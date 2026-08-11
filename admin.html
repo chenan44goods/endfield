@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎀 团长管理后台</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #fff0f5 0%, #ffe4ec 100%);
+            min-height: 100vh; padding: 20px;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        
+        /* 登录页 */
+        .login-box {
+            max-width: 420px; margin: 80px auto; background: white;
+            padding: 44px; border-radius: 24px;
+            box-shadow: 0 12px 40px rgba(255,107,157,0.15);
+        }
+        .login-box h2 { color: #ff6b9d; text-align: center; margin-bottom: 28px; font-size: 24px; }
+        .form-group { margin-bottom: 18px; }
+        .form-group label { display: block; margin-bottom: 8px; color: #555; font-size: 14px; font-weight: 600; }
+        .form-group input, .form-group select {
+            width: 100%; padding: 14px 16px; border: 2px solid #ffd6e7;
+            border-radius: 12px; font-size: 15px; outline: none; transition: all 0.2s;
+        }
+        .form-group input:focus, .form-group select:focus { border-color: #ff6b9d; }
+        .btn {
+            width: 100%; padding: 14px; background: #ff6b9d; color: white;
+            border: none; border-radius: 12px; font-size: 16px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .btn:hover { background: #ff5285; transform: translateY(-1px); }
+        .btn-secondary { background: #f5f5f5; color: #555; }
+        .btn-secondary:hover { background: #e8e8e8; }
+        .btn-danger { background: #ff4d4f; }
+        .btn-danger:hover { background: #ff7875; }
+        .btn-sm { width: auto; padding: 6px 16px; font-size: 13px; border-radius: 8px; }
+        
+        /* 管理页 */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; padding-top: 10px; }
+        .header h1 { color: #ff6b9d; font-size: 26px; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; margin-bottom: 28px; }
+        .stat-card { background: white; padding: 22px; border-radius: 16px; box-shadow: 0 2px 16px rgba(0,0,0,0.04); }
+        .stat-card h4 { color: #999; font-size: 13px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-card .num { color: #ff6b9d; font-size: 30px; font-weight: bold; }
+        
+        .form-section { background: white; padding: 28px; border-radius: 18px; margin-bottom: 28px; box-shadow: 0 2px 16px rgba(0,0,0,0.04); }
+        .form-section h3 { color: #ff6b9d; margin-bottom: 20px; font-size: 18px; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+        .form-group.full { grid-column: 1 / -1; }
+        
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab { padding: 12px 24px; background: white; border: none; border-radius: 12px; cursor: pointer; color: #666; font-weight: 600; font-size: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .tab.active { background: #ff6b9d; color: white; box-shadow: 0 4px 12px rgba(255,107,157,0.25); }
+        
+        table { width: 100%; background: white; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 16px rgba(0,0,0,0.04); font-size: 14px; border-collapse: separate; border-spacing: 0; }
+        th { background: #fff0f5; color: #ff6b9d; padding: 14px; text-align: left; font-weight: 600; }
+        td { padding: 14px; border-bottom: 1px solid #f5f5f5; }
+        tr:hover { background: #fff8fb; }
+        tr:last-child td { border-bottom: none; }
+        .thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; cursor: pointer; border: 1px solid #f0f0f0; }
+        .status-select { padding: 6px 10px; border-radius: 8px; border: 1px solid #ffd6e7; font-size: 13px; outline: none; color: #555; }
+        .status-select:focus { border-color: #ff6b9d; }
+        
+        .shen-card { background: white; padding: 24px; border-radius: 16px; margin-bottom: 18px; box-shadow: 0 2px 16px rgba(0,0,0,0.04); }
+        .shen-card h3 { color: #ff6b9d; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; font-size: 17px; }
+        .shen-table { width: 100%; font-size: 13px; margin-top: 10px; border-collapse: collapse; }
+        .shen-table th { background: #fafafa; color: #666; padding: 10px; font-weight: 600; }
+        .shen-table td { padding: 10px; border-bottom: 1px solid #f0f0f0; }
+        
+        .empty { text-align: center; padding: 70px; color: #bbb; font-size: 15px; }
+        .toast {
+            position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+            background: #333; color: white; padding: 14px 28px; border-radius: 28px;
+            font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100;
+        }
+        .toast.show { opacity: 1; }
+        .hidden { display: none !important; }
+        .img-preview { max-height: 140px; border-radius: 10px; border: 1px solid #f0f0f0; }
+    </style>
+</head>
+<body>
+    <!-- 登录界面 -->
+    <div id="loginPage" class="container">
+        <div class="login-box">
+            <h2>🎀 团长登录</h2>
+            <div class="form-group">
+                <label>邮箱</label>
+                <input type="email" id="loginEmail" placeholder="你在Supabase创建的邮箱">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="loginPassword" placeholder="你的管理密码">
+            </div>
+            <button class="btn" onclick="login()">登录</button>
+            <p style="text-align:center; margin-top:20px; font-size:13px; color:#999; line-height:1.8;">
+                首次使用？请先在Supabase的 Authentication → Users 里<br>手动添加一个管理员账号
+            </p>
+        </div>
+    </div>
+
+    <!-- 管理界面 -->
+    <div id="adminPage" class="container hidden">
+        <div class="header">
+            <h1>🎀 团长管理后台</h1>
+            <button class="btn btn-secondary btn-sm" onclick="logout()" style="width:auto;">退出登录</button>
+        </div>
+
+        <!-- 统计 -->
+        <div class="stats" id="stats"></div>
+
+        <!-- 添加/编辑表单 -->
+        <div class="form-section">
+            <h3 id="formTitle">➕ 添加新排谷</h3>
+            <input type="hidden" id="editId">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>谷子名称</label>
+                    <input type="text" id="fName" placeholder="如：A3切页">
+                </div>
+                <div class="form-group">
+                    <label>CN（团员昵称）</label>
+                    <input type="text" id="fCn" placeholder="如：小圆">
+                </div>
+                <div class="form-group">
+                    <label>单价（元）</label>
+                    <input type="number" id="fPrice" placeholder="0.00" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>数量</label>
+                    <input type="number" id="fQty" value="1" min="1">
+                </div>
+                <div class="form-group">
+                    <label>到货情况</label>
+                    <select id="fStatus">
+                        <option value="未出荷">未出荷</option>
+                        <option value="已到货">已到货</option>
+                        <option value="已发货">已发货</option>
+                        <option value="已签收">已签收</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>柄图（可选，支持上传图片）</label>
+                    <input type="file" id="fImg" accept="image/*" onchange="previewImg()">
+                </div>
+                <div class="form-group full">
+                    <img id="imgPreview" class="img-preview" style="display:none;">
+                </div>
+            </div>
+            <div style="display:flex; gap:12px; margin-top:18px;">
+                <button class="btn btn-sm" onclick="submitForm()" style="width:auto; min-width:100px;">💾 保存</button>
+                <button class="btn btn-secondary btn-sm" onclick="resetForm()" style="width:auto;">取消编辑</button>
+            </div>
+        </div>
+
+        <!-- 标签页 -->
+        <div class="tabs">
+            <button class="tab active" onclick="switchView('list')">📋 排表总览</button>
+            <button class="tab" onclick="switchView('shen')">💰 肾表汇总</button>
+        </div>
+
+        <!-- 排表视图 -->
+        <div id="viewList"></div>
+
+        <!-- 肾表视图 -->
+        <div id="viewShen" class="hidden"></div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ==================== ⚠️ 必须修改这里 ====================
+        const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_UW9cgyBOeV6zIZCicI2SlQ_bqm0MeJa';
+        // =========================================================
+
+        const { createClient } = supabase;
+        const supa = createClient(SUPABASE_URL, SUPABASE_KEY);
+        let currentData = [];
+
+        // 初始化
+        async function init() {
+            const { data: { session } } = await supa.auth.getSession();
+            if (session) showAdmin();
+            
+            supa.auth.onAuthStateChange((event, session) => {
+                if (session) showAdmin();
+                else showLogin();
+            });
+        }
+
+        function showLogin() {
+            document.getElementById('loginPage').classList.remove('hidden');
+            document.getElementById('adminPage').classList.add('hidden');
+        }
+
+        function showAdmin() {
+            document.getElementById('loginPage').classList.add('hidden');
+            document.getElementById('adminPage').classList.remove('hidden');
+            loadData();
+        }
+
+        async function login() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            if (!email || !password) { showToast('请输入邮箱和密码'); return; }
+            
+            const { error } = await supa.auth.signInWithPassword({ email, password });
+            if (error) showToast('登录失败：' + error.message);
+            else showToast('登录成功！');
+        }
+
+        async function logout() {
+            await supa.auth.signOut();
+            showToast('已退出登录');
+        }
+
+        // ==================== 数据加载与渲染 ====================
+        async function loadData() {
+            const { data, error } = await supa.from('items').select('*').order('created_at', { ascending: false });
+            if (error) { showToast('加载失败：' + error.message); return; }
+            currentData = data || [];
+            renderStats();
+            renderList();
+            renderShen();
+        }
+
+        function renderStats() {
+            const total = currentData.reduce((s, i) => s + i.price * i.quantity, 0);
+            const counts = { '未出荷':0, '已到货':0, '已发货':0, '已签收':0 };
+            currentData.forEach(i => counts[i.status] = (counts[i.status]||0) + i.quantity);
+            
+            document.getElementById('stats').innerHTML = `
+                <div class="stat-card"><h4>总排谷项</h4><div class="num">${currentData.length}</div></div>
+                <div class="stat-card"><h4>应肾总额</h4><div class="num">¥${total.toFixed(0)}</div></div>
+                <div class="stat-card"><h4>未出荷</h4><div class="num">${counts['未出荷']}</div></div>
+                <div class="stat-card"><h4>已到货</h4><div class="num">${counts['已到货']}</div></div>
+            `;
+        }
+
+        function renderList() {
+            const div = document.getElementById('viewList');
+            if (!currentData.length) { div.innerHTML = '<div class="empty">暂无排谷数据，请从上方表单添加</div>'; return; }
+            
+            let html = `<table><thead><tr>
+                <th>柄图</th><th>谷子名称</th><th>CN</th><th>单价</th><th>数量</th><th>总价</th><th>状态</th><th>操作</th>
+            </tr></thead><tbody>`;
+            
+            currentData.forEach(item => {
+                const total = (item.price * item.quantity).toFixed(2);
+                const img = item.image_url 
+                    ? `<img src="${item.image_url}" class="thumb" onclick="window.open('${item.image_url}')">` 
+                    : '<span style="color:#ddd; font-size:12px;">无图</span>';
+                
+                html += `<tr>
+                    <td>${img}</td>
+                    <td style="font-weight:600;">${item.name}</td>
+                    <td>${item.cn}</td>
+                    <td>¥${item.price.toFixed(2)}</td>
+                    <td>${item.quantity}</td>
+                    <td style="color:#ff6b9d; font-weight:bold;">¥${total}</td>
+                    <td>
+                        <select class="status-select" onchange="updateStatus(${item.id}, this.value)">
+                            <option value="未出荷" ${item.status==='未出荷'?'selected':''}>未出荷</option>
+                            <option value="已到货" ${item.status==='已到货'?'selected':''}>已到货</option>
+                            <option value="已发货" ${item.status==='已发货'?'selected':''}>已发货</option>
+                            <option value="已签收" ${item.status==='已签收'?'selected':''}>已签收</option>
+                        </select>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-secondary" onclick="editItem(${item.id})">编辑</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteItem(${item.id})">删除</button>
+                    </td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            div.innerHTML = html;
+        }
+
+        function renderShen() {
+            const div = document.getElementById('viewShen');
+            if (!currentData.length) { div.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+            
+            const map = {};
+            currentData.forEach(item => {
+                if (!map[item.cn]) map[item.cn] = { items: [], total: 0, qty: 0 };
+                map[item.cn].items.push(item);
+                map[item.cn].total += item.price * item.quantity;
+                map[item.cn].qty += item.quantity;
+            });
+            
+            let html = '';
+            Object.keys(map).sort().forEach(cn => {
+                const g = map[cn];
+                html += `<div class="shen-card">
+                    <h3><span>👤 ${cn}</span><span style="color:#ff6b9d; font-size:20px;">应肾 ¥${g.total.toFixed(2)}（${g.qty}件）</span></h3>
+                    <table class="shen-table"><thead><tr><th>谷子</th><th>单价×数量</th><th>小计</th><th>状态</th></tr></thead><tbody>
+                    ${g.items.map(i => `<tr><td>${i.name}</td><td>¥${i.price.toFixed(2)} × ${i.quantity}</td><td style="color:#ff6b9d; font-weight:bold;">¥${(i.price*i.quantity).toFixed(2)}</td><td>${i.status}</td></tr>`).join('')}
+                    </tbody></table>
+                </div>`;
+            });
+            div.innerHTML = html;
+        }
+
+        // ==================== 表单操作 ====================
+        function previewImg() {
+            const file = document.getElementById('fImg').files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                document.getElementById('imgPreview').src = e.target.result;
+                document.getElementById('imgPreview').style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function resetForm() {
+            document.getElementById('formTitle').textContent = '➕ 添加新排谷';
+            document.getElementById('editId').value = '';
+            document.getElementById('fName').value = '';
+            document.getElementById('fCn').value = '';
+            document.getElementById('fPrice').value = '';
+            document.getElementById('fQty').value = '1';
+            document.getElementById('fStatus').value = '未出荷';
+            document.getElementById('fImg').value = '';
+            document.getElementById('imgPreview').style.display = 'none';
+        }
+
+        async function submitForm() {
+            const id = document.getElementById('editId').value;
+            const name = document.getElementById('fName').value.trim();
+            const cn = document.getElementById('fCn').value.trim();
+            const price = parseFloat(document.getElementById('fPrice').value) || 0;
+            const qty = parseInt(document.getElementById('fQty').value) || 1;
+            const status = document.getElementById('fStatus').value;
+            
+            if (!name || !cn) { showToast('请填写谷子名称和CN'); return; }
+            if (price <= 0) { showToast('单价必须大于0'); return; }
+            
+            let image_url = '';
+            const file = document.getElementById('fImg').files[0];
+            
+            // 如果有新图片，先上传
+            if (file) {
+                showToast('正在上传图片...');
+                const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+                const { error: upError } = await supa.storage.from('images').upload(fileName, file);
+                if (upError) { showToast('图片上传失败：' + upError.message); return; }
+                const { data: urlData } = supa.storage.from('images').getPublicUrl(fileName);
+                image_url = urlData.publicUrl;
+            } else if (id) {
+                // 编辑模式且没传新图，保留旧图
+                const old = currentData.find(i => i.id == id);
+                if (old) image_url = old.image_url;
+            }
+            
+            if (id) {
+                const { error } = await supa.from('items').update({ name, cn, price, quantity: qty, status, image_url }).eq('id', id);
+                if (error) showToast('更新失败：' + error.message);
+                else { showToast('更新成功！'); resetForm(); loadData(); }
+            } else {
+                const { error } = await supa.from('items').insert([{ name, cn, price, quantity: qty, status, image_url }]);
+                if (error) showToast('添加失败：' + error.message);
+                else { showToast('添加成功！'); resetForm(); loadData(); }
+            }
+        }
+
+        async function updateStatus(id, status) {
+            const { error } = await supa.from('items').update({ status }).eq('id', id);
+            if (error) showToast('更新失败：' + error.message);
+            else { showToast('状态已更新'); loadData(); }
+        }
+
+        function editItem(id) {
+            const item = currentData.find(i => i.id == id);
+            if (!item) return;
+            document.getElementById('formTitle').textContent = '✏️ 编辑排谷（ID: ' + id + '）';
+            document.getElementById('editId').value = id;
+            document.getElementById('fName').value = item.name;
+            document.getElementById('fCn').value = item.cn;
+            document.getElementById('fPrice').value = item.price;
+            document.getElementById('fQty').value = item.quantity;
+            document.getElementById('fStatus').value = item.status;
+            if (item.image_url) {
+                document.getElementById('imgPreview').src = item.image_url;
+                document.getElementById('imgPreview').style.display = 'block';
+            } else {
+                document.getElementById('imgPreview').style.display = 'none';
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            showToast('已加载到编辑区，修改后点击保存');
+        }
+
+        async function deleteItem(id) {
+            if (!confirm('确定删除这条排谷记录吗？此操作不可恢复。')) return;
+            const { error } = await supa.from('items').delete().eq('id', id);
+            if (error) showToast('删除失败：' + error.message);
+            else { showToast('已删除'); loadData(); }
+        }
+
+        function switchView(view) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('viewList').classList.toggle('hidden', view !== 'list');
+            document.getElementById('viewShen').classList.toggle('hidden', view !== 'shen');
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2800);
+        }
+
+        init();
+    </script>
+</body>
+</html>
