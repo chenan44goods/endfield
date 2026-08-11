@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎀 团排谷自查系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #fff0f5 0%, #ffe4ec 100%);
+            min-height: 100vh; padding: 20px;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        .header { text-align: center; padding: 50px 20px 30px; }
+        .header h1 { color: #ff6b9d; font-size: 34px; margin-bottom: 10px; }
+        .header p { color: #888; font-size: 15px; }
+        .search-box {
+            background: white; border-radius: 18px; padding: 28px;
+            box-shadow: 0 8px 32px rgba(255,107,157,0.12);
+            margin-bottom: 28px; display: flex; gap: 14px;
+        }
+        .search-box input {
+            flex: 1; padding: 16px 20px; border: 2px solid #ffd6e7;
+            border-radius: 14px; font-size: 17px; outline: none; transition: all 0.2s;
+        }
+        .search-box input:focus { border-color: #ff6b9d; box-shadow: 0 0 0 3px rgba(255,107,157,0.1); }
+        .btn {
+            padding: 16px 32px; background: #ff6b9d; color: white;
+            border: none; border-radius: 14px; font-size: 16px;
+            cursor: pointer; font-weight: 600; transition: all 0.2s; white-space: nowrap;
+        }
+        .btn:hover { background: #ff5285; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(255,107,157,0.3); }
+        .result { background: white; border-radius: 18px; padding: 28px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+        .summary {
+            background: linear-gradient(135deg, #fff0f5, #ffe4ec);
+            padding: 20px; border-radius: 14px; margin-bottom: 20px;
+        }
+        .summary h3 { color: #ff6b9d; margin-bottom: 12px; font-size: 18px; }
+        .summary-grid { display: flex; gap: 28px; flex-wrap: wrap; }
+        .summary-item { text-align: center; }
+        .summary-item .num { color: #ff6b9d; font-size: 28px; font-weight: bold; }
+        .summary-item .label { color: #888; font-size: 13px; margin-top: 4px; }
+        .item-card { display: flex; gap: 18px; padding: 18px 0; border-bottom: 1px solid #f5f5f5; }
+        .item-card:last-child { border-bottom: none; }
+        .item-img {
+            width: 90px; height: 90px; object-fit: cover; border-radius: 12px;
+            border: 1px solid #f0f0f0; cursor: pointer; transition: transform 0.2s;
+        }
+        .item-img:hover { transform: scale(1.05); }
+        .item-info { flex: 1; }
+        .item-name { font-size: 17px; font-weight: 600; color: #333; margin-bottom: 6px; }
+        .item-meta { color: #666; font-size: 14px; line-height: 2; }
+        .status-tag {
+            display: inline-block; padding: 3px 12px; border-radius: 20px;
+            font-size: 12px; font-weight: 600; margin-left: 6px;
+        }
+        .status-未出荷 { background: #e6f7ff; color: #1890ff; }
+        .status-已到货 { background: #f6ffed; color: #52c41a; }
+        .status-已发货 { background: #fff7e6; color: #fa8c16; }
+        .status-已签收 { background: #f9f0ff; color: #722ed1; }
+        .empty { text-align: center; padding: 70px 20px; color: #bbb; font-size: 15px; }
+        .footer { text-align: center; margin-top: 50px; padding: 20px; }
+        .footer a { color: #ff6b9d; text-decoration: none; font-size: 14px; }
+        .loading { text-align: center; padding: 50px; color: #ff6b9d; font-size: 15px; }
+        .toast {
+            position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+            background: #333; color: white; padding: 14px 28px; border-radius: 28px;
+            font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100;
+        }
+        .toast.show { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎀 团排谷自查</h1>
+            <p>输入你的CN，查看所有排谷记录和到货状态</p>
+        </div>
+        
+        <div class="search-box">
+            <input type="text" id="cnInput" placeholder="请输入你的CN..." onkeydown="if(event.key==='Enter')search()">
+            <button class="btn" onclick="search()">🔍 查询</button>
+        </div>
+        
+        <div id="result"></div>
+        
+        <div class="footer">
+            <a href="admin.html">👉 团长管理入口</a>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ==================== ⚠️ 必须修改这里 ====================
+        const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co;
+        const SUPABASE_KEY = 'sb_publishable_UW9cgyBOeV6zIZCicI2SlQ_bqm0MeJa';
+        // =========================================================
+
+        const { createClient } = supabase;
+        const supa = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        async function search() {
+            const cn = document.getElementById('cnInput').value.trim();
+            const resultDiv = document.getElementById('result');
+            
+            if (!cn) {
+                resultDiv.innerHTML = '<div class="result"><div class="empty">请输入CN后再查询哦~</div></div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<div class="result"><div class="loading">正在查询中...</div></div>';
+            
+            try {
+                const { data, error } = await supa
+                    .from('items')
+                    .select('*')
+                    .eq('cn', cn)
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
+                
+                if (!data || data.length === 0) {
+                    resultDiv.innerHTML = `<div class="result"><div class="empty">没有找到 CN 为「${cn}」的排谷记录<br>请检查CN是否输入正确，或联系团长确认</div></div>`;
+                    return;
+                }
+                
+                const total = data.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                const totalQty = data.reduce((sum, item) => sum + item.quantity, 0);
+                
+                let html = `<div class="result">
+                    <div class="summary">
+                        <h3>👤 ${cn} 的排谷统计</h3>
+                        <div class="summary-grid">
+                            <div class="summary-item"><div class="num">${data.length}</div><div class="label">排谷项数</div></div>
+                            <div class="summary-item"><div class="num">${totalQty}</div><div class="label">总数量</div></div>
+                            <div class="summary-item"><div class="num">¥${total.toFixed(2)}</div><div class="label">应肾总额</div></div>
+                        </div>
+                    </div>`;
+                
+                data.forEach(item => {
+                    const subtotal = (item.price * item.quantity).toFixed(2);
+                    const imgHtml = item.image_url 
+                        ? `<img src="${item.image_url}" class="item-img" onclick="window.open('${item.image_url}')">` 
+                        : `<div class="item-img" style="background:#f8f8f8; display:flex; align-items:center; justify-content:center; color:#ccc; font-size:12px;">无图</div>`;
+                    
+                    html += `
+                        <div class="item-card">
+                            ${imgHtml}
+                            <div class="item-info">
+                                <div class="item-name">${item.name}</div>
+                                <div class="item-meta">
+                                    单价：¥${item.price.toFixed(2)} &nbsp;|&nbsp; 
+                                    数量：${item.quantity} &nbsp;|&nbsp; 
+                                    小计：<strong style="color:#ff6b9d; font-size:16px;">¥${subtotal}</strong><br>
+                                    状态：<span class="status-tag status-${item.status}">${item.status}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                resultDiv.innerHTML = html;
+                
+            } catch (err) {
+                resultDiv.innerHTML = `<div class="result"><div class="empty">查询出错：${err.message}<br>请联系团长检查系统配置</div></div>`;
+            }
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2500);
+        }
+    </script>
+</body>
+</html>
