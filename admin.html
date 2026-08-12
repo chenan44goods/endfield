@@ -18,9 +18,8 @@
         /* 批量删除面板样式 */
         .batch-delete-card { background: var(--danger-bg); border: 1px solid #ffa39e; margin-bottom: 20px; }
         .collapse-header { cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: bold; color: #cf1322; }
-        .match-preview-list { background: #fff; border-radius: 6px; padding: 10px; margin-top: 10px; font-size: 12px; max-height: 200px; overflow-y: auto; border: 1px solid #d9d9d9; }
+        .match-preview-list { background: #fff; border-radius: 6px; padding: 10px; margin-top: 10px; font-size: 12px; max-height: 200px; overflow-y: auto; border: 1px solid #d9d9d9; white-space: pre-wrap; }
         
-        /* 表格样式 */
         table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #fff; }
         th, td { border-bottom: 1px solid #eee; padding: 12px 10px; text-align: left; font-size: 13px; }
         
@@ -34,13 +33,11 @@
         .stats-badge { padding: 3px 8px; border-radius: 12px; background: #f0f0f0; font-size: 11px; margin-right: 5px; border: 1px solid #ddd; }
         .img-preview { width: 45px; height: 45px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; }
         .hidden { display: none !important; }
-        .flex-row { display: flex; gap: 10px; align-items: center; }
-        .flex-row > div { flex: 1; }
     </style>
 </head>
 <body>
 
-    <div id="debug-bar">⏳ 同步状态中...</div>
+    <div id="debug-bar">⌛ 同步状态中...</div>
 
     <!-- 登录模块 -->
     <div id="loginSection" class="login-box">
@@ -81,12 +78,321 @@
             <!-- 批量删除面板 (按范围) -->
             <div class="card batch-delete-card">
                 <div class="collapse-header" onclick="toggleBatchDeletePanel()">
-                    <span>🗑️ 批量删除 (按条件筛选删除)</span>
+                    <span>🗑️ 批量删除记录 (按条件筛选)</span>
                     <span id="collapseIcon">展开 ▼</span>
                 </div>
                 <div id="batchDeleteContent" class="hidden" style="margin-top:15px;">
-                    <p style="font-size: 13px; color: #851d19;">选择条件以筛选出要删除的记录：</p>
                     <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
-                        <div><label>CN</label><select id="filterCN"><option>全部</option></select></div>
-                        <div><label>谷子名称</label><select id="filterName"><option>全部</option></select></div>
-                        <div><label
+                        <div><label>按CN筛选</label><select id="filterCN"><option>全部</option></select></div>
+                        <div><label>按谷子名称</label><select id="filterName"><option>全部</option></select></div>
+                        <div><label>按国家</label><select id="filterCountry"><option>全部</option><option>国内</option><option>日本</option><option>台湾</option><option>泰国</option><option>印尼</option><option>美国</option><option>韩国</option></select></div>
+                        <div><label>按状态</label><select id="filterStatus"><option>全部</option><option>未出荷</option><option>已下单未到货</option><option>回国中</option><option>已到货</option><option>可排发</option><option>已排发</option><option>未付款</option></select></div>
+                    </div>
+                    <div style="margin-top:15px;">
+                        <button class="btn btn-outline" onclick="previewBatchDelete()">🔍 预览匹配结果</button>
+                        <button class="btn btn-danger" id="executeDeleteBtn" disabled onclick="executeBatchDelete()">❌ 确认删除匹配项</button>
+                    </div>
+                    <div id="deletePreview" class="match-preview-list">尚未开始预览...</div>
+                </div>
+            </div>
+
+            <div class="grid">
+                <!-- 单条录入 -->
+                <div class="card">
+                    <h3>✍️ 单条录入/编辑</h3>
+                    <input type="hidden" id="editItemId">
+                    <label>谷子名称</label><input type="text" id="itemName">
+                    <label>地区</label>
+                    <select id="itemCountry"><option>日本</option><option>国内</option><option>台湾</option><option>泰国</option><option>印尼</option><option>美国</option><option>韩国</option></select>
+                    <label>团员 CN</label><input type="text" id="itemCN">
+                    <div style="display:flex; gap:10px">
+                        <div><label>单价</label><input type="number" id="itemPrice" step="0.01"></div>
+                        <div><label>数量</label><input type="number" id="itemQty" value="1"></div>
+                    </div>
+                    <label>状态</label>
+                    <select id="itemStatus" onchange="checkStatusChange(this.value)">
+                        <option>未出荷</option><option>已下单未到货</option><option>回国中</option><option>已到货</option><option>可排发</option><option>已排发</option><option>未付款</option>
+                    </select>
+                    <div id="expiryInput" class="hidden"><label style="color:red">📦 设置囤货截止日</label><input type="date" id="itemExpiry"></div>
+                    <label>柄图上传</label><input type="file" id="itemFile" accept="image/*">
+                    <button class="btn btn-pink" style="width:100%; margin-top:10px" onclick="saveItem()">保存记录</button>
+                    <button class="btn btn-outline" style="width:100%; margin-top:5px" onclick="clearForm()">清空重置</button>
+                </div>
+
+                <!-- 批量导入 -->
+                <div class="card">
+                    <h3>📥 批量导入 (Excel Tab格式)</h3>
+                    <label>归属国家</label>
+                    <select id="importCountry"><option>日本</option><option>国内</option><option>台湾</option><option>泰国</option><option>印尼</option><option>美国</option><option>韩国</option></select>
+                    <textarea id="csvInput" rows="10" placeholder="请复制 Excel 完整表格粘贴在此..."></textarea>
+                    <div style="margin-top:10px">
+                        <button class="btn btn-primary" onclick="previewImport()">🔍 预览解析</button>
+                        <button class="btn btn-pink" id="confirmImportBtn" disabled onclick="executeImport()">✅ 确认导入</button>
+                    </div>
+                    <div id="importPreview" class="import-preview-area" style="font-size:12px; background:#f9f9f9; padding:10px; margin-top:10px; border-radius:6px; max-height:100px; overflow-y:auto; border:1px dashed #ccc;">尚未解析...</div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top:20px; overflow-x:auto;">
+                <h3>📜 全团明细</h3>
+                <table>
+                    <thead><tr><th>图</th><th>名称</th><th>CN</th><th>明细</th><th>状态</th><th>操作</th></tr></thead>
+                    <tbody id="tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
+        
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        let currentData = null;
+        let currentUser = null;
+        let tempImportItems = [];
+        let tempDeleteMatches = [];
+
+        // --- 登录系统 ---
+        async function login() {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('pw').value.trim();
+            const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            if (error) document.getElementById('loginStatus').innerText = "登录失败: " + error.message;
+            else checkAuth();
+        }
+        async function logout() { await supabaseClient.auth.signOut(); location.reload(); }
+
+        async function checkAuth() {
+            const { data: { user } } = await supabaseClient.auth.getUser();
+            if (!user) {
+                document.getElementById('debug-bar').innerText = "💡 请登录团长账号";
+                document.getElementById('loginSection').classList.remove('hidden');
+                return;
+            }
+            currentUser = user;
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('adminSection').classList.remove('hidden');
+            document.getElementById('userEmail').innerText = user.email;
+
+            const { data: records } = await supabaseClient.from('leader_data').select('*');
+            if (records && records.length > 0) {
+                currentData = records[0];
+                document.getElementById('debug-bar').innerText = "✅ 数据同步成功";
+                document.getElementById('debug-bar').style.background = "green";
+                renderUI();
+            } else {
+                document.getElementById('initGuide').classList.remove('hidden');
+            }
+        }
+
+        async function initSystem() {
+            const key = document.getElementById('newQueryKey').value.trim();
+            if(!key) return alert("请输入密钥");
+            const { error } = await supabaseClient.rpc('init_leader_data', { p_query_key: key });
+            if(error) alert(error.message); else location.reload();
+        }
+
+        // --- 批量删除逻辑 ---
+        function toggleBatchDeletePanel() {
+            const content = document.getElementById('batchDeleteContent');
+            const icon = document.getElementById('collapseIcon');
+            if(content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                icon.innerText = "收起 ▲";
+                populateFilterOptions();
+            } else {
+                content.classList.add('hidden');
+                icon.innerText = "展开 ▼";
+            }
+        }
+
+        function populateFilterOptions() {
+            const data = currentData.group_data || [];
+            const cns = [...new Set(data.map(i => i.cn))].sort();
+            const names = [...new Set(data.map(i => i.name))].sort();
+            
+            const cnSelect = document.getElementById('filterCN');
+            const nameSelect = document.getElementById('filterName');
+            
+            cnSelect.innerHTML = '<option>全部</option>' + cns.map(c => `<option>${c}</option>`).join('');
+            nameSelect.innerHTML = '<option>全部</option>' + names.map(n => `<option>${n}</option>`).join('');
+        }
+
+        function previewBatchDelete() {
+            const cnF = document.getElementById('filterCN').value;
+            const nameF = document.getElementById('filterName').value;
+            const countryF = document.getElementById('filterCountry').value;
+            const statusF = document.getElementById('filterStatus').value;
+            const data = currentData.group_data || [];
+
+            tempDeleteMatches = data.filter(item => {
+                if (cnF !== '全部' && item.cn !== cnF) return false;
+                if (nameF !== '全部' && item.name !== nameF) return false;
+                if (countryF !== '全部' && item.country !== countryF) return false;
+                if (statusF !== '全部' && item.status !== statusF) return false;
+                return true;
+            });
+
+            const previewArea = document.getElementById('deletePreview');
+            const btn = document.getElementById('executeDeleteBtn');
+            
+            if(tempDeleteMatches.length === 0) {
+                previewArea.innerText = "没有匹配到任何记录。";
+                btn.disabled = true;
+            } else {
+                let text = tempDeleteMatches.slice(0, 10).map(i => `${i.cn} - ${i.name} (${i.status})`).join('\n');
+                if(tempDeleteMatches.length > 10) text += `\n...还有 ${tempDeleteMatches.length - 10} 条`;
+                previewArea.innerText = `已匹配 ${tempDeleteMatches.length} 条记录：\n${text}`;
+                btn.disabled = false;
+                btn.innerText = `❌ 确认删除这 ${tempDeleteMatches.length} 条`;
+            }
+        }
+
+        async function executeBatchDelete() {
+            if(!confirm(`确定要删除匹配的 ${tempDeleteMatches.length} 条记录吗？此操作不可恢复。`)) return;
+            
+            const matchIds = new Set(tempDeleteMatches.map(i => i.item_id));
+            const newData = currentData.group_data.filter(item => !matchIds.has(item.item_id));
+
+            const { error } = await supabaseClient.from('leader_data')
+                .update({ group_data: newData, updated_at: new Date().toISOString() })
+                .eq('query_key', currentData.query_key);
+
+            if(error) alert("删除失败: " + error.message);
+            else { alert(`成功删除 ${tempDeleteMatches.length} 条记录`); location.reload(); }
+        }
+
+        // --- 批量导入逻辑 ---
+        function previewImport() {
+            const raw = document.getElementById('csvInput').value.trim();
+            const country = document.getElementById('importCountry').value;
+            if(!raw) return alert("内容为空");
+            const lines = raw.split(/\r?\n/).filter(l => l.trim() !== "");
+            if(lines.length < 6) return alert("格式不正确，请确保复制了整表。");
+
+            const itemNames = lines[2].split('\t').slice(2);
+            const prices = lines[3].split('\t').slice(2).map(p => parseFloat(p.replace(/[¥,]/g, '')) || 0);
+            
+            tempImportItems = [];
+            for(let i = 5; i < lines.length; i++) {
+                const cells = lines[i].split('\t');
+                const cn = cells[1]?.trim();
+                if(!cn || cn === "昵称/总数") continue;
+                for(let j = 0; j < itemNames.length; j++) {
+                    const qtyStr = cells[j+2]?.trim();
+                    if(!qtyStr || qtyStr === "") continue;
+                    const qty = parseInt(parseFloat(qtyStr));
+                    if(qty > 0) {
+                        tempImportItems.push({
+                            item_id: Date.now() + "_" + Math.random().toString(36).substr(2,5),
+                            name: itemNames[j].trim(),
+                            country: country,
+                            price: prices[j],
+                            quantity: qty,
+                            cn: cn,
+                            status: "未出荷",
+                            image_url: "",
+                            storage_expiry: null,
+                            created_at: new Date().toISOString()
+                        });
+                    }
+                }
+            }
+            document.getElementById('importPreview').innerText = `解析成功：识别到 ${tempImportItems.length} 条记录。`;
+            document.getElementById('confirmImportBtn').disabled = tempImportItems.length === 0;
+        }
+
+        async function executeImport() {
+            const newList = [...(currentData.group_data || []), ...tempImportItems];
+            const { error } = await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
+            if(error) alert("导入失败"); else { alert("导入成功！"); location.reload(); }
+        }
+
+        // --- 基础 CRUD ---
+        function renderUI() {
+            const isOwner = currentData.user_id === currentUser.id;
+            document.getElementById('roleTag').innerText = isOwner ? "🎀 团长后台" : "助理后台";
+            const list = currentData.group_data || [];
+            const total = list.reduce((s, i) => s + (i.price * i.quantity), 0);
+            document.getElementById('statsArea').innerHTML = `<span class="stats-badge">总项: ${list.length}</span> <span class="stats-badge">总金额: ￥${total.toFixed(2)}</span>`;
+            
+            const tbody = document.getElementById('tbody');
+            tbody.innerHTML = list.slice().reverse().map(item => `
+                <tr>
+                    <td><img src="${item.image_url || ''}" class="img-preview" onerror="this.src='https://via.placeholder.com/50'"></td>
+                    <td>${item.name}<br><small>${item.country}</small></td>
+                    <td>${item.cn}</td>
+                    <td>￥${item.price} x ${item.quantity}</td>
+                    <td><span class="stats-badge">${item.status}</span></td>
+                    <td>
+                        <button onclick="editItem('${item.item_id}')" style="font-size:11px">改</button>
+                        <button onclick="deleteSingle('${item.item_id}')" style="font-size:11px;color:red">删</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function saveItem() {
+            const file = document.getElementById('itemFile').files[0];
+            let imageUrl = document.getElementById('editItemId').dataset.img || "";
+            if(file) {
+                const fileName = `${Date.now()}_${file.name}`;
+                await supabaseClient.storage.from('images').upload(fileName, file);
+                imageUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
+            }
+            const newItem = {
+                item_id: document.getElementById('editItemId').value || Date.now().toString(),
+                name: document.getElementById('itemName').value || "未命名",
+                country: document.getElementById('itemCountry').value,
+                price: parseFloat(document.getElementById('itemPrice').value) || 0,
+                quantity: parseInt(document.getElementById('itemQty').value) || 1,
+                cn: document.getElementById('itemCN').value || "未知",
+                status: document.getElementById('itemStatus').value,
+                image_url: imageUrl,
+                storage_expiry: document.getElementById('itemExpiry').value || null,
+                created_at: new Date().toISOString()
+            };
+            let newList = [...(currentData.group_data || [])];
+            const idx = newList.findIndex(i => i.item_id === newItem.item_id);
+            if(idx > -1) newList[idx] = newItem; else newList.push(newItem);
+            const { error } = await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
+            if(error) alert("保存失败"); else location.reload();
+        }
+
+        function editItem(id) {
+            const item = currentData.group_data.find(i => i.item_id === id);
+            document.getElementById('editItemId').value = item.item_id;
+            document.getElementById('editItemId').dataset.img = item.image_url;
+            document.getElementById('itemName').value = item.name;
+            document.getElementById('itemCN').value = item.cn;
+            document.getElementById('itemPrice').value = item.price;
+            document.getElementById('itemQty').value = item.quantity;
+            document.getElementById('itemStatus').value = item.status;
+            checkStatusChange(item.status);
+            window.scrollTo(0,0);
+        }
+
+        async function deleteSingle(id) {
+            if(!confirm("确定删除？")) return;
+            const newList = currentData.group_data.filter(i => i.item_id !== id);
+            await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
+            location.reload();
+        }
+
+        function checkStatusChange(val) {
+            if(val === "可排发") document.getElementById('expiryInput').classList.remove('hidden');
+            else document.getElementById('expiryInput').classList.add('hidden');
+        }
+
+        function clearForm() {
+            document.getElementById('editItemId').value = "";
+            document.getElementById('itemName').value = "";
+            document.getElementById('itemCN').value = "";
+            document.getElementById('itemFile').value = "";
+        }
+
+        checkAuth();
+    </script>
+</body>
+</html>
