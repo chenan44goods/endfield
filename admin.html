@@ -29,6 +29,10 @@
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; }
         .modal { background: #fff; padding: 20px; border-radius: 15px; width: 90%; max-width: 400px; }
         .batch-bar { background: #fffbe6; border: 1px solid #ffe58f; padding: 10px 15px; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        
+        /* 谷子明细展示优化 */
+        .items-grid { display: flex; flex-wrap: wrap; gap: 5px; max-width: 800px; }
+        .item-tag { background: #f0f2f5; padding: 2px 8px; border-radius: 4px; font-size: 12px; color: #555; border: 1px solid #e8e8e8; white-space: nowrap; }
     </style>
 </head>
 <body>
@@ -59,7 +63,6 @@
         </div>
 
         <div class="main-content">
-            <!-- 1. 排表管理 -->
             <div id="tab-overview" class="tab-content">
                 <div class="card"><div id="statsArea"></div></div>
                 <div class="grid">
@@ -102,7 +105,6 @@
                 </div>
             </div>
 
-            <!-- 2. 排发工作台 -->
             <div id="tab-shipping" class="tab-content hidden">
                 <div style="display:flex; gap:15px; margin-bottom:15px;">
                     <div class="card" style="flex:1; margin-bottom:0; text-align:center;"><h4 style="margin:0;color:#666">📦 待处理申请</h4><h2 id="pendingShipCount">0</h2></div>
@@ -120,7 +122,13 @@
                 </div>
             </div>
 
-            <div id="tab-logs" class="tab-content hidden"><div class="card"><h3>🔄 转单日志</h3><div id="transferLogsList"></div></div></div>
+            <div id="tab-logs" class="tab-content hidden">
+                <div class="card">
+                    <h3>🔄 转单日志</h3>
+                    <div id="transferLogsList"></div>
+                </div>
+            </div>
+            
             <div id="tab-settings" class="tab-content hidden"><div class="card"><h3>⚙️ 设置</h3><p>密钥：<strong id="dispKey">-</strong></p></div></div>
         </div>
     </div>
@@ -252,43 +260,73 @@
             if(target.length === 0) { tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:#999">🎉 当前没有记录</td></tr>`; return; }
 
             tbody.innerHTML = target.map(app => {
-                const itemsDesc = app.items.map(i => `${i.name} x${i.quantity}`).join('<br>');
-                const op = shipViewMode === 'pending' 
-                    ? `<button class="btn btn-primary" onclick="openShipConfirm('${app.time}', '${app.cn}')">确认发货</button>` 
-                    : `<div style="display:flex; flex-direction:column; gap:5px;"><small>完成：${new Date(app.completed_time).toLocaleDateString()}</small><button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger); padding:2px; font-size:11px" onclick="deleteCompletedShipRecord('${app.time}','${app.cn}')">🗑️ 删除记录</button></div>`;
-                return `<tr><td>${new Date(app.time).toLocaleString()}</td><td><b>${app.cn}</b></td><td>${itemsDesc}</td><td>${app.note || '-'}</td><td>${op}</td></tr>`;
+                const itemsHtml = `<div class="items-grid">${app.items.map(i => `<span class="item-tag">${i.name} x${i.quantity}</span>`).join('')}</div>`;
+                
+                let op = '';
+                if(shipViewMode === 'pending') {
+                    op = `
+                        <div style="display:flex; gap:5px;">
+                            <button class="btn btn-primary" style="padding:4px 8px;" onclick="openShipConfirm('${app.time}', '${app.cn}')">确认发货</button>
+                            <button class="btn btn-outline" style="padding:4px 8px; color:var(--danger); border-color:var(--danger);" onclick="deletePendingShipRecord('${app.time}','${app.cn}')">🗑️ 删除申请</button>
+                        </div>
+                    `;
+                } else {
+                    op = `
+                        <div style="display:flex; flex-direction:column; gap:5px;">
+                            <small>完成：${new Date(app.completed_time).toLocaleDateString()}</small>
+                            <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger); padding:2px; font-size:11px" onclick="deleteCompletedShipRecord('${app.time}','${app.cn}')">🗑️ 删除记录</button>
+                        </div>
+                    `;
+                }
+                
+                return `<tr><td>${new Date(app.time).toLocaleString()}</td><td><b>${app.cn}</b></td><td>${itemsHtml}</td><td>${app.note || '-'}</td><td>${op}</td></tr>`;
             }).join('');
         }
 
-        async function deleteCompletedShipRecord(time, cn) {
-            if(!confirm("⚠️ 确认删除这条排发记录？\n\n注意：同时会从排表记录中移除对应的谷子，此操作不可恢复。")) return;
+        async function deletePendingShipRecord(time, cn) {
+            if(!confirm("⚠️ 确认删除这条排发申请？\n\n删除后，申请中的谷子状态会恢复为“可排发”，团员可以重新申请。")) return;
             
-            // 1. 找到那条申请记录
             const apps = (currentData.image_data && currentData.image_data.applications) || [];
             const targetApp = apps.find(a => a.time === time && a.cn === cn);
-            if(!targetApp) return alert("记录不存在");
+            if(!targetApp) return;
 
-            // 2. 获取要删除的 item_id 集合
-            const itemIdsToDelete = new Set(targetApp.items.map(i => i.item_id));
+            const itemIdsToRollback = new Set(targetApp.items.map(i => i.item_id));
 
-            // 3. 从全团数据 group_data 中移除这些谷子
-            let newGroupData = currentData.group_data.filter(item => !itemIdsToDelete.has(item.item_id));
+            // 1. 回滚状态：把状态从 已申请发货 变回 可排发
+            let newGroupData = currentData.group_data.map(item => {
+                if(itemIdsToRollback.has(item.item_id)) {
+                    return { ...item, status: '可排发' };
+                }
+                return item;
+            });
 
-            // 4. 从申请记录 applications 中移除这一条
+            // 2. 移除申请记录
             let newApps = apps.filter(a => !(a.time === time && a.cn === cn));
 
-            // 5. 保存到 Supabase
             const { error } = await supabaseClient.from('leader_data').update({ 
                 group_data: newGroupData, 
                 image_data: { ...currentData.image_data, applications: newApps } 
             }).eq('query_key', currentData.query_key);
 
             if (!error) {
-                alert("✅ 记录与对应谷子已同步删除！");
+                alert("✅ 申请已撤销，谷子已恢复为可排发状态。");
                 location.reload();
-            } else {
-                alert("操作失败");
-            }
+            } else { alert("操作失败"); }
+        }
+
+        async function deleteCompletedShipRecord(time, cn) {
+            if(!confirm("⚠️ 确认删除这条排发记录？\n\n注意：同时会从排表记录中移除对应的谷子，此操作不可恢复。")) return;
+            const apps = (currentData.image_data && currentData.image_data.applications) || [];
+            const targetApp = apps.find(a => a.time === time && a.cn === cn);
+            if(!targetApp) return alert("记录不存在");
+            const itemIdsToDelete = new Set(targetApp.items.map(i => i.item_id));
+            let newGroupData = currentData.group_data.filter(item => !itemIdsToDelete.has(item.item_id));
+            let newApps = apps.filter(a => !(a.time === time && a.cn === cn));
+            const { error } = await supabaseClient.from('leader_data').update({ 
+                group_data: newGroupData, 
+                image_data: { ...currentData.image_data, applications: newApps } 
+            }).eq('query_key', currentData.query_key);
+            if (!error) { alert("✅ 记录与对应谷子已同步删除！"); location.reload(); } else { alert("操作失败"); }
         }
 
         function openShipConfirm(time, cn) {
@@ -383,7 +421,26 @@
 
         function renderLogs() {
             const logs = (currentData.image_data && currentData.image_data.transfer_logs) || [];
-            document.getElementById('transferLogsList').innerHTML = logs.slice().reverse().map(l => `<div style="border-bottom:1px solid #eee; padding:5px;">[${new Date(l.time).toLocaleString()}] <b>${l.item_name}</b>: ${l.from_cn} -> ${l.to_cn} (${l.note || '-'})</div>`).join('');
+            const list = document.getElementById('transferLogsList');
+            if(logs.length === 0) { list.innerHTML = "暂无转单记录"; return; }
+            list.innerHTML = logs.slice().reverse().map((l, index) => `
+                <div style="border-bottom:1px solid #eee; padding:8px 0; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-size:13px; line-height:1.5;">
+                        [${new Date(l.time).toLocaleString()}] <b>${l.item_name}</b><br>
+                        从 <b>${l.from_cn}</b> 转给 <b>${l.to_cn}</b> | 备注：${l.note || '-'} | 操作人：${l.operator}
+                    </div>
+                    <button class="btn btn-outline" style="padding:4px 8px; color:var(--danger); border-color:var(--danger); font-size:11px;" onclick="deleteTransferLog(${logs.length - 1 - index})">🗑️ 删除</button>
+                </div>`).join('');
+        }
+
+        async function deleteTransferLog(realIndex) {
+            if(!confirm("确认删除这条转单记录？")) return;
+            let logs = [...currentData.image_data.transfer_logs];
+            logs.splice(realIndex, 1);
+            const { error } = await supabaseClient.from('leader_data').update({ 
+                image_data: { ...currentData.image_data, transfer_logs: logs } 
+            }).eq('query_key', currentData.query_key);
+            if (!error) location.reload();
         }
 
         function batchDeleteItems() {
