@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <meta name="referrer" content="no-referrer">
+    <title>排单管理系统 (design by 秋洛)</title>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.0.0/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- 引入读取 Excel 文件的神器 -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+    
+    <script>
+        // 👇 替换为你的 Supabase 项目 URL 和 anon key，详见 README 部署步骤
+        const SUPABASE_URL = 'https://your-project.supabase.co';
+        const SUPABASE_KEY = 'your-anon-key';
+        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    </script>
+
+
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 min-h-screen font-sans text-gray-700 dark:text-gray-300">
+<main>
+    <!-- P6: 黑夜模式切换按钮 — 每页固定右上角 -->
+    <button onclick="toggleTheme()" id="themeToggleBtn" class="fixed top-3 right-3 z-50 w-11 h-11 rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 shadow-md flex items-center justify-center text-xl hover:scale-110 transition-transform cursor-pointer" title="切换深色/浅色模式">🌙</button>
+
+    <div id="globalLoading" class="fixed inset-0 bg-white bg-opacity-80 flex flex-col items-center justify-center z-[100] hidden">
+        <div class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+        <div id="loadingText" class="text-blue-600 font-bold">处理中...</div>
+    </div>
+
+    <!-- 1. 初始身份选择大厅 -->
+    <div id="portal-screen" class="max-w-md mx-auto pt-16 px-4 fade-in">
+        <h1 class="text-3xl font-extrabold text-center text-blue-600 mb-2">排单系统</h1>
+        <p class="text-center text-gray-400 text-sm mb-8">云端实时同步 · 全局历史可查</p>
+        <div class="space-y-4">
+            <button onclick="showScreen('buyer-screen')" class="w-full bg-white border border-gray-200 text-gray-700 font-bold text-lg py-4 rounded-lg shadow-sm hover:shadow-md hover:border-blue-300 transition flex items-center justify-center gap-2">
+                <span>🔍</span> 我是团员 (免登录自助查询)
+            </button>
+            <button onclick="showScreen('payment-apply-screen')" class="w-full bg-yellow-50 border border-yellow-200 text-yellow-700 font-bold text-lg py-4 rounded-lg shadow-sm hover:border-yellow-300 transition flex items-center justify-center gap-2">
+                <span>💰</span> 我是团员 (我要交肾)
+            </button>
+            <button onclick="showScreen('shipping-apply-screen')" class="w-full bg-green-50 border border-green-200 text-green-700 font-bold text-lg py-4 rounded-lg shadow-sm hover:border-green-300 transition flex items-center justify-center gap-2">
+                <span>📦</span> 我是团员 (申请排发/查快递)
+            </button>
+            
+            <!-- 🌟 吃谷成就功能入口 -->
+            <button onclick="showScreen('rank-screen')" class="w-full bg-pink-50 border border-pink-200 text-pink-600 font-bold text-lg py-4 rounded-lg shadow-sm hover:border-pink-300 transition flex items-center justify-center gap-2">
+                <span>🐷</span> ！？猪猪？！
+            </button>
+
+            <button onclick="showScreen('login-screen')" class="w-full bg-blue-500 text-white font-bold text-lg py-4 rounded-lg shadow hover:bg-blue-600 transition flex items-center justify-center gap-2 mt-4">
+                <span>👑</span> 我是团长 (登录管理后台)
+            </button>
+
+            <button onclick="showScreen('about-screen')" class="w-full bg-gray-100 border border-gray-200 text-gray-500 font-bold text-sm py-3 rounded-lg hover:bg-gray-200 transition flex items-center justify-center gap-1 mt-3">
+                <span>ℹ️</span> 关于
+            </button>
+        </div>
+    </div>
+
+    <!-- 🌟 吃谷成就排名界面 -->
+    <div id="rank-screen" class="max-w-2xl mx-auto pt-8 px-4 hidden fade-in pb-12">
+        <button onclick="showScreen('portal-screen')" class="text-gray-400 mb-4 hover:text-gray-600 block">← 返回首页</button>
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-pink-200 w-full">
+            <h2 class="text-xl font-bold text-pink-600 mb-1 text-center">🐷 ！？猪猪？！</h2>
+            <p class="text-center text-gray-400 text-xs mb-6">计算并查看你在本团吃谷的惊人战斗力排名！</p>
+            <div class="space-y-4 mb-6">
+                <div>
+                    <label class="block text-sm text-gray-600 mb-1">团长查询密钥</label>
+                    <input type="text" id="rankKeyInput" placeholder="输入团长给你的全局密钥" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-pink-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm text-pink-600 font-bold mb-1">你的 CN</label>
+                    <input type="text" id="rankCnInput" placeholder="有猪啊！" class="w-full border border-pink-200 rounded px-3 py-2 focus:border-pink-500 focus:outline-none bg-pink-50 text-pink-800">
+                </div>
+                <button onclick="doRankSearch()" class="w-full bg-pink-500 text-white font-bold py-3 rounded shadow hover:bg-pink-600 transition mt-2">✨ 生成我的成就报告</button>
+            </div>
+            
+            <div id="rankResultArea" class="hidden mt-6 pt-6 border-t border-pink-100 fade-in">
+                <div id="rankResultText"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 团员自助查询端 -->
+    <div id="buyer-screen" class="max-w-2xl mx-auto pt-8 px-4 hidden fade-in pb-12">
+        <button onclick="showScreen('portal-screen')" class="text-gray-400 mb-4 hover:text-gray-600 block">← 返回首页</button>
+        <div class="flex flex-col items-center gap-4">
+            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 w-full">
+                <h2 class="text-xl font-bold text-gray-800 mb-1 text-center">团员自查中心</h2>
+                <p class="text-center text-gray-400 text-xs mb-6">输入团长给的密钥，查询你的所有历史排单</p>
+                <div class="space-y-4 mb-6">
+                    <div>
+                        <label class="block text-sm text-gray-600 mb-1">团长查询密钥</label>
+                        <input type="text" id="queryKeyInput" placeholder="例如: GUGU666" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-600 mb-1">你的买家 CN</label>
+                        <input type="text" id="queryCnInput" placeholder="输入CN，支持部分模糊搜索..." class="w-full border border-gray-300 rounded px-3 py-2 focus:border-blue-500 focus:outline-none">
+                    </div>
+                    <button onclick="doBuyerSearch()" class="w-full bg-blue-500 text-white font-bold py-2 rounded shadow hover:bg-blue-600 transition mt-2">立即查询</button>
+                </div>
+                <div id="buyerResultArea" class="hidden border-t pt-6">
+                    <!-- 新增：团期筛选下拉框 -->
+                    <div class="mb-4 flex items-center gap-2 bg-gray-50 p-2 rounded border border-gray-200">
+                        <label class="text-sm font-bold text-gray-700 whitespace-nowrap">📺 筛选团期:</label>
+                        <select id="buyerBatchFilter" onchange="renderBuyerSearchPage(0)" class="flex-1 border border-gray-300 rounded px-2 py-1.5 text-sm focus:border-blue-500 outline-none">
+                            <option value="all">全部团期</option>
+                        </select>
+                    </div>
+                    <div id="buyerSummary" class="bg-blue-50 text-blue-800 p-3 rounded text-sm mb-4"></div>
+                    <div id="buyerList" class="space-y-4"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- ================= 团员交肾申请端 ================= -->
+    <div id="payment-apply-screen" class="max-w-2xl mx-auto pt-8 px-4 hidden fade-in pb-12">
+        <button onclick="showScreen('portal-screen')" class="text-gray-400 mb-4 hover:text-gray-600 block">← 返回首页</button>
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-yellow-200 w-full">
+            <h2 class="text-xl font-bold text-yellow-700 mb-1 text-center">💰 交肾 (付款) 中心</h2>
+            <p class="text-center text-gray-400 text-xs mb-6">仅显示未交肾的商品，按团期合并付款</p>
+            <div class="space-y-4 mb-6">
+                <input type="text" id="payKeyInput" placeholder="团长查询密钥" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-yellow-500">
+                <input type="text" id="payCnInput" placeholder="你的严格完整 CN" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-yellow-500">
+                <button onclick="doPaymentSearch()" class="w-full bg-yellow-500 text-white font-bold py-2 rounded shadow hover:bg-yellow-600 transition mt-2">查询待交肾谷子</button>
+            </div>
+            <div id="payHistoryArea" class="hidden mt-6 mb-6">
+                <h3 class="font-bold text-gray-700 border-l-4 border-yellow-500 pl-2 mb-3">🕒 我的交肾审核记录</h3>
+                <div id="payHistoryList" class="space-y-3"></div>
+            </div>
+            <div id="payResultArea" class="hidden border-t border-gray-200 pt-6">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-gray-700 border-l-4 border-blue-500 pl-2">🛒 待交肾商品 (按团期)</h3>
+                </div>
+                <div id="payItemsList" class="space-y-4 mb-4 select-none"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 交肾上传表单弹窗 -->
+    <div id="payFormModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-5 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 class="text-lg font-bold mb-4 text-gray-800" id="payFormTitle">提交交肾截图</h3>
+            <div class="mb-4 bg-yellow-50 p-3 rounded border text-sm text-yellow-800 text-center">
+                <p class="font-bold mb-1">本次需交总额: <span id="payTotalAmount" class="text-xl text-red-600">¥0.00</span></p>
+                <div id="payCodeArea" class="mt-2 text-xs text-yellow-700">正在加载收款码...</div>
+            </div>
+            <div class="space-y-4 text-sm">
+                <div class="bg-blue-50 p-2 rounded border border-blue-100">
+                    <label class="block mb-1 font-bold text-blue-700">🧾 上传付款截图 (必填)</label>
+                    <input type="file" accept="image/*" onchange="handleBuyerUpload(this, 'payUploadPreview')" class="w-full text-xs text-blue-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200">
+                    <div id="payUploadPreview" class="mt-2 hidden"><img src="" class="w-20 h-20 object-cover rounded border shadow-sm cursor-pointer" onclick="window.open(this.src)"></div>
+                </div>
+                <div><label class="block mb-1 font-bold">转账备注/留言 (选填)</label><input type="text" id="payRemark" placeholder="如：微信号、支付宝尾号等" class="w-full border rounded p-2"></div>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+                <button onclick="closePayForm()" class="px-4 py-2 border rounded">取消</button>
+                <button onclick="submitPayment()" class="px-4 py-2 bg-yellow-500 text-white rounded font-bold hover:bg-yellow-600">确认提交审核</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ================= 团员排发申请端 ================= -->
+    <div id="shipping-apply-screen" class="max-w-2xl mx-auto pt-8 px-4 hidden fade-in pb-12">
+        <button onclick="showScreen('portal-screen')" class="text-gray-400 mb-4 hover:text-gray-600 block">← 返回首页</button>
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-green-200 w-full">
+            <h2 class="text-xl font-bold text-green-700 mb-1 text-center">📦 排发申请与快递查询</h2>
+            <p class="text-center text-gray-400 text-xs mb-6">仅显示已到货且已交肾的商品</p>
+            <div class="space-y-4 mb-6">
+                <input type="text" id="shipKeyInput" placeholder="团长查询密钥" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-green-500 focus:outline-none">
+                <input type="text" id="shipCnInput" placeholder="你的严格完整 CN" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-green-500 focus:outline-none">
+                <button onclick="doShippingSearch()" class="w-full bg-green-500 text-white font-bold py-2 rounded shadow hover:bg-green-600 transition mt-2">查询可排发谷子</button>
+            </div>
+            
+            <div id="shipHistoryArea" class="hidden mt-6 mb-6">
+                <h3 class="font-bold text-gray-700 border-l-4 border-green-500 pl-2 mb-3">🕒 我的排发申请记录</h3>
+                <div id="shipHistoryList" class="space-y-3"></div>
+            </div>
+
+            <div id="shipResultArea" class="hidden border-t border-gray-200 pt-6">
+                <div class="flex justify-between items-center mb-3">
+                    <div class="flex items-center gap-2">
+                        <h3 class="font-bold text-gray-700 border-l-4 border-blue-500 pl-2">✅ 可排发商品</h3>
+                        <button onclick="openShipExportModal()" class="text-xs bg-purple-100 text-purple-700 px-3 py-1.5 rounded border border-purple-200 shadow-sm hover:bg-purple-200 transition font-bold">📄 导出清单</button>
+                    </div>
+                    <button id="swipeSelectBtn" onclick="toggleSwipeMode()" class="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full border border-gray-300 shadow-sm transition">👆 开启多选</button>
+                </div>
+                <div id="shipItemsList" class="space-y-3 mb-4 select-none"></div>
+                <button onclick="openShipForm()" class="w-full bg-indigo-500 text-white font-bold py-3 rounded shadow-md hover:bg-indigo-600 transition">🚀 将已勾选的谷子去排发</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 排发申请表单弹窗 -->
+    <div id="shipFormModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-5 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 class="text-lg font-bold mb-4 text-gray-800">填写排发信息</h3>
+            <div class="mb-4 bg-gray-50 p-3 rounded border text-sm text-gray-600">
+                <p id="postageNoticeText" class="font-bold text-red-500 mb-1 text-center">⚠️ 邮费读取中...</p>
+                <div id="postageCodeArea" class="mt-2 text-center text-xs text-gray-400">正在加载收款码...</div>
+            </div>
+            <div class="space-y-4 text-sm">
+                <div><label class="block mb-1 font-bold">是否已付邮费？</label><select id="shipIsPaid" class="w-full border rounded p-2"><option value="是">是，已付</option><option value="否">否，之后再付</option></select></div>
+                
+                <div class="bg-blue-50 p-2 rounded border border-blue-100">
+                    <label class="block mb-1 font-bold text-blue-700">🧾 上传邮费付款截图 (选填)</label>
+                    <input type="file" accept="image/*" onchange="handleBuyerUpload(this, 'shipUploadPreview')" class="w-full text-xs text-blue-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200">
+                    <div id="shipUploadPreview" class="mt-2 hidden"><img src="" class="w-20 h-20 object-cover rounded border shadow-sm cursor-pointer" onclick="window.open(this.src)"></div>
+                </div>
+
+                <div><label class="block mb-1 font-bold">收件地址信息</label><textarea id="shipAddress" rows="3" placeholder="姓名，电话，省市区详细地址" class="w-full border rounded p-2"></textarea></div>
+                <div><label class="block mb-1 font-bold">快递方式要求</label><input type="text" id="shipExpress" placeholder="无指定则默认随机" class="w-full border rounded p-2"></div>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+                <button onclick="closeShipForm()" class="px-4 py-2 border rounded">取消</button>
+                <button onclick="submitShipping()" class="px-4 py-2 bg-green-500 text-white rounded font-bold">确认提交</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 查看详情弹窗 -->
+    <div id="shipDetailModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-5 w-full max-w-md shadow-xl">
+            <h3 class="text-lg font-bold mb-4 border-b pb-2">📦 申请详情与反馈</h3>
+            <div id="shipDetailContent" class="space-y-3 text-sm text-gray-700 max-h-[70vh] overflow-y-auto"></div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeShipDetail()" class="px-4 py-2 bg-blue-500 text-white rounded font-bold">关闭窗口</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🌟 导出排发清单弹窗 -->
+    <div id="shipExportModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg w-full max-w-lg shadow-xl flex flex-col max-h-[90vh]">
+            <div class="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
+                <h3 class="text-lg font-bold text-gray-800">生成排发清单</h3>
+                <button onclick="closeShipExportModal()" class="text-gray-500 hover:text-red-500 text-2xl font-bold">&times;</button>
+            </div>
+            <!-- Step 1: 勾选 -->
+            <div id="shipExportStep1" class="p-4 overflow-y-auto flex-1 text-sm">
+                <p class="text-gray-500 text-xs mb-3">请勾选需要导出的内容。勾选“团期”则只导出团期名；展开并勾选“明细”则导出具体谷子。</p>
+                <div id="shipExportTree" class="space-y-3"></div>
+            </div>
+            <!-- Step 2: 预览与排序 -->
+            <div id="shipExportStep2" class="p-4 overflow-y-auto flex-1 text-sm hidden bg-gray-100">
+                <p class="text-gray-500 text-xs mb-3">上下拖拽列表项可调整顺序 (电脑端支持拖拽)。确认无误后点击下方导出。</p>
+                <div id="shipExportPreview" class="bg-white p-4 rounded shadow-sm min-h-[200px]"></div>
+            </div>
+            <div class="p-4 border-t bg-gray-50 rounded-b-lg flex justify-between items-center">
+                <button id="shipExportBackBtn" onclick="shipExportGoStep1()" class="px-4 py-2 border border-gray-300 text-gray-600 rounded hidden hover:bg-gray-100 text-sm font-bold">返回修改</button>
+                <div class="flex gap-2 ml-auto">
+                    <button id="shipExportNextBtn" onclick="shipExportGoStep2()" class="px-4 py-2 bg-blue-500 text-white rounded font-bold hover:bg-blue-600 text-sm shadow">下一步：预览与排序</button>
+                    <button id="shipExportTextBtn" onclick="shipExportToText()" class="px-3 py-2 bg-green-500 text-white rounded font-bold hover:bg-green-600 text-sm shadow hidden">复制纯文字</button>
+                    <button id="shipExportImgBtn" onclick="shipExportToImage()" class="px-3 py-2 bg-indigo-500 text-white rounded font-bold hover:bg-indigo-600 text-sm shadow hidden">保存长图</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. 团长登录端 / 注册 / 忘记密码 -->
+    <div id="login-screen" class="max-w-md mx-auto pt-20 px-4 hidden fade-in">
+        <button onclick="showScreen('portal-screen')" class="text-gray-400 mb-4 hover:text-gray-600">← 返回首页</button>
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center">团长登录</h2>
+            <div class="space-y-4">
+                <input type="email" id="authEmail" placeholder="输入注册账号邮箱" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-blue-500 focus:outline-none">
+                <input type="password" id="authPassword" placeholder="密码 (至少6位)" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-blue-500 focus:outline-none">
+                <div class="flex justify-between items-center px-1">
+                    <button onclick="showScreen('register-screen')" class="text-sm text-gray-500 hover:text-blue-500">无账号? 注册</button>
+                    <button onclick="showScreen('forgot-screen')" class="text-sm text-blue-500 hover:text-blue-700">忘记密码？</button>
+                </div>
+                <div class="pt-2"><button onclick="handleLogin()" class="w-full bg-blue-500 text-white font-bold py-3 rounded shadow hover:bg-blue-600 transition">登录</button></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="register-screen" class="max-w-md mx-auto pt-20 px-4 hidden fade-in">
+        <button onclick="showScreen('login-screen')" class="text-gray-400 mb-4 hover:text-gray-600">← 返回登录</button>
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center">账号注册</h2>
+            <div class="space-y-4">
+                <input type="email" id="regEmail" placeholder="输入常用邮箱 (用于接收确认链接)" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-blue-500 focus:outline-none">
+                <input type="password" id="regPassword" placeholder="设置密码 (至少6位)" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-blue-500 focus:outline-none">
+                <input type="password" id="regConfirmPassword" placeholder="确认密码" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-blue-500 focus:outline-none">
+                <div class="pt-2"><button onclick="handleRegisterSubmit()" class="w-full bg-blue-500 text-white font-bold py-3 rounded shadow hover:bg-blue-600 transition">提交注册</button></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="forgot-screen" class="max-w-md mx-auto pt-20 px-4 hidden fade-in">
+        <button onclick="showScreen('login-screen')" class="text-gray-400 mb-4 hover:text-gray-600">← 返回登录</button>
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <h2 class="text-2xl font-bold text-gray-800 mb-2 text-center">找回密码</h2>
+            <p class="text-xs text-gray-500 text-center mb-6">请输入你注册时的邮箱，我们将发送重置链接给你</p>
+            <div class="space-y-4">
+                <input type="email" id="forgotEmail" placeholder="输入注册邮箱" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-blue-500 focus:outline-none">
+                <div class="pt-2"><button onclick="handleSendResetCode()" class="w-full bg-blue-500 text-white font-bold py-3 rounded shadow hover:bg-blue-600 transition">发送重置链接</button></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="reset-screen" class="max-w-md mx-auto pt-20 px-4 hidden fade-in">
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <h2 class="text-2xl font-bold text-gray-800 mb-2 text-center">设置新密码</h2>
+            <p class="text-xs text-blue-600 text-center mb-6">链接验证成功，请直接设置您的新密码</p>
+            <div class="space-y-4">
+                <input type="password" id="resetNewPassword" placeholder="输入新的密码 (至少6位)" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-blue-500 focus:outline-none">
+                <div class="pt-2"><button onclick="handleDoResetPassword()" class="w-full bg-red-500 text-white font-bold py-3 rounded shadow hover:bg-red-600 transition">确定重置并进入后台</button></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. 团长管理大盘 -->
+    <div id="dashboard-screen" class="hidden">
+        <div class="max-w-7xl mx-auto pt-4 md:pt-6 px-2 md:px-4 pb-12 fade-in">
+            
+            <div class="flex justify-between items-start md:items-center mb-4 md:mb-6 border-b pb-3 flex-col md:flex-row gap-3">
+                <h1 class="text-2xl font-bold text-blue-600 tracking-wide">排单云后台</h1>
+                <div class="text-xs text-gray-500 flex flex-col md:items-end w-full md:w-auto gap-2">
+                    <div class="flex items-center justify-between md:justify-end w-full gap-3 bg-gray-50 p-2 rounded border border-gray-200 shadow-sm">
+                        <span id="syncStatusText" class="text-green-500 font-bold flex items-center gap-1 text-sm">☁️ 云端已同步</span>
+                        <button onclick="forceRefreshData()" class="bg-blue-500 text-white px-3 py-1.5 rounded hover:bg-blue-600 transition shadow text-xs font-bold flex items-center gap-1">🔄 拉取最新数据</button>
+                    </div>
+                    <div class="flex justify-end items-center gap-3 mt-1 w-full"><span>已登录管理模式</span><button onclick="handleLogout()" class="text-red-500 hover:underline">退出登录</button></div>
+                </div>
+            </div>
+
+            <div class="flex md:justify-center flex-nowrap md:flex-wrap gap-2 mb-4 md:mb-6 pb-2 overflow-x-auto hide-scrollbar whitespace-nowrap">
+                <button onclick="switchTab('input')" id="tab-input" class="px-3 md:px-4 py-2 text-sm md:text-base tab-active">录入排表</button>
+                <button onclick="switchTab('images')" id="tab-images" class="px-3 md:px-4 py-2 text-sm md:text-base text-gray-500 hover:text-blue-500">柄图管理</button>
+                <button onclick="switchTab('manage')" id="tab-manage" class="px-3 md:px-4 py-2 text-sm md:text-base text-gray-500 hover:text-blue-500">订单管理</button>
+                <button onclick="switchTab('schedule')" id="tab-schedule" class="px-3 md:px-4 py-2 text-sm md:text-base text-gray-500 hover:text-blue-500">排表显示</button>
+                <button onclick="switchTab('finance')" id="tab-finance" class="px-3 md:px-4 py-2 text-sm md:text-base text-gray-500 hover:text-blue-500">肾表统计</button>
+               <button onclick="switchTab('payment')" id="tab-payment" class="px-3 md:px-4 py-2 text-sm md:text-base text-gray-500 hover:text-yellow-600">💰 交肾工作台</button>
+                <button onclick="switchTab('shipping')" id="tab-shipping" class="px-3 md:px-4 py-2 text-sm md:text-base text-gray-500 hover:text-green-600">📦 排发工作台</button>
+               <button onclick="showScreen('intl-freight-screen')" id="tab-intl-freight" class="px-3 md:px-4 py-2 text-sm md:text-base text-indigo-500 font-bold hover:text-indigo-600">🌍 国际运费</button>
+                <button onclick="switchTab('cloud')" id="tab-cloud" class="px-3 md:px-4 py-2 text-sm md:text-base text-purple-500 font-bold hover:text-purple-600">云端设置</button>
+            </div>
+
+            <!-- 1. 录入排表页面 -->
+            <div id="page-input" class="space-y-4 md:space-y-6">
+                <div class="bg-white p-4 md:p-6 rounded shadow-sm border border-gray-200">
+                    <h2 class="text-base md:text-lg font-bold mb-4 border-b pb-2 text-gray-800">快捷手动录入</h2>
+                    <form id="itemForm" class="grid grid-cols-1 md:grid-cols-5 gap-3 md:gap-4">
+                        <div class="col-span-1 md:col-span-1"><label class="block text-sm text-gray-600 mb-1">团期</label><input type="text" id="inBatch" list="batchOptions" placeholder="输入新团期" required class="w-full border border-gray-300 rounded px-3 py-2 text-sm"><datalist id="batchOptions"></datalist></div>
+                        <div class="col-span-1 md:col-span-1"><label class="block text-sm text-gray-600 mb-1">商品种类</label><input type="text" id="inCategory" required class="w-full border border-gray-300 rounded px-3 py-2 text-sm"></div>
+                        <div class="col-span-1 md:col-span-1"><label class="block text-sm text-gray-600 mb-1">角色款式</label><input type="text" id="inCharacter" required class="w-full border border-gray-300 rounded px-3 py-2 text-sm"></div>
+                        <div class="col-span-1 md:col-span-1"><label class="block text-sm text-gray-600 mb-1">单价 (元)</label><input type="number" step="0.01" id="inPrice" required class="w-full border border-gray-300 rounded px-3 py-2 text-sm"></div>
+                        <div class="col-span-1 md:col-span-1"><label class="block text-sm font-bold text-blue-600 mb-1">每行默认数量倍数</label><input type="number" id="inMultiplier" value="1" min="1" required class="w-full border border-blue-300 bg-blue-50 rounded px-3 py-2 text-sm"></div>
+                        <div class="col-span-1 md:col-span-5 mt-2"><label class="block text-sm text-gray-600 mb-1">批量粘贴买家 CN (每行一个)</label><textarea id="inCNs" rows="5" required class="w-full border border-gray-300 rounded px-3 py-2 text-sm"></textarea></div>
+                        <div class="col-span-1 md:col-span-5 flex justify-end mt-2"><button type="submit" class="w-full md:w-auto bg-blue-500 text-white px-6 py-2 rounded text-sm hover:bg-blue-600 transition">一键录入 (默认未交肾)</button></div>
+                    </form>
+                </div>
+                <div class="bg-white p-4 md:p-6 rounded shadow-sm border border-gray-200">
+                    <h2 class="text-base md:text-lg font-bold mb-4 border-b pb-2 text-gray-800">通过 Excel/CSV 批量导入</h2>
+                    <div class="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-center gap-3 pt-2">
+                        <button onclick="downloadTemplate()" class="bg-gray-100 border border-gray-300 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-200 transition">📥 下载标准导入模板</button>
+                        <select id="importEncoding" class="border border-gray-300 rounded px-3 py-2 text-sm"><option value="auto">自动识别编码(仅对CSV有效)</option><option value="gbk">GBK (Excel默认/乱码请选这个)</option><option value="utf-8">UTF-8 (国际标准)</option></select>
+                        <input type="file" id="importFile" accept=".csv, .xlsx, .xls" class="hidden" onchange="importFileHandler(event)">
+                        <button onclick="document.getElementById('importFile').click()" class="bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600 transition shadow">📤 导入 Excel/CSV 数据</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 1.5 柄图管理页面 -->
+            <div id="page-images" class="hidden space-y-4">
+                <div class="bg-white p-4 md:p-6 rounded shadow-sm border border-gray-200">
+                    <div class="flex flex-col md:flex-row md:items-center gap-3 mb-4 border-b pb-4">
+    <div class="flex items-center">
+        <label class="text-sm text-gray-600 mr-2 whitespace-nowrap">选择团期:</label>
+        <select id="imageBatchSelect" onchange="renderImageManager()" class="flex-1 md:flex-none border border-gray-300 rounded px-2 py-1 text-sm min-w-[150px]"></select>
+    </div>
+    <div class="flex gap-2 md:ml-auto">
+        <button onclick="openReuseImageModal()" class="text-sm bg-green-100 text-green-700 px-3 py-1.5 rounded hover:bg-green-200 font-bold transition shadow-sm">♻️ 一键复用历史柄图</button>
+        <p class="text-xs text-gray-500 hidden md:flex items-center">点击图片格单独填直链，或使用分类旁的批量导入</p>
+    </div>
+                    </div>
+                    <div id="imageContainer" class="space-y-6"></div>
+                </div>
+            </div>
+
+            <!-- 2. 订单管理页面 -->
+            <div id="page-manage" class="hidden flex flex-col md:flex-row gap-4 h-[80vh] md:h-[70vh]">
+                <div class="w-full md:w-64 bg-white border border-gray-200 rounded shadow-sm flex flex-col flex-shrink-0 md:flex-shrink"><div class="p-2 md:p-3 border-b bg-gray-50 text-gray-700 font-bold text-sm hidden md:block">选择团期</div><div id="batchSidebar" class="flex flex-row md:flex-col overflow-x-auto md:overflow-y-auto p-2 md:space-y-1 gap-2 md:gap-0 hide-scrollbar whitespace-nowrap md:whitespace-normal max-h-32 md:max-h-full"></div></div>
+                <div class="flex-1 bg-white border border-gray-200 rounded shadow-sm flex flex-col overflow-hidden">
+                    <div class="p-2 md:p-3 border-b bg-gray-50 flex flex-col lg:flex-row gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-gray-700 font-bold text-sm whitespace-nowrap" id="manageTitle">请选择团期</span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <input type="text" id="manageSearchInput" oninput="handleSearch()" placeholder="🔍 搜索买家CN、商品..." class="w-full border border-gray-300 rounded-full px-3 py-1.5 text-sm">
+                        </div>
+                        <div class="flex gap-2 flex-wrap">
+                            <button onclick="exportCSV()" class="bg-gray-100 text-gray-700 border border-gray-300 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-200 transition">💾 导出数据备份</button>
+                            <button onclick="openBatchEditModal()" class="bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-200 transition">📝 批量修改</button>
+                            <button onclick="batchDelete()" class="bg-red-100 text-red-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-red-200 transition">🗑️ 批量删除</button>
+                        </div>
+                    </div>
+                    <div class="flex-1 overflow-auto bg-gray-50 p-1">
+                        <p class="text-xs text-gray-400 mb-1 px-1">💡 提示：按住行首的 ☰ 图标拖拽即可调整顺序，排表将自动同步更新。</p>
+                        <table class="min-w-full text-sm text-left whitespace-nowrap bg-white border border-gray-200">
+                            <thead class="bg-gray-100 text-gray-600 sticky top-0 shadow-sm z-10">
+                                <tr>
+                                    <th class="py-2 px-2 border-b w-8 text-center">↕️</th>
+                                    <th class="py-2 px-2 border-b w-10 text-center"><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+                                    <th class="py-2 px-2 border-b max-w-[100px]">商品种类</th>
+                                    <th class="py-2 px-2 border-b max-w-[100px]">角色款式</th>
+                                    <th class="py-2 px-2 border-b max-w-[100px]">买家 CN</th>
+                                    <th class="py-2 px-2 border-b">金额明细</th>
+                                    <th class="py-2 px-2 border-b w-20">到货状态</th>
+                                    <th class="py-2 px-2 border-b w-16">交肾状态</th>
+                                    <th class="py-2 px-2 border-b w-20">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="manageTableBody" class="divide-y divide-gray-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. 排表显示页面 -->
+            <div id="page-schedule" class="hidden space-y-4">
+                <div class="bg-white p-3 md:p-6 rounded shadow-sm border border-gray-200">
+                    <div class="flex flex-col md:flex-row md:items-center gap-3 mb-4 border-b pb-4"><div class="flex flex-wrap items-center gap-3"><div class="flex items-center"><label class="text-sm text-gray-600 mr-2 whitespace-nowrap">团期:</label><select id="scheduleBatch" onchange="updateScheduleCategory()" class="border border-gray-300 rounded px-2 py-1 text-sm w-full md:w-auto"></select></div><div class="flex items-center gap-2"><label class="text-sm text-gray-600 whitespace-nowrap">商品种类:</label><select id="scheduleCategory" onchange="renderSchedule()" class="border border-gray-300 rounded px-2 py-1 text-sm w-full md:w-auto"></select></div></div><div class="md:ml-auto w-full md:w-auto"><button onclick="exportToImage('scheduleContainer', '排表')" class="w-full md:w-auto justify-center bg-indigo-500 text-white px-4 py-1.5 rounded shadow hover:bg-indigo-600 transition text-sm flex items-center">📸 导出完整排表图片</button></div></div>
+                    <div id="scheduleContainer" class="space-y-6 md:space-y-8 bg-white p-1 md:p-2"></div>
+                </div>
+            </div>
+
+            <!-- 4. 肾表统计页面 -->
+            <div id="page-finance" class="hidden space-y-4">
+                <div class="bg-white p-3 md:p-6 rounded shadow-sm border border-gray-200">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 border-b pb-4"><div class="flex items-center gap-2"><label class="text-sm text-gray-600 whitespace-nowrap">筛选统计:</label><select id="financeBatchSelect" onchange="renderFinanceTable()" class="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"></select></div><div><button onclick="exportToImage('financeExportArea', '肾表')" class="w-full justify-center bg-indigo-500 text-white px-4 py-1.5 rounded shadow hover:bg-indigo-600 transition text-sm flex items-center">📸 导出完整肾表图片</button></div></div>
+                    <div id="financeExportArea" class="bg-white p-1 md:p-2"><div class="overflow-x-auto" id="financeScrollArea"><table class="min-w-full text-sm text-left border border-gray-200 whitespace-nowrap"><thead class="bg-gray-100 text-gray-600 border-b"><tr><th class="py-2 px-2 md:px-3 w-24 md:w-32 border-r">买家 CN</th><th class="py-2 px-2 md:px-3 border-r">商品明细 (包含数量)</th><th class="py-2 px-2 md:px-3 w-24 md:w-28 border-r">应收总额</th><th class="py-2 px-2 md:px-3 w-24 md:w-28 border-r">已交金额</th><th class="py-2 px-2 md:px-3 w-24 md:w-28">未交金额</th></tr></thead><tbody id="financeTableBody" class="divide-y divide-gray-100"></tbody><tfoot id="financeTableFoot" class="bg-blue-50 font-bold text-blue-900"></tfoot></table></div></div>
+                </div>
+            </div>
+            
+            <!-- ================= 修改：团长交肾工作台 ================= -->
+            <div id="page-payment" class="hidden space-y-4">
+                <div class="bg-white p-4 md:p-6 rounded shadow-sm border border-yellow-200">
+                    <div class="flex justify-between items-center mb-4 border-b pb-2">
+                        <h2 class="text-xl font-bold text-yellow-700">💰 交肾审核工作台</h2>
+                    </div>
+                    
+                    <div class="bg-yellow-50 border border-yellow-200 p-4 rounded mb-6 shadow-sm">
+                        <h3 class="font-bold text-yellow-800 mb-2">💸 设置团期收款码 (肾码)</h3>
+                        <p class="text-xs text-yellow-700 mb-3">为不同团期单独设置收款码。如果不设置，将使用下方的【默认收款码】。</p>
+                        <div class="flex flex-col sm:flex-row gap-2 mb-4">
+                            <select id="payAdminBatchSelect" onchange="updatePayAdminCodeDisplay()" class="border border-yellow-300 bg-white rounded px-2 py-1.5 text-sm sm:w-1/3"></select>
+                            <input type="text" id="payAdminCodeInput" placeholder="粘贴此团期的专用收款码直链图片地址" class="border border-yellow-300 rounded px-2 py-1.5 text-sm flex-1">
+                            <button onclick="setBatchPayCode()" class="bg-yellow-600 text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-yellow-700 transition shadow">保存该团专用码</button>
+                        </div>
+                        
+                        <div class="border-t border-yellow-200 pt-3 mt-3">
+                            <h4 class="font-bold text-blue-800 mb-2 text-sm">🌟 设置全局【默认】收款码</h4>
+                            <div class="flex flex-col sm:flex-row gap-2">
+                                <input type="text" id="payAdminDefaultCodeInput" placeholder="在此粘贴全局默认收款码直链" class="border border-blue-300 bg-white rounded px-2 py-1.5 text-sm flex-1">
+                                <button onclick="setDefaultPayCode()" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-blue-700 transition shadow">保存默认码</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <p class="text-xs text-gray-500 mb-4">团员提交的交肾作业：</p>
+                    <div id="paymentAdminList" class="space-y-4"></div>
+                </div>
+            </div>
+            
+            <!-- ================= 修改：团长排发工作台 ================= -->
+            <div id="page-shipping" class="hidden space-y-4">
+                <div class="bg-white p-4 md:p-6 rounded shadow-sm border border-green-200">
+                    <div class="flex justify-between items-center mb-4 border-b pb-2">
+                        <h2 class="text-xl font-bold text-green-700">📦 排发订单工作台</h2>
+                    </div>
+                    
+                    <!-- 🏠 修改：囤货地设置工具 -->
+                    <div class="bg-green-50 border border-green-200 p-4 rounded mb-6 shadow-sm">
+                        <h3 class="font-bold text-green-800 mb-2">🏠 设置或调整团期【囤货地】</h3>
+                        <p class="text-xs text-green-700 mb-3">将不同团期分配到对应的仓库/发货地。只有同一囤货地的谷子，团员才能合并打包排发。</p>
+                        
+                        <div class="flex flex-col sm:flex-row gap-2 items-center mb-2">
+                            <select id="shipAdminBatchSelect" onchange="updateCurrentLocationDisplay()" class="border border-green-300 bg-white rounded px-2 py-1.5 text-sm sm:w-1/3 flex-1"></select>
+                            <span id="currentBatchLocation" class="text-sm font-bold text-green-700 bg-green-100 px-3 py-1.5 rounded border border-green-300 shadow-sm whitespace-nowrap">当前: 未分配</span>
+                        </div>
+                        
+                        <div class="flex flex-col sm:flex-row gap-2">
+                            <input type="text" id="shipAdminLocationInput" list="locationOptions" placeholder="输入或选择新囤货地 (如: 国内仓/现货仓)" class="border border-green-300 rounded px-2 py-1.5 text-sm flex-1">
+                            <datalist id="locationOptions"></datalist>
+                            <button onclick="setBatchLocation()" class="bg-green-600 text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-green-700 transition shadow">保存新囤货地</button>
+                        </div>
+                    </div>
+
+                    <p class="text-xs text-gray-500 mb-4">团员提交的排发申请：</p>
+                    <div id="shippingAdminList" class="space-y-4"></div>
+                </div>
+            </div>
+            
+             <!-- 🌟 云端设置页 -->
+            <div id="page-cloud" class="hidden max-w-xl mx-auto space-y-6">
+                <!-- ===== 基础设置 ===== -->
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1 mb-1">🔑 基础设置</div>
+                <!-- 全局查询密钥卡片 -->
+                <div class="bg-white p-4 rounded shadow-sm border-l-4 border-purple-500">
+                    <h2 class="text-lg font-bold text-purple-700 mb-3">云端全局设置</h2>
+                    <p class="text-sm text-purple-700 bg-purple-50 p-2 rounded mb-3">在这里设置你的【全局查询密钥】。</p>
+                    <label class="block text-sm font-bold text-gray-700 mb-1">当前全局查询密钥</label>
+                    <div class="flex gap-2"><input type="text" id="settingQueryKey" placeholder="设置一个方便好记的密码" class="flex-1 border border-gray-300 rounded px-3 py-2 focus:border-purple-500 text-sm"><button onclick="saveQueryKey()" class="bg-purple-500 text-white px-5 rounded shadow hover:bg-purple-600 text-sm font-bold whitespace-nowrap">保存密钥</button></div>
+                </div>
+
+                <!-- ===== 扩展功能 ===== -->
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1 mb-1">🔧 扩展功能</div>
+                <!-- P16: 图床 API 配置卡片 -->
+                <div class="bg-white p-4 rounded shadow-sm border border-gray-200">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-indigo-700">🖼️ 图床 API 配置</h3>
+                        <button onclick="saveImageHostConfig()" class="bg-indigo-500 text-white px-3 py-1 rounded shadow hover:bg-indigo-600 text-xs font-bold">保存图床配置</button>
+                    </div>
+                    <div id="cloudImageHostConfig" class="bg-indigo-50 p-3 rounded border border-indigo-200 min-h-[80px]">
+                        <!-- 动态加载图床配置 -->
+                    </div>
+                </div>
+
+                <!-- P12: 功能开关卡片 -->
+                <div class="bg-white p-4 rounded shadow-sm border border-gray-200">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-amber-700">🔧 实验功能开关</h3>
+                        <button onclick="saveFeatureToggles()" class="bg-amber-500 text-white px-3 py-1 rounded shadow hover:bg-amber-600 text-xs font-bold">保存开关</button>
+                    </div>
+                    <div id="cloudFeatureToggles" class="bg-amber-50 p-3 rounded border border-amber-200 min-h-[60px]">
+                        <!-- 动态加载功能开关 -->
+                    </div>
+                </div>
+
+                <!-- P15: 自定义背景卡片 -->
+                <div class="bg-white p-4 rounded shadow-sm border border-gray-200">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-pink-700">🎨 自定义背景</h3>
+                        <button onclick="saveBgConfig()" class="bg-pink-500 text-white px-3 py-1 rounded shadow hover:bg-pink-600 text-xs font-bold">保存背景</button>
+                    </div>
+                    <div id="cloudBgConfig" class="bg-pink-50 p-3 rounded border border-pink-200 min-h-[80px]">
+                        <!-- 动态加载背景配置 -->
+                    </div>
+                </div>
+
+                <!-- ===== 仓库与物流 ===== -->
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-1 mb-1">🚚 仓库与物流</div>
+                <!-- 各囤货地邮费与收款码卡片 -->
+                <div class="bg-white p-4 rounded shadow-sm border border-gray-200">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-gray-700">🚚 各囤货地邮费与收款码配置</h3>
+                        <button onclick="saveLocationSettings()" class="bg-indigo-500 text-white px-3 py-1 rounded shadow hover:bg-indigo-600 text-xs font-bold">保存邮费配置</button>
+                    </div>
+                    <div id="cloudLocationSettings" class="space-y-3 bg-gray-50 p-3 rounded border border-gray-200 min-h-[100px]">
+                        <!-- 动态加载各仓库配置 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗区 (柄图双通道上传) -->
+    <div id="imageUrlModal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-5 w-full max-w-md shadow-xl">
+            <h3 class="text-lg font-bold mb-4 text-gray-800">设置柄图</h3>
+            
+            <div class="space-y-4 mb-6">
+                <!-- 方式1：本地上传 (新功能) -->
+                <div class="bg-blue-50 p-3 rounded border border-blue-100">
+                    <label class="block mb-2 font-bold text-blue-700 text-sm">🚀 方式一：直接上传本地图片</label>
+                    <input type="file" accept="image/*" onchange="uploadItemImage(this)" class="w-full text-xs text-blue-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200">
+                </div>
+                
+                <div class="text-center text-xs text-gray-400">——— 或者 ———</div>
+                
+                <!-- 方式2：粘贴链接 (原有功能) -->
+                <div>
+                    <label class="block mb-2 font-bold text-gray-700 text-sm">🔗 方式二：粘贴已有图片直链</label>
+                    <input type="text" id="imgUrlInput" placeholder="http://..." class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none">
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <button onclick="closeImageModal()" class="px-4 py-1.5 border rounded text-sm">取消</button>
+                <button onclick="saveImageUrl()" class="px-4 py-1.5 bg-blue-500 text-white rounded shadow text-sm font-bold">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🌟 批量导入柄图弹窗 -->
+    <div id="batchImageModal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-5 w-full max-w-lg shadow-xl">
+            <h3 class="text-lg font-bold mb-2 text-gray-800" id="batchImageTitle">批量导入柄图链接</h3>
+            <p class="text-xs text-gray-500 mb-3">支持格式：<code class="bg-gray-100 px-1 rounded">角色款式名, http://图片直链</code> （每行一个，可用逗号或空格隔开）</p>
+            <textarea id="batchImageText" rows="8" class="w-full border rounded px-3 py-2 text-sm mb-4 font-mono" placeholder="阿米娅, https://xxx.com/a.jpg&#10;陈, https://xxx.com/c.jpg"></textarea>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeBatchImageModal()" class="px-4 py-1.5 border rounded text-gray-600 text-sm hover:bg-gray-50">取消</button>
+                <button onclick="saveBatchImage()" class="px-4 py-1.5 bg-indigo-500 text-white rounded text-sm hover:bg-indigo-600 shadow">识别并保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="batchEditModal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded p-5 w-full max-w-sm shadow-lg"><h3 class="text-lg font-bold mb-4 text-gray-800">批量修改选中项</h3><div class="space-y-4 text-sm"><div><label class="block mb-1">交肾状态：</label><select id="batchEditPaid" class="w-full border rounded p-2"><option value="">-- 不修改 --</option><option value="未交">未交</option><option value="已交">已交</option></select></div><div><label class="block mb-1">到货状态：</label><select id="batchEditStatus" class="w-full border rounded p-2"><option value="">-- 不修改 --</option><option value="未到货">未到货</option><option value="已到货">已到货</option><option value="已排发">已排发</option></select></div></div><div class="mt-6 flex justify-end gap-2"><button onclick="closeBatchEditModal()" class="px-4 py-1.5 border rounded">取消</button><button onclick="saveBatchEdit()" class="px-4 py-1.5 bg-indigo-500 text-white rounded">确认</button></div></div>
+    </div>
+
+<!-- 🌟 复用历史柄图弹窗 -->
+<div id="reuseImageModal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg p-5 w-full max-w-sm shadow-xl">
+        <h3 class="text-lg font-bold mb-4 text-gray-800">♻️ 复用历史柄图</h3>
+        <p class="text-xs text-gray-500 mb-4 bg-gray-50 p-2 rounded">系统会自动从选中的【历史团期】中，寻找与当前团期<strong class="text-blue-500">同分类、同角色名</strong>的柄图并复制过来。</p>
+        <div class="mb-4">
+            <label class="block text-sm mb-1 font-bold">请选择要复制的【源团期】：</label>
+            <select id="reuseSourceBatch" class="w-full border rounded p-2 text-sm"></select>
+        </div>
+        <div class="flex justify-end gap-3">
+            <button onclick="closeReuseImageModal()" class="px-4 py-1.5 border rounded text-sm hover:bg-gray-50">取消</button>
+            <button onclick="applyReuseImages()" class="px-4 py-1.5 bg-green-500 text-white rounded text-sm shadow hover:bg-green-600 font-bold">确认复用</button>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑排单信息弹窗 -->
+<div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded p-5 w-full max-w-sm shadow-lg max-h-[90vh] overflow-y-auto"><h3 class="text-lg font-bold mb-4 text-gray-800">编辑排单信息</h3><div class="space-y-3 text-sm"><input type="hidden" id="editId"><div><label class="block mb-1">买家 CN</label><input type="text" id="editCn" class="w-full border rounded px-2 py-1.5"></div><div><label class="block mb-1">团期</label><input type="text" id="editBatch" class="w-full border rounded px-2 py-1.5"></div><div><label class="block mb-1">商品种类</label><input type="text" id="editCategory" class="w-full border rounded px-2 py-1.5"></div><div><label class="block mb-1">角色款式</label><input type="text" id="editCharacter" class="w-full border rounded px-2 py-1.5"></div><div class="flex gap-2"><div class="flex-1"><label class="block mb-1">单价</label><input type="number" step="0.01" id="editPrice" class="w-full border rounded px-2 py-1.5"></div><div class="flex-1"><label class="block mb-1">数量</label><input type="number" id="editCount" class="w-full border rounded px-2 py-1.5"></div></div><div><label class="block mb-1">到货状态</label><select id="editStatus" class="w-full border rounded px-2 py-1.5"><option value="未到货">未到货</option><option value="已到货">已到货</option><option value="已排发">已排发</option></select></div><div><label class="block mb-1">交肾状态</label><select id="editPaid" class="w-full border rounded px-2 py-1.5"><option value="未交">未交</option><option value="已交">已交</option></select></div></div><div class="mt-6 flex justify-end gap-2"><button onclick="closeEditModal()" class="px-4 py-1.5 border rounded">取消</button><button onclick="saveEdit()" class="px-4 py-1.5 bg-blue-500 text-white rounded">保存</button></div></div>
+</div>
+
+
+    <!-- 国际运费计算 + 排发表 -->
+    <div id="intl-freight-screen" class="max-w-6xl mx-auto pt-4 px-4 hidden fade-in pb-12">
+        <button onclick="showScreen('dashboard-screen')" class="text-gray-400 mb-4 hover:text-gray-600 block">← 返回管理面板</button>
+        <div class="flex items-center justify-between mb-4">
+            <div><h2 class="text-xl font-bold text-gray-800">🌍 国际运费加权计算</h2><p class="text-xs text-gray-400 mt-1">按重量比例分摊国际运费 · 支持手动加权微调</p></div>
+            <button onclick="ifcShowNewBatchDialog()" class="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-bold hover:bg-blue-600 shadow-sm">+ 新建批次</button>
+        </div>
+        <!-- Tab 切换 -->
+        <div class="flex gap-0 mb-4 border-b border-gray-200">
+            <button onclick="ifcSwitchTab('calc')" id="ifc-tab-calc" class="px-4 py-2 text-sm font-bold text-indigo-600 border-b-2 border-indigo-500 -mb-px bg-white">📊 运费计算</button>
+            <button onclick="ifcSwitchTab('schedule')" id="ifc-tab-schedule" class="px-4 py-2 text-sm text-gray-500 hover:text-indigo-500 -mb-px">📋 国际排发表</button>
+        </div>
+        <div class="mb-4 flex items-center gap-3">
+            <span class="text-sm text-gray-500">当前批次：</span>
+            <select id="ifcBatchSelect" onchange="ifcSwitchBatch()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 max-w-xs focus:border-blue-400 focus:outline-none"><option value="">-- 无批次 --</option></select>
+            <button onclick="ifcDeleteBatch(ifcCurrentBatchId);ifcRender();ifcShowToast('批次已删除','info')" class="text-xs text-red-400 hover:text-red-600">删除当前批次</button>
+        </div>
+        <div id="ifcPanel" class="mb-6"></div>
+        <div id="ifcTableContainer" class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"></div>
+        <div id="ifcScheduleContainer" class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hidden"></div>
+    </div>
+
+    <!-- 关于页面 -->
+    <div id="about-screen" class="max-w-md mx-auto pt-16 px-4 hidden fade-in pb-12">
+        <button onclick="showScreen('portal-screen')" class="text-gray-400 mb-6 hover:text-gray-600 block">← 返回首页</button>
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-center">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">谷圈云端排单管理系统</h2>
+            <p class="text-sm text-gray-500 mb-6">让拼团排单变得简单 ✨</p>
+            <div class="space-y-2 text-sm text-gray-600 text-left bg-gray-50 rounded p-4">
+                <p><strong>版本：</strong>v<span id="aboutVersion"></span></p>
+                <p><strong>原作者：</strong>秋洛</p>
+                <p><strong>许可证：</strong>CC BY-NC-SA 4.0</p>
+                <p><strong>技术栈：</strong>HTML + Tailwind CSS + Vanilla JS + Supabase</p>
+                <p><strong>教程站：</strong><a href="https://mossasari.github.io/groupbuy-tutorial-site/" target="_blank" class="text-blue-500 hover:underline">mossasari.github.io/groupbuy-tutorial-site</a></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== JS 模块（顺序依赖） ==================== -->
+    <script src="js/core.js"></script>
+    <script>document.addEventListener('DOMContentLoaded', function() { var el = document.getElementById('aboutVersion'); if(el) el.textContent = APP_VERSION; });</script>
+    <script src="js/data.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/image-crop.js"></script>
+    <script src="js/image-upload.js"></script>
+    <script src="js/order-manage.js"></script>
+    <script src="js/swipe.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/buyer-portal.js"></script>
+    <script src="js/admin-payment.js"></script>
+    <script src="js/shipping-export.js"></script>
+    <script src="js/admin-shipping.js"></script>
+    <script>window.IFC_EMBEDDED = true;</script>
+    <script src="../intl-freight-calc/js/ifc-core.js"></script>
+    <script src="../intl-freight-calc/js/ifc-data.js"></script>
+    <script src="../intl-freight-calc/js/ifc-calc.js"></script>
+    <script src="../intl-freight-calc/js/ifc-panel.js"></script>
+    <script src="../intl-freight-calc/js/ifc-table.js"></script>
+    <script src="../intl-freight-calc/js/ifc-import.js"></script>
+    <script src="../intl-freight-calc/js/ifc-export.js"></script>
+    <script src="../intl-freight-calc/js/ifc-schedule.js"></script>
+    <script>ifcInit();</script>
+</main>
+<script>initOnboarding();</script>
+</body></html>
