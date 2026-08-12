@@ -6,7 +6,7 @@
     <title>团长后台系统 🛠️</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        :root { --main: #6c5ce7; --bg: #f0f2f5; --pink: #ffb7c5; --selected: #fff0f5; }
+        :root { --main: #6c5ce7; --bg: #f0f2f5; --pink: #ffb7c5; --danger-bg: #fff1f0; }
         body { font-family: system-ui; background: var(--bg); margin: 0; display: flex; flex-direction: column; height: 100vh; }
         #debug-bar { background: #333; color: #fff; padding: 5px 10px; font-size: 12px; text-align: center; z-index: 9999; }
         .login-box { max-width: 400px; margin: 50px auto; padding: 30px; background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
@@ -15,34 +15,32 @@
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }
         .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         
-        /* 表格样式 */
-        .table-container { background: #fff; padding: 20px; border-radius: 12px; margin-top: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border-bottom: 1px solid #eee; padding: 12px 10px; text-align: left; font-size: 13px; }
-        .selected-row { background-color: var(--selected) !important; }
+        /* 批量删除面板样式 */
+        .batch-delete-card { background: var(--danger-bg); border: 1px solid #ffa39e; margin-bottom: 20px; }
+        .collapse-header { cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: bold; color: #cf1322; }
+        .match-preview-list { background: #fff; border-radius: 6px; padding: 10px; margin-top: 10px; font-size: 12px; max-height: 200px; overflow-y: auto; border: 1px solid #d9d9d9; }
         
-        /* 批量操作栏 */
-        .batch-bar { display: flex; align-items: center; gap: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px; margin-bottom: 10px; border: 1px solid #eee; }
-        .batch-count { font-size: 13px; color: #666; }
-
+        /* 表格样式 */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #fff; }
+        th, td { border-bottom: 1px solid #eee; padding: 12px 10px; text-align: left; font-size: 13px; }
+        
         input, select, textarea { padding: 8px; border: 1px solid #ddd; border-radius: 6px; margin: 5px 0; width: 100%; box-sizing: border-box; font-family: inherit; }
         .btn { padding: 10px 16px; border-radius: 6px; cursor: pointer; border: none; font-weight: bold; transition: 0.2s; margin-right: 5px; }
         .btn-primary { background: var(--main); color: #fff; }
         .btn-pink { background: var(--pink); color: #fff; }
-        .btn-danger { background: #ff7675; color: #fff; }
+        .btn-danger { background: #ff4d4f; color: #fff; }
         .btn-outline { background: #fff; border: 1px solid #ddd; color: #666; }
         
         .stats-badge { padding: 3px 8px; border-radius: 12px; background: #f0f0f0; font-size: 11px; margin-right: 5px; border: 1px solid #ddd; }
-        #initGuide { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: #fff; display: flex; justify-content: center; align-items: center; z-index: 999; }
         .img-preview { width: 45px; height: 45px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; }
-        .import-preview-area { background: #f9f9f9; padding: 10px; border-radius: 6px; border: 1px dashed #ccc; margin-top: 10px; font-size: 12px; max-height: 150px; overflow-y: auto; white-space: pre-wrap; }
         .hidden { display: none !important; }
-        input[type="checkbox"] { width: auto; cursor: pointer; }
+        .flex-row { display: flex; gap: 10px; align-items: center; }
+        .flex-row > div { flex: 1; }
     </style>
 </head>
 <body>
 
-    <div id="debug-bar">⏳ 正在同步系统状态...</div>
+    <div id="debug-bar">⏳ 同步状态中...</div>
 
     <!-- 登录模块 -->
     <div id="loginSection" class="login-box">
@@ -53,11 +51,11 @@
         <p id="loginStatus" style="font-size:12px; color:red; text-align:center; margin-top:10px"></p>
     </div>
 
-    <!-- 初始化引导 -->
+    <!-- 初始化向导 -->
     <div id="initGuide" class="hidden">
-        <div class="card" style="color:#333; width: 320px; text-align: center;">
+        <div class="card" style="color:#333; width: 320px; text-align: center; margin: 100px auto;">
             <h3>✨ 欢迎新团长</h3>
-            <p>请设置你的查询密钥</p>
+            <p>设置查询密钥（发给团员用）</p>
             <input type="text" id="newQueryKey" placeholder="例如：endfield">
             <button class="btn btn-primary" style="width: 100%;" onclick="initSystem()">完成初始化</button>
         </div>
@@ -66,375 +64,29 @@
     <!-- 管理后台主体 -->
     <div id="adminSection" class="hidden">
         <nav>
-            <strong id="roleTag">载入中...</strong>
+            <strong id="roleTag">后台载入中...</strong>
             <div>
                 <span id="userEmail" style="margin-right:15px; font-size:13px; color:#666"></span>
-                <button class="btn btn-danger" style="padding: 5px 10px;" onclick="logout()">退出</button>
+                <button class="btn btn-outline" style="padding: 5px 10px;" onclick="logout()">退出</button>
             </div>
         </nav>
 
         <div class="main-content">
+            <!-- 统计 -->
             <div class="card" style="margin-bottom:20px;">
-                <h3>📊 数据统计</h3>
+                <h3>📊 实时统计</h3>
                 <div id="statsArea"></div>
             </div>
 
-            <div class="grid">
-                <!-- 单条录入 -->
-                <div class="card">
-                    <h3>✍️ 编辑/新增排单</h3>
-                    <input type="hidden" id="editItemId">
-                    <label>谷子名称</label><input type="text" id="itemName">
-                    <label>地区</label>
-                    <select id="itemCountry">
-                        <option>日本</option><option>国内</option><option>台湾</option><option>泰国</option><option>印尼</option><option>美国</option><option>韩国</option>
-                    </select>
-                    <label>团员昵称 (CN)</label><input type="text" id="itemCN">
-                    <div style="display:flex; gap:10px">
-                        <div><label>单价</label><input type="number" id="itemPrice" step="0.01"></div>
-                        <div><label>数量</label><input type="number" id="itemQty" value="1"></div>
-                    </div>
-                    <label>状态</label>
-                    <select id="itemStatus" onchange="checkStatusChange(this.value)">
-                        <option>未出荷</option><option>已下单未到货</option><option>回国中</option><option>已到货</option><option>可排发</option><option>已排发</option><option>未付款</option>
-                    </select>
-                    <div id="expiryInput" class="hidden">
-                        <label style="color:red">📦 设置囤货截止日</label>
-                        <input type="date" id="itemExpiry">
-                    </div>
-                    <label>柄图上传</label>
-                    <input type="file" id="itemFile" accept="image/*">
-                    <button class="btn btn-pink" style="width:100%; margin-top:15px" onclick="saveItem()">保存记录</button>
-                    <button class="btn btn-outline" style="width:100%; margin-top:5px" onclick="clearForm()">清空重置</button>
+            <!-- 批量删除面板 (按范围) -->
+            <div class="card batch-delete-card">
+                <div class="collapse-header" onclick="toggleBatchDeletePanel()">
+                    <span>🗑️ 批量删除 (按条件筛选删除)</span>
+                    <span id="collapseIcon">展开 ▼</span>
                 </div>
-
-                <!-- 批量导入 -->
-                <div class="card">
-                    <h3>📥 批量导入通贩汇总表</h3>
-                    <label>通贩地区</label>
-                    <select id="importCountry">
-                        <option>日本</option><option>国内</option><option>台湾</option><option>泰国</option><option>印尼</option><option>美国</option><option>韩国</option>
-                    </select>
-                    <label>粘贴 Excel 内容 (Tab 分隔)</label>
-                    <textarea id="csvInput" rows="8" placeholder="请直接复制 Excel 完整表格粘贴..."></textarea>
-                    <div style="margin-top:10px">
-                        <button class="btn btn-primary" onclick="previewImport()">🔍 预览解析</button>
-                        <button class="btn btn-pink" id="confirmImportBtn" disabled onclick="executeImport()">✅ 确认导入</button>
-                    </div>
-                    <div id="importPreview" class="import-preview-area">尚未解析数据...</div>
-                </div>
-            </div>
-
-            <!-- 排单明细表 -->
-            <div class="table-container">
-                <h3>📜 排单明细 (共 <span id="totalCount">0</span> 条)</h3>
-                
-                <!-- 批量操作栏 -->
-                <div class="batch-bar">
-                    <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this.checked)">
-                    <span class="batch-count">已选择 <strong id="selectedCount" style="color:var(--main)">0</strong> 条</span>
-                    <button class="btn btn-danger" style="padding: 5px 12px; font-size: 12px;" onclick="batchDelete()">🗑️ 批量删除</button>
-                </div>
-
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 20px;"></th>
-                            <th>图</th><th>名称</th><th>CN</th><th>明细</th><th>状态</th><th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tbody"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
-        
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        let currentData = null;
-        let currentUser = null;
-        let tempImportData = [];
-        let selectedIds = new Set(); // 存储选中的 item_id
-
-        // --- 基础登录与初始化逻辑 ---
-        async function login() {
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('pw').value.trim();
-            const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-            if (error) document.getElementById('loginStatus').innerText = "登录失败: " + error.message;
-            else checkAuth();
-        }
-        async function logout() { await supabaseClient.auth.signOut(); location.reload(); }
-
-        async function checkAuth() {
-            const { data: { user } } = await supabaseClient.auth.getUser();
-            if (!user) {
-                document.getElementById('debug-bar').innerText = "💡 请登录团长账号";
-                document.getElementById('loginSection').classList.remove('hidden');
-                return;
-            }
-            currentUser = user;
-            document.getElementById('loginSection').classList.add('hidden');
-            document.getElementById('adminSection').classList.remove('hidden');
-            document.getElementById('userEmail').innerText = user.email;
-
-            const { data: records } = await supabaseClient.from('leader_data').select('*');
-            if (records && records.length > 0) {
-                currentData = records[0];
-                document.getElementById('debug-bar').innerText = "✅ 数据已同步";
-                document.getElementById('debug-bar').style.background = "green";
-                renderUI();
-            } else {
-                document.getElementById('initGuide').classList.remove('hidden');
-            }
-        }
-
-        async function initSystem() {
-            const key = document.getElementById('newQueryKey').value.trim();
-            const { error } = await supabaseClient.rpc('init_leader_data', { p_query_key: key });
-            if(error) alert(error.message); else location.reload();
-        }
-
-        // --- 批量删除逻辑 ---
-        function toggleSelect(itemId) {
-            if (selectedIds.has(itemId)) selectedIds.delete(itemId);
-            else selectedIds.add(itemId);
-            updateSelectUI();
-        }
-
-        function toggleSelectAll(isChecked) {
-            const list = currentData.group_data || [];
-            if (isChecked) {
-                list.forEach(item => selectedIds.add(item.item_id));
-            } else {
-                selectedIds.clear();
-            }
-            updateSelectUI();
-        }
-
-        function updateSelectUI() {
-            // 更新计数
-            document.getElementById('selectedCount').innerText = selectedIds.size;
-            // 更新全选框状态
-            const list = currentData.group_data || [];
-            document.getElementById('selectAll').checked = list.length > 0 && selectedIds.size === list.length;
-            // 重新渲染表格内容（应用背景色和选中状态）
-            renderTableOnly();
-        }
-
-        async function batchDelete() {
-            if (selectedIds.size === 0) {
-                alert("请先勾选要删除的排项");
-                return;
-            }
-
-            if (!confirm(`确定要删除选中的 ${selectedIds.size} 条记录吗？此操作不可恢复！`)) {
-                return;
-            }
-
-            const newList = currentData.group_data.filter(item => !selectedIds.has(item.item_id));
-
-            const { error } = await supabaseClient.from('leader_data')
-                .update({ group_data: newList, updated_at: new Date().toISOString() })
-                .eq('query_key', currentData.query_key);
-
-            if (error) {
-                alert("删除失败: " + error.message);
-            } else {
-                alert(`已成功删除 ${selectedIds.size} 条记录`);
-                selectedIds.clear();
-                location.reload();
-            }
-        }
-
-        // --- 批量导入解析逻辑 ---
-        function previewImport() {
-            const raw = document.getElementById('csvInput').value.trim();
-            const country = document.getElementById('importCountry').value;
-            const previewArea = document.getElementById('importPreview');
-            const confirmBtn = document.getElementById('confirmImportBtn');
-
-            if (!raw) { alert("请粘贴 Excel 数据"); return; }
-            const lines = raw.split(/\r?\n/).filter(l => l.trim() !== "");
-            if (lines.length < 6) { alert("格式不正确，请确保复制了完整的 Excel 表格。"); return; }
-
-            const rowNames = lines[2].split('\t').map(c => c.trim());
-            const rowPrices = lines[3].split('\t').map(c => c.trim());
-            const itemNames = rowNames.slice(2);
-            const prices = rowPrices.slice(2).map(p => parseFloat(p.replace(/[¥,]/g, '')) || 0);
-
-            tempImportData = [];
-            let previewText = "";
-
-            for (let i = 5; i < lines.length; i++) {
-                const cells = lines[i].split('\t').map(c => c.trim());
-                const cn = cells[1];
-                if (!cn || cn === "昵称/总数") continue;
-
-                for (let j = 0; j < itemNames.length; j++) {
-                    const qtyStr = cells[j + 2];
-                    if (!qtyStr || qtyStr === "") continue;
-                    const qty = parseInt(parseFloat(qtyStr));
-                    if (qty > 0) {
-                        tempImportData.push({
-                            item_id: Date.now() + "_" + Math.random().toString(36).substr(2, 5),
-                            name: itemNames[j],
-                            country: country,
-                            price: prices[j],
-                            quantity: qty,
-                            cn: cn,
-                            status: "未出荷",
-                            image_url: "",
-                            storage_expiry: null,
-                            created_at: new Date().toISOString()
-                        });
-                        if (tempImportData.length <= 5) {
-                            previewText += `${tempImportData.length}. [${cn}] ${itemNames[j]} x${qty}\n`;
-                        }
-                    }
-                }
-            }
-
-            if (tempImportData.length === 0) {
-                previewArea.innerText = "❌ 未解析到有效数据";
-                confirmBtn.disabled = true;
-            } else {
-                previewArea.innerText = `预览解析(前5条):\n${previewText}...等共计 ${tempImportData.length} 条`;
-                confirmBtn.disabled = false;
-            }
-        }
-
-        async function executeImport() {
-            const newList = [...(currentData.group_data || []), ...tempImportData];
-            const { error } = await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
-            if (error) alert("导入失败"); else { alert("导入成功！"); location.reload(); }
-        }
-
-        // --- UI 渲染逻辑 ---
-        function renderUI() {
-            const isOwner = currentData.user_id === currentUser.id;
-            if (isOwner) {
-                document.getElementById('ownerSettings').classList.remove('hidden');
-                document.getElementById('dispKey').innerText = currentData.query_key;
-                renderAdmins();
-            }
-            document.getElementById('roleTag').innerText = isOwner ? "🎀 团长后台" : "助理后台";
-            
-            const list = currentData.group_data || [];
-            document.getElementById('totalCount').innerText = list.length;
-            const totalSum = list.reduce((s, i) => s + (i.price * i.quantity), 0);
-            document.getElementById('statsArea').innerHTML = `<strong>排项数: ${list.length}</strong> | <strong>应肾总额: ￥${totalSum.toFixed(2)}</strong>`;
-            
-            renderTableOnly();
-        }
-
-        function renderTableOnly() {
-            const list = currentData.group_data || [];
-            const tbody = document.getElementById('tbody');
-            // 倒序显示，最新添加的在顶端
-            tbody.innerHTML = list.slice().reverse().map((item) => {
-                const isSelected = selectedIds.has(item.item_id);
-                return `
-                    <tr class="${isSelected ? 'selected-row' : ''}">
-                        <td><input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelect('${item.item_id}')"></td>
-                        <td><img src="${item.image_url || ''}" class="img-preview" onerror="this.src='https://via.placeholder.com/50?text=无图'"></td>
-                        <td>${item.name}<br><small>${item.country}</small></td>
-                        <td>${item.cn}</td>
-                        <td>￥${item.price}x${item.quantity}</td>
-                        <td><span class="stats-badge">${item.status}</span></td>
-                        <td>
-                            <button onclick="editItem('${item.item_id}')" style="font-size:11px">改</button>
-                            <button onclick="deleteSingle('${item.item_id}')" style="font-size:11px;color:red">删</button>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // --- 单条保存与删除 ---
-        async function saveItem() {
-            const file = document.getElementById('itemFile').files[0];
-            let imageUrl = document.getElementById('editItemId').dataset.img || "";
-            if (file) {
-                const fileName = `${Date.now()}_${file.name}`;
-                await supabaseClient.storage.from('images').upload(fileName, file);
-                imageUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
-            }
-            const newItem = {
-                item_id: document.getElementById('editItemId').value || Date.now().toString(),
-                name: document.getElementById('itemName').value || "未命名",
-                country: document.getElementById('itemCountry').value,
-                price: parseFloat(document.getElementById('itemPrice').value) || 0,
-                quantity: parseInt(document.getElementById('itemQty').value) || 1,
-                cn: document.getElementById('itemCN').value || "未知",
-                status: document.getElementById('itemStatus').value,
-                image_url: imageUrl,
-                storage_expiry: document.getElementById('itemExpiry').value || null,
-                created_at: new Date().toISOString()
-            };
-            let newList = [...(currentData.group_data || [])];
-            const idx = newList.findIndex(i => i.item_id === newItem.item_id);
-            if (idx > -1) newList[idx] = newItem; else newList.push(newItem);
-
-            const { error } = await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
-            if (error) alert("保存失败"); else location.reload();
-        }
-
-        async function deleteSingle(id) {
-            if(!confirm("确定删除该记录？")) return;
-            const newList = currentData.group_data.filter(i => i.item_id !== id);
-            await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
-            location.reload();
-        }
-
-        // --- 表单交互 ---
-        function editItem(id) {
-            const item = currentData.group_data.find(i => i.item_id === id);
-            document.getElementById('editItemId').value = item.item_id;
-            document.getElementById('editItemId').dataset.img = item.image_url;
-            document.getElementById('itemName').value = item.name;
-            document.getElementById('itemCountry').value = item.country;
-            document.getElementById('itemCN').value = item.cn;
-            document.getElementById('itemPrice').value = item.price;
-            document.getElementById('itemQty').value = item.quantity;
-            document.getElementById('itemStatus').value = item.status;
-            document.getElementById('itemExpiry').value = item.storage_expiry || "";
-            checkStatusChange(item.status);
-            window.scrollTo(0,0);
-        }
-
-        function checkStatusChange(val) {
-            if(val === "可排发") document.getElementById('expiryInput').classList.remove('hidden');
-            else document.getElementById('expiryInput').classList.add('hidden');
-        }
-
-        async function addAdmin() {
-            const email = document.getElementById('newAdminEmail').value;
-            const { data, error } = await supabaseClient.rpc('add_co_admin', { p_query_key: currentData.query_key, p_email: email });
-            alert(data || error.message); location.reload();
-        }
-
-        function renderAdmins() {
-            const list = currentData.admin_ids || [];
-            document.getElementById('coAdminList').innerHTML = list.length ? list.map(id => `<div>助理UID: ${id.substring(0,8)}... <button onclick="removeAdmin('${id}')">移除</button></div>`).join('') : "暂无助理";
-        }
-
-        async function removeAdmin(uid) {
-            await supabaseClient.rpc('remove_co_admin', { p_query_key: currentData.query_key, p_admin_id: uid });
-            location.reload();
-        }
-
-        function clearForm() {
-            document.getElementById('editItemId').value = "";
-            document.getElementById('itemName').value = "";
-            document.getElementById('itemCN').value = "";
-            document.getElementById('itemFile').value = "";
-        }
-
-        checkAuth();
-    </script>
-</body>
-</html>
+                <div id="batchDeleteContent" class="hidden" style="margin-top:15px;">
+                    <p style="font-size: 13px; color: #851d19;">选择条件以筛选出要删除的记录：</p>
+                    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+                        <div><label>CN</label><select id="filterCN"><option>全部</option></select></div>
+                        <div><label>谷子名称</label><select id="filterName"><option>全部</option></select></div>
+                        <div><label
