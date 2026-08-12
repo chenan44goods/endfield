@@ -6,100 +6,76 @@
     <title>团长后台系统 🛠️</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        :root { --main: #6c5ce7; --bg: #f0f2f5; --pink: #ffb7c5; --danger-bg: #fff1f0; }
-        body { font-family: system-ui; background: var(--bg); margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        #debug-bar { background: #333; color: #fff; padding: 5px 10px; font-size: 12px; text-align: center; z-index: 9999; }
-        .login-box { max-width: 400px; margin: 50px auto; padding: 30px; background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
-        nav { background: #fff; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; }
+        :root { --main: #6c5ce7; --bg: #f0f2f5; --pink: #ffb7c5; --accent: #ff85a2; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); margin: 0; display: flex; flex-direction: column; height: 100vh; color: #333; }
+        
+        /* 布局与导航 */
+        nav { background: #fff; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
+        .tabs { background: #fff; display: flex; padding: 0 20px; border-bottom: 1px solid #ddd; gap: 20px; }
+        .tab-btn { padding: 12px 5px; border-bottom: 3px solid transparent; cursor: pointer; font-weight: bold; color: #666; transition: 0.2s; }
+        .tab-btn.active { color: var(--main); border-bottom-color: var(--main); }
         .main-content { flex: 1; overflow-y: auto; padding: 20px; }
+
+        /* 卡片与组件 */
+        .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }
-        .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         
-        /* 批量删除面板样式 */
-        .batch-delete-card { background: var(--danger-bg); border: 1px solid #ffa39e; margin-bottom: 20px; }
-        .collapse-header { cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: bold; color: #cf1322; }
-        .match-preview-list { background: #fff; border-radius: 6px; padding: 10px; margin-top: 10px; font-size: 12px; max-height: 200px; overflow-y: auto; border: 1px solid #d9d9d9; white-space: pre-wrap; }
+        /* 表格与操作 */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; }
+        th, td { border-bottom: 1px solid #eee; padding: 12px 10px; text-align: left; }
+        .batch-bar { display: flex; align-items: center; gap: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px; margin-bottom: 15px; border: 1px solid #eee; }
         
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #fff; }
-        th, td { border-bottom: 1px solid #eee; padding: 12px 10px; text-align: left; font-size: 13px; }
-        
-        input, select, textarea { padding: 8px; border: 1px solid #ddd; border-radius: 6px; margin: 5px 0; width: 100%; box-sizing: border-box; font-family: inherit; }
-        .btn { padding: 10px 16px; border-radius: 6px; cursor: pointer; border: none; font-weight: bold; transition: 0.2s; margin-right: 5px; }
+        /* 弹窗样式 */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal { background: #fff; padding: 25px; border-radius: 15px; width: 90%; max-width: 450px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+
+        /* 通用表单 */
+        input, select, textarea { padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; font-size: 14px; }
+        .btn { padding: 10px 16px; border-radius: 8px; cursor: pointer; border: none; font-weight: bold; transition: 0.2s; white-space: nowrap; }
+        .btn:active { transform: scale(0.95); }
         .btn-primary { background: var(--main); color: #fff; }
         .btn-pink { background: var(--pink); color: #fff; }
         .btn-danger { background: #ff4d4f; color: #fff; }
         .btn-outline { background: #fff; border: 1px solid #ddd; color: #666; }
         
-        .stats-badge { padding: 3px 8px; border-radius: 12px; background: #f0f0f0; font-size: 11px; margin-right: 5px; border: 1px solid #ddd; }
-        .img-preview { width: 45px; height: 45px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; }
+        .img-preview { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; }
+        .stats-badge { padding: 4px 10px; border-radius: 20px; background: #f0f0f0; font-size: 11px; margin-right: 5px; }
         .hidden { display: none !important; }
+        .selected-row { background-color: #f6f5ff !important; }
+        
+        /* 日志列表样式 */
+        .log-item { border-left: 3px solid var(--main); padding: 10px; margin-bottom: 10px; background: #f9f9f9; font-size: 12px; }
+        .log-arrow { margin: 0 8px; color: var(--main); font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <div id="debug-bar">⌛ 同步状态中...</div>
-
-    <!-- 登录模块 -->
-    <div id="loginSection" class="login-box">
-        <h2 style="text-align:center">🎀 团长登录</h2>
-        <input type="email" id="email" placeholder="管理邮箱">
-        <input type="password" id="pw" placeholder="管理密码">
-        <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="login()">登录后台</button>
-        <p id="loginStatus" style="font-size:12px; color:red; text-align:center; margin-top:10px"></p>
-    </div>
-
-    <!-- 初始化向导 -->
-    <div id="initGuide" class="hidden">
-        <div class="card" style="color:#333; width: 320px; text-align: center; margin: 100px auto;">
-            <h3>✨ 欢迎新团长</h3>
-            <p>设置查询密钥（发给团员用）</p>
-            <input type="text" id="newQueryKey" placeholder="例如：endfield">
-            <button class="btn btn-primary" style="width: 100%;" onclick="initSystem()">完成初始化</button>
+    <nav>
+        <strong id="roleTag">后台载入中...</strong>
+        <div>
+            <span id="userEmail" style="margin-right:15px; font-size:12px; color:#666"></span>
+            <button class="btn btn-outline" style="padding: 5px 12px;" onclick="logout()">退出</button>
         </div>
+    </nav>
+
+    <div class="tabs" id="tabBar">
+        <div class="tab-btn active" onclick="switchTab('overview')">📋 排表管理</div>
+        <div class="tab-btn" onclick="switchTab('logs')">🔄 转单记录</div>
+        <div class="tab-btn" onclick="switchTab('settings')">⚙️ 团务设置</div>
     </div>
 
-    <!-- 管理后台主体 -->
-    <div id="adminSection" class="hidden">
-        <nav>
-            <strong id="roleTag">后台载入中...</strong>
-            <div>
-                <span id="userEmail" style="margin-right:15px; font-size:13px; color:#666"></span>
-                <button class="btn btn-outline" style="padding: 5px 10px;" onclick="logout()">退出</button>
-            </div>
-        </nav>
-
-        <div class="main-content">
-            <!-- 统计 -->
-            <div class="card" style="margin-bottom:20px;">
-                <h3>📊 实时统计</h3>
+    <div class="main-content">
+        <!-- 标签页1: 排表管理 -->
+        <div id="tab-overview" class="tab-content">
+            <div class="card">
+                <h3>📊 全团统计</h3>
                 <div id="statsArea"></div>
             </div>
 
-            <!-- 批量删除面板 (按范围) -->
-            <div class="card batch-delete-card">
-                <div class="collapse-header" onclick="toggleBatchDeletePanel()">
-                    <span>🗑️ 批量删除记录 (按条件筛选)</span>
-                    <span id="collapseIcon">展开 ▼</span>
-                </div>
-                <div id="batchDeleteContent" class="hidden" style="margin-top:15px;">
-                    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
-                        <div><label>按CN筛选</label><select id="filterCN"><option>全部</option></select></div>
-                        <div><label>按谷子名称</label><select id="filterName"><option>全部</option></select></div>
-                        <div><label>按国家</label><select id="filterCountry"><option>全部</option><option>国内</option><option>日本</option><option>台湾</option><option>泰国</option><option>印尼</option><option>美国</option><option>韩国</option></select></div>
-                        <div><label>按状态</label><select id="filterStatus"><option>全部</option><option>未出荷</option><option>已下单未到货</option><option>回国中</option><option>已到货</option><option>可排发</option><option>已排发</option><option>未付款</option></select></div>
-                    </div>
-                    <div style="margin-top:15px;">
-                        <button class="btn btn-outline" onclick="previewBatchDelete()">🔍 预览匹配结果</button>
-                        <button class="btn btn-danger" id="executeDeleteBtn" disabled onclick="executeBatchDelete()">❌ 确认删除匹配项</button>
-                    </div>
-                    <div id="deletePreview" class="match-preview-list">尚未开始预览...</div>
-                </div>
-            </div>
-
             <div class="grid">
-                <!-- 单条录入 -->
                 <div class="card">
-                    <h3>✍️ 单条录入/编辑</h3>
+                    <h3>✍️ 单条编辑/录入</h3>
                     <input type="hidden" id="editItemId">
                     <label>谷子名称</label><input type="text" id="itemName">
                     <label>地区</label>
@@ -113,283 +89,381 @@
                     <select id="itemStatus" onchange="checkStatusChange(this.value)">
                         <option>未出荷</option><option>已下单未到货</option><option>回国中</option><option>已到货</option><option>可排发</option><option>已排发</option><option>未付款</option>
                     </select>
-                    <div id="expiryInput" class="hidden"><label style="color:red">📦 设置囤货截止日</label><input type="date" id="itemExpiry"></div>
-                    <label>柄图上传</label><input type="file" id="itemFile" accept="image/*">
                     <button class="btn btn-pink" style="width:100%; margin-top:10px" onclick="saveItem()">保存记录</button>
-                    <button class="btn btn-outline" style="width:100%; margin-top:5px" onclick="clearForm()">清空重置</button>
+                    <button class="btn btn-outline" style="width:100%; margin-top:5px" onclick="clearForm()">清空</button>
                 </div>
 
-                <!-- 批量导入 -->
                 <div class="card">
                     <h3>📥 批量导入 (Excel Tab格式)</h3>
-                    <label>归属国家</label>
-                    <select id="importCountry"><option>日本</option><option>国内</option><option>台湾</option><option>泰国</option><option>印尼</option><option>美国</option><option>韩国</option></select>
-                    <textarea id="csvInput" rows="10" placeholder="请复制 Excel 完整表格粘贴在此..."></textarea>
-                    <div style="margin-top:10px">
-                        <button class="btn btn-primary" onclick="previewImport()">🔍 预览解析</button>
-                        <button class="btn btn-pink" id="confirmImportBtn" disabled onclick="executeImport()">✅ 确认导入</button>
-                    </div>
-                    <div id="importPreview" class="import-preview-area" style="font-size:12px; background:#f9f9f9; padding:10px; margin-top:10px; border-radius:6px; max-height:100px; overflow-y:auto; border:1px dashed #ccc;">尚未解析...</div>
+                    <select id="importCountry"><option>日本</option><option>国内</option><option>台湾</option></select>
+                    <textarea id="csvInput" rows="6" placeholder="请直接复制 Excel 表格内容粘贴..."></textarea>
+                    <button class="btn btn-primary" style="width:100%" onclick="previewImport()">解析并导入</button>
                 </div>
             </div>
 
-            <div class="card" style="margin-top:20px; overflow-x:auto;">
-                <h3>📜 全团明细</h3>
+            <div class="card table-wrap">
+                <h3>📜 排单明细</h3>
+                <div class="batch-bar">
+                    <input type="checkbox" id="selectAllCheck" onchange="toggleSelectAll(this.checked)">
+                    <span style="font-size:12px">已选择 <strong id="selCount" style="color:var(--main)">0</strong> 条</span>
+                    <button class="btn btn-primary" style="padding:5px 12px; font-size:12px;" onclick="openTransferModal('batch')">🔄 批量转单</button>
+                    <button class="btn btn-danger" style="padding:5px 12px; font-size:12px;" onclick="batchDelete()">🗑️ 批量删除</button>
+                </div>
                 <table>
-                    <thead><tr><th>图</th><th>名称</th><th>CN</th><th>明细</th><th>状态</th><th>操作</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th style="width:20px"></th>
+                            <th>图</th><th>名称</th><th>CN</th><th>金额</th><th>状态</th><th>操作</th>
+                        </tr>
+                    </thead>
                     <tbody id="tbody"></tbody>
                 </table>
             </div>
+        </div>
+
+        <!-- 标签页2: 转单记录 -->
+        <div id="tab-logs" class="tab-content hidden">
+            <div class="card">
+                <h3>📜 历史转单日志</h3>
+                <div id="transferLogsList"></div>
+            </div>
+        </div>
+
+        <!-- 标签页3: 设置 -->
+        <div id="tab-settings" class="tab-content hidden">
+            <div class="card">
+                <h3>⚙️ 团务设置</h3>
+                <p>当前查询密钥：<strong id="dispKey" style="color:var(--main)"></strong></p>
+                <hr>
+                <h4>副团长管理</h4>
+                <div id="coAdminList"></div>
+                <input type="email" id="newAdminEmail" placeholder="输入副团长邮箱">
+                <button class="btn btn-primary" onclick="addAdmin()">添加副团长</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 转单弹窗 -->
+    <div class="modal-overlay" id="transferModal">
+        <div class="modal">
+            <h3 id="transferTitle">🔄 订单转单交接</h3>
+            <p id="transferInfo" style="font-size:13px; color:#666"></p>
+            <label>新接手人 (CN)</label>
+            <input type="text" id="newCNInput" list="cnList" placeholder="搜索已有团员或输入新CN">
+            <datalist id="cnList"></datalist>
+            
+            <label>转单备注</label>
+            <input type="text" id="transferNote" placeholder="例如：团员掉落、合并账号">
+            
+            <div style="margin-top:20px; display:flex; gap:10px">
+                <button class="btn btn-outline" style="flex:1" onclick="closeModal()">取消</button>
+                <button class="btn btn-primary" style="flex:1" onclick="executeTransfer()">✅ 确认转单</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 初始化 -->
+    <div id="initGuide" class="modal-overlay" style="display:none">
+        <div class="modal" style="text-align:center">
+            <h3>✨ 欢迎新团长</h3>
+            <input type="text" id="newQueryKey" placeholder="设置你的查询密钥">
+            <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="initSystem()">完成初始化</button>
         </div>
     </div>
 
     <script>
         const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
-        
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
         let currentData = null;
         let currentUser = null;
-        let tempImportItems = [];
-        let tempDeleteMatches = [];
+        let selectedIds = new Set();
+        let transferTargets = []; // 暂存要转单的 item_id
 
-        // --- 登录系统 ---
+        // --- 核心鉴权 ---
         async function login() {
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('pw').value.trim();
             const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-            if (error) document.getElementById('loginStatus').innerText = "登录失败: " + error.message;
-            else checkAuth();
+            if (error) alert("失败: " + error.message); else checkAuth();
         }
         async function logout() { await supabaseClient.auth.signOut(); location.reload(); }
 
         async function checkAuth() {
             const { data: { user } } = await supabaseClient.auth.getUser();
             if (!user) {
-                document.getElementById('debug-bar').innerText = "💡 请登录团长账号";
-                document.getElementById('loginSection').classList.remove('hidden');
+                document.getElementById('debug-bar').innerText = "💡 请登录";
                 return;
             }
             currentUser = user;
             document.getElementById('loginSection').classList.add('hidden');
-            document.getElementById('adminSection').classList.remove('hidden');
             document.getElementById('userEmail').innerText = user.email;
 
             const { data: records } = await supabaseClient.from('leader_data').select('*');
             if (records && records.length > 0) {
                 currentData = records[0];
-                document.getElementById('debug-bar').innerText = "✅ 数据同步成功";
-                document.getElementById('debug-bar').style.background = "green";
+                document.getElementById('debug-bar').innerText = "✅ 同步成功";
                 renderUI();
             } else {
-                document.getElementById('initGuide').classList.remove('hidden');
+                document.getElementById('initGuide').style.display = 'flex';
             }
         }
 
-        async function initSystem() {
-            const key = document.getElementById('newQueryKey').value.trim();
-            if(!key) return alert("请输入密钥");
-            const { error } = await supabaseClient.rpc('init_leader_data', { p_query_key: key });
-            if(error) alert(error.message); else location.reload();
+        // --- 标签页切换 ---
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-' + tabId).classList.remove('hidden');
+            event.target.classList.add('active');
+            if (tabId === 'logs') renderLogs();
         }
 
-        // --- 批量删除逻辑 ---
-        function toggleBatchDeletePanel() {
-            const content = document.getElementById('batchDeleteContent');
-            const icon = document.getElementById('collapseIcon');
-            if(content.classList.contains('hidden')) {
-                content.classList.remove('hidden');
-                icon.innerText = "收起 ▲";
-                populateFilterOptions();
-            } else {
-                content.classList.add('hidden');
-                icon.innerText = "展开 ▼";
-            }
-        }
-
-        function populateFilterOptions() {
-            const data = currentData.group_data || [];
-            const cns = [...new Set(data.map(i => i.cn))].sort();
-            const names = [...new Set(data.map(i => i.name))].sort();
-            
-            const cnSelect = document.getElementById('filterCN');
-            const nameSelect = document.getElementById('filterName');
-            
-            cnSelect.innerHTML = '<option>全部</option>' + cns.map(c => `<option>${c}</option>`).join('');
-            nameSelect.innerHTML = '<option>全部</option>' + names.map(n => `<option>${n}</option>`).join('');
-        }
-
-        function previewBatchDelete() {
-            const cnF = document.getElementById('filterCN').value;
-            const nameF = document.getElementById('filterName').value;
-            const countryF = document.getElementById('filterCountry').value;
-            const statusF = document.getElementById('filterStatus').value;
-            const data = currentData.group_data || [];
-
-            tempDeleteMatches = data.filter(item => {
-                if (cnF !== '全部' && item.cn !== cnF) return false;
-                if (nameF !== '全部' && item.name !== nameF) return false;
-                if (countryF !== '全部' && item.country !== countryF) return false;
-                if (statusF !== '全部' && item.status !== statusF) return false;
-                return true;
-            });
-
-            const previewArea = document.getElementById('deletePreview');
-            const btn = document.getElementById('executeDeleteBtn');
-            
-            if(tempDeleteMatches.length === 0) {
-                previewArea.innerText = "没有匹配到任何记录。";
-                btn.disabled = true;
-            } else {
-                let text = tempDeleteMatches.slice(0, 10).map(i => `${i.cn} - ${i.name} (${i.status})`).join('\n');
-                if(tempDeleteMatches.length > 10) text += `\n...还有 ${tempDeleteMatches.length - 10} 条`;
-                previewArea.innerText = `已匹配 ${tempDeleteMatches.length} 条记录：\n${text}`;
-                btn.disabled = false;
-                btn.innerText = `❌ 确认删除这 ${tempDeleteMatches.length} 条`;
-            }
-        }
-
-        async function executeBatchDelete() {
-            if(!confirm(`确定要删除匹配的 ${tempDeleteMatches.length} 条记录吗？此操作不可恢复。`)) return;
-            
-            const matchIds = new Set(tempDeleteMatches.map(i => i.item_id));
-            const newData = currentData.group_data.filter(item => !matchIds.has(item.item_id));
-
-            const { error } = await supabaseClient.from('leader_data')
-                .update({ group_data: newData, updated_at: new Date().toISOString() })
-                .eq('query_key', currentData.query_key);
-
-            if(error) alert("删除失败: " + error.message);
-            else { alert(`成功删除 ${tempDeleteMatches.length} 条记录`); location.reload(); }
-        }
-
-        // --- 批量导入逻辑 ---
-        function previewImport() {
-            const raw = document.getElementById('csvInput').value.trim();
-            const country = document.getElementById('importCountry').value;
-            if(!raw) return alert("内容为空");
-            const lines = raw.split(/\r?\n/).filter(l => l.trim() !== "");
-            if(lines.length < 6) return alert("格式不正确，请确保复制了整表。");
-
-            const itemNames = lines[2].split('\t').slice(2);
-            const prices = lines[3].split('\t').slice(2).map(p => parseFloat(p.replace(/[¥,]/g, '')) || 0);
-            
-            tempImportItems = [];
-            for(let i = 5; i < lines.length; i++) {
-                const cells = lines[i].split('\t');
-                const cn = cells[1]?.trim();
-                if(!cn || cn === "昵称/总数") continue;
-                for(let j = 0; j < itemNames.length; j++) {
-                    const qtyStr = cells[j+2]?.trim();
-                    if(!qtyStr || qtyStr === "") continue;
-                    const qty = parseInt(parseFloat(qtyStr));
-                    if(qty > 0) {
-                        tempImportItems.push({
-                            item_id: Date.now() + "_" + Math.random().toString(36).substr(2,5),
-                            name: itemNames[j].trim(),
-                            country: country,
-                            price: prices[j],
-                            quantity: qty,
-                            cn: cn,
-                            status: "未出荷",
-                            image_url: "",
-                            storage_expiry: null,
-                            created_at: new Date().toISOString()
-                        });
-                    }
-                }
-            }
-            document.getElementById('importPreview').innerText = `解析成功：识别到 ${tempImportItems.length} 条记录。`;
-            document.getElementById('confirmImportBtn').disabled = tempImportItems.length === 0;
-        }
-
-        async function executeImport() {
-            const newList = [...(currentData.group_data || []), ...tempImportItems];
-            const { error } = await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
-            if(error) alert("导入失败"); else { alert("导入成功！"); location.reload(); }
-        }
-
-        // --- 基础 CRUD ---
+        // --- 渲染逻辑 ---
         function renderUI() {
             const isOwner = currentData.user_id === currentUser.id;
             document.getElementById('roleTag').innerText = isOwner ? "🎀 团长后台" : "助理后台";
+            if(isOwner) {
+                document.getElementById('dispKey').innerText = currentData.query_key;
+                renderAdmins();
+            }
+
             const list = currentData.group_data || [];
-            const total = list.reduce((s, i) => s + (i.price * i.quantity), 0);
-            document.getElementById('statsArea').innerHTML = `<span class="stats-badge">总项: ${list.length}</span> <span class="stats-badge">总金额: ￥${total.toFixed(2)}</span>`;
-            
+            const totalMoney = list.reduce((s, i) => s + (i.price * i.quantity), 0);
+            document.getElementById('statsArea').innerHTML = `
+                <span class="stats-badge">总项: ${list.length}</span>
+                <span class="stats-badge">总金额: ￥${totalMoney.toFixed(2)}</span>
+            `;
+
+            // 更新搜索列表 (datalist)
+            const cns = [...new Set(list.map(i => i.cn))].sort();
+            document.getElementById('cnList').innerHTML = cns.map(c => `<option value="${c}">`).join('');
+
             const tbody = document.getElementById('tbody');
-            tbody.innerHTML = list.slice().reverse().map(item => `
-                <tr>
-                    <td><img src="${item.image_url || ''}" class="img-preview" onerror="this.src='https://via.placeholder.com/50'"></td>
-                    <td>${item.name}<br><small>${item.country}</small></td>
-                    <td>${item.cn}</td>
-                    <td>￥${item.price} x ${item.quantity}</td>
-                    <td><span class="stats-badge">${item.status}</span></td>
-                    <td>
-                        <button onclick="editItem('${item.item_id}')" style="font-size:11px">改</button>
-                        <button onclick="deleteSingle('${item.item_id}')" style="font-size:11px;color:red">删</button>
-                    </td>
-                </tr>
+            tbody.innerHTML = list.slice().reverse().map(item => {
+                const isChecked = selectedIds.has(item.item_id);
+                return `
+                    <tr class="${isChecked ? 'selected-row' : ''}">
+                        <td><input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleSelect('${item.item_id}')"></td>
+                        <td><img src="${item.image_url ? item.image_url+'?width=80' : ''}" class="img-preview" onerror="this.src='https://via.placeholder.com/50'"></td>
+                        <td>${item.name}<br><small>${item.country}</small></td>
+                        <td>${item.cn}</td>
+                        <td>￥${item.price}x${item.quantity}</td>
+                        <td><span class="stats-badge">${item.status}</span></td>
+                        <td>
+                            <button class="btn btn-primary" style="padding:2px 8px; font-size:11px" onclick="openTransferModal(['${item.item_id}'])">转单</button>
+                            <button class="btn btn-outline" style="padding:2px 8px; font-size:11px" onclick="editItem('${item.item_id}')">改</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // --- 转单逻辑 ---
+        function openTransferModal(ids) {
+            if (ids === 'batch') {
+                if (selectedIds.size === 0) return alert("请先勾选需要转单的项目");
+                transferTargets = Array.from(selectedIds);
+            } else {
+                transferTargets = ids;
+            }
+            
+            document.getElementById('transferTitle').innerText = transferTargets.length > 1 ? `🔄 批量转单 (共 ${transferTargets.length} 项)` : "🔄 订单转单交接";
+            document.getElementById('transferInfo').innerText = `选中的排单将全部变更归属人。`;
+            document.getElementById('transferModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('transferModal').style.display = 'none';
+            document.getElementById('newCNInput').value = "";
+            document.getElementById('transferNote').value = "";
+        }
+
+        async function executeTransfer() {
+            const newCN = document.getElementById('newCNInput').value.trim();
+            const note = document.getElementById('transferNote').value.trim();
+            if (!newCN) return alert("请输入新接手人CN");
+
+            if (!confirm(`确定要将这 ${transferTargets.length} 项排单转给 [${newCN}] 吗？`)) return;
+
+            const now = new Date().toISOString();
+            const operator = currentUser.email;
+            
+            // 1. 更新 group_data
+            let groupData = [...currentData.group_data];
+            let newLogs = [];
+
+            transferTargets.forEach(id => {
+                const idx = groupData.findIndex(i => i.item_id === id);
+                if (idx > -1) {
+                    const oldCN = groupData[idx].cn;
+                    // 个体历史
+                    if (!groupData[idx].transfer_history) groupData[idx].transfer_history = [];
+                    groupData[idx].transfer_history.push({ from_cn: oldCN, to_cn: newCN, time: now, note, operator });
+                    // 更新CN
+                    groupData[idx].cn = newCN;
+                    // 全局日志
+                    newLogs.push({
+                        item_id: id,
+                        item_name: groupData[idx].name,
+                        quantity: groupData[idx].quantity,
+                        from_cn: oldCN,
+                        to_cn: newCN,
+                        time: now,
+                        note,
+                        operator
+                    });
+                }
+            });
+
+            // 2. 更新 image_data 日志
+            let imageData = currentData.image_data || {};
+            if (!imageData.transfer_logs) imageData.transfer_logs = [];
+            imageData.transfer_logs = [...newLogs, ...imageData.transfer_logs].slice(0, 500); // 保留最新500条
+
+            // 3. 提交
+            const { error } = await supabaseClient.from('leader_data')
+                .update({ 
+                    group_data: groupData, 
+                    image_data: imageData,
+                    updated_at: now 
+                })
+                .eq('query_key', currentData.query_key);
+
+            if (error) {
+                alert("操作失败: " + error.message);
+            } else {
+                alert("✅ 转单交接成功！");
+                selectedIds.clear();
+                location.reload();
+            }
+        }
+
+        function renderLogs() {
+            const logs = (currentData.image_data && currentData.image_data.transfer_logs) || [];
+            const container = document.getElementById('transferLogsList');
+            if (logs.length === 0) {
+                container.innerHTML = "暂无转单记录。";
+                return;
+            }
+
+            container.innerHTML = logs.map(log => `
+                <div class="log-item">
+                    <div style="margin-bottom:5px">
+                        <strong>${log.item_name}</strong> (x${log.quantity})
+                        <span style="float:right; color:#999">${new Date(log.time).toLocaleString()}</span>
+                    </div>
+                    <div>
+                        <span>${log.from_cn}</span>
+                        <span class="log-arrow">➔</span>
+                        <span style="color:var(--main); font-weight:bold">${log.to_cn}</span>
+                    </div>
+                    <div style="margin-top:5px; color:#666">
+                        备注: ${log.note || '无'} | 操作人: ${log.operator}
+                    </div>
+                </div>
             `).join('');
         }
 
-        async function saveItem() {
-            const file = document.getElementById('itemFile').files[0];
-            let imageUrl = document.getElementById('editItemId').dataset.img || "";
-            if(file) {
-                const fileName = `${Date.now()}_${file.name}`;
-                await supabaseClient.storage.from('images').upload(fileName, file);
-                imageUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
+        // --- 批量导入与基础操作 ---
+        async function previewImport() {
+            const raw = document.getElementById('csvInput').value.trim();
+            const country = document.getElementById('importCountry').value;
+            if(!raw) return;
+            const lines = raw.split('\n').filter(l => l.trim());
+            const itemNames = lines[2].split('\t').slice(2);
+            const prices = lines[3].split('\t').slice(2).map(p => parseFloat(p.replace(/[¥,]/g, '')) || 0);
+            
+            let items = [];
+            for(let i = 5; i < lines.length; i++){
+                const cells = lines[i].split('\t');
+                const cn = cells[1]?.trim();
+                if(!cn || cn === "昵称/总数") continue;
+                itemNames.forEach((name, idx) => {
+                    const qty = parseInt(parseFloat(cells[idx+2]));
+                    if(qty > 0) {
+                        items.push({ 
+                            item_id: Date.now()+'_'+Math.random().toString(36).substr(2,4), 
+                            name: name.trim(), country, price: prices[idx], quantity: qty, cn, status: "未出荷", created_at: new Date().toISOString() 
+                        });
+                    }
+                });
             }
+            const newList = [...(currentData.group_data || []), ...items];
+            await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
+            alert("成功导入 " + items.length + " 条"); location.reload();
+        }
+
+        async function saveItem() {
             const newItem = {
                 item_id: document.getElementById('editItemId').value || Date.now().toString(),
-                name: document.getElementById('itemName').value || "未命名",
+                name: document.getElementById('itemName').value,
                 country: document.getElementById('itemCountry').value,
                 price: parseFloat(document.getElementById('itemPrice').value) || 0,
                 quantity: parseInt(document.getElementById('itemQty').value) || 1,
-                cn: document.getElementById('itemCN').value || "未知",
+                cn: document.getElementById('itemCN').value,
                 status: document.getElementById('itemStatus').value,
-                image_url: imageUrl,
-                storage_expiry: document.getElementById('itemExpiry').value || null,
                 created_at: new Date().toISOString()
             };
             let newList = [...(currentData.group_data || [])];
             const idx = newList.findIndex(i => i.item_id === newItem.item_id);
             if(idx > -1) newList[idx] = newItem; else newList.push(newItem);
-            const { error } = await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
-            if(error) alert("保存失败"); else location.reload();
+            await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
+            location.reload();
         }
 
         function editItem(id) {
             const item = currentData.group_data.find(i => i.item_id === id);
             document.getElementById('editItemId').value = item.item_id;
-            document.getElementById('editItemId').dataset.img = item.image_url;
             document.getElementById('itemName').value = item.name;
             document.getElementById('itemCN').value = item.cn;
             document.getElementById('itemPrice').value = item.price;
             document.getElementById('itemQty').value = item.quantity;
             document.getElementById('itemStatus').value = item.status;
-            checkStatusChange(item.status);
+            switchTab('overview');
             window.scrollTo(0,0);
         }
 
-        async function deleteSingle(id) {
-            if(!confirm("确定删除？")) return;
-            const newList = currentData.group_data.filter(i => i.item_id !== id);
+        async function batchDelete() {
+            if(selectedIds.size === 0) return;
+            if(!confirm(`确定删除这 ${selectedIds.size} 项吗？`)) return;
+            const newList = currentData.group_data.filter(i => !selectedIds.has(i.item_id));
             await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
             location.reload();
         }
 
-        function checkStatusChange(val) {
-            if(val === "可排发") document.getElementById('expiryInput').classList.remove('hidden');
-            else document.getElementById('expiryInput').classList.add('hidden');
+        // --- 辅助功能 ---
+        function toggleSelect(id) {
+            if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+            document.getElementById('selCount').innerText = selectedIds.size;
+            renderUI();
         }
-
-        function clearForm() {
-            document.getElementById('editItemId').value = "";
+        function toggleSelectAll(checked) {
+            const list = currentData.group_data || [];
+            if(checked) list.forEach(i => selectedIds.add(i.item_id));
+            else selectedIds.clear();
+            document.getElementById('selCount').innerText = selectedIds.size;
+            renderUI();
+        }
+        function checkStatusChange(val) { /* 暂时保留逻辑 */ }
+        function clearForm() { 
+            document.getElementById('editItemId').value = ""; 
             document.getElementById('itemName').value = "";
             document.getElementById('itemCN').value = "";
-            document.getElementById('itemFile').value = "";
+        }
+        async function initSystem() {
+            const key = document.getElementById('newQueryKey').value.trim();
+            await supabaseClient.rpc('init_leader_data', { p_query_key: key });
+            location.reload();
+        }
+        function renderAdmins() {
+            const list = currentData.admin_ids || [];
+            document.getElementById('coAdminList').innerHTML = list.map(id => `<div>助理: ${id.substring(0,8)}...</div>`).join('');
+        }
+        async function addAdmin() {
+            const email = document.getElementById('newAdminEmail').value;
+            const { data } = await supabaseClient.rpc('add_co_admin', { p_query_key: currentData.query_key, p_email: email });
+            alert(data); location.reload();
         }
 
         checkAuth();
