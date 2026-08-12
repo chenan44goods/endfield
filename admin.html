@@ -33,6 +33,7 @@
         .items-grid { display: flex; flex-wrap: wrap; gap: 6px; max-width: 800px; }
         .item-tag { background: #f0f2f5; padding: 3px 8px; border-radius: 5px; font-size: 12px; color: #444; border: 1px solid #e2e8f0; white-space: nowrap; font-weight: 500; }
     </style>
+<base target="_blank">
 </head>
 <body>
 
@@ -173,7 +174,7 @@
                     <div id="transferLogsList"></div>
                 </div>
             </div>
-            
+
             <!-- Tab 4: 团务设置 -->
             <div id="tab-settings" class="tab-content hidden"><div class="card"><h3>⚙️ 系统设置</h3><p>云端数据库查询 Key：<strong id="dispKey" style="color:var(--main);">-</strong></p></div></div>
         </div>
@@ -246,6 +247,8 @@
         let selectedIds = new Set();
         let selectedLogIndices = new Set();
         let transferTargetId = null;
+        // 缓存排发工作台当前显示的应用列表，避免 onclick 传字符串出问题
+        let _shipAppsCache = [];
 
         async function checkAuth() {
             const { data: { user } } = await supabaseClient.auth.getUser();
@@ -258,7 +261,7 @@
             document.getElementById('loginSection').classList.add('hidden');
             document.getElementById('adminSection').classList.remove('hidden');
             document.getElementById('userEmail').innerText = user.email;
-            
+
             const { data } = await supabaseClient.from('leader_data').select('*');
             if (data && data[0]) {
                 currentData = data[0];
@@ -320,7 +323,7 @@
             let groupData = [...currentData.group_data];
             let logs = (currentData.image_data && currentData.image_data.transfer_logs) || [];
             const ids = transferTargetId ? [transferTargetId] : Array.from(selectedIds);
-            
+
             ids.forEach(id => {
                 const idx = groupData.findIndex(i => i.item_id === id);
                 if (idx > -1) {
@@ -375,7 +378,7 @@
             document.getElementById('viewDoneBtn').className = mode === 'done' ? 'btn btn-primary' : 'btn btn-outline';
             renderShippingWorkbench();
         }
-        
+
         function renderShippingWorkbench() {
             const apps = (currentData.image_data && currentData.image_data.applications) || [];
             const pending = apps.filter(a => a.status === '待处理');
@@ -384,14 +387,15 @@
             document.getElementById('completedShipCount').innerText = done.length;
 
             const target = (shipViewMode === 'pending' ? pending : done).sort((a,b) => new Date(b.time) - new Date(a.time));
+            _shipAppsCache = target; // 缓存到全局，避免 onclick 传字符串
             const tbody = document.getElementById('shipBody');
-            
+
             if(target.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:#999">🎉 当前没有记录</td></tr>`;
                 return;
             }
 
-            tbody.innerHTML = target.map(app => {
+            tbody.innerHTML = target.map((app, idx) => {
                 const chunks = [];
                 for (let i = 0; i < app.items.length; i += 10) {
                     chunks.push(app.items.slice(i, i + 10));
@@ -403,36 +407,62 @@
                         ${chunk.map(i => `<span class="item-tag">${i.name} x${i.quantity}</span>`).join('')}
                     </div>
                 `).join('');
-                
+
                 let op = '';
                 if(shipViewMode === 'pending') {
                     op = `
                         <div style="display:flex; gap:6px; flex-wrap:nowrap;">
-                            <button class="btn btn-primary" style="padding:4px 8px; font-size:12px;" onclick="openShipConfirm('${app.time}', '${app.cn}')">确认发货</button>
-                            <button class="btn btn-outline" style="padding:4px 8px; font-size:12px; color:var(--danger); border-color:var(--danger);" onclick="deletePendingShipRecord('${app.time}','${app.cn}')">🗑️ 删除申请</button>
+                            <button class="btn btn-primary" style="padding:4px 8px; font-size:12px;" onclick="handleShipConfirm(${idx})">确认发货</button>
+                            <button class="btn btn-outline" style="padding:4px 8px; font-size:12px; color:var(--danger); border-color:var(--danger);" onclick="handleDeletePending(${idx})">🗑️ 删除申请</button>
                         </div>
                     `;
                 } else {
                     op = `
                         <div style="display:flex; flex-direction:column; gap:5px;">
                             <small style="color:#888;">完成时间: ${new Date(app.completed_time).toLocaleDateString()}</small>
-                            <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger); padding:2px 6px; font-size:11px" onclick="deleteCompletedShipRecord('${app.time}','${app.cn}')">🗑️ 删除记录</button>
+                            <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger); padding:2px 6px; font-size:11px" onclick="handleDeleteCompleted(${idx})">🗑️ 删除记录</button>
                         </div>
                     `;
                 }
-                
+
                 return `<tr><td style="white-space:nowrap;">${new Date(app.time).toLocaleString()}</td><td><b>${app.cn}</b></td><td>${itemsHtml}</td><td>${app.note || '-'}</td><td>${op}</td></tr>`;
             }).join('');
         }
 
-        async function deletePendingShipRecord(time, cn) {
-            if(!confirm("⚠️ 确认删除这条排发申请？\n\n删除后，申请中的谷子状态会自动恢复为“可排发”，团员可重新提交申请。")) return;
-            
-            const apps = (currentData.image_data && currentData.image_data.applications) || [];
-            const targetApp = apps.find(a => a.time === time && a.cn === cn);
-            if(!targetApp) return;
+        // 通过缓存索引获取应用，避免字符串传参问题
+        function getAppFromCache(idx) {
+            return _shipAppsCache[idx];
+        }
 
-            const itemIdsToRollback = new Set(targetApp.items.map(i => i.item_id));
+        function handleShipConfirm(idx) {
+            const app = getAppFromCache(idx);
+            if(!app) return;
+            const apps = currentData.image_data.applications;
+            currentShipAppIndex = apps.findIndex(a => a.time === app.time && a.cn === app.cn);
+            document.getElementById('shipConfirmInfo').innerHTML = `确认已为 <strong>${app.cn}</strong> 发出以下谷子吗？<br><br>${app.items.map(i => `• ${i.name} x${i.quantity}`).join('<br>')}`;
+            document.getElementById('confirmShipModal').style.display = 'flex';
+        }
+
+        async function executeShipment() {
+            const apps = [...currentData.image_data.applications];
+            const app = apps[currentShipAppIndex];
+            if(!app) return alert("申请记录不存在");
+            app.status = "已发货";
+            app.completed_time = new Date().toISOString();
+            let groupData = [...currentData.group_data];
+            const ids = app.items.map(i => i.item_id);
+            groupData.forEach(item => { if(ids.includes(item.item_id)) item.status = "已排发"; });
+            const { error } = await supabaseClient.from('leader_data').update({ group_data: groupData, image_data: { ...currentData.image_data, applications: apps } }).eq('query_key', currentData.query_key);
+            if (!error) location.reload(); else alert("更新失败：" + error.message);
+        }
+
+        async function handleDeletePending(idx) {
+            const app = getAppFromCache(idx);
+            if(!app) return;
+            if(!confirm("⚠️ 确认删除这条排发申请？\n\n删除后，申请中的谷子状态会自动恢复为“可排发”，团员可重新提交申请。")) return;
+
+            const apps = (currentData.image_data && currentData.image_data.applications) || [];
+            const itemIdsToRollback = new Set(app.items.map(i => i.item_id));
 
             let newGroupData = currentData.group_data.map(item => {
                 if(itemIdsToRollback.has(item.item_id)) {
@@ -441,7 +471,7 @@
                 return item;
             });
 
-            let newApps = apps.filter(a => !(a.time === time && a.cn === cn));
+            let newApps = apps.filter(a => !(a.time === app.time && a.cn === app.cn));
 
             const { error } = await supabaseClient.from('leader_data').update({ 
                 group_data: newGroupData, 
@@ -457,18 +487,21 @@
             } else { alert("操作失败: " + error.message); }
         }
 
-        async function deleteCompletedShipRecord(time, cn) {
+        async function handleDeleteCompleted(idx) {
+            const app = getAppFromCache(idx);
+            if(!app) return;
             if(!confirm("⚠️ 确认删除这条排发记录？\n\n注意：此操作同时会从排表中同步移除对应的谷子，且不可撤销。")) return;
+
             const apps = (currentData.image_data && currentData.image_data.applications) || [];
-            const targetApp = apps.find(a => a.time === time && a.cn === cn);
-            if(!targetApp) return alert("记录不存在");
-            const itemIdsToDelete = new Set(targetApp.items.map(i => i.item_id));
+            const itemIdsToDelete = new Set(app.items.map(i => i.item_id));
             let newGroupData = currentData.group_data.filter(item => !itemIdsToDelete.has(item.item_id));
-            let newApps = apps.filter(a => !(a.time === time && a.cn === cn));
+            let newApps = apps.filter(a => !(a.time === app.time && a.cn === app.cn));
+
             const { error } = await supabaseClient.from('leader_data').update({ 
                 group_data: newGroupData, 
                 image_data: { ...currentData.image_data, applications: newApps } 
             }).eq('query_key', currentData.query_key);
+
             if (!error) {
                 currentData.group_data = newGroupData;
                 currentData.image_data.applications = newApps;
@@ -476,26 +509,6 @@
                 renderUI();
                 alert("✅ 记录与对应谷子已同步删除！");
             } else { alert("操作失败: " + error.message); }
-        }
-
-        function openShipConfirm(time, cn) {
-            const apps = currentData.image_data.applications;
-            currentShipAppIndex = apps.findIndex(a => a.time === time && a.cn === cn);
-            const app = apps[currentShipAppIndex];
-            document.getElementById('shipConfirmInfo').innerHTML = `确认已为 <strong>${app.cn}</strong> 发出以下谷子吗？<br><br>${app.items.map(i => `• ${i.name} x${i.quantity}`).join('<br>')}`;
-            document.getElementById('confirmShipModal').style.display = 'flex';
-        }
-
-        async function executeShipment() {
-            const apps = [...currentData.image_data.applications];
-            const app = apps[currentShipAppIndex];
-            app.status = "已发货";
-            app.completed_time = new Date().toISOString();
-            let groupData = [...currentData.group_data];
-            const ids = app.items.map(i => i.item_id);
-            groupData.forEach(item => { if(ids.includes(item.item_id)) item.status = "已排发"; });
-            const { error } = await supabaseClient.from('leader_data').update({ group_data: groupData, image_data: { ...currentData.image_data, applications: apps } }).eq('query_key', currentData.query_key);
-            if (!error) location.reload(); else alert("更新失败：" + error.message);
         }
 
         function renderUI() {
@@ -511,7 +524,7 @@
             tbody.innerHTML = list.slice().reverse().map(item => `
                 <tr style="${item.status==='已排发'?'opacity:0.5':''}">
                     <td><input type="checkbox" class="item-checkbox" data-id="${item.item_id}" onchange="updateSelection('${item.item_id}', this.checked)"></td>
-                    <td><img src="${item.image_url ? item.image_url+'?width=80' : ''}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;background:#eee;"></td>
+                    <td><img src="${item.image_url ? item.image_url+'?width=80' : ''}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;background:#eee;" onerror="this.style.display='none'"></td>
                     <td>
                         <b>${item.name}</b>
                         <div style="font-size:11px; color:#888; margin-top:2px;">地区：${item.country || '日本'}</div>
@@ -530,7 +543,7 @@
             if(!raw) return alert("请先粘贴 Excel 表格数据！");
             const lines = raw.split('\n').filter(l => l.trim());
             if (lines.length < 5) return alert("解析失败，请确保复制了完整的包含名称、单价与数量的 Excel 区域。");
-            
+
             const batchCountry = document.getElementById('batchImportCountry')?.value || "日本";
             const itemNames = lines[2].split('\t').slice(2);
             const prices = lines[3].split('\t').slice(2).map(p => parseFloat(p.replace(/[¥,]/g, '')) || 0);
@@ -564,7 +577,7 @@
             const name = document.getElementById('itemName').value.trim();
             const cn = document.getElementById('itemCN').value.trim();
             if(!name || !cn) return alert("请填写谷子名称和团员 CN！");
-            
+
             const newItem = {
                 item_id: document.getElementById('editItemId').value || Date.now() + '_' + Math.random().toString(36).substr(2, 4),
                 name: name,
