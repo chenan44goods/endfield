@@ -9,60 +9,70 @@
         :root { --main: #6c5ce7; --bg: #f0f2f5; --pink: #ffb7c5; --accent: #ff85a2; }
         body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); margin: 0; display: flex; flex-direction: column; height: 100vh; color: #333; }
         
+        /* 导航与标签 */
         nav { background: #fff; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
         .tabs { background: #fff; display: flex; padding: 0 20px; border-bottom: 1px solid #ddd; gap: 20px; }
         .tab-btn { padding: 12px 5px; border-bottom: 3px solid transparent; cursor: pointer; font-weight: bold; color: #666; font-size: 14px; }
         .tab-btn.active { color: var(--main); border-bottom-color: var(--main); }
         .main-content { flex: 1; overflow-y: auto; padding: 20px; }
 
+        /* 通用卡片 */
         .card { background: #fff; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; }
         
-        .table-wrap { overflow-x: auto; background: #fff; border-radius: 12px; padding: 10px; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 600px; }
+        /* 表格与筛选操作栏 */
+        .table-wrap { overflow-x: auto; background: #fff; border-radius: 12px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 650px; }
         th, td { border-bottom: 1px solid #eee; padding: 12px 10px; text-align: left; }
+        
+        /* 搜索筛选栏样式 */
+        .search-row { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; background: #fdfdfd; padding: 10px; border-radius: 10px; border: 1px solid #eee; }
+        .search-input-group { display: flex; align-items: center; background: #fff; border: 2px solid var(--main); border-radius: 8px; padding: 2px 10px; flex: 1; min-width: 200px; }
+        .search-input-group input { border: none; outline: none; padding: 8px; flex: 1; font-size: 14px; }
+        
         .batch-bar { display: flex; align-items: center; gap: 10px; padding: 10px; background: #f8f9fa; border-radius: 8px; margin-bottom: 10px; border: 1px solid #eee; flex-wrap: wrap; }
         
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
-        .modal { background: #fff; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px; }
+        /* 状态与统计 */
+        .filter-info { font-size: 12px; color: var(--main); margin-bottom: 10px; font-weight: bold; display: none; }
+        .stats-badge { padding: 4px 12px; border-radius: 20px; background: #eee; font-size: 12px; margin-right: 8px; display: inline-block; font-weight: bold; }
 
-        input, select, textarea { padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; font-size: 14px; }
-        .btn { padding: 10px 16px; border-radius: 8px; cursor: pointer; border: none; font-weight: bold; transition: 0.2s; white-space: nowrap; font-size: 14px; }
+        /* 按钮 */
+        .btn { padding: 8px 16px; border-radius: 8px; cursor: pointer; border: none; font-weight: bold; transition: 0.2s; white-space: nowrap; font-size: 13px; }
         .btn-primary { background: var(--main); color: #fff; }
         .btn-pink { background: var(--pink); color: #fff; }
         .btn-danger { background: #ff4d4f; color: #fff; }
         .btn-outline { background: #fff; border: 1px solid #ddd; color: #666; }
-        
-        .img-preview { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
-        .stats-badge { padding: 3px 10px; border-radius: 20px; background: #eee; font-size: 11px; margin-right: 5px; display: inline-block; }
+        .btn-small { padding: 4px 10px; font-size: 11px; }
+
+        /* 其他 */
         .hidden { display: none !important; }
         .selected-row { background-color: #f6f5ff !important; }
-        .log-item { border-left: 3px solid var(--main); padding: 10px; margin-bottom: 10px; background: #f9f9f9; font-size: 12px; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal { background: #fff; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px; }
+        .img-preview { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
     </style>
 </head>
 <body>
 
-    <!-- 顶部状态栏 -->
-    <div id="debug-bar" style="background:#333; color:#fff; font-size:12px; text-align:center; padding:8px;">⌛ 正在加载系统...</div>
+    <div id="debug-bar" style="background:#333; color:#fff; font-size:12px; text-align:center; padding:8px;">⌛ 正在加载系统环境...</div>
 
-    <!-- 登录页 (默认隐藏，由 JS 决定是否显示) -->
+    <!-- 登录 -->
     <div id="loginSection" class="hidden">
         <div class="card" style="max-width:350px; margin: 60px auto;">
             <h2 style="text-align:center">🎀 团长登录</h2>
             <input type="email" id="email" placeholder="管理邮箱">
-            <input type="password" id="pw" placeholder="管理密码">
-            <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="login()">立即登录</button>
-            <p id="loginMsg" style="color:red; font-size:12px; text-align:center; margin-top:5px;"></p>
+            <input type="password" id="pw" placeholder="密码">
+            <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="login()">立即进入后台</button>
         </div>
     </div>
 
     <!-- 后台内容 -->
     <div id="adminSection" class="hidden">
         <nav>
-            <strong id="roleTag">后台</strong>
+            <strong id="roleTag">后台载入中</strong>
             <div>
                 <span id="userEmail" style="margin-right:10px; font-size:12px; color:#666"></span>
-                <button class="btn btn-outline" style="padding: 4px 10px; font-size:12px;" onclick="logout()">退出</button>
+                <button class="btn btn-outline btn-small" onclick="logout()">退出</button>
             </div>
         </nav>
 
@@ -73,68 +83,90 @@
         </div>
 
         <div class="main-content">
-            <!-- 标签页1: 排表管理 -->
             <div id="tab-overview" class="tab-content">
+                <!-- 统计卡片：会自动随筛选变化 -->
                 <div class="card">
-                    <h3>📊 全团统计</h3>
+                    <h3 style="margin-top:0">📊 数据概览</h3>
                     <div id="statsArea"></div>
                 </div>
 
+                <!-- 录入与导入区 -->
                 <div class="grid">
                     <div class="card">
-                        <h3>✍️ 录入/编辑</h3>
+                        <h3>✍️ 快速录入/编辑</h3>
                         <input type="hidden" id="editItemId">
                         <input type="text" id="itemName" placeholder="谷子名称">
-                        <select id="itemCountry"><option>日本</option><option>国内</option><option>台湾</option></select>
+                        <select id="itemCountry"><option>日本</option><option>国内</option><option>台湾</option><option>泰国</option></select>
                         <input type="text" id="itemCN" placeholder="团员CN">
                         <div style="display:flex; gap:5px">
                             <input type="number" id="itemPrice" placeholder="单价" step="0.01">
-                            <input type="number" id="itemQty" value="1" placeholder="数量">
+                            <input type="number" id="itemQty" value="1">
                         </div>
                         <select id="itemStatus">
                             <option>未出荷</option><option>已下单未到货</option><option>回国中</option><option>已到货</option><option>可排发</option><option>已排发</option><option>未付款</option>
                         </select>
-                        <button class="btn btn-pink" style="width:100%; margin-top:10px" onclick="saveItem()">保存</button>
+                        <button class="btn btn-pink" style="width:100%; margin-top:10px" onclick="saveItem()">保存记录</button>
                         <button class="btn btn-outline" style="width:100%; margin-top:5px" onclick="clearForm()">重置</button>
                     </div>
-
                     <div class="card">
-                        <h3>📥 批量导入</h3>
-                        <textarea id="csvInput" rows="5" placeholder="粘贴 Excel 汇总表内容..."></textarea>
-                        <button class="btn btn-primary" style="width:100%" onclick="previewImport()">导入数据</button>
+                        <h3>📥 批量导入 (Excel)</h3>
+                        <textarea id="csvInput" rows="6" placeholder="直接粘贴 Excel 汇总表内容..."></textarea>
+                        <button class="btn btn-primary" style="width:100%" onclick="previewImport()">识别并导入</button>
                     </div>
                 </div>
 
-                <div class="table-wrap card">
+                <!-- 排单明细（含搜索筛选） -->
+                <div class="table-wrap">
+                    <h3>📜 全团明细</h3>
+                    
+                    <!-- 🔍 CN 搜索栏 -->
+                    <div class="search-row">
+                        <div class="search-input-group">
+                            <span>🔍</span>
+                            <input type="text" id="cnSearchInput" placeholder="输入团员 CN 快速筛选..." onkeypress="if(event.keyCode==13) applyCNFilter()">
+                        </div>
+                        <button class="btn btn-primary" onclick="applyCNFilter()">筛选</button>
+                        <button class="btn btn-outline" id="clearFilterBtn" onclick="clearCNFilter()">清除</button>
+                    </div>
+
+                    <div id="filterStatusText" class="filter-info"></div>
+
+                    <!-- 批量操作栏 -->
                     <div class="batch-bar">
                         <input type="checkbox" id="selectAllCheck" onchange="toggleSelectAll(this.checked)" style="width:auto">
-                        <span style="font-size:12px">已选择 <strong id="selCount">0</strong> 条</span>
-                        <button class="btn btn-primary" style="padding:4px 10px; font-size:12px;" onclick="openTransferModal('batch')">批量转单</button>
-                        <button class="btn btn-danger" style="padding:4px 10px; font-size:12px;" onclick="batchDelete()">批量删除</button>
+                        <span style="font-size:12px">已选 <strong id="selCount">0</strong> 条</span>
+                        <button class="btn btn-primary btn-small" onclick="openTransferModal('batch')">批量转单</button>
+                        <button class="btn btn-danger btn-small" onclick="batchDelete()">批量删除</button>
                     </div>
+
                     <table>
-                        <thead><tr><th></th><th>图</th><th>名称</th><th>CN</th><th>金额</th><th>状态</th><th>操作</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th style="width:20px"></th>
+                                <th>图</th><th>名称</th><th>CN</th><th>金额</th><th>状态</th><th>操作</th>
+                            </tr>
+                        </thead>
                         <tbody id="tbody"></tbody>
                     </table>
                 </div>
             </div>
 
-            <!-- 标签页2: 转单记录 -->
+            <!-- 转单日志页 -->
             <div id="tab-logs" class="tab-content hidden">
                 <div class="card">
-                    <h3>📜 历史转单日志</h3>
+                    <h3>🔄 转单历史记录</h3>
                     <div id="transferLogsList"></div>
                 </div>
             </div>
 
-            <!-- 标签页3: 设置 -->
+            <!-- 设置页 -->
             <div id="tab-settings" class="tab-content hidden">
                 <div class="card">
                     <h3>⚙️ 团务设置</h3>
-                    <p>查询密钥：<strong id="dispKey"></strong></p>
+                    <p>查询密钥：<strong id="dispKey" style="color:var(--main)">未设置</strong></p>
                     <div id="coAdminList"></div>
                     <input type="email" id="newAdminEmail" placeholder="副团长邮箱">
-                    <button class="btn btn-primary" onclick="addAdmin()">添加副团长</button>
+                    <button class="btn btn-primary" onclick="addAdmin()">添加副团员</button>
                 </div>
             </div>
         </div>
@@ -143,11 +175,11 @@
     <!-- 转单弹窗 -->
     <div class="modal-overlay" id="transferModal">
         <div class="modal">
-            <h3>🔄 订单转单交接</h3>
+            <h3>🔄 订单转交确认</h3>
             <p id="transferInfo" style="font-size:12px; color:#666"></p>
-            <input type="text" id="newCNInput" placeholder="输入新接手人 CN">
-            <input type="text" id="transferNote" placeholder="转单备注（可选）">
-            <div style="margin-top:15px; display:flex; gap:10px">
+            <input type="text" id="newCNInput" placeholder="新接手人 CN">
+            <input type="text" id="transferNote" placeholder="转单原因 (可选)">
+            <div style="margin-top:20px; display:flex; gap:10px">
                 <button class="btn btn-outline" style="flex:1" onclick="closeModal()">取消</button>
                 <button class="btn btn-primary" style="flex:1" onclick="executeTransfer()">确认转单</button>
             </div>
@@ -163,84 +195,133 @@
         let currentUser = null;
         let selectedIds = new Set();
         let transferTargets = [];
+        let currentFilterCN = ''; // 当前筛选的 CN
 
-        // 页面启动时加入安全超时机制（防止卡死）
-        window.addEventListener('DOMContentLoaded', () => {
-            setTimeout(() => {
-                const debugBar = document.getElementById('debug-bar');
-                if (debugBar && debugBar.innerText.includes("正在加载")) {
-                    debugBar.innerText = "⚠️ 连接超时，已强制解除锁定。请直接尝试登录。";
-                    debugBar.style.background = "#d9534f";
-                    document.getElementById('loginSection').classList.remove('hidden');
-                }
-            }, 3000); // 3秒没响应自动切到登录页
-            
-            checkAuth();
-        });
-
-        async function login() {
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('pw').value.trim();
-            const msgBox = document.getElementById('loginMsg');
-            msgBox.innerText = "登录中...";
-            
-            const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-            if (error) {
-                msgBox.innerText = "登录失败: " + error.message;
-            } else {
-                msgBox.innerText = "";
-                checkAuth();
-            }
-        }
-
-        async function logout() { 
-            await supabaseClient.auth.signOut(); 
-            location.reload(); 
-        }
-
+        // --- 核心鉴权逻辑 ---
         async function checkAuth() {
             try {
-                const { data: { user }, error: authErr } = await supabaseClient.auth.getUser();
-                
-                if (authErr || !user) {
-                    // 未登录，显示登录框，隐藏后台
+                const { data: { user } } = await supabaseClient.auth.getUser();
+                if (!user) {
                     document.getElementById('loginSection').classList.remove('hidden');
                     document.getElementById('adminSection').classList.add('hidden');
-                    document.getElementById('debug-bar').style.display = 'none'; // 隐藏顶栏
+                    document.getElementById('debug-bar').style.display = 'none';
                     return;
                 }
-
                 currentUser = user;
                 document.getElementById('loginSection').classList.add('hidden');
                 document.getElementById('adminSection').classList.remove('hidden');
                 document.getElementById('userEmail').innerText = user.email;
-                document.getElementById('debug-bar').innerText = "✅ 正在获取数据...";
 
-                const { data: records, error: dbErr } = await supabaseClient.from('leader_data').select('*');
-                
-                if (dbErr) {
-                    document.getElementById('debug-bar').innerText = "❌ 数据库读取错误: " + dbErr.message;
-                    document.getElementById('debug-bar').style.background = "red";
-                    return;
-                }
-
+                const { data: records } = await supabaseClient.from('leader_data').select('*');
                 if (records && records.length > 0) {
                     currentData = records[0];
-                    document.getElementById('debug-bar').style.display = 'none'; // 成功后隐藏黑条
+                    document.getElementById('debug-bar').style.display = 'none';
                     renderUI();
-                } else {
-                    document.getElementById('debug-bar').innerText = "⚠️ 提示：数据库中暂无数据，请先初始化";
-                    document.getElementById('debug-bar').style.background = "orange";
                 }
             } catch (err) {
-                console.error(err);
-                document.getElementById('debug-bar').innerText = "❌ 系统异常: " + err.message;
-                document.getElementById('debug-bar').style.background = "red";
-                // 异常时强行展示登录框防止死锁
+                console.error("加载失败:", err);
                 document.getElementById('loginSection').classList.remove('hidden');
             }
         }
 
+        async function login() {
+            const { error } = await supabaseClient.auth.signInWithPassword({
+                email: document.getElementById('email').value,
+                password: document.getElementById('pw').value
+            });
+            if (error) alert("登录失败: " + error.message); else checkAuth();
+        }
+
+        async function logout() { await supabaseClient.auth.signOut(); location.reload(); }
+
+        // --- 🔍 筛选逻辑 ---
+        function applyCNFilter() {
+            currentFilterCN = document.getElementById('cnSearchInput').value.trim();
+            selectedIds.clear(); // 筛选时清空勾选，防止跨人操作错误
+            document.getElementById('selCount').innerText = "0";
+            document.getElementById('selectAllCheck').checked = false;
+            renderUI();
+        }
+
+        function clearCNFilter() {
+            document.getElementById('cnSearchInput').value = "";
+            currentFilterCN = '';
+            renderUI();
+        }
+
+        // --- 渲染逻辑 ---
+        function renderUI() {
+            if (!currentData) return;
+            const isOwner = currentData.user_id === currentUser.id;
+            document.getElementById('roleTag').innerText = isOwner ? "🎀 团长后台" : "助理后台";
+            if(isOwner) document.getElementById('dispKey').innerText = currentData.query_key;
+
+            let list = currentData.group_data || [];
+            
+            // 执行筛选
+            if (currentFilterCN) {
+                list = list.filter(item => item.cn.toLowerCase().includes(currentFilterCN.toLowerCase()));
+                document.getElementById('filterStatusText').innerText = `💡 当前筛选: CN 包含 "${currentFilterCN}" (共 ${list.length} 条)`;
+                document.getElementById('filterStatusText').style.display = 'block';
+            } else {
+                document.getElementById('filterStatusText').style.display = 'none';
+            }
+
+            // 更新统计 (基于筛选后的 list)
+            const totalItems = list.reduce((s, i) => s + (parseInt(i.quantity) || 0), 0);
+            const totalMoney = list.reduce((s, i) => s + (parseFloat(i.price) * (parseInt(i.quantity) || 0)), 0);
+            document.getElementById('statsArea').innerHTML = `
+                <span class="stats-badge">当前排单: ${list.length} 项</span>
+                <span class="stats-badge">物品总数: ${totalItems} 件</span>
+                <span class="stats-badge" style="background:#f6f5ff; color:var(--main)">应肾合计: ￥${totalMoney.toFixed(2)}</span>
+            `;
+
+            const tbody = document.getElementById('tbody');
+            if (list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:#999;">${currentFilterCN ? '未找到匹配的 CN 记录' : '暂无排单数据'}</td></tr>`;
+            } else {
+                tbody.innerHTML = list.slice().reverse().map(item => {
+                    const isChecked = selectedIds.has(item.item_id);
+                    return `<tr class="${isChecked ? 'selected-row' : ''}">
+                        <td><input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleSelect('${item.item_id}')" style="width:auto"></td>
+                        <td><img src="${item.image_url ? item.image_url+'?width=80' : ''}" class="img-preview" onerror="this.src='https://via.placeholder.com/50'"></td>
+                        <td>${item.name}<br><small>${item.country}</small></td>
+                        <td>${item.cn}</td>
+                        <td>￥${item.price}x${item.quantity}</td>
+                        <td><span class="stats-badge" style="margin:0">${item.status}</span></td>
+                        <td>
+                            <button class="btn btn-outline btn-small" onclick="openTransferModal(['${item.item_id}'])">转单</button>
+                            <button class="btn btn-outline btn-small" onclick="editItem('${item.item_id}')">改</button>
+                        </td>
+                    </tr>`;
+                }).join('');
+            }
+        }
+
+        // --- 批量操作 ---
+        function toggleSelect(id) {
+            if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+            document.getElementById('selCount').innerText = selectedIds.size;
+            renderUI();
+        }
+
+        function toggleSelectAll(checked) {
+            // 注意：全选只勾选“当前可见（筛选后）”的列表
+            let visibleList = currentData.group_data || [];
+            if (currentFilterCN) {
+                visibleList = visibleList.filter(item => item.cn.toLowerCase().includes(currentFilterCN.toLowerCase()));
+            }
+
+            if (checked) {
+                visibleList.forEach(item => selectedIds.add(item.item_id));
+            } else {
+                selectedIds.clear();
+            }
+            document.getElementById('selCount').innerText = selectedIds.size;
+            renderUI();
+        }
+
+        // --- 基础逻辑 ---
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
             document.querySelectorAll('.tab-btn').forEach(b => {
@@ -249,89 +330,6 @@
             });
             document.getElementById('tab-' + tabId).classList.remove('hidden');
             if (tabId === 'logs') renderLogs();
-        }
-
-        function renderUI() {
-            try {
-                if(!currentData) return;
-                document.getElementById('dispKey').innerText = currentData.query_key || '未设置';
-                const list = currentData.group_data || [];
-                const total = list.reduce((s, i) => s + (i.price * i.quantity), 0);
-                document.getElementById('statsArea').innerHTML = `<span class="stats-badge">项数: ${list.length}</span><span class="stats-badge">金额: ￥${total.toFixed(2)}</span>`;
-
-                const tbody = document.getElementById('tbody');
-                tbody.innerHTML = list.slice().reverse().map(item => {
-                    const isChecked = selectedIds.has(item.item_id);
-                    return `<tr class="${isChecked ? 'selected-row' : ''}">
-                        <td><input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleSelect('${item.item_id}')" style="width:auto"></td>
-                        <td><img src="${item.image_url ? item.image_url+'?width=80' : ''}" class="img-preview" onerror="this.src='https://via.placeholder.com/50'"></td>
-                        <td>${item.name}</td><td>${item.cn}</td><td>￥${item.price}x${item.quantity}</td>
-                        <td><span class="stats-badge">${item.status}</span></td>
-                        <td>
-                            <button class="btn btn-outline" style="padding:2px 8px; font-size:11px" onclick="openTransferModal(['${item.item_id}'])">转单</button>
-                            <button class="btn btn-outline" style="padding:2px 8px; font-size:11px" onclick="editItem('${item.item_id}')">改</button>
-                        </td>
-                    </tr>`;
-                }).join('');
-            } catch(e) { console.error("渲染出错:", e); }
-        }
-
-        function toggleSelect(id) {
-            if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
-            document.getElementById('selCount').innerText = selectedIds.size;
-            renderUI();
-        }
-
-        function toggleSelectAll(checked) {
-            const list = (currentData && currentData.group_data) || [];
-            if(checked) list.forEach(i => selectedIds.add(i.item_id)); else selectedIds.clear();
-            document.getElementById('selCount').innerText = selectedIds.size;
-            renderUI();
-        }
-
-        function openTransferModal(ids) {
-            transferTargets = (ids === 'batch') ? Array.from(selectedIds) : ids;
-            if(transferTargets.length === 0) return alert("请先勾选");
-            document.getElementById('transferInfo').innerText = `已选 ${transferTargets.length} 项记录进行转交。`;
-            document.getElementById('transferModal').style.display = 'flex';
-        }
-
-        function closeModal() { document.getElementById('transferModal').style.display = 'none'; }
-
-        async function executeTransfer() {
-            const newCN = document.getElementById('newCNInput').value.trim();
-            const note = document.getElementById('transferNote').value.trim();
-            if(!newCN) return alert("请输入新CN");
-            
-            let groupData = [...currentData.group_data];
-            let newLogs = [];
-            const now = new Date().toISOString();
-
-            transferTargets.forEach(id => {
-                const idx = groupData.findIndex(i => i.item_id === id);
-                if(idx > -1) {
-                    const oldCN = groupData[idx].cn;
-                    groupData[idx].cn = newCN;
-                    newLogs.push({ item_name: groupData[idx].name, from_cn: oldCN, to_cn: newCN, time: now, note, operator: currentUser.email });
-                }
-            });
-
-            let imageData = currentData.image_data || {};
-            if(!imageData.transfer_logs) imageData.transfer_logs = [];
-            imageData.transfer_logs = [...newLogs, ...imageData.transfer_logs].slice(0, 500);
-
-            const { error } = await supabaseClient.from('leader_data').update({ group_data: groupData, image_data: imageData }).eq('query_key', currentData.query_key);
-            if(error) alert(error.message); else { alert("成功"); location.reload(); }
-        }
-
-        function renderLogs() {
-            const logs = (currentData && currentData.image_data && currentData.image_data.transfer_logs) || [];
-            document.getElementById('transferLogsList').innerHTML = logs.length === 0 ? "暂无转单记录" : logs.map(log => `
-                <div class="log-item">
-                    <strong>${log.item_name}</strong>: ${log.from_cn} ➔ ${log.to_cn}<br>
-                    <small>${new Date(log.time).toLocaleString()} | 备注: ${log.note || '无'}</small>
-                </div>
-            `).join('');
         }
 
         async function saveItem() {
@@ -365,16 +363,55 @@
         }
 
         async function batchDelete() {
-            if(selectedIds.size === 0) return;
-            if(!confirm("确定？")) return;
+            if(selectedIds.size === 0) return alert("请先勾选");
+            if(!confirm(`确定要删除选中的 ${selectedIds.size} 项记录吗？`)) return;
             const newList = currentData.group_data.filter(i => !selectedIds.has(i.item_id));
             await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
             location.reload();
         }
 
+        // --- 转单 ---
+        function openTransferModal(ids) {
+            transferTargets = (ids === 'batch') ? Array.from(selectedIds) : ids;
+            if(transferTargets.length === 0) return alert("请先勾选");
+            document.getElementById('transferInfo').innerText = `已选 ${transferTargets.length} 项排单。`;
+            document.getElementById('transferModal').style.display = 'flex';
+        }
+        function closeModal() { document.getElementById('transferModal').style.display = 'none'; }
+        async function executeTransfer() {
+            const newCN = document.getElementById('newCNInput').value.trim();
+            const note = document.getElementById('transferNote').value.trim();
+            if(!newCN) return alert("请输入新CN");
+            let groupData = [...currentData.group_data];
+            let newLogs = [];
+            const now = new Date().toISOString();
+            transferTargets.forEach(id => {
+                const idx = groupData.findIndex(i => i.item_id === id);
+                if(idx > -1) {
+                    const oldCN = groupData[idx].cn;
+                    groupData[idx].cn = newCN;
+                    newLogs.push({ item_name: groupData[idx].name, from_cn: oldCN, to_cn: newCN, time: now, note, operator: currentUser.email });
+                }
+            });
+            let imageData = currentData.image_data || {};
+            if(!imageData.transfer_logs) imageData.transfer_logs = [];
+            imageData.transfer_logs = [...newLogs, ...imageData.transfer_logs].slice(0, 500);
+            await supabaseClient.from('leader_data').update({ group_data: groupData, image_data: imageData }).eq('query_key', currentData.query_key);
+            location.reload();
+        }
+
+        function renderLogs() {
+            const logs = (currentData && currentData.image_data && currentData.image_data.transfer_logs) || [];
+            document.getElementById('transferLogsList').innerHTML = logs.length === 0 ? "暂无转单记录" : logs.map(log => `
+                <div style="border-left:3px solid var(--main); padding:10px; margin-bottom:10px; background:#f9f9f9; font-size:12px;">
+                    <strong>${log.item_name}</strong>: ${log.from_cn} ➔ ${log.to_cn}<br>
+                    <small>${new Date(log.time).toLocaleString()} | 操作人: ${log.operator}</small>
+                </div>
+            `).join('');
+        }
+
         async function previewImport() {
             const raw = document.getElementById('csvInput').value.trim();
-            if(!raw) return alert("请先粘贴内容");
             const lines = raw.split('\n').filter(l => l.trim());
             const itemNames = lines[2].split('\t').slice(2);
             const prices = lines[3].split('\t').slice(2).map(p => parseFloat(p.replace(/[¥,]/g, '')) || 0);
@@ -399,11 +436,7 @@
             document.getElementById('itemCN').value = "";
         }
 
-        async function addAdmin() {
-            const email = document.getElementById('newAdminEmail').value;
-            const { data } = await supabaseClient.rpc('add_co_admin', { p_query_key: currentData.query_key, p_email: email });
-            alert(data); location.reload();
-        }
+        checkAuth();
     </script>
 </body>
 </html>
