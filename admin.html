@@ -80,6 +80,19 @@
                             <input type="number" id="itemPrice" placeholder="单价 (元)" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:6px;">
                             <input type="number" id="itemQty" value="1" placeholder="数量" style="width:70px; padding:8px; border:1px solid #ddd; border-radius:6px;">
                         </div>
+                        <div style="margin-bottom:8px">
+                            <label style="font-size:12px; color:#666; font-weight:bold; display:block; margin-bottom:4px;">地区：</label>
+                            <select id="itemCountry" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+                                <option value="日本">日本</option>
+                                <option value="闲鱼">闲鱼</option>
+                                <option value="淘宝店">淘宝店</option>
+                                <option value="美国">美国</option>
+                                <option value="韩国">韩国</option>
+                                <option value="印尼">印尼</option>
+                                <option value="泰国">泰国</option>
+                                <option value="台湾">台湾</option>
+                            </select>
+                        </div>
                         <select id="itemStatus" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
                             <option>未出荷</option><option>已下单未到货</option><option>回国中</option><option>已到货</option><option>可排发</option><option>已申请发货</option><option>已排发</option><option>未付款</option>
                         </select>
@@ -455,7 +468,11 @@
                 <tr style="${item.status==='已排发'?'opacity:0.5':''}">
                     <td><input type="checkbox" class="item-checkbox" data-id="${item.item_id}" onchange="updateSelection('${item.item_id}', this.checked)"></td>
                     <td><img src="${item.image_url ? item.image_url+'?width=80' : ''}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;background:#eee;"></td>
-                    <td>${item.name}</td><td><b>${item.cn}</b></td><td>￥${item.price} x ${item.quantity}</td>
+                    <td>
+                        <b>${item.name}</b>
+                        <div style="font-size:11px; color:#888; margin-top:2px;">地区：${item.country || '日本'}</div>
+                    </td>
+                    <td><b>${item.cn}</b></td><td>￥${item.price} x ${item.quantity}</td>
                     <td><span class="stats-badge" style="margin:0">${item.status}</span></td>
                     <td>
                         <button class="btn btn-outline" style="padding:2px 6px; font-size:11px; margin-right:4px;" onclick="editItem('${item.item_id}')">修改</button>
@@ -510,7 +527,7 @@
                 price: parseFloat(document.getElementById('itemPrice').value) || 0,
                 quantity: parseInt(document.getElementById('itemQty').value) || 1,
                 status: document.getElementById('itemStatus').value,
-                country: "日本",
+                country: document.getElementById('itemCountry').value || "日本",
                 image_url: "",
                 created_at: new Date().toISOString()
             };
@@ -533,6 +550,7 @@
             document.getElementById('itemCN').value = item.cn;
             document.getElementById('itemPrice').value = item.price;
             document.getElementById('itemQty').value = item.quantity;
+            document.getElementById('itemCountry').value = item.country || "日本";
             document.getElementById('itemStatus').value = item.status;
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
