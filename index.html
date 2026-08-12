@@ -17,17 +17,16 @@
         input:focus { border-color: var(--accent); }
         button { width: 100%; padding: 12px; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.3s; }
         button:hover { background: #ff5e84; transform: translateY(-2px); }
-        .item-card { border-left: 5px solid var(--primary); margin-top: 15px; position: relative; display: flex; gap: 15px; }
+        
+        .item-card { border-left: 5px solid var(--primary); margin-top: 15px; display: flex; gap: 15px; align-items: center; }
         .item-img { width: 80px; height: 80px; border-radius: 8px; object-fit: cover; cursor: pointer; border: 1px solid #eee; }
         .item-info { flex: 1; }
-        .status-tag { display: inline-block; padding: 2px 8px; border-radius: 5px; font-size: 0.75rem; background: #eee; margin-top: 5px; }
-        .status-未出荷 { background: #fdf2f2; color: #e02424; }
-        .status-已到货 { background: #f0fdf4; color: #166534; }
-        .status-可排发 { background: #eff6ff; color: #1e40af; border: 1px dashed #1e40af; }
-        .expiry-red { color: #ff0000; font-weight: bold; border: 1px solid #ff0000; padding: 2px 5px; border-radius: 4px; font-size: 0.8rem; }
-        .summary { background: var(--accent); color: #fff; text-align: center; font-size: 1.1rem; }
-        .error { color: #ff5e84; text-align: center; margin-top: 10px; font-weight: bold; }
-        #loading { text-align: center; display: none; }
+        .status-tag { display: inline-block; padding: 2px 8px; border-radius: 5px; font-size: 0.75rem; background: #eee; margin-top: 5px; border: 1px solid #ddd; }
+        .expiry-red { color: #ff0000; font-weight: bold; border: 1px solid #ff0000; padding: 2px 5px; border-radius: 4px; font-size: 0.8rem; margin-top: 5px; }
+        
+        .summary-card { background: var(--accent); color: #fff; text-align: center; }
+        .error { color: #ff5e84; text-align: center; margin-top: 10px; font-weight: bold; font-size: 14px; }
+        #loading { text-align: center; display: none; color: var(--accent); font-weight: bold; margin: 10px 0; }
     </style>
 </head>
 <body>
@@ -36,26 +35,31 @@
             <h1>🎀 谷子排单查询</h1>
             <div class="input-group">
                 <label>查询密钥 (Query Key)</label>
-                <input type="text" id="queryKey" placeholder="请输入团长提供的密钥">
+                <input type="text" id="queryKey" placeholder="请输入团长提供的密钥" value="4goods">
             </div>
             <div class="input-group">
                 <label>团员昵称 (CN)</label>
                 <input type="text" id="cnName" placeholder="请输入你的排单CN">
             </div>
             <button onclick="doQuery()">立即查询</button>
+            <div id="loading">✨ 正在召唤账单...</div>
             <div id="errorMsg" class="error"></div>
-            <div id="loading">✨ 正在魔法检索中...</div>
         </div>
+
         <div id="resultArea"></div>
     </div>
+
+    <!-- 图片放大遮罩 -->
     <div id="imgModal" onclick="this.style.display='none'" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; justify-content:center; align-items:center; cursor:zoom-out;">
-        <img id="modalImg" style="max-width:90%; max-height:90%; border-radius:10px;">
+        <img id="modalImg" style="max-width:90%; max-height:90%; border-radius:10px; box-shadow: 0 0 20px rgba(0,0,0,0.5);">
     </div>
 
     <script>
+        // 配置连接
         const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
-        // 修复：修改变量名避免冲突
+        
+        // 修复冲突：重命名为 supabaseClient
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         async function doQuery() {
@@ -65,35 +69,80 @@
             const errorArea = document.getElementById('errorMsg');
             const loading = document.getElementById('loading');
 
-            if (!key || !cn) { errorArea.innerText = "请填写密钥和CN"; return; }
-            errorArea.innerText = ""; resArea.innerHTML = ""; loading.style.display = "block";
+            if (!key || !cn) { errorArea.innerText = "❌ 请填写密钥和CN"; return; }
+            
+            errorArea.innerText = "";
+            resArea.innerHTML = "";
+            loading.style.display = "block";
 
             try {
+                // 调用 RPC
                 const { data, error } = await supabaseClient.rpc('get_group_by_key', { p_query_key: key });
+
                 if (error) throw error;
-                if (!data) { errorArea.innerText = "查询密钥错误，请联系团长"; return; }
+                if (!data || data.length === 0) { 
+                    errorArea.innerText = "❌ 查询密钥错误或该团暂无数据"; 
+                    return; 
+                }
 
+                // 前端根据 CN 过滤
                 const myGoods = data.filter(item => item.cn === cn);
-                if (myGoods.length === 0) { errorArea.innerText = "未找到你的排谷记录，请检查CN是否正确"; return; }
+                
+                if (myGoods.length === 0) { 
+                    errorArea.innerText = "❌ 未找到该 CN 的记录，请检查昵称是否输入正确"; 
+                    return; 
+                }
 
-                let html = `<div class="card summary"><div>共计: ${myGoods.length} 项谷子</div><div style="font-size:1.5rem; font-weight:bold; margin-top:5px;">应肾总计: ￥${myGoods.reduce((sum, i) => sum + (i.price * i.quantity), 0).toFixed(2)}</div></div>`;
+                // 计算总数
+                const totalItems = myGoods.reduce((sum, i) => sum + (parseInt(i.quantity) || 0), 0);
+                const totalMoney = myGoods.reduce((sum, i) => sum + (parseFloat(i.price) * parseInt(i.quantity) || 0), 0);
+
+                let html = `
+                    <div class="card summary-card">
+                        <div style="font-size: 0.9rem;">你好，${cn}！</div>
+                        <div style="font-size: 1.4rem; font-weight: bold; margin: 5px 0;">应肾总计：￥${totalMoney.toFixed(2)}</div>
+                        <div style="font-size: 0.8rem;">共计 ${myGoods.length} 项谷子 / ${totalItems} 件物品</div>
+                    </div>
+                `;
+
                 const today = new Date().toISOString().split('T')[0];
+
                 myGoods.forEach(item => {
-                    let expiryInfo = "";
+                    let expiryHtml = "";
                     if (item.status === "可排发" && item.storage_expiry) {
                         const isExpired = today > item.storage_expiry;
-                        expiryInfo = `<div class="${isExpired ? 'expiry-red' : ''}" style="margin-top:5px; font-size:0.8rem;">📦 囤货截止：${item.storage_expiry} ${isExpired ? '[已到期]' : ''}</div>`;
+                        expiryHtml = `<div class="${isExpired ? 'expiry-red' : ''}" style="font-size: 0.75rem; margin-top:5px;">
+                            📦 囤货截止：${item.storage_expiry} ${isExpired ? ' [已到期]' : ''}
+                        </div>`;
                     }
-                    html += `<div class="card item-card"><img src="${item.image_url || 'https://via.placeholder.com/100?text=No+Pic'}" class="item-img" onclick="showImg('${item.image_url}')"><div class="item-info"><div style="font-weight:bold;">${item.name} <span style="font-weight:normal; color:#888; font-size:0.8rem;">(${item.country})</span></div><div style="color:var(--accent); font-weight:bold;">￥${item.price} × ${item.quantity} = ￥${(item.price * item.quantity).toFixed(2)}</div><div class="status-tag status-${item.status}">${item.status}</div>${expiryInfo}</div></div>`;
+
+                    html += `
+                        <div class="card item-card">
+                            <img src="${item.image_url || 'https://via.placeholder.com/100?text=No+Pic'}" class="item-img" onclick="showImg('${item.image_url}')">
+                            <div class="item-info">
+                                <div style="font-weight:bold; font-size: 0.95rem;">${item.name} <small style="color:#999; font-weight:normal;">(${item.country || '国内'})</small></div>
+                                <div style="color:var(--accent); font-weight:bold; margin-top:2px;">￥${item.price} × ${item.quantity} = ￥${(item.price * item.quantity).toFixed(2)}</div>
+                                <div class="status-tag">${item.status}</div>
+                                ${expiryHtml}
+                            </div>
+                        </div>
+                    `;
                 });
                 resArea.innerHTML = html;
+
             } catch (e) {
-                errorArea.innerText = "查询失败：" + e.message;
+                console.error(e);
+                errorArea.innerText = "⚠️ 查询出错：" + e.message;
             } finally {
                 loading.style.display = "none";
             }
         }
-        function showImg(url) { if(!url) return; document.getElementById('modalImg').src = url; document.getElementById('imgModal').style.display = 'flex'; }
+
+        function showImg(url) {
+            if(!url || url.includes('placeholder')) return;
+            document.getElementById('modalImg').src = url;
+            document.getElementById('imgModal').style.display = 'flex';
+        }
     </script>
 </body>
 </html>
