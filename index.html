@@ -7,7 +7,19 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root { --primary: #ffb7c5; --bg: #fff5f7; --text: #5a4a4d; --accent: #ff85a2; }
-        body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; line-height: 1.6; }
+        body { 
+    font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; 
+    /* --- 背景图设置开始 --- */
+    background-image: linear-gradient(rgba(255, 245, 247, 0.6), rgba(255, 245, 247, 0.6)), url('https://oknhlfhdqbsukskdxqre.supabase.co/storage/v1/object/public/images/ef1c1657d08ed47d87a555cd6df8f368.jpg');
+    background-size: cover;        /* 全屏覆盖 */
+    background-attachment: fixed;  /* 背景固定，不随滚动条滚动 */
+    background-position: center;   /* 图片居中 */
+    /* --- 背景图设置结束 --- */
+    color: var(--text); 
+    margin: 0; 
+    padding: 20px; 
+    line-height: 1.6; 
+}
         .container { max-width: 600px; margin: 0 auto; }
         .card { background: #fff; border-radius: 15px; padding: 20px; box-shadow: 0 4px 15px rgba(255, 183, 197, 0.2); margin-bottom: 20px; border: 1px solid var(--primary); }
         h1 { text-align: center; color: var(--accent); font-size: 1.5rem; }
