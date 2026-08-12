@@ -1,421 +1,638 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎀 团长管理后台</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-            background: linear-gradient(135deg, #fff0f5 0%, #ffe4ec 100%);
-            min-height: 100vh; padding: 20px;
-        }
-        .container { max-width: 1100px; margin: 0 auto; }
-        
-        /* 登录页 */
-        .login-box {
-            max-width: 420px; margin: 80px auto; background: white;
-            padding: 44px; border-radius: 24px;
-            box-shadow: 0 12px 40px rgba(255,107,157,0.15);
-        }
-        .login-box h2 { color: #ff6b9d; text-align: center; margin-bottom: 28px; font-size: 24px; }
-        .form-group { margin-bottom: 18px; }
-        .form-group label { display: block; margin-bottom: 8px; color: #555; font-size: 14px; font-weight: 600; }
-        .form-group input, .form-group select {
-            width: 100%; padding: 14px 16px; border: 2px solid #ffd6e7;
-            border-radius: 12px; font-size: 15px; outline: none; transition: all 0.2s;
-        }
-        .form-group input:focus, .form-group select:focus { border-color: #ff6b9d; }
-        .btn {
-            width: 100%; padding: 14px; background: #ff6b9d; color: white;
-            border: none; border-radius: 12px; font-size: 16px; font-weight: 600;
-            cursor: pointer; transition: all 0.2s;
-        }
-        .btn:hover { background: #ff5285; transform: translateY(-1px); }
-        .btn-secondary { background: #f5f5f5; color: #555; }
-        .btn-secondary:hover { background: #e8e8e8; }
-        .btn-danger { background: #ff4d4f; }
-        .btn-danger:hover { background: #ff7875; }
-        .btn-sm { width: auto; padding: 6px 16px; font-size: 13px; border-radius: 8px; }
-        
-        /* 管理页 */
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; padding-top: 10px; }
-        .header h1 { color: #ff6b9d; font-size: 26px; }
-        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; margin-bottom: 28px; }
-        .stat-card { background: white; padding: 22px; border-radius: 16px; box-shadow: 0 2px 16px rgba(0,0,0,0.04); }
-        .stat-card h4 { color: #999; font-size: 13px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .stat-card .num { color: #ff6b9d; font-size: 30px; font-weight: bold; }
-        
-        .form-section { background: white; padding: 28px; border-radius: 18px; margin-bottom: 28px; box-shadow: 0 2px 16px rgba(0,0,0,0.04); }
-        .form-section h3 { color: #ff6b9d; margin-bottom: 20px; font-size: 18px; }
-        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
-        .form-group.full { grid-column: 1 / -1; }
-        
-        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-        .tab { padding: 12px 24px; background: white; border: none; border-radius: 12px; cursor: pointer; color: #666; font-weight: 600; font-size: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
-        .tab.active { background: #ff6b9d; color: white; box-shadow: 0 4px 12px rgba(255,107,157,0.25); }
-        
-        table { width: 100%; background: white; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 16px rgba(0,0,0,0.04); font-size: 14px; border-collapse: separate; border-spacing: 0; }
-        th { background: #fff0f5; color: #ff6b9d; padding: 14px; text-align: left; font-weight: 600; }
-        td { padding: 14px; border-bottom: 1px solid #f5f5f5; }
-        tr:hover { background: #fff8fb; }
-        tr:last-child td { border-bottom: none; }
-        .thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; cursor: pointer; border: 1px solid #f0f0f0; }
-        .status-select { padding: 6px 10px; border-radius: 8px; border: 1px solid #ffd6e7; font-size: 13px; outline: none; color: #555; }
-        .status-select:focus { border-color: #ff6b9d; }
-        
-        .shen-card { background: white; padding: 24px; border-radius: 16px; margin-bottom: 18px; box-shadow: 0 2px 16px rgba(0,0,0,0.04); }
-        .shen-card h3 { color: #ff6b9d; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; font-size: 17px; }
-        .shen-table { width: 100%; font-size: 13px; margin-top: 10px; border-collapse: collapse; }
-        .shen-table th { background: #fafafa; color: #666; padding: 10px; font-weight: 600; }
-        .shen-table td { padding: 10px; border-bottom: 1px solid #f0f0f0; }
-        
-        .empty { text-align: center; padding: 70px; color: #bbb; font-size: 15px; }
-        .toast {
-            position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
-            background: #333; color: white; padding: 14px 28px; border-radius: 28px;
-            font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100;
-        }
-        .toast.show { opacity: 1; }
-        .hidden { display: none !important; }
-        .img-preview { max-height: 140px; border-radius: 10px; border: 1px solid #f0f0f0; }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+<title>谷团后台 · 团长管理</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --pink-1:#fff0f6; --pink-2:#ffd6e8; --pink-3:#ff9ec7;
+    --purple-1:#e7d9ff; --purple-2:#b48cff; --purple-3:#8a5cf6;
+    --ink:#4a3352; --ink-soft:#9c7fa8; --white:#ffffff;
+    --shadow: 0 10px 30px rgba(154, 92, 190, 0.15);
+    --radius: 20px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;min-height:100vh;
+    font-family:"Hiragino Sans GB","PingFang SC","Microsoft YaHei",sans-serif;
+    background:
+      radial-gradient(circle at 10% 0%, var(--pink-2) 0%, transparent 40%),
+      radial-gradient(circle at 90% 10%, var(--purple-1) 0%, transparent 40%),
+      linear-gradient(180deg, var(--pink-1) 0%, #f6ecff 100%);
+    color:var(--ink);
+    padding: 20px 14px 60px;
+  }
+  .wrap{max-width: 880px;margin:0 auto;}
+  h1,h2,h3{margin:0;}
+  .hero{text-align:center;margin-bottom:20px;}
+  .hero .badge{
+    display:inline-block;background:linear-gradient(135deg,var(--purple-3),var(--pink-3));
+    color:#fff;font-size:12px;padding:4px 14px;border-radius:999px;letter-spacing:2px;margin-bottom:8px;
+  }
+  .hero h1{
+    font-size:24px;font-weight:800;
+    background:linear-gradient(120deg,var(--purple-3),var(--pink-3));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .card{
+    background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:22px;margin-bottom:18px;border:1px solid #ffe3f1;
+  }
+  .card h2{font-size:16px;color:var(--ink);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+  .card h2 .dot{width:8px;height:8px;border-radius:50%;background:linear-gradient(135deg,var(--purple-3),var(--pink-3));}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:5px;font-weight:600;}
+  input,select{
+    width:100%;padding:11px 13px;border-radius:12px;border:1.5px solid var(--pink-2);
+    background:#fffaff;font-size:14px;color:var(--ink);outline:none;
+  }
+  input:focus,select:focus{border-color:var(--purple-3);}
+  .btn{
+    padding:11px 18px;border:none;border-radius:14px;
+    background:linear-gradient(120deg,var(--purple-3),var(--pink-3));
+    color:#fff;font-size:14px;font-weight:700;cursor:pointer;
+    box-shadow:0 8px 16px rgba(180,90,200,.3);
+  }
+  .btn:disabled{opacity:.6;cursor:not-allowed;}
+  .btn.small{padding:6px 12px;font-size:12px;border-radius:10px;box-shadow:none;}
+  .btn.ghost{background:#fff;color:var(--purple-3);border:1.5px solid var(--purple-2);box-shadow:none;}
+  .btn.danger{background:linear-gradient(120deg,#e0567a,#f08a5c);}
+  .row{display:flex;gap:10px;flex-wrap:wrap;}
+  .row > *{flex:1;min-width:120px;}
+
+  .login-box{max-width:380px;margin:60px auto 0;}
+  .msg{font-size:13px;padding:8px 0;color:var(--ink-soft);}
+  .msg.error{color:#d6537a;}
+  .msg.ok{color:#2f9e5c;}
+
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+  .topbar .who{font-size:12px;color:var(--ink-soft);}
+
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:6px;}
+  @media(max-width:560px){.stat-grid{grid-template-columns:repeat(2,1fr);}}
+  .stat{
+    background:linear-gradient(135deg,#fff,#fff5fb);border:1.5px solid var(--pink-2);
+    border-radius:14px;padding:12px;text-align:center;
+  }
+  .stat .num{font-size:19px;font-weight:800;color:var(--purple-3);}
+  .stat .label{font-size:10.5px;color:var(--ink-soft);margin-top:2px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:9px 6px;text-align:left;border-bottom:1px solid #ffe8f3;vertical-align:middle;}
+  th{color:var(--ink-soft);font-size:11px;font-weight:700;}
+  td img{width:38px;height:38px;border-radius:9px;object-fit:cover;border:1px solid var(--pink-2);cursor:zoom-in;}
+  .status-pill{font-size:11px;padding:3px 9px;border-radius:999px;font-weight:700;border:none;}
+  .status.未出荷,option[value="未出荷"]{}
+  select.status-select{padding:5px 8px;font-size:11px;width:auto;border-radius:999px;font-weight:700;}
+  .table-wrap{overflow-x:auto;}
+
+  .cn-group{margin-bottom:14px;padding:12px;border-radius:14px;background:#fbf7ff;border:1px solid var(--purple-1);}
+  .cn-group .cn-head{display:flex;justify-content:space-between;font-weight:700;font-size:13px;margin-bottom:6px;}
+  .cn-group .cn-item{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-soft);padding:2px 0;}
+
+  .key-display{
+    display:flex;align-items:center;gap:10px;background:#fbf7ff;border:1.5px dashed var(--purple-2);
+    border-radius:14px;padding:12px 14px;font-weight:700;color:var(--purple-3);font-size:15px;
+  }
+  .co-admin-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f5e9f9;font-size:13px;}
+
+  .app-item{border:1px solid #ffe3f1;border-radius:14px;padding:12px;margin-bottom:10px;}
+  .app-item .top{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-soft);margin-bottom:6px;}
+  .app-item .imgs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;}
+  .app-item .imgs img{width:52px;height:52px;border-radius:10px;object-fit:cover;cursor:zoom-in;border:1px solid var(--pink-2);}
+
+  .lightbox{position:fixed;inset:0;background:rgba(60,20,60,.75);display:none;align-items:center;justify-content:center;padding:24px;z-index:100;}
+  .lightbox.open{display:flex;}
+  .lightbox img{max-width:100%;max-height:100%;border-radius:14px;}
+
+  .hidden{display:none !important;}
+  .divider{height:1px;background:#ffe8f3;margin:14px 0;}
+</style>
 </head>
 <body>
-    <!-- 登录界面 -->
-    <div id="loginPage" class="container">
-        <div class="login-box">
-            <h2>🎀 团长登录</h2>
-            <div class="form-group">
-                <label>邮箱</label>
-                <input type="email" id="loginEmail" placeholder="你在Supabase创建的邮箱">
-            </div>
-            <div class="form-group">
-                <label>密码</label>
-                <input type="password" id="loginPassword" placeholder="你的管理密码">
-            </div>
-            <button class="btn" onclick="login()">登录</button>
-            <p style="text-align:center; margin-top:20px; font-size:13px; color:#999; line-height:1.8;">
-                首次使用？请先在Supabase的 Authentication → Users 里<br>手动添加一个管理员账号
-            </p>
-        </div>
+<div class="wrap">
+
+  <!-- ============ 登录区 ============ -->
+  <div id="loginSection">
+    <div class="hero">
+      <span class="badge">谷团 · 团长后台</span>
+      <h1>登录管理后台</h1>
+    </div>
+    <div class="card login-box">
+      <div class="field"><label>邮箱</label><input id="loginEmail" type="email" placeholder="你的登录邮箱" /></div>
+      <div class="field"><label>密码</label><input id="loginPassword" type="password" placeholder="密码" /></div>
+      <button class="btn" style="width:100%" id="loginBtn" onclick="doLogin()">登 录</button>
+      <div class="msg error" id="loginMsg"></div>
+    </div>
+  </div>
+
+  <!-- ============ 初始化向导 ============ -->
+  <div id="initSection" class="hidden">
+    <div class="hero">
+      <span class="badge">首次使用</span>
+      <h1>设置你的查询密钥</h1>
+    </div>
+    <div class="card login-box">
+      <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">这个密钥会发给团员，用来免登录查自己的排单，请设置一个不容易和别的团重复的密钥（比如团名+日期）。</p>
+      <div class="field"><label>查询密钥</label><input id="initKey" type="text" placeholder="例如 xxx团0812" /></div>
+      <button class="btn" style="width:100%" id="initBtn" onclick="doInit()">创建我的团</button>
+      <div class="msg" id="initMsg"></div>
+    </div>
+  </div>
+
+  <!-- ============ 管理后台 ============ -->
+  <div id="dashSection" class="hidden">
+    <div class="topbar">
+      <div>
+        <span class="badge">谷团 · 团长后台</span>
+        <div class="who" id="whoAmI"></div>
+      </div>
+      <button class="btn ghost small" onclick="doLogout()">退出登录</button>
     </div>
 
-    <!-- 管理界面 -->
-    <div id="adminPage" class="container hidden">
-        <div class="header">
-            <h1>🎀 团长管理后台</h1>
-            <button class="btn btn-secondary btn-sm" onclick="logout()" style="width:auto;">退出登录</button>
-        </div>
-
-        <!-- 统计 -->
-        <div class="stats" id="stats"></div>
-
-        <!-- 添加/编辑表单 -->
-        <div class="form-section">
-            <h3 id="formTitle">➕ 添加新排谷</h3>
-            <input type="hidden" id="editId">
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>谷子名称</label>
-                    <input type="text" id="fName" placeholder="如：A3切页">
-                </div>
-                <div class="form-group">
-                    <label>CN（团员昵称）</label>
-                    <input type="text" id="fCn" placeholder="如：小圆">
-                </div>
-                <div class="form-group">
-                    <label>单价（元）</label>
-                    <input type="number" id="fPrice" placeholder="0.00" step="0.01">
-                </div>
-                <div class="form-group">
-                    <label>数量</label>
-                    <input type="number" id="fQty" value="1" min="1">
-                </div>
-                <div class="form-group">
-                    <label>到货情况</label>
-                    <select id="fStatus">
-                        <option value="未出荷">未出荷</option>
-                        <option value="已到货">已到货</option>
-                        <option value="已发货">已发货</option>
-                        <option value="已签收">已签收</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>柄图（可选，支持上传图片）</label>
-                    <input type="file" id="fImg" accept="image/*" onchange="previewImg()">
-                </div>
-                <div class="form-group full">
-                    <img id="imgPreview" class="img-preview" style="display:none;">
-                </div>
-            </div>
-            <div style="display:flex; gap:12px; margin-top:18px;">
-                <button class="btn btn-sm" onclick="submitForm()" style="width:auto; min-width:100px;">💾 保存</button>
-                <button class="btn btn-secondary btn-sm" onclick="resetForm()" style="width:auto;">取消编辑</button>
-            </div>
-        </div>
-
-        <!-- 标签页 -->
-        <div class="tabs">
-            <button class="tab active" onclick="switchView('list')">📋 排表总览</button>
-            <button class="tab" onclick="switchView('shen')">💰 肾表汇总</button>
-        </div>
-
-        <!-- 排表视图 -->
-        <div id="viewList"></div>
-
-        <!-- 肾表视图 -->
-        <div id="viewShen" class="hidden"></div>
+    <!-- 统计卡片 -->
+    <div class="card">
+      <h2><span class="dot"></span>团务概览</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="num" id="statTotalItems">0</div><div class="label">总排谷项数</div></div>
+        <div class="stat"><div class="num" id="statTotalAmount">¥0</div><div class="label">应肾总额</div></div>
+        <div class="stat"><div class="num" id="statUnshipped">0</div><div class="label">未出荷</div></div>
+        <div class="stat"><div class="num" id="statArrived">0</div><div class="label">已到货</div></div>
+        <div class="stat"><div class="num" id="statShipped">0</div><div class="label">已发货</div></div>
+        <div class="stat"><div class="num" id="statSigned">0</div><div class="label">已签收</div></div>
+      </div>
     </div>
 
-    <div class="toast" id="toast"></div>
+    <!-- 录入/编辑 -->
+    <div class="card">
+      <h2><span class="dot"></span><span id="formTitle">录入新排谷</span></h2>
+      <div class="row">
+        <div class="field"><label>谷子名称</label><input id="fName" placeholder="如 A3切页" /></div>
+        <div class="field"><label>CN（团员昵称）</label><input id="fCn" placeholder="团员昵称" /></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>单价</label><input id="fPrice" type="number" step="0.01" placeholder="0.00" /></div>
+        <div class="field"><label>数量</label><input id="fQty" type="number" step="1" value="1" /></div>
+        <div class="field"><label>到货状态</label>
+          <select id="fStatus">
+            <option>未出荷</option><option>已到货</option><option>已发货</option><option>已签收</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>柄图上传</label>
+        <input id="fImage" type="file" accept="image/*" />
+        <div id="fImagePreview" style="margin-top:8px;"></div>
+      </div>
+      <div class="row">
+        <button class="btn" id="fSaveBtn" onclick="saveItem()">保存排谷</button>
+        <button class="btn ghost hidden" id="fCancelBtn" onclick="resetForm()">取消编辑</button>
+      </div>
+      <div class="msg" id="formMsg"></div>
+    </div>
 
-    <script>
-        // ==================== ⚠️ 必须修改这里 ====================
-        const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_UW9cgyBOeV6zIZCicI2SlQ_bqm0MeJa';
-        // =========================================================
+    <!-- 排谷列表 -->
+    <div class="card">
+      <h2><span class="dot"></span>排谷列表</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>柄图</th><th>名称</th><th>CN</th><th>单价</th><th>数量</th><th>小计</th><th>状态</th><th>操作</th>
+          </tr></thead>
+          <tbody id="itemsTableBody"></tbody>
+        </table>
+      </div>
+      <div class="msg" id="listEmptyMsg"></div>
+    </div>
 
-        const { createClient } = supabase;
-        const supa = createClient(SUPABASE_URL, SUPABASE_KEY);
-        let currentData = [];
+    <!-- 肾表汇总 -->
+    <div class="card">
+      <h2><span class="dot"></span>肾表汇总（按 CN）</h2>
+      <div id="cnSummary"></div>
+    </div>
 
-        // 初始化
-        async function init() {
-            const { data: { session } } = await supa.auth.getSession();
-            if (session) showAdmin();
-            
-            supa.auth.onAuthStateChange((event, session) => {
-                if (session) showAdmin();
-                else showLogin();
-            });
-        }
+    <!-- 团务设置：仅团长可见 -->
+    <div class="card" id="teamSettingsCard">
+      <h2><span class="dot"></span>团务设置</h2>
+      <div class="field">
+        <label>查询密钥（发给团员用）</label>
+        <div class="key-display">
+          <span id="queryKeyText">-</span>
+          <button class="btn small ghost" onclick="copyKey()">复制</button>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="field">
+        <label>添加副团长（最多 3 人）</label>
+        <div class="row">
+          <input id="coAdminEmail" type="email" placeholder="副团长的注册邮箱" />
+          <button class="btn small" style="flex:0 0 auto;" onclick="addCoAdmin()">添加</button>
+        </div>
+        <div class="msg" id="coAdminMsg"></div>
+      </div>
+      <div id="coAdminList"></div>
+      <div class="divider"></div>
+      <div style="font-size:12px;color:var(--ink-soft);">数据最后更新：<span id="updatedAtText">-</span></div>
+    </div>
 
-        function showLogin() {
-            document.getElementById('loginPage').classList.remove('hidden');
-            document.getElementById('adminPage').classList.add('hidden');
-        }
+    <!-- 团员申请区 -->
+    <div class="card">
+      <h2><span class="dot"></span>团员申请（交肾 / 排发）</h2>
+      <div id="applicationsList"></div>
+      <div class="msg" id="applicationsEmptyMsg"></div>
+    </div>
 
-        function showAdmin() {
-            document.getElementById('loginPage').classList.add('hidden');
-            document.getElementById('adminPage').classList.remove('hidden');
-            loadData();
-        }
+  </div>
+</div>
 
-        async function login() {
-            const email = document.getElementById('loginEmail').value.trim();
-            const password = document.getElementById('loginPassword').value;
-            if (!email || !password) { showToast('请输入邮箱和密码'); return; }
-            
-            const { error } = await supa.auth.signInWithPassword({ email, password });
-            if (error) showToast('登录失败：' + error.message);
-            else showToast('登录成功！');
-        }
+<div class="lightbox" id="lightbox" onclick="closeLightbox()"><img id="lightboxImg" src="" /></div>
 
-        async function logout() {
-            await supa.auth.signOut();
-            showToast('已退出登录');
-        }
+<script>
+  // ====== Supabase 连接信息 ======
+  const SUPABASE_URL = "https://oknhlfhdqbsukskdxqre.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_uW9cgyB0e6zIZCIcIZSlQ_bqm0MeJa";
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        // ==================== 数据加载与渲染 ====================
-        async function loadData() {
-            const { data, error } = await supa.from('items').select('*').order('created_at', { ascending: false });
-            if (error) { showToast('加载失败：' + error.message); return; }
-            currentData = data || [];
-            renderStats();
-            renderList();
-            renderShen();
-        }
+  let currentUser = null;
+  let teamRow = null;      // 当前团的整行数据
+  let isOwner = false;
+  let editingItemId = null;
+  let pendingImageUrl = null;
 
-        function renderStats() {
-            const total = currentData.reduce((s, i) => s + i.price * i.quantity, 0);
-            const counts = { '未出荷':0, '已到货':0, '已发货':0, '已签收':0 };
-            currentData.forEach(i => counts[i.status] = (counts[i.status]||0) + i.quantity);
-            
-            document.getElementById('stats').innerHTML = `
-                <div class="stat-card"><h4>总排谷项</h4><div class="num">${currentData.length}</div></div>
-                <div class="stat-card"><h4>应肾总额</h4><div class="num">¥${total.toFixed(0)}</div></div>
-                <div class="stat-card"><h4>未出荷</h4><div class="num">${counts['未出荷']}</div></div>
-                <div class="stat-card"><h4>已到货</h4><div class="num">${counts['已到货']}</div></div>
-            `;
-        }
+  const STATUSES = ["未出荷","已到货","已发货","已签收"];
 
-        function renderList() {
-            const div = document.getElementById('viewList');
-            if (!currentData.length) { div.innerHTML = '<div class="empty">暂无排谷数据，请从上方表单添加</div>'; return; }
-            
-            let html = `<table><thead><tr>
-                <th>柄图</th><th>谷子名称</th><th>CN</th><th>单价</th><th>数量</th><th>总价</th><th>状态</th><th>操作</th>
-            </tr></thead><tbody>`;
-            
-            currentData.forEach(item => {
-                const total = (item.price * item.quantity).toFixed(2);
-                const img = item.image_url 
-                    ? `<img src="${item.image_url}" class="thumb" onclick="window.open('${item.image_url}')">` 
-                    : '<span style="color:#ddd; font-size:12px;">无图</span>';
-                
-                html += `<tr>
-                    <td>${img}</td>
-                    <td style="font-weight:600;">${item.name}</td>
-                    <td>${item.cn}</td>
-                    <td>¥${item.price.toFixed(2)}</td>
-                    <td>${item.quantity}</td>
-                    <td style="color:#ff6b9d; font-weight:bold;">¥${total}</td>
-                    <td>
-                        <select class="status-select" onchange="updateStatus(${item.id}, this.value)">
-                            <option value="未出荷" ${item.status==='未出荷'?'selected':''}>未出荷</option>
-                            <option value="已到货" ${item.status==='已到货'?'selected':''}>已到货</option>
-                            <option value="已发货" ${item.status==='已发货'?'selected':''}>已发货</option>
-                            <option value="已签收" ${item.status==='已签收'?'selected':''}>已签收</option>
-                        </select>
-                    </td>
-                    <td>
-                        <button class="btn btn-sm btn-secondary" onclick="editItem(${item.id})">编辑</button>
-                        <button class="btn btn-sm btn-danger" onclick="deleteItem(${item.id})">删除</button>
-                    </td>
-                </tr>`;
-            });
-            html += '</tbody></table>';
-            div.innerHTML = html;
-        }
+  function escapeHtml(str){
+    return String(str ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+  function show(id){document.getElementById(id).classList.remove('hidden');}
+  function hide(id){document.getElementById(id).classList.add('hidden');}
 
-        function renderShen() {
-            const div = document.getElementById('viewShen');
-            if (!currentData.length) { div.innerHTML = '<div class="empty">暂无数据</div>'; return; }
-            
-            const map = {};
-            currentData.forEach(item => {
-                if (!map[item.cn]) map[item.cn] = { items: [], total: 0, qty: 0 };
-                map[item.cn].items.push(item);
-                map[item.cn].total += item.price * item.quantity;
-                map[item.cn].qty += item.quantity;
-            });
-            
-            let html = '';
-            Object.keys(map).sort().forEach(cn => {
-                const g = map[cn];
-                html += `<div class="shen-card">
-                    <h3><span>👤 ${cn}</span><span style="color:#ff6b9d; font-size:20px;">应肾 ¥${g.total.toFixed(2)}（${g.qty}件）</span></h3>
-                    <table class="shen-table"><thead><tr><th>谷子</th><th>单价×数量</th><th>小计</th><th>状态</th></tr></thead><tbody>
-                    ${g.items.map(i => `<tr><td>${i.name}</td><td>¥${i.price.toFixed(2)} × ${i.quantity}</td><td style="color:#ff6b9d; font-weight:bold;">¥${(i.price*i.quantity).toFixed(2)}</td><td>${i.status}</td></tr>`).join('')}
-                    </tbody></table>
-                </div>`;
-            });
-            div.innerHTML = html;
-        }
+  // ---------- 启动 ----------
+  (async function init(){
+    const { data: { session } } = await supabase.auth.getSession();
+    if(session){ currentUser = session.user; await afterLogin(); }
+  })();
 
-        // ==================== 表单操作 ====================
-        function previewImg() {
-            const file = document.getElementById('fImg').files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = e => {
-                document.getElementById('imgPreview').src = e.target.result;
-                document.getElementById('imgPreview').style.display = 'block';
-            };
-            reader.readAsDataURL(file);
-        }
+  async function doLogin(){
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const msg = document.getElementById('loginMsg');
+    const btn = document.getElementById('loginBtn');
+    msg.textContent = '';
+    if(!email || !password){ msg.textContent = '请填写邮箱和密码'; return; }
+    btn.disabled = true; btn.textContent = '登录中...';
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    btn.disabled = false; btn.textContent = '登 录';
+    if(error){ msg.textContent = '登录失败：' + error.message; return; }
+    currentUser = data.user;
+    await afterLogin();
+  }
 
-        function resetForm() {
-            document.getElementById('formTitle').textContent = '➕ 添加新排谷';
-            document.getElementById('editId').value = '';
-            document.getElementById('fName').value = '';
-            document.getElementById('fCn').value = '';
-            document.getElementById('fPrice').value = '';
-            document.getElementById('fQty').value = '1';
-            document.getElementById('fStatus').value = '未出荷';
-            document.getElementById('fImg').value = '';
-            document.getElementById('imgPreview').style.display = 'none';
-        }
+  async function doLogout(){
+    await supabase.auth.signOut();
+    currentUser = null; teamRow = null;
+    hide('dashSection'); hide('initSection'); show('loginSection');
+  }
 
-        async function submitForm() {
-            const id = document.getElementById('editId').value;
-            const name = document.getElementById('fName').value.trim();
-            const cn = document.getElementById('fCn').value.trim();
-            const price = parseFloat(document.getElementById('fPrice').value) || 0;
-            const qty = parseInt(document.getElementById('fQty').value) || 1;
-            const status = document.getElementById('fStatus').value;
-            
-            if (!name || !cn) { showToast('请填写谷子名称和CN'); return; }
-            if (price <= 0) { showToast('单价必须大于0'); return; }
-            
-            let image_url = '';
-            const file = document.getElementById('fImg').files[0];
-            
-            // 如果有新图片，先上传
-            if (file) {
-                showToast('正在上传图片...');
-                const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-                const { error: upError } = await supa.storage.from('images').upload(fileName, file);
-                if (upError) { showToast('图片上传失败：' + upError.message); return; }
-                const { data: urlData } = supa.storage.from('images').getPublicUrl(fileName);
-                image_url = urlData.publicUrl;
-            } else if (id) {
-                // 编辑模式且没传新图，保留旧图
-                const old = currentData.find(i => i.id == id);
-                if (old) image_url = old.image_url;
-            }
-            
-            if (id) {
-                const { error } = await supa.from('items').update({ name, cn, price, quantity: qty, status, image_url }).eq('id', id);
-                if (error) showToast('更新失败：' + error.message);
-                else { showToast('更新成功！'); resetForm(); loadData(); }
-            } else {
-                const { error } = await supa.from('items').insert([{ name, cn, price, quantity: qty, status, image_url }]);
-                if (error) showToast('添加失败：' + error.message);
-                else { showToast('添加成功！'); resetForm(); loadData(); }
-            }
-        }
+  async function afterLogin(){
+    hide('loginSection'); hide('initSection'); hide('dashSection');
+    const uid = currentUser.id;
+    const { data, error } = await supabase
+      .from('leader_data')
+      .select('*')
+      .or(`user_id.eq.${uid},admin_ids.cs.{${uid}}`)
+      .maybeSingle();
 
-        async function updateStatus(id, status) {
-            const { error } = await supa.from('items').update({ status }).eq('id', id);
-            if (error) showToast('更新失败：' + error.message);
-            else { showToast('状态已更新'); loadData(); }
-        }
+    if(error){
+      alert('加载数据失败：' + error.message);
+      return;
+    }
 
-        function editItem(id) {
-            const item = currentData.find(i => i.id == id);
-            if (!item) return;
-            document.getElementById('formTitle').textContent = '✏️ 编辑排谷（ID: ' + id + '）';
-            document.getElementById('editId').value = id;
-            document.getElementById('fName').value = item.name;
-            document.getElementById('fCn').value = item.cn;
-            document.getElementById('fPrice').value = item.price;
-            document.getElementById('fQty').value = item.quantity;
-            document.getElementById('fStatus').value = item.status;
-            if (item.image_url) {
-                document.getElementById('imgPreview').src = item.image_url;
-                document.getElementById('imgPreview').style.display = 'block';
-            } else {
-                document.getElementById('imgPreview').style.display = 'none';
-            }
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            showToast('已加载到编辑区，修改后点击保存');
-        }
+    if(!data){
+      show('initSection');
+      return;
+    }
 
-        async function deleteItem(id) {
-            if (!confirm('确定删除这条排谷记录吗？此操作不可恢复。')) return;
-            const { error } = await supa.from('items').delete().eq('id', id);
-            if (error) showToast('删除失败：' + error.message);
-            else { showToast('已删除'); loadData(); }
-        }
+    teamRow = data;
+    isOwner = teamRow.user_id === uid;
+    show('dashSection');
+    renderAll();
+  }
 
-        function switchView(view) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            event.target.classList.add('active');
-            document.getElementById('viewList').classList.toggle('hidden', view !== 'list');
-            document.getElementById('viewShen').classList.toggle('hidden', view !== 'shen');
-        }
+  async function doInit(){
+    const key = document.getElementById('initKey').value.trim();
+    const msg = document.getElementById('initMsg');
+    const btn = document.getElementById('initBtn');
+    if(!key){ msg.className='msg error'; msg.textContent='请输入查询密钥'; return; }
+    btn.disabled = true; btn.textContent = '创建中...';
+    const { error } = await supabase.rpc('init_leader_data', { p_query_key: key });
+    btn.disabled = false; btn.textContent = '创建我的团';
+    if(error){ msg.className='msg error'; msg.textContent = '创建失败：' + error.message; return; }
+    msg.className='msg ok'; msg.textContent = '创建成功！';
+    await afterLogin();
+  }
 
-        function showToast(msg) {
-            const t = document.getElementById('toast');
-            t.textContent = msg; t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 2800);
-        }
+  // ---------- 渲染 ----------
+  function renderAll(){
+    document.getElementById('whoAmI').textContent =
+      (isOwner ? '团长' : '副团长') + ' · ' + (currentUser.email || '');
 
-        init();
-    </script>
+    if(isOwner){ show('teamSettingsCard'); } else { hide('teamSettingsCard'); }
+
+    renderStats();
+    renderTable();
+    renderCnSummary();
+    if(isOwner) renderTeamSettings();
+    renderApplications();
+  }
+
+  function renderStats(){
+    const items = teamRow.group_data || [];
+    let totalAmount = 0;
+    const counts = {未出荷:0, 已到货:0, 已发货:0, 已签收:0};
+    items.forEach(it => {
+      totalAmount += (Number(it.price)||0) * (Number(it.quantity)||0);
+      const s = STATUSES.includes(it.status) ? it.status : '未出荷';
+      counts[s]++;
+    });
+    document.getElementById('statTotalItems').textContent = items.length;
+    document.getElementById('statTotalAmount').textContent = '¥' + totalAmount.toFixed(2);
+    document.getElementById('statUnshipped').textContent = counts['未出荷'];
+    document.getElementById('statArrived').textContent = counts['已到货'];
+    document.getElementById('statShipped').textContent = counts['已发货'];
+    document.getElementById('statSigned').textContent = counts['已签收'];
+  }
+
+  function renderTable(){
+    const items = teamRow.group_data || [];
+    const tbody = document.getElementById('itemsTableBody');
+    const emptyMsg = document.getElementById('listEmptyMsg');
+    if(items.length === 0){
+      tbody.innerHTML = '';
+      emptyMsg.textContent = '还没有排谷记录，在上面的表单里添加第一个吧～';
+      return;
+    }
+    emptyMsg.textContent = '';
+    tbody.innerHTML = items.map(it => {
+      const price = Number(it.price)||0, qty = Number(it.quantity)||0;
+      const img = it.image_url ? `<img src="${escapeHtml(it.image_url)}" onclick="openLightbox('${escapeHtml(it.image_url)}')" />` : '-';
+      const statusOptions = STATUSES.map(s => `<option value="${s}" ${it.status===s?'selected':''}>${s}</option>`).join('');
+      return `
+        <tr>
+          <td>${img}</td>
+          <td>${escapeHtml(it.name||'')}</td>
+          <td>${escapeHtml(it.cn||'')}</td>
+          <td>¥${price.toFixed(2)}</td>
+          <td>${qty}</td>
+          <td>¥${(price*qty).toFixed(2)}</td>
+          <td><select class="status-select" onchange="quickUpdateStatus('${it.item_id}', this.value)">${statusOptions}</select></td>
+          <td>
+            <button class="btn small ghost" onclick="editItem('${it.item_id}')">编辑</button>
+            <button class="btn small danger" onclick="deleteItem('${it.item_id}')">删除</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function renderCnSummary(){
+    const items = teamRow.group_data || [];
+    const el = document.getElementById('cnSummary');
+    if(items.length === 0){ el.innerHTML = `<div class="msg">暂无数据</div>`; return; }
+    const groups = {};
+    items.forEach(it => {
+      const cn = it.cn || '（未填写CN）';
+      if(!groups[cn]) groups[cn] = [];
+      groups[cn].push(it);
+    });
+    let grandTotal = 0;
+    const html = Object.keys(groups).map(cn => {
+      const list = groups[cn];
+      const subtotal = list.reduce((s,it)=> s + (Number(it.price)||0)*(Number(it.quantity)||0), 0);
+      grandTotal += subtotal;
+      const rows = list.map(it => `<div class="cn-item"><span>${escapeHtml(it.name||'')} ×${it.quantity||0}</span><span>¥${((Number(it.price)||0)*(Number(it.quantity)||0)).toFixed(2)}</span></div>`).join('');
+      return `<div class="cn-group"><div class="cn-head"><span>${escapeHtml(cn)}</span><span>¥${subtotal.toFixed(2)}</span></div>${rows}</div>`;
+    }).join('');
+    el.innerHTML = html + `<div style="text-align:right;font-weight:800;color:var(--purple-3);padding-top:6px;">全团总计：¥${grandTotal.toFixed(2)}</div>`;
+  }
+
+  async function renderTeamSettings(){
+    document.getElementById('queryKeyText').textContent = teamRow.query_key;
+    document.getElementById('updatedAtText').textContent = teamRow.updated_at ? new Date(teamRow.updated_at).toLocaleString('zh-CN') : '-';
+
+    const listEl = document.getElementById('coAdminList');
+    const adminIds = teamRow.admin_ids || [];
+    if(adminIds.length === 0){
+      listEl.innerHTML = `<div class="msg">还没有副团长</div>`;
+      return;
+    }
+    listEl.innerHTML = `<div class="msg">加载中...</div>`;
+    const { data, error } = await supabase.rpc('get_co_admin_emails', { p_query_key: teamRow.query_key });
+    if(error){ listEl.innerHTML = `<div class="msg error">加载副团长失败：${escapeHtml(error.message)}</div>`; return; }
+    listEl.innerHTML = (data||[]).map(u => `
+      <div class="co-admin-row">
+        <span>${escapeHtml(u.email)}</span>
+        <button class="btn small danger" onclick="removeCoAdmin('${u.id}')">移除</button>
+      </div>
+    `).join('');
+  }
+
+  function renderApplications(){
+    const apps = (teamRow.image_data && teamRow.image_data.applications) || [];
+    const el = document.getElementById('applicationsList');
+    const emptyMsg = document.getElementById('applicationsEmptyMsg');
+    if(apps.length === 0){ el.innerHTML=''; emptyMsg.textContent = '暂无团员提交的申请'; return; }
+    emptyMsg.textContent = '';
+    el.innerHTML = apps.map((app, idx) => {
+      const imgs = (app.images||[]).map(u => `<img src="${escapeHtml(u)}" onclick="openLightbox('${escapeHtml(u)}')" />`).join('');
+      const isConfirmed = app.status === '已确认';
+      return `
+        <div class="app-item">
+          <div class="top">
+            <span>${escapeHtml(app.type||'')} · ${escapeHtml(app.cn||'')}</span>
+            <span>${app.time ? new Date(app.time).toLocaleString('zh-CN') : ''}</span>
+          </div>
+          <div class="imgs">${imgs}</div>
+          <div class="row" style="align-items:center;">
+            <span class="status-pill" style="background:${isConfirmed?'#dcf7e3':'#fff2cf'};color:${isConfirmed?'#2f9e5c':'#b7841a'};">${escapeHtml(app.status||'待确认')}</span>
+            <button class="btn small ${isConfirmed?'ghost':''}" style="flex:0 0 auto;" onclick="toggleApplicationStatus(${idx})">${isConfirmed?'标记为待确认':'标记为已确认'}</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ---------- 排谷 增/删/改 ----------
+  document.getElementById('fImage').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    const preview = document.getElementById('fImagePreview');
+    pendingImageUrl = null;
+    if(!file) return;
+    preview.innerHTML = '上传中...';
+    try{
+      const ext = (file.name.split('.').pop()||'jpg').toLowerCase();
+      const path = `items/${teamRow.query_key}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
+      const { error } = await supabase.storage.from('images').upload(path, file);
+      if(error){ preview.innerHTML = '上传失败：' + error.message; return; }
+      const { data: pub } = supabase.storage.from('images').getPublicUrl(path);
+      pendingImageUrl = pub.publicUrl;
+      preview.innerHTML = `<img src="${escapeHtml(pendingImageUrl)}" style="width:60px;height:60px;border-radius:10px;object-fit:cover;" />`;
+    }catch(err){ preview.innerHTML = '上传出错：' + (err.message||err); }
+  });
+
+  function resetForm(){
+    editingItemId = null;
+    pendingImageUrl = null;
+    document.getElementById('formTitle').textContent = '录入新排谷';
+    document.getElementById('fName').value = '';
+    document.getElementById('fCn').value = '';
+    document.getElementById('fPrice').value = '';
+    document.getElementById('fQty').value = 1;
+    document.getElementById('fStatus').value = '未出荷';
+    document.getElementById('fImage').value = '';
+    document.getElementById('fImagePreview').innerHTML = '';
+    document.getElementById('formMsg').textContent = '';
+    hide('fCancelBtn');
+  }
+
+  function editItem(itemId){
+    const it = (teamRow.group_data||[]).find(x => x.item_id === itemId);
+    if(!it) return;
+    editingItemId = itemId;
+    pendingImageUrl = it.image_url || null;
+    document.getElementById('formTitle').textContent = '编辑排谷';
+    document.getElementById('fName').value = it.name || '';
+    document.getElementById('fCn').value = it.cn || '';
+    document.getElementById('fPrice').value = it.price || '';
+    document.getElementById('fQty').value = it.quantity || 1;
+    document.getElementById('fStatus').value = STATUSES.includes(it.status) ? it.status : '未出荷';
+    document.getElementById('fImagePreview').innerHTML = it.image_url ? `<img src="${escapeHtml(it.image_url)}" style="width:60px;height:60px;border-radius:10px;object-fit:cover;" />` : '';
+    show('fCancelBtn');
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+
+  async function saveItem(){
+    const name = document.getElementById('fName').value.trim();
+    const cn = document.getElementById('fCn').value.trim();
+    const price = parseFloat(document.getElementById('fPrice').value);
+    const qty = parseInt(document.getElementById('fQty').value, 10);
+    const status = document.getElementById('fStatus').value;
+    const msg = document.getElementById('formMsg');
+
+    if(!name || !cn || isNaN(price) || isNaN(qty)){
+      msg.className = 'msg error'; msg.textContent = '请完整填写名称、CN、单价、数量';
+      return;
+    }
+
+    const btn = document.getElementById('fSaveBtn');
+    btn.disabled = true; btn.textContent = '保存中...';
+
+    const items = teamRow.group_data ? [...teamRow.group_data] : [];
+
+    if(editingItemId){
+      const idx = items.findIndex(x => x.item_id === editingItemId);
+      if(idx >= 0){
+        items[idx] = { ...items[idx], name, cn, price, quantity: qty, status, image_url: pendingImageUrl || items[idx].image_url || null };
+      }
+    } else {
+      items.push({
+        item_id: Date.now().toString(36) + Math.random().toString(36).slice(2,8),
+        name, cn, price, quantity: qty, status,
+        image_url: pendingImageUrl || null,
+        created_at: new Date().toISOString()
+      });
+    }
+
+    const ok = await saveGroupData(items);
+    btn.disabled = false; btn.textContent = '保存排谷';
+    if(ok){
+      msg.className = 'msg ok'; msg.textContent = '保存成功！';
+      resetForm();
+    } else {
+      msg.className = 'msg error'; msg.textContent = '保存失败，请重试';
+    }
+  }
+
+  async function quickUpdateStatus(itemId, newStatus){
+    const items = (teamRow.group_data||[]).map(it => it.item_id === itemId ? { ...it, status: newStatus } : it);
+    await saveGroupData(items);
+  }
+
+  async function deleteItem(itemId){
+    if(!confirm('确定删除这条排谷记录吗？')) return;
+    const items = (teamRow.group_data||[]).filter(it => it.item_id !== itemId);
+    await saveGroupData(items);
+  }
+
+  async function saveGroupData(items){
+    const { data, error } = await supabase
+      .from('leader_data')
+      .update({ group_data: items, updated_at: new Date().toISOString() })
+      .eq('id', teamRow.id)
+      .select()
+      .single();
+    if(error){ alert('保存失败：' + error.message); return false; }
+    teamRow = data;
+    renderAll();
+    return true;
+  }
+
+  // ---------- 团务设置 ----------
+  function copyKey(){
+    navigator.clipboard.writeText(teamRow.query_key).then(()=> alert('已复制查询密钥'));
+  }
+
+  async function addCoAdmin(){
+    const email = document.getElementById('coAdminEmail').value.trim();
+    const msg = document.getElementById('coAdminMsg');
+    if(!email){ msg.className='msg error'; msg.textContent='请输入邮箱'; return; }
+    const { data, error } = await supabase.rpc('add_co_admin', { p_query_key: teamRow.query_key, p_email: email });
+    if(error){ msg.className='msg error'; msg.textContent = '出错：' + error.message; return; }
+    msg.className = data === '添加成功' ? 'msg ok' : 'msg error';
+    msg.textContent = data;
+    if(data === '添加成功'){
+      document.getElementById('coAdminEmail').value = '';
+      await refreshTeamRow();
+    }
+  }
+
+  async function removeCoAdmin(adminId){
+    if(!confirm('确定移除这位副团长吗？')) return;
+    const { data, error } = await supabase.rpc('remove_co_admin', { p_query_key: teamRow.query_key, p_admin_id: adminId });
+    if(error){ alert('出错：' + error.message); return; }
+    await refreshTeamRow();
+  }
+
+  async function refreshTeamRow(){
+    const { data, error } = await supabase.from('leader_data').select('*').eq('id', teamRow.id).single();
+    if(!error){ teamRow = data; renderAll(); }
+  }
+
+  // ---------- 申请区 ----------
+  async function toggleApplicationStatus(idx){
+    const apps = [...((teamRow.image_data && teamRow.image_data.applications) || [])];
+    if(!apps[idx]) return;
+    apps[idx] = { ...apps[idx], status: apps[idx].status === '已确认' ? '待确认' : '已确认' };
+    const newImageData = { ...(teamRow.image_data||{}), applications: apps };
+    const { data, error } = await supabase
+      .from('leader_data')
+      .update({ image_data: newImageData, updated_at: new Date().toISOString() })
+      .eq('id', teamRow.id)
+      .select()
+      .single();
+    if(error){ alert('更新失败：' + error.message); return; }
+    teamRow = data;
+    renderAll();
+  }
+
+  // ---------- 灯箱 ----------
+  function openLightbox(url){
+    document.getElementById('lightboxImg').src = url;
+    document.getElementById('lightbox').classList.add('open');
+  }
+  function closeLightbox(){ document.getElementById('lightbox').classList.remove('open'); }
+</script>
 </body>
 </html>
