@@ -18,52 +18,51 @@
         .card { background: #fff; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; }
         
+        .table-wrap { overflow-x: auto; background: #fff; border-radius: 12px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 650px; }
         th, td { border-bottom: 1px solid #eee; padding: 12px 10px; text-align: left; }
         
-        .img-preview-box { width: 100%; height: 100px; border: 2px dashed #ddd; border-radius: 8px; margin: 10px 0; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fafafa; }
-        .img-preview-box img { max-height: 100%; object-fit: contain; }
+        .search-row { display: flex; align-items: center; gap: 8px; margin-bottom: 15px; flex-wrap: wrap; background: #fdfdfd; padding: 12px; border-radius: 10px; border: 1px solid #eee; }
+        .search-input-group { display: flex; align-items: center; background: #fff; border: 2px solid var(--main); border-radius: 8px; padding: 2px 12px; flex: 1; min-width: 200px; }
+        .search-input-group input { border: none; outline: none; padding: 8px; flex: 1; font-size: 14px; }
         
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; }
-        .modal { background: #fff; padding: 20px; border-radius: 15px; width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto; }
-        
-        /* 图库网格 */
-        .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; margin-top: 15px; }
-        .gallery-item { border: 1px solid #eee; border-radius: 8px; overflow: hidden; cursor: pointer; position: relative; transition: 0.2s; }
-        .gallery-item:hover { border-color: var(--main); transform: scale(1.05); }
-        .gallery-item img { width: 100%; height: 80px; object-fit: cover; }
-        .gallery-item span { font-size: 10px; display: block; padding: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+        .batch-bar { display: flex; align-items: center; gap: 10px; padding: 10px; background: #f8f9fa; border-radius: 8px; margin-bottom: 10px; border: 1px solid #eee; flex-wrap: wrap; }
+        .filter-info { font-size: 12px; color: var(--main); margin-bottom: 10px; font-weight: bold; background: #f0edff; padding: 5px 12px; border-radius: 5px; display: none; }
 
-        input, select, textarea { padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; font-size: 14px; }
-        .btn { padding: 8px 16px; border-radius: 8px; cursor: pointer; border: none; font-weight: bold; transition: 0.2s; white-space: nowrap; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+        .btn { padding: 8px 16px; border-radius: 8px; cursor: pointer; border: none; font-weight: bold; transition: 0.2s; white-space: nowrap; font-size: 13px; display: inline-flex; align-items: center; gap: 5px; }
         .btn-primary { background: var(--main); color: #fff; }
         .btn-pink { background: var(--pink); color: #fff; }
+        .btn-danger { background: #ff4d4f; color: #fff; }
         .btn-outline { background: #fff; border: 1px solid #ddd; color: #666; }
+        .btn-small { padding: 4px 10px; font-size: 11px; }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal { background: #fff; padding: 20px; border-radius: 15px; width: 90%; max-width: 400px; }
+        .img-preview { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
         .hidden { display: none !important; }
-        .stats-badge { padding: 4px 12px; border-radius: 20px; background: #eee; font-size: 12px; margin-right: 8px; display: inline-block; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <div id="debug-bar" style="background:#333; color:#fff; font-size:12px; text-align:center; padding:8px;">⌛ 加载系统...</div>
+    <div id="debug-bar" style="background:#333; color:#fff; font-size:12px; text-align:center; padding:8px;">⌛ 同步系统环境中...</div>
 
     <!-- 登录模块 -->
     <div id="loginSection" class="hidden">
         <div class="card" style="max-width:350px; margin: 80px auto;">
             <h2 style="text-align:center">🎀 团长登录</h2>
-            <input type="email" id="email" placeholder="邮箱">
+            <input type="email" id="email" placeholder="管理邮箱">
             <input type="password" id="pw" placeholder="密码">
-            <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="login()">登录</button>
+            <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="login()">进入后台</button>
         </div>
     </div>
 
-    <!-- 后台主体 -->
+    <!-- 后台内容 -->
     <div id="adminSection" class="hidden">
         <nav>
             <strong id="roleTag">后台</strong>
             <div>
                 <span id="userEmail" style="margin-right:10px; font-size:12px; color:#666"></span>
-                <button class="btn btn-outline" style="padding:4px 10px;" onclick="logout()">退出</button>
+                <button class="btn btn-outline btn-small" onclick="logout()">退出</button>
             </div>
         </nav>
 
@@ -75,18 +74,16 @@
 
         <div class="main-content">
             <div id="tab-overview" class="tab-content">
-                <!-- 统计 -->
-                <div class="card">
-                    <div id="statsArea"></div>
-                </div>
+                <div class="card"><div id="statsArea"></div></div>
 
                 <div class="grid">
-                    <!-- ✍️ 单条录入 -->
+                    <!-- 单条录入 -->
                     <div class="card">
                         <h3>✍️ 排谷录入/编辑</h3>
                         <input type="hidden" id="editItemId">
                         <input type="text" id="itemName" placeholder="谷子名称">
-                        <input type="text" id="itemCN" placeholder="团员 CN">
+                        <select id="itemCountry"><option>日本</option><option>国内</option><option>台湾</option><option>美国</option></select>
+                        <input type="text" id="itemCN" placeholder="团员CN">
                         <div style="display:flex; gap:5px">
                             <input type="number" id="itemPrice" placeholder="单价" step="0.01">
                             <input type="number" id="itemQty" value="1">
@@ -94,79 +91,85 @@
                         <select id="itemStatus">
                             <option>未出荷</option><option>已下单未到货</option><option>回国中</option><option>已到货</option><option>可排发</option><option>已排发</option><option>未付款</option>
                         </select>
-                        
-                        <label style="margin-top:10px; display:block">柄图（可选）：</label>
-                        <div style="display:flex; gap:5px; margin-bottom:5px;">
-                            <input type="file" id="itemFile" accept="image/*" style="font-size:12px; padding:5px" onchange="previewSelectedFile(this)">
-                            <button class="btn btn-outline" style="padding:5px 10px" onclick="openGallery('single')">📁 图库</button>
-                        </div>
-                        <div class="img-preview-box" id="singleImgPreview"><span style="color:#ccc">📷 无图片预览</span></div>
-                        <input type="hidden" id="pendingImgUrl">
-
+                        <label style="font-size:12px; color:#666">上传柄图(可选)：</label>
+                        <input type="file" id="itemFile" accept="image/*" style="font-size:12px;">
                         <button class="btn btn-pink" style="width:100%; margin-top:10px" onclick="saveItem()">保存记录</button>
-                        <button class="btn btn-outline" style="width:100%; margin-top:5px" onclick="clearForm()">清空</button>
+                        <button class="btn btn-outline" style="width:100%; margin-top:5px" onclick="clearForm()">重置</button>
                     </div>
-
-                    <!-- 📥 批量导入与批量传图 -->
+                    <!-- 批量导入 -->
                     <div class="card">
-                        <h3>📥 批量导入 Excel</h3>
-                        <textarea id="csvInput" rows="4" placeholder="粘贴 Excel 汇总表内容..."></textarea>
+                        <h3>📥 批量导入 (Excel)</h3>
+                        <textarea id="csvInput" rows="6" placeholder="直接粘贴 Excel 汇总表内容..."></textarea>
                         <button class="btn btn-primary" style="width:100%" onclick="previewImport()">识别并导入</button>
-                        
-                        <hr style="margin:15px 0; border:none; border-top:1px dashed #eee;">
-                        
-                        <h3>🖼️ 批量上传柄图到图库</h3>
-                        <input type="file" id="batchFiles" accept="image/*" multiple style="font-size:12px">
-                        <button class="btn btn-outline" style="width:100%; margin-top:5px" onclick="startBatchUpload()">📤 开始上传到图库</button>
-                        <div id="batchProgress" style="font-size:12px; color:var(--main); margin-top:5px"></div>
                     </div>
                 </div>
 
-                <!-- 排单明细 -->
-                <div class="card" style="overflow-x:auto;">
-                    <div style="display:flex; gap:10px; margin-bottom:10px;">
-                        <input type="text" id="universalSearchInput" placeholder="搜索 CN 或 谷子名称..." style="flex:1" onkeypress="if(event.keyCode==13) applySearchFilter()">
+                <div class="table-wrap">
+                    <h3>📜 排单明细</h3>
+                    
+                    <!-- 🔍 搜索与批量补图工具栏 -->
+                    <div class="search-row">
+                        <div class="search-input-group">
+                            <input type="text" id="universalSearchInput" placeholder="输入 CN 或 谷子名称 搜索..." onkeypress="if(event.keyCode==13) applySearchFilter()">
+                        </div>
                         <button class="btn btn-primary" onclick="applySearchFilter()">搜索</button>
+                        <button class="btn btn-outline" onclick="clearSearchFilter()">清除</button>
+                        <button class="btn btn-pink" onclick="openBatchImgModal()">🖼️ 批量补图</button>
                     </div>
+
+                    <div id="filterStatusText" class="filter-info"></div>
+
                     <div class="batch-bar">
-                        <input type="checkbox" onchange="toggleSelectAll(this.checked)" style="width:auto">
+                        <input type="checkbox" id="selectAllCheck" onchange="toggleSelectAll(this.checked)" style="width:auto">
                         <span style="font-size:12px">已选 <strong id="selCount">0</strong> 条</span>
-                        <button class="btn btn-primary" style="padding:4px 10px; font-size:11px;" onclick="openTransferModal('batch')">批量转单</button>
-                        <button class="btn btn-danger" style="padding:4px 10px; font-size:11px;" onclick="batchDelete()">批量删除</button>
+                        <button class="btn btn-primary btn-small" onclick="openTransferModal('batch')">批量转单</button>
+                        <button class="btn btn-danger btn-small" onclick="batchDelete()">批量删除</button>
                     </div>
+
                     <table>
-                        <thead><tr><th></th><th>图</th><th>名称</th><th>CN</th><th>金额</th><th>操作</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th style="width:20px"></th>
+                                <th>图</th><th>名称</th><th>CN</th><th>金额</th><th>状态</th><th>操作</th>
+                            </tr>
+                        </thead>
                         <tbody id="tbody"></tbody>
                     </table>
                 </div>
             </div>
 
-            <!-- 标签页: 转单记录 -->
+            <!-- 转单日志页 -->
             <div id="tab-logs" class="tab-content hidden">
                 <div class="card"><h3>🔄 转单历史记录</h3><div id="transferLogsList"></div></div>
             </div>
 
-            <!-- 标签页: 团务设置 -->
+            <!-- 设置页 -->
             <div id="tab-settings" class="tab-content hidden">
                 <div class="card">
                     <h3>⚙️ 团务设置</h3>
                     <p>查询密钥：<strong id="dispKey">-</strong></p>
                     <div id="coAdminList"></div>
-                    <input type="email" id="newAdminEmail" placeholder="添加副团员邮箱">
-                    <button class="btn btn-primary" onclick="addAdmin()">添加</button>
+                    <input type="email" id="newAdminEmail" placeholder="副团长邮箱">
+                    <button class="btn btn-primary" onclick="addAdmin()">添加副团员</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 📁 图库弹窗 -->
-    <div class="modal-overlay" id="galleryModal">
+    <!-- 🖼️ 批量补图弹窗 -->
+    <div class="modal-overlay" id="batchImgModal">
         <div class="modal">
-            <div style="display:flex; justify-content:space-between; align-items:center">
-                <h3>🖼️ 选择柄图</h3>
-                <button class="btn btn-outline btn-small" onclick="closeGallery()">关闭</button>
+            <h3>🖼️ 批量补图</h3>
+            <p id="batchImgInfo" style="font-size:12px; color:var(--main); margin-bottom:15px;"></p>
+            <label>请选择要上传的柄图：</label>
+            <input type="file" id="batchImgFile" accept="image/*" onchange="previewBatchImg(this)">
+            <div id="batchImgPreview" style="margin:10px 0; text-align:center; height:100px; display:flex; align-items:center; justify-content:center; background:#f9f9f9; border-radius:8px;">
+                <span style="color:#ccc">等待选择图片...</span>
             </div>
-            <div class="gallery-grid" id="galleryGrid"></div>
+            <div style="margin-top:20px; display:flex; gap:10px">
+                <button class="btn btn-outline" style="flex:1" onclick="closeBatchImgModal()">取消</button>
+                <button class="btn btn-primary" id="confirmBatchImgBtn" style="flex:1" onclick="executeBatchImgUpdate()">✅ 确认补图</button>
+            </div>
         </div>
     </div>
 
@@ -175,8 +178,8 @@
         <div class="modal">
             <h3>🔄 归属转交</h3>
             <p id="transferInfo" style="font-size:12px; color:#666"></p>
-            <input type="text" id="newCNInput" placeholder="输入新接手人 CN">
-            <div style="margin-top:15px; display:flex; gap:10px">
+            <input type="text" id="newCNInput" placeholder="新接手人 CN">
+            <div style="margin-top:20px; display:flex; gap:10px">
                 <button class="btn btn-outline" style="flex:1" onclick="closeModal()">取消</button>
                 <button class="btn btn-primary" style="flex:1" onclick="executeTransfer()">确认转单</button>
             </div>
@@ -192,124 +195,123 @@
         let currentUser = null;
         let selectedIds = new Set();
         let currentSearchKey = '';
+        let currentFilteredList = [];
 
-        // --- 鉴权与启动 ---
+        // --- 核心启动 ---
         async function checkAuth() {
             const { data: { user } } = await supabaseClient.auth.getUser();
-            if (!user) {
-                document.getElementById('loginSection').classList.remove('hidden');
-                document.getElementById('adminSection').classList.add('hidden');
-                document.getElementById('debug-bar').style.display = 'none';
-                return;
-            }
+            if (!user) { document.getElementById('loginSection').classList.remove('hidden'); document.getElementById('debug-bar').style.display = 'none'; return; }
             currentUser = user;
             document.getElementById('loginSection').classList.add('hidden');
             document.getElementById('adminSection').classList.remove('hidden');
             document.getElementById('userEmail').innerText = user.email;
-
             const { data: records } = await supabaseClient.from('leader_data').select('*');
-            if (records && records.length > 0) {
-                currentData = records[0];
-                document.getElementById('debug-bar').style.display = 'none';
-                renderUI();
-            }
+            if (records && records.length > 0) { currentData = records[0]; document.getElementById('debug-bar').style.display = 'none'; renderUI(); }
         }
 
         async function login() {
-            const { error } = await supabaseClient.auth.signInWithPassword({
-                email: document.getElementById('email').value,
-                password: document.getElementById('pw').value
-            });
+            const { error } = await supabaseClient.auth.signInWithPassword({ email:document.getElementById('email').value, password:document.getElementById('pw').value });
             if (error) alert("失败: " + error.message); else checkAuth();
         }
         async function logout() { await supabaseClient.auth.signOut(); location.reload(); }
 
-        // --- 🖼️ 图库逻辑 ---
-        function openGallery() {
-            const modal = document.getElementById('galleryModal');
-            const grid = document.getElementById('galleryGrid');
-            const gallery = (currentData.image_data && currentData.image_data.gallery) || [];
-            
-            if(gallery.length === 0) {
-                grid.innerHTML = '<p style="grid-column: 1/-1; text-align:center; color:#999; padding:20px;">图库空空如也，请先批量上传图片。</p>';
-            } else {
-                grid.innerHTML = gallery.slice().reverse().map(img => `
-                    <div class="gallery-item" onclick="selectFromGallery('${img.url}')">
-                        <img src="${img.url}?width=150">
-                        <span>${img.name}</span>
-                    </div>
-                `).join('');
-            }
-            modal.style.display = 'flex';
+        // --- 🖼️ 批量补图逻辑 ---
+        function openBatchImgModal() {
+            if (!currentSearchKey) return alert("❌ 请先在搜索框输入关键词（如谷子名称），筛选出需要补图的项");
+            const info = document.getElementById('batchImgInfo');
+            info.innerText = `当前筛选："${currentSearchKey}" (共 ${currentFilteredList.length} 条记录)`;
+            document.getElementById('batchImgModal').style.display = 'flex';
         }
-        function closeGallery() { document.getElementById('galleryModal').style.display = 'none'; }
-        function selectFromGallery(url) {
-            document.getElementById('pendingImgUrl').value = url;
-            document.getElementById('singleImgPreview').innerHTML = `<img src="${url}">`;
-            closeGallery();
-        }
-
-        // --- 📤 上传逻辑 ---
-        async function startBatchUpload() {
-            const files = document.getElementById('batchFiles').files;
-            if (files.length === 0) return alert("请先选择图片");
-            
-            const progress = document.getElementById('batchProgress');
-            let newGalleryItems = [];
-            const now = new Date().toISOString();
-
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                progress.innerText = `正在上传 (${i + 1}/${files.length}): ${file.name}`;
-                
-                const fileName = `${Date.now()}_${file.name}`;
-                const { error: upErr } = await supabaseClient.storage.from('images').upload(fileName, file);
-                
-                if (!upErr) {
-                    const url = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
-                    newGalleryItems.push({ url, name: file.name, uploaded_at: now });
-                }
-            }
-
-            // 更新到 image_data.gallery
-            let imageData = currentData.image_data || {};
-            if (!imageData.gallery) imageData.gallery = [];
-            imageData.gallery = [...imageData.gallery, ...newGalleryItems];
-
-            const { error } = await supabaseClient.from('leader_data').update({ image_data: imageData }).eq('query_key', currentData.query_key);
-            if (error) alert("保存到图库失败");
-            else { alert(`成功上传 ${newGalleryItems.length} 张图片到图库`); location.reload(); }
-        }
-
-        function previewSelectedFile(input) {
+        function closeBatchImgModal() { document.getElementById('batchImgModal').style.display = 'none'; }
+        
+        function previewBatchImg(input) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
-                reader.onload = function(e) {
-                    document.getElementById('singleImgPreview').innerHTML = `<img src="${e.target.result}">`;
-                }
+                reader.onload = (e) => document.getElementById('batchImgPreview').innerHTML = `<img src="${e.target.result}" style="max-height:100%">`;
                 reader.readAsDataURL(input.files[0]);
             }
         }
 
-        // --- ✍️ 录入与保存 ---
+        async function executeBatchImgUpdate() {
+            const file = document.getElementById('batchImgFile').files[0];
+            if (!file) return alert("请先选择图片文件");
+            const btn = document.getElementById('confirmBatchImgBtn');
+            btn.innerText = "⏳ 正在上传并同步..."; btn.disabled = true;
+
+            try {
+                // 1. 上传图片
+                const fileName = `${Date.now()}_batch_${file.name}`;
+                const { error: upErr } = await supabaseClient.storage.from('images').upload(fileName, file);
+                if (upErr) throw upErr;
+                const imageUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
+
+                // 2. 遍历 group_data 批量更新
+                const key = currentSearchKey.toLowerCase();
+                let newList = [...currentData.group_data];
+                let count = 0;
+                newList.forEach(item => {
+                    if ((item.cn||"").toLowerCase().includes(key) || (item.name||"").toLowerCase().includes(key)) {
+                        item.image_url = imageUrl;
+                        count++;
+                    }
+                });
+
+                // 3. 保存
+                const { error: saveErr } = await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
+                if (saveErr) throw saveErr;
+
+                alert(`✅ 成功给 ${count} 条记录补充了柄图！`);
+                location.reload();
+            } catch (err) {
+                alert("补图失败: " + err.message);
+                btn.innerText = "✅ 确认补图"; btn.disabled = false;
+            }
+        }
+
+        // --- 渲染逻辑 ---
+        function renderUI() {
+            if (!currentData) return;
+            document.getElementById('dispKey').innerText = currentData.query_key;
+            let list = currentData.group_data || [];
+            
+            if (currentSearchKey) {
+                const key = currentSearchKey.toLowerCase();
+                list = list.filter(i => (i.cn||"").toLowerCase().includes(key) || (i.name||"").toLowerCase().includes(key));
+                document.getElementById('filterStatusText').innerText = `💡 当前筛选: "${currentSearchKey}" (${list.length} 条)`;
+                document.getElementById('filterStatusText').style.display = 'block';
+            } else {
+                document.getElementById('filterStatusText').style.display = 'none';
+            }
+            currentFilteredList = list;
+
+            const totalMoney = list.reduce((s, i) => s + (parseFloat(i.price) * parseInt(i.quantity)), 0);
+            document.getElementById('statsArea').innerHTML = `<span class="stats-badge">项数: ${list.length}</span><span class="stats-badge">应肾合计: ￥${totalMoney.toFixed(2)}</span>`;
+
+            const tbody = document.getElementById('tbody');
+            tbody.innerHTML = list.slice().reverse().map(item => `
+                <tr class="${selectedIds.has(item.item_id) ? 'selected-row' : ''}">
+                    <td><input type="checkbox" ${selectedIds.has(item.item_id) ? 'checked' : ''} onchange="toggleSelect('${item.item_id}')" style="width:auto"></td>
+                    <td><img src="${item.image_url ? item.image_url+'?width=80' : ''}" class="img-preview" onerror="this.src='https://via.placeholder.com/50'"></td>
+                    <td>${item.name}<br><small style="color:#999">${item.country}</small></td>
+                    <td>${item.cn}</td>
+                    <td>￥${item.price}x${item.quantity}</td>
+                    <td>
+                        <button class="btn btn-outline btn-small" onclick="openTransferModal(['${item.item_id}'])">转</button>
+                        <button class="btn btn-outline btn-small" onclick="editItem('${item.item_id}')">改</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // --- 其余功能逻辑 ---
         async function saveItem() {
             const file = document.getElementById('itemFile').files[0];
-            let imageUrl = document.getElementById('pendingImgUrl').value;
-
-            // 如果选择了本地文件，优先上传
+            let imageUrl = document.getElementById('editItemId').dataset.img || "";
             if (file) {
                 const fileName = `${Date.now()}_${file.name}`;
-                const { error: upErr } = await supabaseClient.storage.from('images').upload(fileName, file);
-                if (!upErr) {
-                    imageUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
-                    // 同时存入图库
-                    let imageData = currentData.image_data || {};
-                    if (!imageData.gallery) imageData.gallery = [];
-                    imageData.gallery.push({ url: imageUrl, name: file.name, uploaded_at: new Date().toISOString() });
-                    await supabaseClient.from('leader_data').update({ image_data: imageData }).eq('query_key', currentData.query_key);
-                }
+                await supabaseClient.storage.from('images').upload(fileName, file);
+                imageUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
             }
-
             const newItem = {
                 item_id: document.getElementById('editItemId').value || Date.now().toString(),
                 name: document.getElementById('itemName').value,
@@ -321,70 +323,27 @@
                 country: document.getElementById('itemCountry').value,
                 created_at: new Date().toISOString()
             };
-
             let newList = [...(currentData.group_data || [])];
             const idx = newList.findIndex(i => i.item_id === newItem.item_id);
             if (idx > -1) newList[idx] = newItem; else newList.push(newItem);
-
             await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
             location.reload();
         }
 
-        // --- UI 渲染 ---
-        function renderUI() {
-            if (!currentData) return;
-            const isOwner = currentData.user_id === currentUser.id;
-            document.getElementById('roleTag').innerText = isOwner ? "🎀 团长后台" : "助理后台";
-            document.getElementById('dispKey').innerText = currentData.query_key;
-
-            let list = currentData.group_data || [];
-            if (currentSearchKey) {
-                const key = currentSearchKey.toLowerCase();
-                list = list.filter(i => (i.cn||"").toLowerCase().includes(key) || (i.name||"").toLowerCase().includes(key));
-            }
-
-            const totalMoney = list.reduce((s, i) => s + (i.price * i.quantity), 0);
-            document.getElementById('statsArea').innerHTML = `<span class="stats-badge">项数: ${list.length}</span><span class="stats-badge">金额: ￥${totalMoney.toFixed(2)}</span>`;
-
-            const tbody = document.getElementById('tbody');
-            tbody.innerHTML = list.slice().reverse().map(item => `
-                <tr class="${selectedIds.has(item.item_id) ? 'selected-row' : ''}">
-                    <td><input type="checkbox" ${selectedIds.has(item.item_id) ? 'checked' : ''} onchange="toggleSelect('${item.item_id}')" style="width:auto"></td>
-                    <td><img src="${item.image_url ? item.image_url+'?width=80' : ''}" class="img-preview" onerror="this.src='https://via.placeholder.com/50'"></td>
-                    <td>${item.name}<br><small style="color:#999">${item.country}</small></td>
-                    <td>${item.cn}</td>
-                    <td>￥${item.price}x${item.quantity}</td>
-                    <td>
-                        <button class="btn btn-outline" style="padding:2px 8px; font-size:10px" onclick="editItem('${item.item_id}')">改</button>
-                        <button class="btn btn-outline" style="padding:2px 8px; font-size:10px" onclick="deleteSingle('${item.item_id}')">删</button>
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        // --- 其余通用函数 (导入/删除/转单等保持不变) ---
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-            document.querySelectorAll('.tab-btn').forEach(b => {
-                b.classList.remove('active');
-                if(b.getAttribute('data-tab') === tabId) b.classList.add('active');
-            });
-            document.getElementById('tab-' + tabId).classList.remove('hidden');
-        }
         function editItem(id) {
             const item = currentData.group_data.find(i => i.item_id === id);
             document.getElementById('editItemId').value = item.item_id;
+            document.getElementById('editItemId').dataset.img = item.image_url || "";
             document.getElementById('itemName').value = item.name;
             document.getElementById('itemCN').value = item.cn;
             document.getElementById('itemPrice').value = item.price;
             document.getElementById('itemQty').value = item.quantity;
             document.getElementById('itemStatus').value = item.status;
             document.getElementById('itemCountry').value = item.country;
-            document.getElementById('pendingImgUrl').value = item.image_url || "";
-            document.getElementById('singleImgPreview').innerHTML = item.image_url ? `<img src="${item.image_url}">` : `<span style="color:#ccc">📷 无图片预览</span>`;
             switchTab('overview');
             window.scrollTo(0,0);
         }
+
         async function previewImport() {
             const raw = document.getElementById('csvInput').value.trim();
             if(!raw) return;
@@ -395,26 +354,36 @@
             for(let i = 5; i < lines.length; i++){
                 const cells = lines[i].split('\t');
                 const cn = cells[1]?.trim();
-                if(!cn) continue;
+                if(!cn || cn === "昵称/总数") continue;
                 itemNames.forEach((name, idx) => {
                     const qty = parseInt(parseFloat(cells[idx+2]));
-                    if(qty > 0) items.push({ item_id: Date.now()+'_'+Math.random().toString(36).substr(2,4), name: name.trim(), country:"日本", price: prices[idx], quantity: qty, cn, status: "未出荷", created_at: new Date().toISOString() });
+                    if(qty > 0) items.push({ item_id: Date.now()+'_'+Math.random().toString(36).substr(2,4), name: name.trim(), country:"日本", price: prices[idx], quantity: qty, cn, status: "未出荷", image_url: "", created_at: new Date().toISOString() });
                 });
             }
             const newList = [...(currentData.group_data || []), ...items];
             await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
             location.reload();
         }
-        function toggleSelect(id) { if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id); renderUI(); }
-        function toggleSelectAll(c) { const l = currentData.group_data || []; if(c) l.forEach(i=>selectedIds.add(i.item_id)); else selectedIds.clear(); renderUI(); }
-        async function batchDelete() { if(!confirm("删？")) return; const newList = currentData.group_data.filter(i => !selectedIds.has(i.item_id)); await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key); location.reload(); }
-        function applySearchFilter() { currentSearchKey = document.getElementById('universalSearchInput').value; renderUI(); }
-        function clearForm() { 
-            document.getElementById('editItemId').value = ""; document.getElementById('itemName').value = ""; document.getElementById('itemCN').value = ""; 
-            document.getElementById('pendingImgUrl').value = ""; document.getElementById('singleImgPreview').innerHTML = '<span style="color:#ccc">📷 无图片预览</span>';
-        }
 
-        checkAuth();
-    </script>
-</body>
-</html>
+        function applySearchFilter() { currentSearchKey = document.getElementById('universalSearchInput').value; selectedIds.clear(); renderUI(); }
+        function clearSearchFilter() { document.getElementById('universalSearchInput').value = ""; currentSearchKey = ''; renderUI(); }
+        function switchTab(t) { 
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden')); 
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.remove('active'); if(b.getAttribute('data-tab')===t) b.classList.add('active');
+            });
+            document.getElementById('tab-'+t).classList.remove('hidden');
+            if(t==='logs') renderLogs();
+        }
+        function toggleSelect(id) { if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id); document.getElementById('selCount').innerText = selectedIds.size; renderUI(); }
+        function toggleSelectAll(c) { const l = currentFilteredList; if(c) l.forEach(i=>selectedIds.add(i.item_id)); else selectedIds.clear(); document.getElementById('selCount').innerText = selectedIds.size; renderUI(); }
+        async function batchDelete() { if(!selectedIds.size || !confirm("确定删除选中项？")) return; const newList = currentData.group_data.filter(i=>!selectedIds.has(i.item_id)); await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key); location.reload(); }
+        function closeModal() { document.getElementById('transferModal').style.display='none'; }
+        function openTransferModal(ids) { transferTargets = (ids==='batch')?Array.from(selectedIds):ids; if(!transferTargets.length) return alert("选一个"); document.getElementById('transferModal').style.display='flex'; }
+        async function executeTransfer() {
+            const newCN = document.getElementById('newCNInput').value;
+            let groupData = [...currentData.group_data];
+            transferTargets.forEach(id => { const i = groupData.find(x=>x.item_id===id); if(i) i.cn = newCN; });
+            await supabaseClient.from('leader_data').update({ group_data }).eq('query_key', currentData.query_key);
+            location.reload();
+        }
