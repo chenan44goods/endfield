@@ -30,8 +30,6 @@
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; }
         .modal { background: #fff; padding: 20px; border-radius: 15px; width: 90%; max-width: 420px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
         .batch-bar { background: #fffbe6; border: 1px solid #ffe58f; padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-        
-        /* 谷子明细展示样式：多排结构，每排最多10个 */
         .items-grid { display: flex; flex-wrap: wrap; gap: 6px; max-width: 800px; }
         .item-tag { background: #f0f2f5; padding: 3px 8px; border-radius: 5px; font-size: 12px; color: #444; border: 1px solid #e2e8f0; white-space: nowrap; font-weight: 500; }
     </style>
@@ -337,7 +335,6 @@
             }
 
             tbody.innerHTML = target.map(app => {
-                // 每10个谷子切分为一排展示
                 const chunks = [];
                 for (let i = 0; i < app.items.length; i += 10) {
                     chunks.push(app.items.slice(i, i + 10));
@@ -380,7 +377,6 @@
 
             const itemIdsToRollback = new Set(targetApp.items.map(i => i.item_id));
 
-            // 1. 状态恢复：从“已申请发货”切回“可排发”
             let newGroupData = currentData.group_data.map(item => {
                 if(itemIdsToRollback.has(item.item_id)) {
                     return { ...item, status: '可排发' };
@@ -388,7 +384,6 @@
                 return item;
             });
 
-            // 2. 移除该待处理申请记录
             let newApps = apps.filter(a => !(a.time === time && a.cn === cn));
 
             const { error } = await supabaseClient.from('leader_data').update({ 
