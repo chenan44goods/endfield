@@ -1,456 +1,134 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-<title>谷团查单 · 团员自查</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<style>
-  :root{
-    --pink-1:#fff0f6;
-    --pink-2:#ffd6e8;
-    --pink-3:#ff9ec7;
-    --purple-1:#e7d9ff;
-    --purple-2:#b48cff;
-    --purple-3:#8a5cf6;
-    --ink:#5a3d63;
-    --ink-soft:#9c7fa8;
-    --white:#ffffff;
-    --shadow: 0 10px 30px rgba(154, 92, 190, 0.18);
-    --radius: 22px;
-  }
-  *{box-sizing:border-box;}
-  body{
-    margin:0;
-    min-height:100vh;
-    font-family: "Hiragino Sans GB", "PingFang SC", "Microsoft YaHei", sans-serif;
-    background:
-      radial-gradient(circle at 15% 10%, var(--pink-2) 0%, transparent 45%),
-      radial-gradient(circle at 85% 0%, var(--purple-1) 0%, transparent 40%),
-      linear-gradient(180deg, var(--pink-1) 0%, #f6ecff 100%);
-    color: var(--ink);
-    padding: 24px 16px 60px;
-  }
-  .wrap{max-width:520px;margin:0 auto;}
-  .hero{
-    text-align:center;
-    margin-bottom: 22px;
-  }
-  .hero .badge{
-    display:inline-block;
-    background: linear-gradient(135deg, var(--purple-3), var(--pink-3));
-    color:#fff;
-    font-size:12px;
-    padding: 4px 14px;
-    border-radius: 999px;
-    letter-spacing: 2px;
-    margin-bottom: 10px;
-  }
-  .hero h1{
-    margin: 6px 0 4px;
-    font-size: 26px;
-    font-weight: 800;
-    background: linear-gradient(120deg, var(--purple-3), var(--pink-3));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-  .hero p{margin:0;color:var(--ink-soft);font-size:13px;}
-
-  .card{
-    background: var(--white);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 22px;
-    margin-bottom: 18px;
-    border: 1px solid #ffe3f1;
-  }
-  .field{margin-bottom:14px;}
-  .field label{
-    display:block;
-    font-size:12px;
-    color: var(--ink-soft);
-    margin-bottom:6px;
-    font-weight:600;
-  }
-  .field input{
-    width:100%;
-    padding: 12px 14px;
-    border-radius: 14px;
-    border: 1.5px solid var(--pink-2);
-    background: #fffaff;
-    font-size:15px;
-    color: var(--ink);
-    outline:none;
-    transition: border-color .15s;
-  }
-  .field input:focus{border-color: var(--purple-3);}
-
-  .btn{
-    width:100%;
-    padding: 13px;
-    border:none;
-    border-radius: 16px;
-    background: linear-gradient(120deg, var(--purple-3), var(--pink-3));
-    color:#fff;
-    font-size:15px;
-    font-weight:700;
-    letter-spacing:1px;
-    cursor:pointer;
-    box-shadow: 0 8px 18px rgba(180, 90, 200, 0.35);
-    transition: transform .1s;
-  }
-  .btn:active{transform: scale(0.98);}
-  .btn.secondary{
-    background: var(--white);
-    color: var(--purple-3);
-    border: 1.5px solid var(--purple-2);
-    box-shadow:none;
-  }
-  .btn:disabled{opacity:.6;cursor:not-allowed;}
-
-  .msg{
-    text-align:center;
-    padding: 30px 10px;
-    color: var(--ink-soft);
-    font-size:14px;
-  }
-  .msg.error{color:#d6537a;}
-
-  .stat-row{
-    display:flex;
-    gap:12px;
-    margin-bottom: 16px;
-  }
-  .stat{
-    flex:1;
-    background: linear-gradient(135deg, #fff, #fff5fb);
-    border: 1.5px solid var(--pink-2);
-    border-radius: 16px;
-    padding: 12px;
-    text-align:center;
-  }
-  .stat .num{font-size:20px;font-weight:800;color:var(--purple-3);}
-  .stat .label{font-size:11px;color:var(--ink-soft);margin-top:2px;}
-
-  .item{
-    display:flex;
-    gap:12px;
-    padding: 12px 0;
-    border-bottom: 1px dashed #ffdcee;
-    align-items:center;
-  }
-  .item:last-child{border-bottom:none;}
-  .item img{
-    width:56px;height:56px;border-radius:12px;object-fit:cover;
-    border: 1.5px solid var(--pink-2);
-    cursor:zoom-in;
-    background:#f8f2fb;
-    flex-shrink:0;
-  }
-  .item .noimg{
-    width:56px;height:56px;border-radius:12px;
-    background:#f8f2fb;
-    border: 1.5px dashed var(--pink-2);
-    flex-shrink:0;
-    display:flex;align-items:center;justify-content:center;
-    font-size:10px;color:var(--ink-soft);
-  }
-  .item .info{flex:1;min-width:0;}
-  .item .name{font-weight:700;font-size:14px;margin-bottom:3px;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .item .sub{font-size:12px;color:var(--ink-soft);}
-  .item .right{text-align:right;flex-shrink:0;}
-  .item .price{font-weight:700;font-size:14px;color:var(--purple-3);}
-  .status{
-    display:inline-block;
-    margin-top:4px;
-    font-size:10px;
-    padding:2px 9px;
-    border-radius:999px;
-    font-weight:700;
-  }
-  .status.未出荷{background:#ffe3e3;color:#c94b4b;}
-  .status.已到货{background:#fff2cf;color:#b7841a;}
-  .status.已发货{background:#dcefff;color:#3a7bd5;}
-  .status.已签收{background:#dcf7e3;color:#2f9e5c;}
-
-  .lightbox{
-    position:fixed;inset:0;background:rgba(60,20,60,0.75);
-    display:none;align-items:center;justify-content:center;
-    padding: 24px; z-index:100;
-  }
-  .lightbox.open{display:flex;}
-  .lightbox img{max-width:100%;max-height:100%;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.4);}
-
-  .apply-toggle{
-    text-align:center;font-size:12px;color:var(--purple-3);
-    cursor:pointer; text-decoration:underline; margin-top:4px;
-  }
-  .file-drop{
-    border: 1.5px dashed var(--purple-2);
-    border-radius:14px;
-    padding: 16px;
-    text-align:center;
-    font-size:12px;
-    color:var(--ink-soft);
-    background:#fbf7ff;
-  }
-  .preview-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
-  .preview-row img{width:52px;height:52px;border-radius:10px;object-fit:cover;border:1px solid var(--pink-2);}
-  select{
-    width:100%;padding:12px 14px;border-radius:14px;
-    border:1.5px solid var(--pink-2); background:#fffaff;
-    font-size:15px;color:var(--ink);
-  }
-  .footer-tip{text-align:center;font-size:11px;color:var(--ink-soft);margin-top:6px;}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>谷子排单自查系统 🎀</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root { --primary: #ffb7c5; --bg: #fff5f7; --text: #5a4a4d; --accent: #ff85a2; }
+        body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; line-height: 1.6; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .card { background: #fff; border-radius: 15px; padding: 20px; box-shadow: 0 4px 15px rgba(255, 183, 197, 0.2); margin-bottom: 20px; border: 1px solid var(--primary); }
+        h1 { text-align: center; color: var(--accent); font-size: 1.5rem; }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.9rem; }
+        input { width: 100%; padding: 12px; border: 2px solid var(--primary); border-radius: 10px; box-sizing: border-box; outline: none; transition: 0.3s; }
+        input:focus { border-color: var(--accent); }
+        button { width: 100%; padding: 12px; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #ff5e84; transform: translateY(-2px); }
+        
+        .item-card { border-left: 5px solid var(--primary); margin-top: 15px; position: relative; display: flex; gap: 15px; }
+        .item-img { width: 80px; height: 80px; border-radius: 8px; object-fit: cover; cursor: pointer; border: 1px solid #eee; }
+        .item-info { flex: 1; }
+        .status-tag { display: inline-block; padding: 2px 8px; border-radius: 5px; font-size: 0.75rem; background: #eee; margin-top: 5px; }
+        .status-未出荷 { background: #fdf2f2; color: #e02424; }
+        .status-已到货 { background: #f0fdf4; color: #166534; }
+        .status-可排发 { background: #eff6ff; color: #1e40af; border: 1px dashed #1e40af; }
+        .expiry-red { color: #ff0000; font-weight: bold; border: 1px solid #ff0000; padding: 2px 5px; border-radius: 4px; font-size: 0.8rem; }
+        
+        .summary { background: var(--accent); color: #fff; text-align: center; font-size: 1.1rem; }
+        .error { color: #ff5e84; text-align: center; margin-top: 10px; font-weight: bold; }
+        #loading { text-align: center; display: none; }
+    </style>
 </head>
 <body>
-<div class="wrap">
-
-  <div class="hero">
-    <span class="badge">谷团 · 团员自查</span>
-    <h1>我的排单查询</h1>
-    <p>输入团长给你的查询密钥和昵称，查看自己的排单</p>
-  </div>
-
-  <div class="card">
-    <div class="field">
-      <label>查询密钥</label>
-      <input id="queryKey" type="text" placeholder="团长发给你的密钥" autocomplete="off" />
-    </div>
-    <div class="field">
-      <label>你的昵称（CN）</label>
-      <input id="cnInput" type="text" placeholder="填写和团长登记一致的昵称" autocomplete="off" />
-    </div>
-    <button class="btn" id="searchBtn" onclick="doSearch()">查 询</button>
-  </div>
-
-  <div id="resultArea"></div>
-
-  <div class="card" id="applyCard" style="display:none;">
-    <div class="apply-toggle" onclick="toggleApply()" id="applyToggleText">+ 提交交肾截图 / 排发申请</div>
-    <div id="applyForm" style="display:none;margin-top:14px;">
-      <div class="field">
-        <label>申请类型</label>
-        <select id="applyType">
-          <option value="交肾">交肾（付款凭证）</option>
-          <option value="排发">排发申请</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>上传截图</label>
-        <div class="file-drop">
-          <input type="file" id="applyFile" accept="image/*" multiple style="width:100%;" />
-          点击选择图片，可多选
-        </div>
-        <div class="preview-row" id="previewRow"></div>
-      </div>
-      <button class="btn secondary" id="applySubmitBtn" onclick="submitApply()">提 交 申 请</button>
-    </div>
-  </div>
-
-  <div class="footer-tip">数据由团长实时维护 · 如有疑问请联系团长</div>
-</div>
-
-<div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <img id="lightboxImg" src="" />
-</div>
-
-<script>
-  // ====== Supabase 连接信息 ======
-  const SUPABASE_URL = "https://oknhlfhdqbsukskdxqre.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_uW9cgyB0e6zIZCIcIZSlQ_bqm0MeJa";
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-  let currentQueryKey = "";
-  let currentCn = "";
-  let uploadedUrls = [];
-
-  function statusClass(s){
-    const known = ["未出荷","已到货","已发货","已签收"];
-    return known.includes(s) ? s : "未出荷";
-  }
-
-  async function doSearch(){
-    const queryKey = document.getElementById('queryKey').value.trim();
-    const cn = document.getElementById('cnInput').value.trim();
-    const resultArea = document.getElementById('resultArea');
-    const btn = document.getElementById('searchBtn');
-
-    if(!queryKey || !cn){
-      resultArea.innerHTML = `<div class="card"><div class="msg error">请填写查询密钥和昵称哦～</div></div>`;
-      document.getElementById('applyCard').style.display = 'none';
-      return;
-    }
-
-    btn.disabled = true;
-    btn.textContent = "查询中...";
-    resultArea.innerHTML = `<div class="card"><div class="msg">正在查询，请稍候…</div></div>`;
-
-    try{
-      const { data, error } = await supabase.rpc('get_group_by_key', { p_query_key: queryKey });
-
-      if(error){
-        resultArea.innerHTML = `<div class="card"><div class="msg error">查询失败：${escapeHtml(error.message)}</div></div>`;
-        document.getElementById('applyCard').style.display = 'none';
-        return;
-      }
-
-      if(data === null){
-        resultArea.innerHTML = `<div class="card"><div class="msg error">没有找到这个查询密钥，请和团长核对一下～</div></div>`;
-        document.getElementById('applyCard').style.display = 'none';
-        return;
-      }
-
-      const list = (Array.isArray(data) ? data : []).filter(it => (it.cn || '').trim() === cn);
-
-      if(list.length === 0){
-        resultArea.innerHTML = `<div class="card"><div class="msg error">没有找到「${escapeHtml(cn)}」的排单记录，请确认昵称是否与团长登记的一致～</div></div>`;
-        document.getElementById('applyCard').style.display = 'none';
-        return;
-      }
-
-      let totalQty = 0, totalAmount = 0;
-      const itemsHtml = list.map(it => {
-        const price = Number(it.price) || 0;
-        const qty = Number(it.quantity) || 0;
-        totalQty += qty;
-        totalAmount += price * qty;
-        const img = it.image_url
-          ? `<img src="${escapeHtml(it.image_url)}" onclick="openLightbox('${escapeHtml(it.image_url)}')" />`
-          : `<div class="noimg">无图</div>`;
-        return `
-          <div class="item">
-            ${img}
-            <div class="info">
-              <div class="name">${escapeHtml(it.name || '未命名谷子')}</div>
-              <div class="sub">单价 ¥${price.toFixed(2)} × ${qty}</div>
-              <span class="status ${statusClass(it.status)}">${escapeHtml(statusClass(it.status))}</span>
-            </div>
-            <div class="right">
-              <div class="price">¥${(price*qty).toFixed(2)}</div>
-            </div>
-          </div>
-        `;
-      }).join('');
-
-      resultArea.innerHTML = `
+    <div class="container">
         <div class="card">
-          <div class="stat-row">
-            <div class="stat"><div class="num">${totalQty}</div><div class="label">总件数</div></div>
-            <div class="stat"><div class="num">¥${totalAmount.toFixed(2)}</div><div class="label">应肾总额</div></div>
-          </div>
-          ${itemsHtml}
+            <h1>🎀 谷子排单查询</h1>
+            <div class="input-group">
+                <label>查询密钥 (Query Key)</label>
+                <input type="text" id="queryKey" placeholder="请输入团长提供的密钥">
+            </div>
+            <div class="input-group">
+                <label>团员昵称 (CN)</label>
+                <input type="text" id="cnName" placeholder="请输入你的排单CN">
+            </div>
+            <button onclick="doQuery()">立即查询</button>
+            <div id="errorMsg" class="error"></div>
+            <div id="loading">✨ 正在魔法检索中...</div>
         </div>
-      `;
 
-      currentQueryKey = queryKey;
-      currentCn = cn;
-      document.getElementById('applyCard').style.display = 'block';
+        <div id="resultArea"></div>
+    </div>
 
-    }catch(e){
-      resultArea.innerHTML = `<div class="card"><div class="msg error">出错了：${escapeHtml(e.message || String(e))}</div></div>`;
-    }finally{
-      btn.disabled = false;
-      btn.textContent = "查 询";
-    }
-  }
+    <!-- 图片放大遮罩 -->
+    <div id="imgModal" onclick="this.style.display='none'" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; justify-content:center; align-items:center; cursor:zoom-out;">
+        <img id="modalImg" style="max-width:90%; max-height:90%; border-radius:10px;">
+    </div>
 
-  function openLightbox(url){
-    document.getElementById('lightboxImg').src = url;
-    document.getElementById('lightbox').classList.add('open');
-  }
-  function closeLightbox(){
-    document.getElementById('lightbox').classList.remove('open');
-  }
+    <script>
+        const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_uW9cgyB0e6zIZCIcIZSlQ_bqm0MeJa';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  function toggleApply(){
-    const form = document.getElementById('applyForm');
-    const text = document.getElementById('applyToggleText');
-    const open = form.style.display !== 'none';
-    form.style.display = open ? 'none' : 'block';
-    text.textContent = open ? '+ 提交交肾截图 / 排发申请' : '− 收起申请表单';
-  }
+        async function doQuery() {
+            const key = document.getElementById('queryKey').value.trim();
+            const cn = document.getElementById('cnName').value.trim();
+            const resArea = document.getElementById('resultArea');
+            const errorArea = document.getElementById('errorMsg');
+            const loading = document.getElementById('loading');
 
-  document.getElementById('applyFile').addEventListener('change', async (e) => {
-    const files = Array.from(e.target.files || []);
-    const previewRow = document.getElementById('previewRow');
-    previewRow.innerHTML = '';
-    uploadedUrls = [];
-    if(files.length === 0) return;
+            if (!key || !cn) { errorArea.innerText = "请填写密钥和CN"; return; }
+            
+            errorArea.innerText = "";
+            resArea.innerHTML = "";
+            loading.style.display = "block";
 
-    previewRow.innerHTML = `<span style="font-size:11px;color:var(--ink-soft);">上传中…</span>`;
+            try {
+                // 调用 RPC 函数
+                const { data, error } = await supabase.rpc('get_group_by_key', { p_query_key: key });
 
-    for(const file of files){
-      try{
-        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-        const path = `applications/${currentQueryKey || 'unknown'}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
-        const { error: upErr } = await supabase.storage.from('images').upload(path, file);
-        if(upErr){ continue; }
-        const { data: pub } = supabase.storage.from('images').getPublicUrl(path);
-        uploadedUrls.push(pub.publicUrl);
-      }catch(err){ /* skip failed file */ }
-    }
+                if (error) throw error;
+                if (!data) { errorArea.innerText = "查询密钥错误，请联系团长"; return; }
 
-    previewRow.innerHTML = uploadedUrls.map(u => `<img src="${escapeHtml(u)}" />`).join('') ||
-      `<span style="font-size:11px;color:#d6537a;">上传失败，请重试</span>`;
-  });
+                // 过滤 CN
+                const myGoods = data.filter(item => item.cn === cn);
+                if (myGoods.length === 0) { errorArea.innerText = "未找到你的排谷记录，请检查CN是否正确"; return; }
 
-  async function submitApply(){
-    const btn = document.getElementById('applySubmitBtn');
-    if(!currentQueryKey || !currentCn){
-      alert('请先完成查询');
-      return;
-    }
-    if(uploadedUrls.length === 0){
-      alert('请先上传截图');
-      return;
-    }
-    const type = document.getElementById('applyType').value;
+                // 渲染结果
+                let html = `<div class="card summary">
+                    <div>共计: ${myGoods.length} 项谷子</div>
+                    <div style="font-size:1.5rem; font-weight:bold; margin-top:5px;">应肾总计: ￥${myGoods.reduce((sum, i) => sum + (i.price * i.quantity), 0).toFixed(2)}</div>
+                </div>`;
 
-    btn.disabled = true;
-    btn.textContent = '提交中...';
+                const today = new Date().toISOString().split('T')[0];
 
-    try{
-      const payload = {
-        type,
-        cn: currentCn,
-        images: uploadedUrls,
-        time: new Date().toISOString(),
-        status: '待确认'
-      };
-      const { error } = await supabase.rpc('submit_application', {
-        p_query_key: currentQueryKey,
-        p_data: payload
-      });
-      if(error){
-        alert('提交失败：' + error.message);
-      }else{
-        alert('提交成功，等待团长确认～');
-        document.getElementById('applyFile').value = '';
-        document.getElementById('previewRow').innerHTML = '';
-        uploadedUrls = [];
-        toggleApply();
-      }
-    }catch(e){
-      alert('出错了：' + (e.message || e));
-    }finally{
-      btn.disabled = false;
-      btn.textContent = '提 交 申 请';
-    }
-  }
+                myGoods.forEach(item => {
+                    let expiryInfo = "";
+                    if (item.status === "可排发" && item.storage_expiry) {
+                        const isExpired = today > item.storage_expiry;
+                        expiryInfo = `<div class="${isExpired ? 'expiry-red' : ''}" style="margin-top:5px; font-size:0.8rem;">
+                            📦 囤货截止：${item.storage_expiry} ${isExpired ? '[已到期]' : ''}
+                        </div>`;
+                    }
 
-  function escapeHtml(str){
-    return String(str ?? '').replace(/[&<>"']/g, m => ({
-      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-    }[m]));
-  }
+                    html += `
+                        <div class="card item-card">
+                            <img src="${item.image_url || 'https://via.placeholder.com/100?text=No+Pic'}" class="item-img" onclick="showImg('${item.image_url}')">
+                            <div class="item-info">
+                                <div style="font-weight:bold;">${item.name} <span style="font-weight:normal; color:#888; font-size:0.8rem;">(${item.country})</span></div>
+                                <div style="color:var(--accent); font-weight:bold;">￥${item.price} × ${item.quantity} = ￥${(item.price * item.quantity).toFixed(2)}</div>
+                                <div class="status-tag status-${item.status}">${item.status}</div>
+                                ${expiryInfo}
+                            </div>
+                        </div>
+                    `;
+                });
+                resArea.innerHTML = html;
 
-  // 回车键直接查询
-  document.getElementById('cnInput').addEventListener('keydown', e => { if(e.key === 'Enter') doSearch(); });
-  document.getElementById('queryKey').addEventListener('keydown', e => { if(e.key === 'Enter') doSearch(); });
-</script>
+            } catch (e) {
+                errorArea.innerText = "查询失败：" + e.message;
+            } finally {
+                loading.style.display = "none";
+            }
+        }
+
+        function showImg(url) {
+            if(!url) return;
+            document.getElementById('modalImg').src = url;
+            document.getElementById('imgModal').style.display = 'flex';
+        }
+    </script>
 </body>
 </html>
