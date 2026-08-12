@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>团长后台系统 🛠️</title>
+    <title>谷团团长后台管理系统 🛠️</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root { --main: #6c5ce7; --bg: #f0f2f5; --pink: #ffb7c5; --accent: #ff85a2; --danger: #ff4d4f; --success: #28a745; }
@@ -30,7 +30,7 @@
         .modal { background: #fff; padding: 20px; border-radius: 15px; width: 90%; max-width: 400px; }
         .batch-bar { background: #fffbe6; border: 1px solid #ffe58f; padding: 10px 15px; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         
-        /* 谷子明细展示优化 */
+        /* 谷子明细展示样式：支持多排显示，单次最多10个 */
         .items-grid { display: flex; flex-wrap: wrap; gap: 5px; max-width: 800px; }
         .item-tag { background: #f0f2f5; padding: 2px 8px; border-radius: 4px; font-size: 12px; color: #555; border: 1px solid #e8e8e8; white-space: nowrap; }
     </style>
@@ -116,7 +116,7 @@
                 </div>
                 <div class="table-wrap">
                     <table id="shippingTable">
-                        <thead><tr><th>申请时间</th><th>团员CN</th><th>谷子明细</th><th>备注</th><th>操作</th></tr></thead>
+                        <thead><tr><th>申请时间</th><th>团员CN</th><th>谷子明细 (每排最多10个)</th><th>备注</th><th>操作</th></tr></thead>
                         <tbody id="shipBody"></tbody>
                     </table>
                 </div>
@@ -133,7 +133,7 @@
         </div>
     </div>
 
-    <!-- 弹窗 -->
+    <!-- 弹窗部分 -->
     <div class="modal-overlay" id="transferModal">
         <div class="modal">
             <h3 id="transferTitle">🔄 谷子转单</h3>
@@ -260,12 +260,23 @@
             if(target.length === 0) { tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:#999">🎉 当前没有记录</td></tr>`; return; }
 
             tbody.innerHTML = target.map(app => {
-                const itemsHtml = `<div class="items-grid">${app.items.map(i => `<span class="item-tag">${i.name} x${i.quantity}</span>`).join('')}</div>`;
+                // 每10个谷子自动切分为一排展示
+                const chunks = [];
+                for (let i = 0; i < app.items.length; i += 10) {
+                    chunks.push(app.items.slice(i, i + 10));
+                }
+
+                const itemsHtml = chunks.map((chunk, rowIdx) => `
+                    <div class="items-grid" style="${chunks.length > 1 ? 'margin-bottom:6px; padding-bottom:4px; border-bottom:1px dashed #eee;' : ''}">
+                        ${chunks.length > 1 ? `<span style="width:100%; font-size:11px; color:#888; font-weight:bold; margin-bottom:2px;">第 ${rowIdx + 1} 排 (${rowIdx * 10 + 1}-${rowIdx * 10 + chunk.length}):</span>` : ''}
+                        ${chunk.map(i => `<span class="item-tag">${i.name} x${i.quantity}</span>`).join('')}
+                    </div>
+                `).join('');
                 
                 let op = '';
                 if(shipViewMode === 'pending') {
                     op = `
-                        <div style="display:flex; gap:5px;">
+                        <div style="display:flex; gap:5px; flex-wrap:nowrap;">
                             <button class="btn btn-primary" style="padding:4px 8px;" onclick="openShipConfirm('${app.time}', '${app.cn}')">确认发货</button>
                             <button class="btn btn-outline" style="padding:4px 8px; color:var(--danger); border-color:var(--danger);" onclick="deletePendingShipRecord('${app.time}','${app.cn}')">🗑️ 删除申请</button>
                         </div>
@@ -273,13 +284,13 @@
                 } else {
                     op = `
                         <div style="display:flex; flex-direction:column; gap:5px;">
-                            <small>完成：${new Date(app.completed_time).toLocaleDateString()}</small>
-                            <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger); padding:2px; font-size:11px" onclick="deleteCompletedShipRecord('${app.time}','${app.cn}')">🗑️ 删除记录</button>
+                            <small style="color:#888;">完成：${new Date(app.completed_time).toLocaleDateString()}</small>
+                            <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger); padding:2px 6px; font-size:11px" onclick="deleteCompletedShipRecord('${app.time}','${app.cn}')">🗑️ 删除记录</button>
                         </div>
                     `;
                 }
                 
-                return `<tr><td>${new Date(app.time).toLocaleString()}</td><td><b>${app.cn}</b></td><td>${itemsHtml}</td><td>${app.note || '-'}</td><td>${op}</td></tr>`;
+                return `<tr><td style="white-space:nowrap;">${new Date(app.time).toLocaleString()}</td><td><b>${app.cn}</b></td><td>${itemsHtml}</td><td>${app.note || '-'}</td><td>${op}</td></tr>`;
             }).join('');
         }
 
@@ -309,9 +320,12 @@
             }).eq('query_key', currentData.query_key);
 
             if (!error) {
+                currentData.group_data = newGroupData;
+                currentData.image_data.applications = newApps;
+                renderShippingWorkbench();
+                renderUI();
                 alert("✅ 申请已撤销，谷子已恢复为可排发状态。");
-                location.reload();
-            } else { alert("操作失败"); }
+            } else { alert("操作失败: " + error.message); }
         }
 
         async function deleteCompletedShipRecord(time, cn) {
@@ -326,7 +340,13 @@
                 group_data: newGroupData, 
                 image_data: { ...currentData.image_data, applications: newApps } 
             }).eq('query_key', currentData.query_key);
-            if (!error) { alert("✅ 记录与对应谷子已同步删除！"); location.reload(); } else { alert("操作失败"); }
+            if (!error) {
+                currentData.group_data = newGroupData;
+                currentData.image_data.applications = newApps;
+                renderShippingWorkbench();
+                renderUI();
+                alert("✅ 记录与对应谷子已同步删除！");
+            } else { alert("操作失败: " + error.message); }
         }
 
         function openShipConfirm(time, cn) {
@@ -364,7 +384,7 @@
                     <td><img src="${item.image_url ? item.image_url+'?width=80' : ''}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;"></td>
                     <td>${item.name}</td><td>${item.cn}</td><td>￥${item.price}x${item.quantity}</td>
                     <td><span class="stats-badge" style="margin:0">${item.status}</span></td>
-                    <td><button class="btn btn-outline" style="padding:2px; font-size:11px" onclick="editItem('${item.item_id}')">改</button><button class="btn btn-outline" style="padding:2px; font-size:11px" onclick="openTransferModal('${item.item_id}')">转</button></td>
+                    <td><button class="btn btn-outline" style="padding:2px 6px; font-size:11px" onclick="editItem('${item.item_id}')">改</button><button class="btn btn-outline" style="padding:2px 6px; font-size:11px" onclick="openTransferModal('${item.item_id}')">转</button></td>
                 </tr>`).join('');
         }
 
@@ -422,15 +442,18 @@
         function renderLogs() {
             const logs = (currentData.image_data && currentData.image_data.transfer_logs) || [];
             const list = document.getElementById('transferLogsList');
-            if(logs.length === 0) { list.innerHTML = "暂无转单记录"; return; }
-            list.innerHTML = logs.slice().reverse().map((l, index) => `
-                <div style="border-bottom:1px solid #eee; padding:8px 0; display:flex; justify-content:space-between; align-items:center;">
-                    <div style="font-size:13px; line-height:1.5;">
-                        [${new Date(l.time).toLocaleString()}] <b>${l.item_name}</b><br>
-                        从 <b>${l.from_cn}</b> 转给 <b>${l.to_cn}</b> | 备注：${l.note || '-'} | 操作人：${l.operator}
-                    </div>
-                    <button class="btn btn-outline" style="padding:4px 8px; color:var(--danger); border-color:var(--danger); font-size:11px;" onclick="deleteTransferLog(${logs.length - 1 - index})">🗑️ 删除</button>
-                </div>`).join('');
+            if(logs.length === 0) { list.innerHTML = "<p style='color:#999;'>暂无转单记录</p>"; return; }
+            list.innerHTML = logs.slice().reverse().map((l, index) => {
+                const realIndex = logs.length - 1 - index;
+                return `
+                    <div style="border-bottom:1px solid #eee; padding:10px 0; display:flex; justify-content:space-between; align-items:center;">
+                        <div style="font-size:13px; line-height:1.6;">
+                            <span style="color:#888; font-size:12px;">[${new Date(l.time).toLocaleString()}]</span> <b>${l.item_name}</b><br>
+                            从 <b style="color:var(--main);">${l.from_cn}</b> 转给 <b style="color:var(--accent);">${l.to_cn}</b> | 备注：${l.note || '-'} | 操作人：${l.operator}
+                        </div>
+                        <button class="btn btn-outline" style="padding:4px 10px; color:var(--danger); border-color:var(--danger); font-size:12px; font-weight:bold;" onclick="deleteTransferLog(${realIndex})">🗑️ 删除记录</button>
+                    </div>`;
+            }).join('');
         }
 
         async function deleteTransferLog(realIndex) {
@@ -440,7 +463,12 @@
             const { error } = await supabaseClient.from('leader_data').update({ 
                 image_data: { ...currentData.image_data, transfer_logs: logs } 
             }).eq('query_key', currentData.query_key);
-            if (!error) location.reload();
+            if (!error) {
+                currentData.image_data.transfer_logs = logs;
+                renderLogs();
+            } else {
+                alert("删除失败: " + error.message);
+            }
         }
 
         function batchDeleteItems() {
