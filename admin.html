@@ -4,12 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>团长后台系统 🛠️</title>
-    <!-- 引入 Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root { --main: #6c5ce7; --bg: #f0f2f5; --pink: #ffb7c5; }
         body { font-family: system-ui; background: var(--bg); margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        /* 状态条样式 */
         #debug-bar { background: #333; color: #fff; padding: 5px 10px; font-size: 12px; text-align: center; z-index: 9999; }
         .login-box { max-width: 400px; margin: 50px auto; padding: 30px; background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         nav { background: #fff; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; }
@@ -17,111 +15,97 @@
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
         .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border-bottom: 1px solid #eee; padding: 10px; text-align: left; font-size: 14px; }
+        th, td { border-bottom: 1px solid #eee; padding: 10px; text-align: left; font-size: 13px; }
         input, select { padding: 8px; border: 1px solid #ddd; border-radius: 6px; margin: 5px 0; width: 100%; box-sizing: border-box; }
-        .btn { padding: 12px 16px; border-radius: 6px; cursor: pointer; border: none; font-weight: bold; transition: 0.2s; background: #eee; }
-        .btn:active { transform: scale(0.95); }
+        .btn { padding: 10px 16px; border-radius: 6px; cursor: pointer; border: none; font-weight: bold; transition: 0.2s; }
         .btn-primary { background: var(--main); color: #fff; }
         .btn-pink { background: var(--pink); color: #fff; }
         .btn-danger { background: #ff7675; color: #fff; }
-        .stats-badge { padding: 5px 10px; border-radius: 20px; background: #eee; font-size: 12px; margin-right: 5px; }
+        .stats-badge { padding: 3px 8px; border-radius: 12px; background: #f0f0f0; font-size: 11px; margin-right: 5px; border: 1px solid #ddd; }
         #initGuide { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: #fff; display: flex; justify-content: center; align-items: center; z-index: 999; }
-        .img-preview { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; }
+        .img-preview { width: 45px; height: 45px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; }
         .hidden { display: none !important; }
     </style>
 </head>
 <body>
 
-    <!-- 顶部诊断条：如果你看到“系统未就绪”，说明插件拦截了脚本 -->
-    <div id="debug-bar">⏳ 正在初始化系统环境...</div>
+    <div id="debug-bar">⏳ 正在同步系统状态...</div>
 
     <!-- 登录模块 -->
     <div id="loginSection" class="login-box">
         <h2 style="text-align:center">🎀 团长登录</h2>
-        <div style="margin-bottom:10px">
-            <label>管理邮箱</label>
-            <input type="email" id="email" placeholder="example@mail.com">
-        </div>
-        <div style="margin-bottom:10px">
-            <label>管理密码</label>
-            <input type="password" id="pw" placeholder="******">
-        </div>
-        <button id="loginBtn" class="btn btn-primary" style="width:100%; margin-top:10px" onclick="login()">
-            点击登录
-        </button>
+        <input type="email" id="email" placeholder="管理邮箱">
+        <input type="password" id="pw" placeholder="管理密码">
+        <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="login()">登录后台</button>
         <p id="loginStatus" style="font-size:12px; color:red; text-align:center; margin-top:10px"></p>
     </div>
 
     <!-- 初始化引导 -->
     <div id="initGuide" class="hidden">
-        <div class="card" style="color:#333; width: 300px;">
+        <div class="card" style="color:#333; width: 320px; text-align: center;">
             <h3>✨ 欢迎新团长</h3>
-            <p>请设置你的查询密钥（发给团员用的）：</p>
+            <p style="font-size: 14px; color: #666;">请设置你的查询密钥<br>(团员查询时需要输入此项)</p>
             <input type="text" id="newQueryKey" placeholder="例如：endfield">
-            <button class="btn btn-primary" onclick="initSystem()">完成初始化</button>
+            <button class="btn btn-primary" style="width: 100%;" onclick="initSystem()">完成初始化</button>
         </div>
     </div>
 
-    <!-- 后台管理主体 -->
+    <!-- 管理后台主体 -->
     <div id="adminSection" class="hidden">
         <nav>
-            <strong id="roleTag">后台加载中...</strong>
+            <strong id="roleTag">载入中...</strong>
             <div>
-                <span id="userEmail" style="margin-right:15px; font-size:14px"></span>
-                <button class="btn btn-danger" onclick="logout()">退出</button>
+                <span id="userEmail" style="margin-right:15px; font-size:13px; color:#666"></span>
+                <button class="btn btn-danger" style="padding: 5px 10px;" onclick="logout()">退出</button>
             </div>
         </nav>
         <div class="main-content">
-            <!-- 统计和表格内容同上，保持不变 -->
             <div class="card" style="margin-bottom:20px;">
-                <h3>📊 全团概览</h3>
+                <h3>📊 数据统计</h3>
                 <div id="statsArea"></div>
             </div>
             <div class="grid">
                 <div class="card">
-                    <h3>✍️ 排单录入/编辑</h3>
+                    <h3>✍️ 编辑排单</h3>
                     <input type="hidden" id="editItemId">
                     <label>谷子名称</label><input type="text" id="itemName">
                     <label>地区</label>
                     <select id="itemCountry">
-                        <option>国内</option><option>台湾</option><option>泰国</option><option>印尼</option>
-                        <option>美国</option><option>日本</option><option>韩国</option>
+                        <option>国内</option><option>日本</option><option>台湾</option><option>泰国</option><option>印尼</option><option>美国</option><option>韩国</option>
                     </select>
-                    <label>团员 CN</label><input type="text" id="itemCN">
+                    <label>团员昵称 (CN)</label><input type="text" id="itemCN">
                     <div style="display:flex; gap:10px">
                         <div><label>单价</label><input type="number" id="itemPrice" step="0.01"></div>
                         <div><label>数量</label><input type="number" id="itemQty" value="1"></div>
                     </div>
                     <label>状态</label>
                     <select id="itemStatus" onchange="checkStatusChange(this.value)">
-                        <option>未出荷</option><option>已下单未到货</option><option>回国中</option>
-                        <option>已到货</option><option>可排发</option><option>已排发</option><option>未付款</option>
+                        <option>未出荷</option><option>已下单未到货</option><option>回国中</option><option>已到货</option><option>可排发</option><option>已排发</option><option>未付款</option>
                     </select>
                     <div id="expiryInput" class="hidden">
-                        <label style="color:red">⚠️ 请设置囤货到期日</label>
+                        <label style="color:red">📦 设置囤货截止日</label>
                         <input type="date" id="itemExpiry">
                     </div>
-                    <label>柄图</label>
+                    <label>柄图上传</label>
                     <input type="file" id="itemFile" accept="image/*">
                     <button class="btn btn-pink" style="width:100%; margin-top:15px" onclick="saveItem()">保存记录</button>
-                    <button class="btn" style="width:100%; margin-top:5px" onclick="clearForm()">重置清空</button>
+                    <button class="btn" style="width:100%; margin-top:5px" onclick="clearForm()">清空表单</button>
                 </div>
                 <div id="ownerSettings" class="card hidden">
                     <h3>⚙️ 团务设置</h3>
-                    <p>查询密钥：<strong id="dispKey" style="color:var(--main)"></strong></p>
+                    <p>查询密钥：<strong id="dispKey" style="color:var(--main); background:#eee; padding:2px 5px;"></strong></p>
                     <hr>
-                    <h4>副团长管理</h4>
-                    <div id="coAdminList"></div>
-                    <div style="margin-top:10px">
-                        <input type="email" id="newAdminEmail" placeholder="输入副团长账号邮箱">
-                        <button class="btn btn-primary" onclick="addAdmin()">添加副团员</button>
-                    </div>
+                    <h4>副团长列表</h4>
+                    <div id="coAdminList" style="margin-bottom:15px;"></div>
+                    <label>添加副团长(邮箱)</label>
+                    <input type="email" id="newAdminEmail" placeholder="输入已注册的邮箱">
+                    <button class="btn btn-primary" style="width:100%;" onclick="addAdmin()">添加</button>
                 </div>
             </div>
             <div class="card" style="margin-top:20px; overflow-x:auto;">
-                <h3>📜 全团排单明细</h3>
-                <table>
-                    <thead><tr><th>柄图</th><th>名称</th><th>CN</th><th>单价×数量</th><th>状态</th><th>操作</th></tr></thead>
+                <h3>📜 排单明细</h3>
+                <table id="goodsTable">
+                    <thead><tr><th>图</th><th>谷名</th><th>CN</th><th>明细</th><th>状态</th><th>操作</th></tr></thead>
                     <tbody id="tbody"></tbody>
                 </table>
             </div>
@@ -129,76 +113,49 @@
     </div>
 
     <script>
-        // 全局捕获所有错误并弹窗
-        window.onerror = function(msg, url, line) {
-            alert("脚本运行出错: " + msg + "\n行号: " + line);
-            return false;
-        };
-
         const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
-
-        let supabaseClient;
+        
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         let currentData = null;
         let currentUser = null;
-
-        // 初始化检查
-        try {
-            if (typeof supabase === 'undefined') {
-                document.getElementById('debug-bar').innerText = "❌ 错误：Supabase 库加载失败！请关闭广告拦截器或更换浏览器再试。";
-                document.getElementById('debug-bar').style.background = "red";
-            } else {
-                supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-                document.getElementById('debug-bar').innerText = "✅ 系统已就绪，可以点击登录";
-                document.getElementById('debug-bar').style.background = "green";
-                checkAuth(); // 自动检查是否已登录
-            }
-        } catch (e) {
-            alert("连接工具启动失败: " + e.message);
-        }
 
         async function login() {
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('pw').value.trim();
             const statusBox = document.getElementById('loginStatus');
-            
-            // 点击反馈
-            console.log("尝试登录:", email);
-            statusBox.innerText = "正在尝试连接服务器...";
-
-            if (!supabaseClient) {
-                alert("连接工具未初始化，请刷新页面或更换浏览器。");
-                return;
-            }
-
-            try {
-                const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-                if (error) {
-                    statusBox.innerText = "登录失败：" + error.message;
-                } else {
-                    statusBox.style.color = "green";
-                    statusBox.innerText = "登录成功！正在进入后台...";
-                    setTimeout(() => checkAuth(), 500);
-                }
-            } catch (err) {
-                alert("登录过程发生异常: " + err.message);
-            }
+            statusBox.innerText = "正在验证...";
+            const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            if (error) statusBox.innerText = "错误: " + error.message;
+            else { statusBox.innerText = ""; checkAuth(); }
         }
 
-        // --- 其余功能逻辑保持不变 ---
         async function logout() { await supabaseClient.auth.signOut(); location.reload(); }
 
         async function checkAuth() {
             const { data: { user } } = await supabaseClient.auth.getUser();
-            if (!user) return;
+            if (!user) {
+                document.getElementById('debug-bar').innerText = "💡 请先登录团长账号";
+                document.getElementById('debug-bar').style.background = "#333";
+                document.getElementById('loginSection').classList.remove('hidden');
+                return;
+            }
             currentUser = user;
             document.getElementById('loginSection').classList.add('hidden');
             document.getElementById('adminSection').classList.remove('hidden');
             document.getElementById('userEmail').innerText = user.email;
-            const { data: records } = await supabaseClient.from('leader_data').select('*');
+
+            // 修正：直接获取数据
+            const { data: records, error } = await supabaseClient.from('leader_data').select('*');
+            if (error) {
+                alert("访问数据库失败: " + error.message);
+                return;
+            }
+
             if (records && records.length > 0) {
                 currentData = records[0];
-                document.getElementById('initGuide').classList.add('hidden');
+                document.getElementById('debug-bar').innerText = "✅ 数据同步成功";
+                document.getElementById('debug-bar').style.background = "green";
                 renderUI();
             } else {
                 document.getElementById('initGuide').classList.remove('hidden');
@@ -207,8 +164,10 @@
 
         async function initSystem() {
             const key = document.getElementById('newQueryKey').value.trim();
+            if(!key) return alert("请输入密钥");
             const { error } = await supabaseClient.rpc('init_leader_data', { p_query_key: key });
-            if(error) alert(error.message); else location.reload();
+            if(error) alert("初始化失败: " + error.message);
+            else location.reload();
         }
 
         function renderUI() {
@@ -219,25 +178,23 @@
                 renderAdmins();
             }
             document.getElementById('roleTag').innerText = isOwner ? "🎀 团长后台" : "助理后台";
+            
             const list = currentData.group_data || [];
             const totalSum = list.reduce((s, i) => s + (i.price * i.quantity), 0);
-            const statusCount = {};
-            list.forEach(i => statusCount[i.status] = (statusCount[i.status] || 0) + 1);
-            let statsHtml = `<strong>总项数: ${list.length}</strong> | <strong>总金额: ￥${totalSum.toFixed(2)}</strong><br>`;
-            for(let s in statusCount) statsHtml += `<span class="stats-badge">${s}: ${statusCount[s]}</span>`;
+            let statsHtml = `<strong>总项: ${list.length}</strong> | <strong>应肾: ￥${totalSum.toFixed(2)}</strong>`;
             document.getElementById('statsArea').innerHTML = statsHtml;
 
             const tbody = document.getElementById('tbody');
             tbody.innerHTML = list.map((item) => `
                 <tr>
-                    <td><img src="${item.image_url || ''}" class="img-preview" onerror="this.src='https://via.placeholder.com/50'"></td>
+                    <td><img src="${item.image_url || ''}" class="img-preview" onerror="this.src='https://via.placeholder.com/50?text=无图'"></td>
                     <td>${item.name}</td>
                     <td>${item.cn}</td>
-                    <td>￥${item.price} × ${item.quantity}</td>
-                    <td>${item.status}</td>
+                    <td>￥${item.price}x${item.quantity}</td>
+                    <td><span class="stats-badge">${item.status}</span></td>
                     <td>
-                        <button onclick="editItem('${item.item_id}')">编辑</button>
-                        <button style="color:red" onclick="deleteItem('${item.item_id}')">删除</button>
+                        <button onclick="editItem('${item.item_id}')" style="font-size:11px">编辑</button>
+                        <button onclick="deleteItem('${item.item_id}')" style="font-size:11px;color:red">删</button>
                     </td>
                 </tr>
             `).join('');
@@ -249,16 +206,16 @@
             if (file) {
                 const fileName = `${Date.now()}_${file.name}`;
                 const { data, error } = await supabaseClient.storage.from('images').upload(fileName, file);
-                if (error) return alert("图片上传失败");
+                if (error) return alert("上传失败");
                 imageUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
             }
             const newItem = {
                 item_id: document.getElementById('editItemId').value || Date.now().toString(),
-                name: document.getElementById('itemName').value,
+                name: document.getElementById('itemName').value || "未命名",
                 country: document.getElementById('itemCountry').value,
                 price: parseFloat(document.getElementById('itemPrice').value) || 0,
                 quantity: parseInt(document.getElementById('itemQty').value) || 1,
-                cn: document.getElementById('itemCN').value,
+                cn: document.getElementById('itemCN').value || "未知",
                 status: document.getElementById('itemStatus').value,
                 image_url: imageUrl,
                 storage_expiry: document.getElementById('itemExpiry').value || null,
@@ -267,8 +224,14 @@
             let newList = [...(currentData.group_data || [])];
             const idx = newList.findIndex(i => i.item_id === newItem.item_id);
             if (idx > -1) newList[idx] = newItem; else newList.push(newItem);
-            await supabaseClient.from('leader_data').update({ group_data: newList }).eq('id', currentData.id);
-            location.reload();
+
+            // 修正：使用 query_key 定位，不再使用 id 字段
+            const { error } = await supabaseClient.from('leader_data')
+                .update({ group_data: newList })
+                .eq('query_key', currentData.query_key);
+            
+            if (error) alert("保存失败: " + error.message); 
+            else location.reload();
         }
 
         function editItem(id) {
@@ -276,17 +239,22 @@
             document.getElementById('editItemId').value = item.item_id;
             document.getElementById('editItemId').dataset.img = item.image_url;
             document.getElementById('itemName').value = item.name;
+            document.getElementById('itemCountry').value = item.country;
             document.getElementById('itemCN').value = item.cn;
             document.getElementById('itemPrice').value = item.price;
             document.getElementById('itemQty').value = item.quantity;
             document.getElementById('itemStatus').value = item.status;
+            document.getElementById('itemExpiry').value = item.storage_expiry || "";
+            checkStatusChange(item.status);
             window.scrollTo(0,0);
         }
 
         async function deleteItem(id) {
             if(!confirm("确定删除？")) return;
             const newList = currentData.group_data.filter(i => i.item_id !== id);
-            await supabaseClient.from('leader_data').update({ group_data: newList }).eq('id', currentData.id);
+            await supabaseClient.from('leader_data')
+                .update({ group_data: newList })
+                .eq('query_key', currentData.query_key);
             location.reload();
         }
 
@@ -297,13 +265,13 @@
 
         async function addAdmin() {
             const email = document.getElementById('newAdminEmail').value;
-            const { data } = await supabaseClient.rpc('add_co_admin', { p_query_key: currentData.query_key, p_email: email });
-            alert(data); location.reload();
+            const { data, error } = await supabaseClient.rpc('add_co_admin', { p_query_key: currentData.query_key, p_email: email });
+            alert(data || error.message); location.reload();
         }
 
         function renderAdmins() {
             const list = currentData.admin_ids || [];
-            document.getElementById('coAdminList').innerHTML = list.length ? list.map(id => `<div>UID: ${id.substring(0,8)}... <button onclick="removeAdmin('${id}')">移除</button></div>`).join('') : "暂无";
+            document.getElementById('coAdminList').innerHTML = list.length ? list.map(id => `<div style="font-size:12px;">助理UID: ${id.substring(0,8)}... <button onclick="removeAdmin('${id}')">移除</button></div>`).join('') : "暂无助理";
         }
 
         async function removeAdmin(uid) {
@@ -315,7 +283,10 @@
             document.getElementById('editItemId').value = "";
             document.getElementById('itemName').value = "";
             document.getElementById('itemCN').value = "";
+            document.getElementById('itemFile').value = "";
         }
+
+        checkAuth();
     </script>
 </body>
 </html>
