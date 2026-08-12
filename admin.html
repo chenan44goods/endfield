@@ -9,34 +9,29 @@
         :root { --main: #6c5ce7; --bg: #f0f2f5; --pink: #ffb7c5; --accent: #ff85a2; }
         body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); margin: 0; display: flex; flex-direction: column; height: 100vh; color: #333; }
         
-        /* 导航与标签 */
         nav { background: #fff; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
         .tabs { background: #fff; display: flex; padding: 0 20px; border-bottom: 1px solid #ddd; gap: 20px; }
         .tab-btn { padding: 12px 5px; border-bottom: 3px solid transparent; cursor: pointer; font-weight: bold; color: #666; font-size: 14px; }
         .tab-btn.active { color: var(--main); border-bottom-color: var(--main); }
         .main-content { flex: 1; overflow-y: auto; padding: 20px; }
 
-        /* 通用卡片 */
         .card { background: #fff; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; }
         
-        /* 表格与筛选操作栏 */
         .table-wrap { overflow-x: auto; background: #fff; border-radius: 12px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 650px; }
         th, td { border-bottom: 1px solid #eee; padding: 12px 10px; text-align: left; }
         
-        /* 搜索筛选栏样式 */
-        .search-row { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; background: #fdfdfd; padding: 10px; border-radius: 10px; border: 1px solid #eee; }
-        .search-input-group { display: flex; align-items: center; background: #fff; border: 2px solid var(--main); border-radius: 8px; padding: 2px 10px; flex: 1; min-width: 200px; }
+        /* 🔍 通用搜索栏样式 */
+        .search-row { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; background: #fdfdfd; padding: 12px; border-radius: 10px; border: 1px solid #eee; }
+        .search-input-group { display: flex; align-items: center; background: #fff; border: 2px solid var(--main); border-radius: 8px; padding: 2px 12px; flex: 1; min-width: 250px; }
         .search-input-group input { border: none; outline: none; padding: 8px; flex: 1; font-size: 14px; }
         
         .batch-bar { display: flex; align-items: center; gap: 10px; padding: 10px; background: #f8f9fa; border-radius: 8px; margin-bottom: 10px; border: 1px solid #eee; flex-wrap: wrap; }
         
-        /* 状态与统计 */
-        .filter-info { font-size: 12px; color: var(--main); margin-bottom: 10px; font-weight: bold; display: none; }
+        .filter-info { font-size: 12px; color: var(--main); margin-bottom: 10px; font-weight: bold; background: #f0edff; padding: 5px 12px; border-radius: 5px; display: none; }
         .stats-badge { padding: 4px 12px; border-radius: 20px; background: #eee; font-size: 12px; margin-right: 8px; display: inline-block; font-weight: bold; }
 
-        /* 按钮 */
         .btn { padding: 8px 16px; border-radius: 8px; cursor: pointer; border: none; font-weight: bold; transition: 0.2s; white-space: nowrap; font-size: 13px; }
         .btn-primary { background: var(--main); color: #fff; }
         .btn-pink { background: var(--pink); color: #fff; }
@@ -44,7 +39,6 @@
         .btn-outline { background: #fff; border: 1px solid #ddd; color: #666; }
         .btn-small { padding: 4px 10px; font-size: 11px; }
 
-        /* 其他 */
         .hidden { display: none !important; }
         .selected-row { background-color: #f6f5ff !important; }
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
@@ -54,19 +48,20 @@
 </head>
 <body>
 
-    <div id="debug-bar" style="background:#333; color:#fff; font-size:12px; text-align:center; padding:8px;">⌛ 正在加载系统环境...</div>
+    <div id="debug-bar" style="background:#333; color:#fff; font-size:12px; text-align:center; padding:8px;">⌛ 正在同步系统环境...</div>
 
-    <!-- 登录 -->
+    <!-- 登录模块 -->
     <div id="loginSection" class="hidden">
-        <div class="card" style="max-width:350px; margin: 60px auto;">
+        <div class="card" style="max-width:350px; margin: 80px auto;">
             <h2 style="text-align:center">🎀 团长登录</h2>
             <input type="email" id="email" placeholder="管理邮箱">
             <input type="password" id="pw" placeholder="密码">
-            <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="login()">立即进入后台</button>
+            <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="login()">进入后台</button>
+            <p id="loginMsg" style="color:red; font-size:12px; text-align:center; margin-top:5px;"></p>
         </div>
     </div>
 
-    <!-- 后台内容 -->
+    <!-- 后台管理主体 -->
     <div id="adminSection" class="hidden">
         <nav>
             <strong id="roleTag">后台载入中</strong>
@@ -84,19 +79,17 @@
 
         <div class="main-content">
             <div id="tab-overview" class="tab-content">
-                <!-- 统计卡片：会自动随筛选变化 -->
                 <div class="card">
-                    <h3 style="margin-top:0">📊 数据概览</h3>
+                    <h3 style="margin-top:0">📊 数据统计 (随筛选更新)</h3>
                     <div id="statsArea"></div>
                 </div>
 
-                <!-- 录入与导入区 -->
                 <div class="grid">
                     <div class="card">
-                        <h3>✍️ 快速录入/编辑</h3>
+                        <h3>✍️ 录入/编辑</h3>
                         <input type="hidden" id="editItemId">
                         <input type="text" id="itemName" placeholder="谷子名称">
-                        <select id="itemCountry"><option>日本</option><option>国内</option><option>台湾</option><option>泰国</option></select>
+                        <select id="itemCountry"><option>日本</option><option>国内</option><option>台湾</option><option>泰国</option><option>美国</option></select>
                         <input type="text" id="itemCN" placeholder="团员CN">
                         <div style="display:flex; gap:5px">
                             <input type="number" id="itemPrice" placeholder="单价" step="0.01">
@@ -109,29 +102,26 @@
                         <button class="btn btn-outline" style="width:100%; margin-top:5px" onclick="clearForm()">重置</button>
                     </div>
                     <div class="card">
-                        <h3>📥 批量导入 (Excel)</h3>
+                        <h3>📥 批量导入</h3>
                         <textarea id="csvInput" rows="6" placeholder="直接粘贴 Excel 汇总表内容..."></textarea>
                         <button class="btn btn-primary" style="width:100%" onclick="previewImport()">识别并导入</button>
                     </div>
                 </div>
 
-                <!-- 排单明细（含搜索筛选） -->
                 <div class="table-wrap">
-                    <h3>📜 全团明细</h3>
+                    <h3>📜 排单明细</h3>
                     
-                    <!-- 🔍 CN 搜索栏 -->
+                    <!-- 🔍 合并搜索栏 -->
                     <div class="search-row">
                         <div class="search-input-group">
-                            <span>🔍</span>
-                            <input type="text" id="cnSearchInput" placeholder="输入团员 CN 快速筛选..." onkeypress="if(event.keyCode==13) applyCNFilter()">
+                            <input type="text" id="universalSearchInput" placeholder="输入 CN 或 谷子名称 搜索..." onkeypress="if(event.keyCode==13) applySearchFilter()">
                         </div>
-                        <button class="btn btn-primary" onclick="applyCNFilter()">筛选</button>
-                        <button class="btn btn-outline" id="clearFilterBtn" onclick="clearCNFilter()">清除</button>
+                        <button class="btn btn-primary" onclick="applySearchFilter()">搜索</button>
+                        <button class="btn btn-outline" onclick="clearSearchFilter()">清除</button>
                     </div>
 
                     <div id="filterStatusText" class="filter-info"></div>
 
-                    <!-- 批量操作栏 -->
                     <div class="batch-bar">
                         <input type="checkbox" id="selectAllCheck" onchange="toggleSelectAll(this.checked)" style="width:auto">
                         <span style="font-size:12px">已选 <strong id="selCount">0</strong> 条</span>
@@ -151,7 +141,6 @@
                 </div>
             </div>
 
-            <!-- 转单日志页 -->
             <div id="tab-logs" class="tab-content hidden">
                 <div class="card">
                     <h3>🔄 转单历史记录</h3>
@@ -159,11 +148,10 @@
                 </div>
             </div>
 
-            <!-- 设置页 -->
             <div id="tab-settings" class="tab-content hidden">
                 <div class="card">
                     <h3>⚙️ 团务设置</h3>
-                    <p>查询密钥：<strong id="dispKey" style="color:var(--main)">未设置</strong></p>
+                    <p>查询密钥：<strong id="dispKey" style="color:var(--main)">-</strong></p>
                     <div id="coAdminList"></div>
                     <input type="email" id="newAdminEmail" placeholder="副团长邮箱">
                     <button class="btn btn-primary" onclick="addAdmin()">添加副团员</button>
@@ -175,7 +163,7 @@
     <!-- 转单弹窗 -->
     <div class="modal-overlay" id="transferModal">
         <div class="modal">
-            <h3>🔄 订单转交确认</h3>
+            <h3>🔄 订单归属转交</h3>
             <p id="transferInfo" style="font-size:12px; color:#666"></p>
             <input type="text" id="newCNInput" placeholder="新接手人 CN">
             <input type="text" id="transferNote" placeholder="转单原因 (可选)">
@@ -195,9 +183,20 @@
         let currentUser = null;
         let selectedIds = new Set();
         let transferTargets = [];
-        let currentFilterCN = ''; // 当前筛选的 CN
+        let currentSearchKey = ''; // 通用搜索词
 
-        // --- 核心鉴权逻辑 ---
+        // 启动逻辑与超时保护
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                const bar = document.getElementById('debug-bar');
+                if (bar && bar.innerText.includes("同步")) {
+                    bar.innerText = "⚠️ 连接响应较慢，请直接尝试登录。";
+                    document.getElementById('loginSection').classList.remove('hidden');
+                }
+            }, 3000);
+            checkAuth();
+        });
+
         async function checkAuth() {
             try {
                 const { data: { user } } = await supabaseClient.auth.getUser();
@@ -219,7 +218,6 @@
                     renderUI();
                 }
             } catch (err) {
-                console.error("加载失败:", err);
                 document.getElementById('loginSection').classList.remove('hidden');
             }
         }
@@ -234,18 +232,18 @@
 
         async function logout() { await supabaseClient.auth.signOut(); location.reload(); }
 
-        // --- 🔍 筛选逻辑 ---
-        function applyCNFilter() {
-            currentFilterCN = document.getElementById('cnSearchInput').value.trim();
-            selectedIds.clear(); // 筛选时清空勾选，防止跨人操作错误
+        // --- 🔍 通用搜索筛选 ---
+        function applySearchFilter() {
+            currentSearchKey = document.getElementById('universalSearchInput').value.trim();
+            selectedIds.clear(); 
             document.getElementById('selCount').innerText = "0";
             document.getElementById('selectAllCheck').checked = false;
             renderUI();
         }
 
-        function clearCNFilter() {
-            document.getElementById('cnSearchInput').value = "";
-            currentFilterCN = '';
+        function clearSearchFilter() {
+            document.getElementById('universalSearchInput').value = "";
+            currentSearchKey = '';
             renderUI();
         }
 
@@ -258,37 +256,42 @@
 
             let list = currentData.group_data || [];
             
-            // 执行筛选
-            if (currentFilterCN) {
-                list = list.filter(item => item.cn.toLowerCase().includes(currentFilterCN.toLowerCase()));
-                document.getElementById('filterStatusText').innerText = `💡 当前筛选: CN 包含 "${currentFilterCN}" (共 ${list.length} 条)`;
+            // 执行通用匹配 (CN 或 谷子名称)
+            if (currentSearchKey) {
+                const key = currentSearchKey.toLowerCase();
+                list = list.filter(item => {
+                    const cnMatch = (item.cn || "").toLowerCase().includes(key);
+                    const nameMatch = (item.name || "").toLowerCase().includes(key);
+                    return cnMatch || nameMatch;
+                });
+                document.getElementById('filterStatusText').innerText = `💡 当前筛选：关键词 "${currentSearchKey}"（共 ${list.length} 条记录）`;
                 document.getElementById('filterStatusText').style.display = 'block';
             } else {
                 document.getElementById('filterStatusText').style.display = 'none';
             }
 
-            // 更新统计 (基于筛选后的 list)
+            // 更新统计 (基于筛选结果)
             const totalItems = list.reduce((s, i) => s + (parseInt(i.quantity) || 0), 0);
             const totalMoney = list.reduce((s, i) => s + (parseFloat(i.price) * (parseInt(i.quantity) || 0)), 0);
             document.getElementById('statsArea').innerHTML = `
-                <span class="stats-badge">当前排单: ${list.length} 项</span>
-                <span class="stats-badge">物品总数: ${totalItems} 件</span>
-                <span class="stats-badge" style="background:#f6f5ff; color:var(--main)">应肾合计: ￥${totalMoney.toFixed(2)}</span>
+                <span class="stats-badge">排项: ${list.length} 项</span>
+                <span class="stats-badge">总数: ${totalItems} 件</span>
+                <span class="stats-badge" style="background:#f0edff; color:var(--main)">金额合计: ￥${totalMoney.toFixed(2)}</span>
             `;
 
             const tbody = document.getElementById('tbody');
             if (list.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:#999;">${currentFilterCN ? '未找到匹配的 CN 记录' : '暂无排单数据'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px; color:#999;">${currentSearchKey ? '未找到包含该关键词的记录' : '暂无数据'}</td></tr>`;
             } else {
                 tbody.innerHTML = list.slice().reverse().map(item => {
                     const isChecked = selectedIds.has(item.item_id);
                     return `<tr class="${isChecked ? 'selected-row' : ''}">
                         <td><input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleSelect('${item.item_id}')" style="width:auto"></td>
                         <td><img src="${item.image_url ? item.image_url+'?width=80' : ''}" class="img-preview" onerror="this.src='https://via.placeholder.com/50'"></td>
-                        <td>${item.name}<br><small>${item.country}</small></td>
+                        <td>${item.name}<br><small style="color:#999">${item.country}</small></td>
                         <td>${item.cn}</td>
                         <td>￥${item.price}x${item.quantity}</td>
-                        <td><span class="stats-badge" style="margin:0">${item.status}</span></td>
+                        <td><span class="stats-badge" style="margin:0; font-size:10px">${item.status}</span></td>
                         <td>
                             <button class="btn btn-outline btn-small" onclick="openTransferModal(['${item.item_id}'])">转单</button>
                             <button class="btn btn-outline btn-small" onclick="editItem('${item.item_id}')">改</button>
@@ -298,7 +301,7 @@
             }
         }
 
-        // --- 批量操作 ---
+        // --- 操作逻辑 ---
         function toggleSelect(id) {
             if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
             document.getElementById('selCount').innerText = selectedIds.size;
@@ -306,22 +309,17 @@
         }
 
         function toggleSelectAll(checked) {
-            // 注意：全选只勾选“当前可见（筛选后）”的列表
+            const key = currentSearchKey.toLowerCase();
             let visibleList = currentData.group_data || [];
-            if (currentFilterCN) {
-                visibleList = visibleList.filter(item => item.cn.toLowerCase().includes(currentFilterCN.toLowerCase()));
+            if (currentSearchKey) {
+                visibleList = visibleList.filter(i => (i.cn||"").toLowerCase().includes(key) || (i.name||"").toLowerCase().includes(key));
             }
-
-            if (checked) {
-                visibleList.forEach(item => selectedIds.add(item.item_id));
-            } else {
-                selectedIds.clear();
-            }
+            if (checked) visibleList.forEach(item => selectedIds.add(item.item_id));
+            else selectedIds.clear();
             document.getElementById('selCount').innerText = selectedIds.size;
             renderUI();
         }
 
-        // --- 基础逻辑 ---
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
             document.querySelectorAll('.tab-btn').forEach(b => {
@@ -363,18 +361,17 @@
         }
 
         async function batchDelete() {
-            if(selectedIds.size === 0) return alert("请先勾选");
-            if(!confirm(`确定要删除选中的 ${selectedIds.size} 项记录吗？`)) return;
+            if(selectedIds.size === 0) return alert("请先勾选项目");
+            if(!confirm(`确认删除选中的 ${selectedIds.size} 项记录？此操作不可撤销！`)) return;
             const newList = currentData.group_data.filter(i => !selectedIds.has(i.item_id));
             await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
             location.reload();
         }
 
-        // --- 转单 ---
         function openTransferModal(ids) {
             transferTargets = (ids === 'batch') ? Array.from(selectedIds) : ids;
-            if(transferTargets.length === 0) return alert("请先勾选");
-            document.getElementById('transferInfo').innerText = `已选 ${transferTargets.length} 项排单。`;
+            if(transferTargets.length === 0) return alert("请勾选项目");
+            document.getElementById('transferInfo').innerText = `即将转交 ${transferTargets.length} 项排单记录归属权。`;
             document.getElementById('transferModal').style.display = 'flex';
         }
         function closeModal() { document.getElementById('transferModal').style.display = 'none'; }
@@ -405,13 +402,14 @@
             document.getElementById('transferLogsList').innerHTML = logs.length === 0 ? "暂无转单记录" : logs.map(log => `
                 <div style="border-left:3px solid var(--main); padding:10px; margin-bottom:10px; background:#f9f9f9; font-size:12px;">
                     <strong>${log.item_name}</strong>: ${log.from_cn} ➔ ${log.to_cn}<br>
-                    <small>${new Date(log.time).toLocaleString()} | 操作人: ${log.operator}</small>
+                    <small>${new Date(log.time).toLocaleString()} | 备注: ${log.note || '无'}</small>
                 </div>
             `).join('');
         }
 
         async function previewImport() {
             const raw = document.getElementById('csvInput').value.trim();
+            if(!raw) return alert("内容为空");
             const lines = raw.split('\n').filter(l => l.trim());
             const itemNames = lines[2].split('\t').slice(2);
             const prices = lines[3].split('\t').slice(2).map(p => parseFloat(p.replace(/[¥,]/g, '')) || 0);
@@ -436,7 +434,11 @@
             document.getElementById('itemCN').value = "";
         }
 
-        checkAuth();
+        async function addAdmin() {
+            const email = document.getElementById('newAdminEmail').value;
+            const { data } = await supabaseClient.rpc('add_co_admin', { p_query_key: currentData.query_key, p_email: email });
+            alert(data); location.reload();
+        }
     </script>
 </body>
 </html>
