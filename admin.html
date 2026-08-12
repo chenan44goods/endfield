@@ -100,7 +100,20 @@
                     </div>
                     <div class="card">
                         <h3>📥 Excel 批量导入</h3>
-                        <textarea id="csvInput" rows="6" placeholder="直接粘贴 Excel 导出的表格数据..." style="width:100%; padding:8px; border-radius:6px; border:1px solid #ddd; font-size:12px;"></textarea>
+                        <div style="margin-bottom:8px">
+                            <label style="font-size:12px; color:#666; font-weight:bold; display:block; margin-bottom:4px;">默认导入地区：</label>
+                            <select id="batchImportCountry" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+                                <option value="日本">日本</option>
+                                <option value="闲鱼">闲鱼</option>
+                                <option value="淘宝店">淘宝店</option>
+                                <option value="美国">美国</option>
+                                <option value="韩国">韩国</option>
+                                <option value="印尼">印尼</option>
+                                <option value="泰国">泰国</option>
+                                <option value="台湾">台湾</option>
+                            </select>
+                        </div>
+                        <textarea id="csvInput" rows="5" placeholder="直接粘贴 Excel 导出的表格数据..." style="width:100%; padding:8px; border-radius:6px; border:1px solid #ddd; font-size:12px;"></textarea>
                         <button class="btn btn-primary" style="width:100%; margin-top:8px; padding:10px;" onclick="previewImport()">识别并批量导入</button>
                     </div>
                 </div>
@@ -116,6 +129,7 @@
                         <span id="selectedTip" style="font-weight:bold; color:#d48806;">已选择 0 条记录</span>
                         <button class="btn btn-outline" onclick="openTransferModal(null)">🔄 批量转单</button>
                         <button class="btn btn-outline" onclick="openBatchStatusModal()">✏️ 批量改状态</button>
+                        <button class="btn btn-outline" onclick="openBatchCountryModal()">🌍 批量改地区</button>
                         <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger)" onclick="batchDeleteItems()">🗑️ 批量删除</button>
                     </div>
 
@@ -144,7 +158,7 @@
                 </div>
             </div>
 
-            <!-- Tab 3: 转单记录 (支持单删、全选、批量删除) -->
+            <!-- Tab 3: 转单记录 -->
             <div id="tab-logs" class="tab-content hidden">
                 <div class="card">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px; border-bottom:1px solid #eee; padding-bottom:12px;">
@@ -184,6 +198,24 @@
             </select>
             <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:10px;" onclick="executeBatchStatusUpdate()">确认修改</button>
             <button class="btn btn-outline" style="width:100%; margin-top:6px; padding:8px;" onclick="document.getElementById('batchStatusModal').style.display='none'">取消</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="batchCountryModal">
+        <div class="modal">
+            <h3 style="margin-top:0;">🌍 批量修改地区</h3>
+            <select id="batchNewCountry" style="width:100%; padding:10px; border-radius:6px; border:1px solid #ddd; font-size:13px;">
+                <option value="日本">日本</option>
+                <option value="闲鱼">闲鱼</option>
+                <option value="淘宝店">淘宝店</option>
+                <option value="美国">美国</option>
+                <option value="韩国">韩国</option>
+                <option value="印尼">印尼</option>
+                <option value="泰国">泰国</option>
+                <option value="台湾">台湾</option>
+            </select>
+            <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:10px;" onclick="executeBatchCountryUpdate()">确认修改地区</button>
+            <button class="btn btn-outline" style="width:100%; margin-top:6px; padding:8px;" onclick="document.getElementById('batchCountryModal').style.display='none'">取消</button>
         </div>
     </div>
 
@@ -320,6 +352,18 @@
             const newStatus = document.getElementById('batchNewStatus').value;
             let groupData = [...currentData.group_data];
             groupData.forEach(item => { if(selectedIds.has(item.item_id)) item.status = newStatus; });
+            const { error } = await supabaseClient.from('leader_data').update({ group_data: groupData }).eq('query_key', currentData.query_key);
+            if (!error) location.reload(); else alert("修改失败：" + error.message);
+        }
+
+        function openBatchCountryModal() {
+            document.getElementById('batchCountryModal').style.display = 'flex';
+        }
+
+        async function executeBatchCountryUpdate() {
+            const newCountry = document.getElementById('batchNewCountry').value;
+            let groupData = [...currentData.group_data];
+            groupData.forEach(item => { if(selectedIds.has(item.item_id)) item.country = newCountry; });
             const { error } = await supabaseClient.from('leader_data').update({ group_data: groupData }).eq('query_key', currentData.query_key);
             if (!error) location.reload(); else alert("修改失败：" + error.message);
         }
@@ -487,6 +531,7 @@
             const lines = raw.split('\n').filter(l => l.trim());
             if (lines.length < 5) return alert("解析失败，请确保复制了完整的包含名称、单价与数量的 Excel 区域。");
             
+            const batchCountry = document.getElementById('batchImportCountry')?.value || "日本";
             const itemNames = lines[2].split('\t').slice(2);
             const prices = lines[3].split('\t').slice(2).map(p => parseFloat(p.replace(/[¥,]/g, '')) || 0);
             let items = [];
@@ -499,7 +544,7 @@
                     if(qty > 0) items.push({
                         item_id: Date.now()+'_'+Math.random().toString(36).substr(2,4),
                         name: name.trim(),
-                        country: "日本",
+                        country: batchCountry,
                         price: prices[idx],
                         quantity: qty,
                         cn: cn,
