@@ -24,13 +24,15 @@
         }
         h1 { text-align: center; color: var(--accent); margin: 0 0 15px 0; font-size: 1.4rem; }
         label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.85rem; }
-        input { width: 100%; padding: 12px; border: 2px solid var(--primary); border-radius: 10px; box-sizing: border-box; margin-bottom: 10px; font-size: 16px; }
+        input, textarea { width: 100%; padding: 12px; border: 2px solid var(--primary); border-radius: 10px; box-sizing: border-box; margin-bottom: 10px; font-size: 16px; }
         .btn { width: 100%; padding: 12px; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-weight: bold; font-size: 1rem; cursor: pointer; margin-bottom: 8px; }
         .btn-outline { background: #fff; color: var(--accent); border: 2px solid var(--accent); }
         .item-card { border-left: 5px solid var(--primary); display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
         .item-img { width: 70px; height: 70px; border-radius: 8px; object-fit: cover; background: #eee; }
         .item-info { flex: 1; min-width: 0; }
         .status-tag { display: inline-block; padding: 2px 8px; border-radius: 5px; font-size: 0.7rem; background: #fff; border: 1px solid var(--primary); margin-top: 5px; }
+        
+        /* 弹窗样式 */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box; }
         .modal { background: #fff; padding: 20px; border-radius: 15px; width: 100%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
         .shippable-cn-card { border-top: 3px solid var(--accent); padding-top: 10px; }
@@ -41,13 +43,12 @@
         <div class="card">
             <h1>🎀 谷子排单自查</h1>
             <label>查询密钥</label>
-            <input type="text" id="queryKey" value="4goods">
+            <input type="text" id="queryKey" value="4goods" placeholder="团长提供的密钥">
             <label>团员昵称 (CN)</label>
             <input type="text" id="cnName" placeholder="输入你的CN查询">
             <button class="btn" onclick="doQuery()">🔍 查询我的排谷</button>
             <button class="btn btn-outline" onclick="loadShippable()">📦 查看可排发谷子</button>
-            <div id="loading" style="display:none; text-align:center;">✨ 魔法加载中...</div>
-            <div id="errorMsg" style="color:red; text-align:center; font-size:14px;"></div>
+            <div id="loading" style="display:none; text-align:center; padding:10px;">✨ 魔法加载中...</div>
         </div>
         <div id="resultArea"></div>
     </div>
@@ -55,89 +56,110 @@
     <!-- 申请发货弹窗 -->
     <div class="modal-overlay" id="shippingModal">
         <div class="modal">
-            <h3 style="margin-top:0">✅ 申请排发确认</h3>
-            <div id="shippingItemsList" style="font-size:14px; background:#f9f9f9; padding:10px; border-radius:8px; max-height:150px; overflow-y:auto; margin-bottom:15px;"></div>
-            <label>收货地址/备注（建议填写）</label>
-            <textarea id="shippingNote" style="width:100%; height:80px; border:1px solid #ddd; border-radius:8px; padding:8px; box-sizing:border-box;"></textarea>
-            <div style="display:flex; gap:10px; margin-top:15px">
+            <h3 style="margin-top:0; color:var(--accent);">✅ 申请发货确认</h3>
+            <div id="shippingItemsList" style="font-size:14px; background:#f9f9f9; padding:10px; border-radius:8px; max-height:150px; overflow-y:auto; margin-bottom:15px; border:1px dashed var(--primary);"></div>
+            <label>收货地址/备注（选填）</label>
+            <textarea id="shippingNote" placeholder="例如：某某小区，由于XX原因请延迟发货等"></textarea>
+            <div style="display:flex; gap:10px; margin-top:10px">
                 <button class="btn btn-outline" style="flex:1" onclick="closeModal()">取消</button>
-                <button class="btn" style="flex:1" id="confirmShipBtn" onclick="submitShippingRequest()">确认申请</button>
+                <button class="btn" style="flex:1" id="confirmShipBtn" onclick="submitShippingRequest()">提交申请</button>
             </div>
         </div>
     </div>
 
     <script>
         const supabaseClient = supabase.createClient('https://oknhlfhdqbsukskdxqre.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y');
-        let currentShippableData = []; // 暂存当前点击申请的物品
+        
+        let currentShippableData = []; 
         let currentShippableCN = "";
 
-        // 1. 查询我的排谷记录 (过滤已排发)
+        // 1. 查询我的排谷记录 (规则：过滤掉“已排发”的谷子)
         async function doQuery() {
             const key = document.getElementById('queryKey').value.trim();
             const cn = document.getElementById('cnName').value.trim();
             const resArea = document.getElementById('resultArea');
-            if (!key || !cn) return alert("请完整填写");
-            resArea.innerHTML = ""; document.getElementById('loading').style.display="block";
+            if (!key || !cn) return alert("请先输入密钥和CN哦~");
+            
+            resArea.innerHTML = ""; 
+            document.getElementById('loading').style.display="block";
             
             try {
                 const { data, error } = await supabaseClient.rpc('get_group_by_key', { p_query_key: key });
                 if (error) throw error;
-                // 过滤：该CN 且 状态不是“已排发”
+
+                // 过滤：必须是本人的 CN，且状态不是“已排发”
                 const list = (data || []).filter(i => i.cn === cn && i.status !== "已排发");
-                if (list.length === 0) { resArea.innerHTML = '<div class="card">未找到相关排谷记录（已发货的物品会自动隐藏）</div>'; return; }
                 
-                let html = `<div class="card" style="background:var(--accent); color:#fff; font-weight:bold;">👤 ${cn} 的排谷记录</div>`;
+                if (list.length === 0) {
+                    resArea.innerHTML = '<div class="card" style="text-align:center;">🔍 未找到您的待收谷子记录<br><small>(已发货或未录入的不会显示)</small></div>';
+                    return;
+                }
+                
+                let html = `<div class="card" style="background:var(--accent); color:#fff; font-weight:bold; text-align:center;">👤 ${cn} 的待收谷子</div>`;
                 list.forEach(item => {
                     html += `
                         <div class="card item-card">
                             <img src="${item.image_url ? item.image_url+'?width=100' : 'https://via.placeholder.com/100'}" class="item-img">
                             <div class="item-info">
-                                <div style="font-weight:bold;">${item.name}</div>
-                                <div style="color:var(--accent); font-size:14px;">￥${item.price} × ${item.quantity}</div>
-                                <div class="status-tag">${item.status}</div>
+                                <div style="font-weight:bold; font-size:0.95rem;">${item.name}</div>
+                                <div style="color:var(--accent); font-size:14px; margin-top:4px;">￥${item.price} × ${item.quantity}</div>
+                                <div class="status-tag" style="background:${item.status==='已申请发货'?'#fff7e6':''}">${item.status}</div>
                             </div>
                         </div>`;
                 });
                 resArea.innerHTML = html;
-            } catch (e) { alert("查询失败: " + e.message); } 
-            finally { document.getElementById('loading').style.display="none"; }
+            } catch (e) { 
+                alert("查询失败，请检查密钥是否正确"); 
+            } finally { 
+                document.getElementById('loading').style.display="none"; 
+            }
         }
 
-        // 2. 加载全团可排发 (按 CN 分组)
+        // 2. 加载全团可排发 (规则：过滤 status === "可排发")
         async function loadShippable() {
             const key = document.getElementById('queryKey').value.trim();
             const resArea = document.getElementById('resultArea');
             if (!key) return alert("请输入查询密钥");
-            resArea.innerHTML = ""; document.getElementById('loading').style.display="block";
+            
+            resArea.innerHTML = ""; 
+            document.getElementById('loading').style.display="block";
 
             try {
                 const { data, error } = await supabaseClient.rpc('get_group_by_key', { p_query_key: key });
                 if (error) throw error;
                 
-                // 过滤 status === "可排发"
+                // 过滤：只要状态是“可排发”的
                 const list = (data || []).filter(i => i.status === "可排发");
-                if (list.length === 0) { resArea.innerHTML = '<div class="card">🎉 当前全团没有可排发的谷子。</div>'; return; }
+                
+                if (list.length === 0) {
+                    resArea.innerHTML = '<div class="card" style="text-align:center;">🎉 目前还没有处于“可排发”状态的谷子。</div>';
+                    return;
+                }
 
-                // 按 CN 分组
+                // 按 CN 分组显示，方便团员找到自己
                 const groups = {};
                 list.forEach(i => { if(!groups[i.cn]) groups[i.cn] = []; groups[i.cn].push(i); });
 
-                let html = `<div class="card" style="text-align:center; font-weight:bold;">📦 以下团员可申请排发</div>`;
+                let html = `<div class="card" style="text-align:center; font-weight:bold; color:var(--accent)">📦 以下团员有谷子可申请排发</div>`;
                 for (let cn in groups) {
                     const items = groups[cn];
-                    const itemsDesc = items.map(i => `${i.name} x${i.quantity}`).join('<br>');
+                    const itemsDesc = items.map(i => `• ${i.name} x${i.quantity}`).join('<br>');
                     html += `
                         <div class="card shippable-cn-card">
                             <div style="font-weight:bold; font-size:1.1rem; margin-bottom:10px;">👤 ${cn}</div>
-                            <div style="font-size:14px; color:#666; margin-bottom:15px; line-height:1.5;">${itemsDesc}</div>
+                            <div style="font-size:13px; color:#666; margin-bottom:15px; line-height:1.6; background:#fffcfc; padding:8px; border-radius:5px;">${itemsDesc}</div>
                             <button class="btn" onclick='openShippingModal("${cn}", ${JSON.stringify(items).replace(/'/g, "&apos;")})'>✅ 申请排发</button>
                         </div>`;
                 }
                 resArea.innerHTML = html;
-            } catch (e) { alert("加载失败"); }
-            finally { document.getElementById('loading').style.display="none"; }
+            } catch (e) { 
+                alert("加载失败"); 
+            } finally { 
+                document.getElementById('loading').style.display="none"; 
+            }
         }
 
+        // 弹窗控制
         function openShippingModal(cn, items) {
             currentShippableCN = cn;
             currentShippableData = items;
@@ -145,14 +167,19 @@
             document.getElementById('shippingModal').style.display = 'flex';
         }
 
-        function closeModal() { document.getElementById('shippingModal').style.display = 'none'; }
+        function closeModal() { 
+            document.getElementById('shippingModal').style.display = 'none'; 
+            document.getElementById('shippingNote').value = "";
+        }
 
-        // 3. 提交申请
+        // 3. 提交申请 (规则：存入 image_data.applications)
         async function submitShippingRequest() {
             const key = document.getElementById('queryKey').value.trim();
             const note = document.getElementById('shippingNote').value.trim();
             const btn = document.getElementById('confirmShipBtn');
-            btn.innerText = "⏳ 正在提交..."; btn.disabled = true;
+            
+            btn.innerText = "⏳ 魔法发送中..."; 
+            btn.disabled = true;
 
             const applicationData = {
                 type: "排发申请",
@@ -164,17 +191,21 @@
             };
 
             try {
-                // 调用 submit_application RPC
+                // 调用后台配置好的 RPC 提交申请
                 const { error } = await supabaseClient.rpc('submit_application', { 
                     p_query_key: key, 
                     p_data: applicationData 
                 });
                 if (error) throw error;
                 
-                alert("✅ 申请提交成功！请等待团长确认发货。");
+                alert("✅ 申请提交成功！\n请等待团长在后台确认发货。");
                 closeModal();
-                loadShippable(); // 重新加载
-            } catch (e) { alert("申请失败：" + e.message); btn.innerText = "确认申请"; btn.disabled = false; }
+                loadShippable(); // 刷新列表
+            } catch (e) { 
+                alert("申请失败，请检查网络或联系团长：" + e.message); 
+                btn.innerText = "确认申请"; 
+                btn.disabled = false; 
+            }
         }
     </script>
 </body>
