@@ -124,7 +124,15 @@
 
             <div id="tab-logs" class="tab-content hidden">
                 <div class="card">
-                    <h3>🔄 转单日志</h3>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px; border-bottom:1px solid #eee; padding-bottom:10px;">
+                        <h3 style="margin:0;">🔄 转单日志</h3>
+                        <div style="display:flex; align-items:center; gap:12px;">
+                            <label style="font-size:13px; cursor:pointer; user-select:none; font-weight:bold; color:#555;">
+                                <input type="checkbox" id="selectAllLogs" onclick="toggleSelectAllLogs(this.checked)"> 全选
+                            </label>
+                            <button class="btn btn-outline" id="batchDeleteLogsBtn" style="color:var(--danger); border-color:var(--danger); font-size:12px; padding:5px 12px; font-weight:bold;" onclick="batchDeleteTransferLogs()">🗑️ 批量删除</button>
+                        </div>
+                    </div>
                     <div id="transferLogsList"></div>
                 </div>
             </div>
@@ -175,6 +183,7 @@
 
         let currentData = null, currentUser = null, currentSearchKey = '', currentShipAppIndex = -1;
         let selectedIds = new Set();
+        let selectedLogIndices = new Set();
         let transferTargetId = null;
 
         async function checkAuth() {
@@ -199,7 +208,7 @@
             document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('active'); if(b.dataset.tab === t) b.classList.add('active'); });
             document.getElementById('tab-' + t).classList.remove('hidden');
             if(t === 'shipping') renderShippingWorkbench();
-            if(t === 'logs') renderLogs();
+            if(t === 'logs') { selectedLogIndices.clear(); renderLogs(); }
         }
 
         function toggleSelectAll(checked) {
@@ -439,21 +448,65 @@
             window.scrollTo(0,0);
         }
 
+        /* ---------------- 转单日志批量删除逻辑 ---------------- */
+        function toggleSelectAllLogs(checked) {
+            selectedLogIndices.clear();
+            const boxes = document.querySelectorAll('.log-checkbox');
+            boxes.forEach(b => {
+                b.checked = checked;
+                if (checked) selectedLogIndices.add(parseInt(b.dataset.index));
+            });
+            updateLogBatchBtn();
+        }
+
+        function updateLogSelection() {
+            selectedLogIndices.clear();
+            const boxes = document.querySelectorAll('.log-checkbox');
+            let allChecked = boxes.length > 0;
+            boxes.forEach(b => {
+                if (b.checked) {
+                    selectedLogIndices.add(parseInt(b.dataset.index));
+                } else {
+                    allChecked = false;
+                }
+            });
+            const selectAll = document.getElementById('selectAllLogs');
+            if (selectAll) selectAll.checked = allChecked && boxes.length > 0;
+            updateLogBatchBtn();
+        }
+
+        function updateLogBatchBtn() {
+            const btn = document.getElementById('batchDeleteLogsBtn');
+            if (btn) {
+                btn.innerText = selectedLogIndices.size > 0 ? `🗑️ 批量删除 (${selectedLogIndices.size})` : '🗑️ 批量删除';
+            }
+        }
+
         function renderLogs() {
             const logs = (currentData.image_data && currentData.image_data.transfer_logs) || [];
             const list = document.getElementById('transferLogsList');
-            if(logs.length === 0) { list.innerHTML = "<p style='color:#999;'>暂无转单记录</p>"; return; }
+            if(logs.length === 0) {
+                list.innerHTML = "<p style='color:#999;'>暂无转单记录</p>";
+                if(document.getElementById('selectAllLogs')) document.getElementById('selectAllLogs').checked = false;
+                updateLogBatchBtn();
+                return;
+            }
             list.innerHTML = logs.slice().reverse().map((l, index) => {
                 const realIndex = logs.length - 1 - index;
+                const isChecked = selectedLogIndices.has(realIndex) ? 'checked' : '';
                 return `
                     <div style="border-bottom:1px solid #eee; padding:10px 0; display:flex; justify-content:space-between; align-items:center;">
-                        <div style="font-size:13px; line-height:1.6;">
-                            <span style="color:#888; font-size:12px;">[${new Date(l.time).toLocaleString()}]</span> <b>${l.item_name}</b><br>
-                            从 <b style="color:var(--main);">${l.from_cn}</b> 转给 <b style="color:var(--accent);">${l.to_cn}</b> | 备注：${l.note || '-'} | 操作人：${l.operator}
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <input type="checkbox" class="log-checkbox" data-index="${realIndex}" ${isChecked} onchange="updateLogSelection()">
+                            <div style="font-size:13px; line-height:1.6;">
+                                <span style="color:#888; font-size:12px;">[${new Date(l.time).toLocaleString()}]</span> <b>${l.item_name}</b><br>
+                                从 <b style="color:var(--main);">${l.from_cn}</b> 转给 <b style="color:var(--accent);">${l.to_cn}</b> | 备注：${l.note || '-'} | 操作人：${l.operator}
+                            </div>
                         </div>
                         <button class="btn btn-outline" style="padding:4px 10px; color:var(--danger); border-color:var(--danger); font-size:12px; font-weight:bold;" onclick="deleteTransferLog(${realIndex})">🗑️ 删除记录</button>
                     </div>`;
             }).join('');
+            updateLogBatchBtn();
         }
 
         async function deleteTransferLog(realIndex) {
@@ -465,7 +518,34 @@
             }).eq('query_key', currentData.query_key);
             if (!error) {
                 currentData.image_data.transfer_logs = logs;
+                selectedLogIndices.clear();
+                if (document.getElementById('selectAllLogs')) document.getElementById('selectAllLogs').checked = false;
                 renderLogs();
+            } else {
+                alert("删除失败: " + error.message);
+            }
+        }
+
+        async function batchDeleteTransferLogs() {
+            if (selectedLogIndices.size === 0) {
+                alert("请先勾选需要删除的转单记录哦！");
+                return;
+            }
+            if (!confirm(`确认彻底删除选中的 ${selectedLogIndices.size} 条转单记录？`)) return;
+
+            let logs = [...currentData.image_data.transfer_logs];
+            logs = logs.filter((_, idx) => !selectedLogIndices.has(idx));
+
+            const { error } = await supabaseClient.from('leader_data').update({ 
+                image_data: { ...currentData.image_data, transfer_logs: logs } 
+            }).eq('query_key', currentData.query_key);
+
+            if (!error) {
+                currentData.image_data.transfer_logs = logs;
+                selectedLogIndices.clear();
+                if (document.getElementById('selectAllLogs')) document.getElementById('selectAllLogs').checked = false;
+                renderLogs();
+                alert("✅ 批量删除成功！");
             } else {
                 alert("删除失败: " + error.message);
             }
