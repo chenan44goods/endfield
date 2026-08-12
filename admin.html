@@ -23,10 +23,12 @@
         .btn-primary { background: var(--main); color: #fff; }
         .btn-pink { background: var(--pink); color: #fff; }
         .btn-outline { background: #fff; border: 1px solid #ddd; color: #666; }
+        .btn-danger { background: var(--danger); color: #fff; }
         .stats-badge { padding: 4px 12px; border-radius: 20px; background: #eee; font-size: 12px; margin-right: 8px; display: inline-block; font-weight: bold; }
         .hidden { display: none !important; }
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
         .modal { background: #fff; padding: 20px; border-radius: 15px; width: 90%; max-width: 400px; }
+        .batch-bar { background: #fffbe6; border: 1px solid #ffe58f; padding: 10px 15px; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; gap: 15px; }
     </style>
 </head>
 <body>
@@ -36,9 +38,9 @@
     <div id="loginSection" class="hidden">
         <div class="card" style="max-width:350px; margin: 80px auto; padding: 30px;">
             <h2 style="text-align:center">🎀 团长登录</h2>
-            <input type="email" id="email" placeholder="邮箱">
-            <input type="password" id="pw" placeholder="密码">
-            <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="login()">进入后台</button>
+            <input type="email" id="email" placeholder="邮箱" style="width:100%; margin-bottom:10px">
+            <input type="password" id="pw" placeholder="密码" style="width:100%; margin-bottom:10px">
+            <button class="btn btn-primary" style="width:100%" onclick="login()">进入后台</button>
         </div>
     </div>
 
@@ -57,7 +59,7 @@
         </div>
 
         <div class="main-content">
-            <!-- 排表管理 -->
+            <!-- 1. 排表管理 -->
             <div id="tab-overview" class="tab-content">
                 <div class="card"><div id="statsArea"></div></div>
                 <div class="grid">
@@ -84,14 +86,25 @@
                         <button class="btn btn-primary" onclick="applySearchFilter()">搜索</button>
                         <button class="btn btn-pink" onclick="openBatchImgModal()">🖼️ 补图</button>
                     </div>
+
+                    <!-- 批量操作栏 (新增功能) -->
+                    <div id="batchBar" class="batch-bar hidden">
+                        <span id="selectedTip">已选择 0 条记录</span>
+                        <button class="btn btn-outline" style="padding:4px 10px;" onclick="openBatchStatusModal()">✏️ 批量改状态</button>
+                        <button class="btn btn-outline" style="padding:4px 10px; color:var(--danger)" onclick="batchDeleteItems()">🗑️ 批量删除</button>
+                    </div>
+
                     <table>
-                        <thead><tr><th>图</th><th>谷名</th><th>CN</th><th>金额</th><th>状态</th><th>操作</th></tr></thead>
+                        <thead><tr>
+                            <th style="width:30px"><input type="checkbox" onclick="toggleSelectAll(this.checked)"></th>
+                            <th>图</th><th>谷名</th><th>CN</th><th>金额</th><th>状态</th><th>操作</th>
+                        </tr></thead>
                         <tbody id="tbody"></tbody>
                     </table>
                 </div>
             </div>
 
-            <!-- 📦 排发工作台 -->
+            <!-- 2. 排发工作台 (新增核心功能) -->
             <div id="tab-shipping" class="tab-content hidden">
                 <div style="display:flex; gap:15px; margin-bottom:15px;">
                     <div class="card" style="flex:1; margin-bottom:0; text-align:center;"><h4 style="margin:0;color:#666">📦 待处理申请</h4><h2 id="pendingShipCount">0</h2></div>
@@ -109,16 +122,16 @@
                 </div>
             </div>
 
-            <!-- 其余页面保持逻辑 -->
+            <!-- 其余页面 -->
             <div id="tab-logs" class="tab-content hidden"><div class="card"><h3>🔄 转单日志</h3><div id="transferLogsList"></div></div></div>
             <div id="tab-settings" class="tab-content hidden"><div class="card"><h3>⚙️ 设置</h3><p>密钥：<strong id="dispKey">-</strong></p></div></div>
         </div>
     </div>
 
-    <!-- 确认发货弹窗 -->
+    <!-- 弹窗部分 -->
     <div class="modal-overlay" id="confirmShipModal">
         <div class="modal">
-            <h3>✅ 确认发货完成</h3>
+            <h3>✅ 确认发货</h3>
             <p id="shipConfirmInfo" style="font-size:14px; line-height:1.5"></p>
             <div style="display:flex; gap:10px; margin-top:20px">
                 <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('confirmShipModal').style.display='none'">取消</button>
@@ -127,7 +140,16 @@
         </div>
     </div>
 
-    <!-- 批量补图弹窗 (原有功能) -->
+    <div class="modal-overlay" id="batchStatusModal">
+        <div class="modal">
+            <h3>✏️ 批量修改状态</h3>
+            <select id="batchNewStatus" style="width:100%; padding:10px; margin-top:10px; border-radius:8px;">
+                <option>未出荷</option><option>已下单未到货</option><option>回国中</option><option>已到货</option><option>可排发</option><option>已排发</option><option>未付款</option>
+            </select>
+            <button class="btn btn-primary" style="width:100%; margin-top:15px" onclick="executeBatchStatusUpdate()">确认修改</button>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="batchImgModal">
         <div class="modal"><h3>🖼️ 批量补图</h3><input type="file" id="batchImgFile" accept="image/*"><button class="btn btn-primary" style="width:100%; margin-top:15px" onclick="executeBatchImgUpdate()">✅ 确认补图</button></div>
     </div>
@@ -138,8 +160,8 @@
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let currentData = null, currentUser = null, currentSearchKey = '', currentShipAppIndex = -1;
+        let selectedIds = new Set();
 
-        // --- 核心鉴权 ---
         async function checkAuth() {
             const { data: { user } } = await supabaseClient.auth.getUser();
             if (!user) { document.getElementById('loginSection').classList.remove('hidden'); document.getElementById('debug-bar').style.display='none'; return; }
@@ -150,13 +172,14 @@
             const { data } = await supabaseClient.from('leader_data').select('*');
             if (data && data[0]) { currentData = data[0]; renderUI(); document.getElementById('debug-bar').style.display='none'; }
         }
+
         async function login() { 
             const { error } = await supabaseClient.auth.signInWithPassword({ email:document.getElementById('email').value, password:document.getElementById('pw').value });
             if (error) alert(error.message); else location.reload();
         }
+
         async function logout() { await supabaseClient.auth.signOut(); location.reload(); }
 
-        // --- 标签页切换 ---
         function switchTab(t) {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
             document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('active'); if(b.dataset.tab === t) b.classList.add('active'); });
@@ -164,7 +187,37 @@
             if(t === 'shipping') renderShippingWorkbench();
         }
 
-        // --- 📦 排发工作台逻辑 ---
+        // --- 批量选择逻辑 ---
+        function toggleSelectAll(checked) {
+            const boxes = document.querySelectorAll('.item-checkbox');
+            boxes.forEach(b => { b.checked = checked; updateSelection(b.dataset.id, checked); });
+        }
+        function updateSelection(id, checked) {
+            if (checked) selectedIds.add(id); else selectedIds.delete(id);
+            const bar = document.getElementById('batchBar');
+            if (selectedIds.size > 0) { bar.classList.remove('hidden'); document.getElementById('selectedTip').innerText = `已选择 ${selectedIds.size} 条记录`; }
+            else bar.classList.add('hidden');
+        }
+
+        // --- 批量改状态逻辑 ---
+        function openBatchStatusModal() { document.getElementById('batchStatusModal').style.display = 'flex'; }
+        async function executeBatchStatusUpdate() {
+            const newStatus = document.getElementById('batchNewStatus').value;
+            let groupData = [...currentData.group_data];
+            groupData.forEach(item => { if(selectedIds.has(item.item_id)) item.status = newStatus; });
+            const { error } = await supabaseClient.from('leader_data').update({ group_data: groupData }).eq('query_key', currentData.query_key);
+            if (!error) location.reload(); else alert("修改失败");
+        }
+
+        // --- 批量删除逻辑 ---
+        async function batchDeleteItems() {
+            if(!confirm(`确定要彻底删除选中的 ${selectedIds.size} 条记录吗？`)) return;
+            let groupData = currentData.group_data.filter(item => !selectedIds.has(item.item_id));
+            const { error } = await supabaseClient.from('leader_data').update({ group_data: groupData }).eq('query_key', currentData.query_key);
+            if (!error) location.reload();
+        }
+
+        // --- 排发工作台逻辑 ---
         let shipViewMode = 'pending';
         function toggleShipView(mode) {
             shipViewMode = mode;
@@ -172,69 +225,42 @@
             document.getElementById('viewDoneBtn').className = mode==='done' ? 'btn btn-primary' : 'btn btn-outline';
             renderShippingWorkbench();
         }
-
         function renderShippingWorkbench() {
             const apps = (currentData.image_data && currentData.image_data.applications) || [];
             const pending = apps.filter(a => a.status === '待处理');
             const done = apps.filter(a => a.status === '已发货');
-
             document.getElementById('pendingShipCount').innerText = pending.length;
             document.getElementById('completedShipCount').innerText = done.length;
 
             const targetList = (shipViewMode === 'pending' ? pending : done).sort((a,b) => new Date(b.time) - new Date(a.time));
             const tbody = document.getElementById('shipBody');
-            
-            if(targetList.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:#999">🎉 当前没有记录</td></tr>`;
-                return;
-            }
+            if(targetList.length === 0) { tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px;">🎉 当前没有记录</td></tr>`; return; }
 
-            tbody.innerHTML = targetList.map((app, index) => {
+            tbody.innerHTML = targetList.map((app) => {
                 const itemsDesc = app.items.map(i => `${i.name} x${i.quantity}`).join('<br>');
-                const timeStr = new Date(app.time).toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
-                const opStr = shipViewMode === 'pending' ? `<button class="btn btn-primary" onclick="openShipConfirm(${apps.indexOf(app)})">确认发货</button>` : `<small style="color:#666">完成：${new Date(app.completed_time).toLocaleDateString()}</small>`;
-                return `<tr><td>${timeStr}</td><td><strong>${app.cn}</strong></td><td>${itemsDesc}</td><td>${app.note || '-'}</td><td>${opStr}</td></tr>`;
+                const opStr = shipViewMode === 'pending' ? `<button class="btn btn-primary" onclick="openShipConfirm('${app.time}', '${app.cn}')">确认发货</button>` : `<small>完成：${new Date(app.completed_time).toLocaleDateString()}</small>`;
+                return `<tr><td>${new Date(app.time).toLocaleString()}</td><td><strong>${app.cn}</strong></td><td>${itemsDesc}</td><td>${app.note || '-'}</td><td>${opStr}</td></tr>`;
             }).join('');
         }
-
-        function openShipConfirm(idx) {
-            currentShipAppIndex = idx;
-            const app = currentData.image_data.applications[idx];
+        function openShipConfirm(time, cn) {
+            const apps = currentData.image_data.applications;
+            currentShipAppIndex = apps.findIndex(a => a.time === time && a.cn === cn);
+            const app = apps[currentShipAppIndex];
             document.getElementById('shipConfirmInfo').innerHTML = `确认已为 <strong>${app.cn}</strong> 发出以下谷子吗？<br><br>${app.items.map(i => `• ${i.name} x${i.quantity}`).join('<br>')}`;
             document.getElementById('confirmShipModal').style.display = 'flex';
         }
-
         async function executeShipment() {
-            const btn = document.getElementById('finalShipBtn');
-            btn.innerText = "⏳ 正在同步状态..."; btn.disabled = true;
-
-            const app = currentData.image_data.applications[currentShipAppIndex];
-            const now = new Date().toISOString();
-
-            // 1. 更新申请状态
-            let apps = [...currentData.image_data.applications];
-            apps[currentShipAppIndex].status = "已发货";
-            apps[currentShipAppIndex].completed_time = now;
-
-            // 2. 更新排单状态 (已申请发货 -> 已排发)
+            const apps = [...currentData.image_data.applications];
+            const app = apps[currentShipAppIndex];
+            app.status = "已发货"; app.completed_time = new Date().toISOString();
             let groupData = [...currentData.group_data];
-            const itemIdsToUpdate = new Set(app.items.map(i => i.item_id));
-            groupData.forEach(item => {
-                if(itemIdsToUpdate.has(item.item_id)) item.status = "已排发";
-            });
-
-            try {
-                const { error } = await supabaseClient.from('leader_data').update({ 
-                    group_data: groupData, 
-                    image_data: { ...currentData.image_data, applications: apps }
-                }).eq('query_key', currentData.query_key);
-                if (error) throw error;
-                alert("✅ 发货确认成功！");
-                location.reload();
-            } catch (e) { alert("操作失败"); btn.disabled = false; }
+            const itemIds = app.items.map(i => i.item_id);
+            groupData.forEach(item => { if(itemIds.includes(item.item_id)) item.status = "已排发"; });
+            const { error } = await supabaseClient.from('leader_data').update({ group_data: groupData, image_data: { ...currentData.image_data, applications: apps } }).eq('query_key', currentData.query_key);
+            if (!error) location.reload();
         }
 
-        // --- 排单管理基础渲染 ---
+        // --- 渲染 UI ---
         function renderUI() {
             document.getElementById('dispKey').innerText = currentData.query_key;
             let list = currentData.group_data || [];
@@ -245,8 +271,9 @@
             const total = list.reduce((s, i) => s + (parseFloat(i.price) * parseInt(i.quantity)), 0);
             document.getElementById('statsArea').innerHTML = `<span class="stats-badge">项数: ${list.length}</span><span class="stats-badge">金额: ￥${total.toFixed(2)}</span>`;
             const tbody = document.getElementById('tbody');
-            tbody.innerHTML = list.slice().reverse().slice(0, 300).map(item => `
-                <tr>
+            tbody.innerHTML = list.slice().reverse().map(item => `
+                <tr style="${item.status==='已排发'?'opacity:0.5':''}">
+                    <td><input type="checkbox" class="item-checkbox" data-id="${item.item_id}" onchange="updateSelection('${item.item_id}', this.checked)"></td>
                     <td><img src="${item.image_url ? item.image_url+'?width=80' : ''}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;"></td>
                     <td>${item.name}</td><td>${item.cn}</td><td>￥${item.price}x${item.quantity}</td>
                     <td><span class="stats-badge" style="margin:0">${item.status}</span></td>
@@ -254,7 +281,6 @@
                 </tr>`).join('');
         }
 
-        // --- 批量导入 (Excel Tab格式) ---
         async function previewImport() {
             const raw = document.getElementById('csvInput').value.trim();
             if(!raw) return;
@@ -276,7 +302,6 @@
             location.reload();
         }
 
-        // --- 单条保存 ---
         async function saveItem() {
             const newItem = {
                 item_id: document.getElementById('editItemId').value || Date.now() + '_' + Math.random().toString(36).substr(2, 4),
@@ -285,7 +310,7 @@
                 price: parseFloat(document.getElementById('itemPrice').value) || 0,
                 quantity: parseInt(document.getElementById('itemQty').value) || 1,
                 status: document.getElementById('itemStatus').value,
-                country: document.getElementById('itemCountry').value,
+                country: "日本",
                 image_url: "",
                 created_at: new Date().toISOString()
             };
