@@ -23,11 +23,12 @@
         .stats-badge { padding: 5px 10px; border-radius: 20px; background: #eee; font-size: 12px; margin-right: 5px; }
         #initGuide { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: #fff; display: flex; justify-content: center; align-items: center; z-index: 999; }
         .img-preview { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; }
-        .hidden { display: none; }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
 
+    <!-- 登录模块 -->
     <div id="loginSection" class="login-box">
         <h2 style="text-align:center">🎀 团长登录</h2>
         <input type="email" id="email" placeholder="邮箱">
@@ -35,6 +36,7 @@
         <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="login()">登录</button>
     </div>
 
+    <!-- 初始化引导 -->
     <div id="initGuide" class="hidden">
         <div class="card" style="color:#333; width: 300px;">
             <h3>✨ 欢迎新团长</h3>
@@ -44,12 +46,13 @@
         </div>
     </div>
 
+    <!-- 后台管理主体 -->
     <div id="adminSection" class="hidden">
         <nav>
             <strong id="roleTag">团长后台</strong>
             <div>
                 <span id="userEmail" style="margin-right:15px; font-size:14px"></span>
-                <button class="btn btn-danger" onclick="supabaseClient.auth.signOut().then(()=>location.reload())">退出</button>
+                <button class="btn btn-danger" onclick="logout()">退出</button>
             </div>
         </nav>
         <div class="main-content">
@@ -109,14 +112,16 @@
     </div>
 
     <script>
+        // ======= 【此处填入你自己的信息】 =======
         const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
-        // 修复：修改变量名
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const SUPABASE_KEY = '这里填入那串eyJ开头的超长密钥'; 
+        // =====================================
 
+        const supabaseClient = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y);
         let currentData = null; 
         let currentUser = null;
 
+        // 登录
         async function login() {
             const email = document.getElementById('email').value;
             const password = document.getElementById('pw').value;
@@ -125,23 +130,45 @@
             else checkAuth();
         }
 
+        // 退出
+        async function logout() {
+            await supabaseClient.auth.signOut();
+            location.reload();
+        }
+
+        // 权限与状态检查（已修正逻辑）
         async function checkAuth() {
-            const { data: { user } } = await supabaseClient.auth.getUser();
-            if (!user) return;
+            const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+            
+            if (!user || authError) {
+                document.getElementById('loginSection').classList.remove('hidden');
+                document.getElementById('adminSection').classList.add('hidden');
+                document.getElementById('initGuide').classList.add('hidden');
+                return;
+            }
+
             currentUser = user;
             document.getElementById('loginSection').classList.add('hidden');
             document.getElementById('adminSection').classList.remove('hidden');
             document.getElementById('userEmail').innerText = user.email;
 
-            const { data: records } = await supabaseClient.from('leader_data').select('*');
+            const { data: records, error: dbError } = await supabaseClient.from('leader_data').select('*');
+            
+            if (dbError) {
+                console.error(dbError.message);
+                return;
+            }
+
             if (records && records.length > 0) {
                 currentData = records[0];
+                document.getElementById('initGuide').classList.add('hidden');
                 renderUI();
             } else {
                 document.getElementById('initGuide').classList.remove('hidden');
             }
         }
 
+        // 初始化系统
         async function initSystem() {
             const key = document.getElementById('newQueryKey').value.trim();
             if(!key) return alert("请输入密钥");
@@ -150,6 +177,7 @@
             else location.reload();
         }
 
+        // 渲染界面
         function renderUI() {
             const isOwner = currentData.user_id === currentUser.id;
             if (isOwner) {
@@ -181,6 +209,7 @@
             `).join('');
         }
 
+        // 保存/上传
         async function saveItem() {
             const file = document.getElementById('itemFile').files[0];
             let imageUrl = document.getElementById('editItemId').dataset.img || "";
@@ -257,6 +286,7 @@
             document.getElementById('itemName').value = "";
             document.getElementById('itemCN').value = "";
             document.getElementById('itemFile').value = "";
+            document.getElementById('editItemId').dataset.img = "";
         }
 
         checkAuth();
