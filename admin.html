@@ -16,7 +16,8 @@
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { border-bottom: 1px solid #eee; padding: 10px; text-align: left; font-size: 14px; }
         input, select { padding: 8px; border: 1px solid #ddd; border-radius: 6px; margin: 5px 0; width: 100%; box-sizing: border-box; }
-        .btn { padding: 8px 16px; border-radius: 6px; cursor: pointer; border: none; font-weight: bold; }
+        .btn { padding: 8px 16px; border-radius: 6px; cursor: pointer; border: none; font-weight: bold; transition: 0.2s; }
+        .btn:active { transform: scale(0.95); }
         .btn-primary { background: var(--main); color: #fff; }
         .btn-pink { background: var(--pink); color: #fff; }
         .btn-danger { background: #ff7675; color: #fff; }
@@ -31,9 +32,16 @@
     <!-- 登录模块 -->
     <div id="loginSection" class="login-box">
         <h2 style="text-align:center">🎀 团长登录</h2>
-        <input type="email" id="email" placeholder="邮箱">
-        <input type="password" id="pw" placeholder="密码">
-        <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="login()">登录</button>
+        <div style="margin-bottom:10px">
+            <label>邮箱</label>
+            <input type="email" id="email" placeholder="请输入你的团长账号">
+        </div>
+        <div style="margin-bottom:10px">
+            <label>密码</label>
+            <input type="password" id="pw" placeholder="请输入密码">
+        </div>
+        <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="login()">立即登录</button>
+        <p id="loginStatus" style="font-size:12px; color:red; text-align:center; margin-top:10px"></p>
     </div>
 
     <!-- 初始化引导 -->
@@ -49,7 +57,7 @@
     <!-- 后台管理主体 -->
     <div id="adminSection" class="hidden">
         <nav>
-            <strong id="roleTag">团长后台</strong>
+            <strong id="roleTag">载入中...</strong>
             <div>
                 <span id="userEmail" style="margin-right:15px; font-size:14px"></span>
                 <button class="btn btn-danger" onclick="logout()">退出</button>
@@ -93,7 +101,7 @@
                     <h3>⚙️ 团务设置</h3>
                     <p>查询密钥：<strong id="dispKey" style="color:var(--main)"></strong></p>
                     <hr>
-                    <h4>副团长管理 (上限3人)</h4>
+                    <h4>副团长管理</h4>
                     <div id="coAdminList"></div>
                     <div style="margin-top:10px">
                         <input type="email" id="newAdminEmail" placeholder="输入副团长账号邮箱">
@@ -112,35 +120,48 @@
     </div>
 
     <script>
-        // ======= 【此处填入你自己的信息】 =======
+        // ======= 信息已自动填入 =======
         const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
-        const SUPABASE_KEY = '这里填入那串eyJ开头的超长密钥'; 
-        // =====================================
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y'; 
+        // ============================
 
-        const supabaseClient = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y);
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         let currentData = null; 
         let currentUser = null;
 
-        // 登录
+        // 登录函数
         async function login() {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('pw').value;
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('pw').value.trim();
+            const statusBox = document.getElementById('loginStatus');
+            
+            if(!email || !password) {
+                statusBox.innerText = "请完整输入邮箱和密码";
+                return;
+            }
+            
+            statusBox.innerText = "正在验证身份...";
             const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-            if (error) alert("登录失败：" + error.message);
-            else checkAuth();
+            
+            if (error) {
+                statusBox.innerText = "登录失败：" + error.message;
+            } else {
+                statusBox.style.color = "green";
+                statusBox.innerText = "登录成功，正在进入...";
+                setTimeout(() => checkAuth(), 500);
+            }
         }
 
-        // 退出
         async function logout() {
             await supabaseClient.auth.signOut();
             location.reload();
         }
 
-        // 权限与状态检查（已修正逻辑）
+        // 核心检查逻辑
         async function checkAuth() {
-            const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+            const { data: { user } } = await supabaseClient.auth.getUser();
             
-            if (!user || authError) {
+            if (!user) {
                 document.getElementById('loginSection').classList.remove('hidden');
                 document.getElementById('adminSection').classList.add('hidden');
                 document.getElementById('initGuide').classList.add('hidden');
@@ -152,23 +173,19 @@
             document.getElementById('adminSection').classList.remove('hidden');
             document.getElementById('userEmail').innerText = user.email;
 
-            const { data: records, error: dbError } = await supabaseClient.from('leader_data').select('*');
+            // 获取数据
+            const { data: records, error } = await supabaseClient.from('leader_data').select('*');
             
-            if (dbError) {
-                console.error(dbError.message);
-                return;
-            }
-
             if (records && records.length > 0) {
                 currentData = records[0];
                 document.getElementById('initGuide').classList.add('hidden');
                 renderUI();
             } else {
+                // 如果登录了但查不到数据，才显示初始化
                 document.getElementById('initGuide').classList.remove('hidden');
             }
         }
 
-        // 初始化系统
         async function initSystem() {
             const key = document.getElementById('newQueryKey').value.trim();
             if(!key) return alert("请输入密钥");
@@ -177,119 +194,18 @@
             else location.reload();
         }
 
-        // 渲染界面
         function renderUI() {
             const isOwner = currentData.user_id === currentUser.id;
+            const isCoAdmin = (currentData.admin_ids || []).includes(currentUser.id);
+            
             if (isOwner) {
                 document.getElementById('ownerSettings').classList.remove('hidden');
                 document.getElementById('dispKey').innerText = currentData.query_key;
                 renderAdmins();
             }
-            document.getElementById('roleTag').innerText = isOwner ? "团长后台" : "副团长后台";
+            document.getElementById('roleTag').innerText = isOwner ? "🎀 团长管理后台" : "👩‍💻 副团长管理后台";
+            
             const list = currentData.group_data || [];
             const totalSum = list.reduce((s, i) => s + (i.price * i.quantity), 0);
             const statusCount = {};
             list.forEach(i => statusCount[i.status] = (statusCount[i.status] || 0) + 1);
-            let statsHtml = `<strong>总项数: ${list.length}</strong> | <strong>总金额: ￥${totalSum.toFixed(2)}</strong><br><div style="margin-top:10px">`;
-            for(let s in statusCount) statsHtml += `<span class="stats-badge">${s}: ${statusCount[s]}</span>`;
-            document.getElementById('statsArea').innerHTML = statsHtml + "</div>";
-            const tbody = document.getElementById('tbody');
-            tbody.innerHTML = list.map((item) => `
-                <tr>
-                    <td><img src="${item.image_url || ''}" class="img-preview"></td>
-                    <td>${item.name}<br><small>${item.country}</small></td>
-                    <td>${item.cn}</td>
-                    <td>￥${item.price} × ${item.quantity}</td>
-                    <td><span class="stats-badge">${item.status}</span></td>
-                    <td>
-                        <button onclick="editItem('${item.item_id}')">编辑</button>
-                        <button style="color:red" onclick="deleteItem('${item.item_id}')">删除</button>
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        // 保存/上传
-        async function saveItem() {
-            const file = document.getElementById('itemFile').files[0];
-            let imageUrl = document.getElementById('editItemId').dataset.img || "";
-            if (file) {
-                const fileName = `${Date.now()}_${file.name}`;
-                const { data, error } = await supabaseClient.storage.from('images').upload(fileName, file);
-                if (error) return alert("图片上传失败");
-                imageUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
-            }
-            const newItem = {
-                item_id: document.getElementById('editItemId').value || Date.now().toString(),
-                name: document.getElementById('itemName').value,
-                country: document.getElementById('itemCountry').value,
-                price: parseFloat(document.getElementById('itemPrice').value) || 0,
-                quantity: parseInt(document.getElementById('itemQty').value) || 1,
-                cn: document.getElementById('itemCN').value,
-                status: document.getElementById('itemStatus').value,
-                image_url: imageUrl,
-                storage_expiry: document.getElementById('itemExpiry').value || null,
-                created_at: new Date().toISOString()
-            };
-            let newList = [...(currentData.group_data || [])];
-            const idx = newList.findIndex(i => i.item_id === newItem.item_id);
-            if (idx > -1) newList[idx] = newItem; else newList.push(newItem);
-            const { error } = await supabaseClient.from('leader_data').update({ group_data: newList }).eq('id', currentData.id);
-            if (error) alert("保存失败"); else { alert("保存成功！"); location.reload(); }
-        }
-
-        function editItem(id) {
-            const item = currentData.group_data.find(i => i.item_id === id);
-            document.getElementById('editItemId').value = item.item_id;
-            document.getElementById('editItemId').dataset.img = item.image_url;
-            document.getElementById('itemName').value = item.name;
-            document.getElementById('itemCountry').value = item.country;
-            document.getElementById('itemCN').value = item.cn;
-            document.getElementById('itemPrice').value = item.price;
-            document.getElementById('itemQty').value = item.quantity;
-            document.getElementById('itemStatus').value = item.status;
-            document.getElementById('itemExpiry').value = item.storage_expiry || "";
-            checkStatusChange(item.status);
-            window.scrollTo(0, 0);
-        }
-
-        async function deleteItem(id) {
-            if(!confirm("确定删除吗？")) return;
-            const newList = currentData.group_data.filter(i => i.item_id !== id);
-            await supabaseClient.from('leader_data').update({ group_data: newList }).eq('id', currentData.id);
-            location.reload();
-        }
-
-        function checkStatusChange(val) {
-            const area = document.getElementById('expiryInput');
-            if(val === "可排发") area.classList.remove('hidden'); else area.classList.add('hidden');
-        }
-
-        async function addAdmin() {
-            const email = document.getElementById('newAdminEmail').value;
-            const { data, error } = await supabaseClient.rpc('add_co_admin', { p_query_key: currentData.query_key, p_email: email });
-            alert(data || error.message); location.reload();
-        }
-
-        function renderAdmins() {
-            const list = currentData.admin_ids || [];
-            document.getElementById('coAdminList').innerHTML = list.length ? list.map(id => `<div>UID: ${id.substring(0,8)}... <button onclick="removeAdmin('${id}')">移除</button></div>`).join('') : "暂无副团长";
-        }
-
-        async function removeAdmin(uid) {
-            await supabaseClient.rpc('remove_co_admin', { p_query_key: currentData.query_key, p_admin_id: uid });
-            location.reload();
-        }
-
-        function clearForm() {
-            document.getElementById('editItemId').value = "";
-            document.getElementById('itemName').value = "";
-            document.getElementById('itemCN').value = "";
-            document.getElementById('itemFile').value = "";
-            document.getElementById('editItemId').dataset.img = "";
-        }
-
-        checkAuth();
-    </script>
-</body>
-</html>
