@@ -7,19 +7,20 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root { --main: #6c5ce7; --bg: #f0f2f5; --pink: #ffb7c5; --accent: #ff85a2; --danger: #ff4d4f; --success: #28a745; }
-        body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); margin: 0; display: flex; flex-direction: column; height: 100vh; color: #333; }
+        * { box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); margin: 0; display: flex; flex-direction: column; min-height: 100vh; color: #333; }
         #debug-bar { background: #333; color: #fff; font-size: 12px; text-align: center; padding: 8px; position: fixed; top: 0; width: 100%; z-index: 9999; }
-        nav { background: #fff; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; margin-top: 30px; }
+        nav { background: #fff; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; margin-top: 32px; }
         .tabs { background: #fff; display: flex; padding: 0 20px; border-bottom: 1px solid #ddd; gap: 20px; position: sticky; top: 0; z-index: 100; overflow-x: auto; }
         .tab-btn { padding: 12px 10px; border-bottom: 3px solid transparent; cursor: pointer; font-weight: bold; color: #666; font-size: 14px; white-space: nowrap; }
         .tab-btn.active { color: var(--main); border-bottom-color: var(--main); }
         .main-content { flex: 1; overflow-y: auto; padding: 20px; }
-        .card { background: #fff; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; }
+        .card { background: #fff; padding: 18px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; }
-        .table-wrap { overflow-x: auto; background: #fff; border-radius: 12px; padding: 10px; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 600px; }
+        .table-wrap { overflow-x: auto; background: #fff; border-radius: 12px; padding: 15px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 650px; }
         th, td { border-bottom: 1px solid #eee; padding: 12px 10px; text-align: left; vertical-align: top; }
-        .btn { padding: 8px 16px; border-radius: 8px; cursor: pointer; border: none; font-weight: bold; transition: 0.2s; white-space: nowrap; font-size: 13px; }
+        .btn { padding: 8px 16px; border-radius: 8px; cursor: pointer; border: none; font-weight: bold; transition: 0.2s; white-space: nowrap; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; }
         .btn-primary { background: var(--main); color: #fff; }
         .btn-pink { background: var(--pink); color: #fff; }
         .btn-outline { background: #fff; border: 1px solid #ddd; color: #666; }
@@ -27,32 +28,37 @@
         .stats-badge { padding: 4px 12px; border-radius: 20px; background: #eee; font-size: 12px; margin-right: 8px; display: inline-block; font-weight: bold; }
         .hidden { display: none !important; }
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; }
-        .modal { background: #fff; padding: 20px; border-radius: 15px; width: 90%; max-width: 400px; }
-        .batch-bar { background: #fffbe6; border: 1px solid #ffe58f; padding: 10px 15px; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .modal { background: #fff; padding: 20px; border-radius: 15px; width: 90%; max-width: 420px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
+        .batch-bar { background: #fffbe6; border: 1px solid #ffe58f; padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         
-        /* 谷子明细展示样式：支持多排显示，单次最多10个 */
-        .items-grid { display: flex; flex-wrap: wrap; gap: 5px; max-width: 800px; }
-        .item-tag { background: #f0f2f5; padding: 2px 8px; border-radius: 4px; font-size: 12px; color: #555; border: 1px solid #e8e8e8; white-space: nowrap; }
+        /* 谷子明细展示样式：多排结构，每排最多10个 */
+        .items-grid { display: flex; flex-wrap: wrap; gap: 6px; max-width: 800px; }
+        .item-tag { background: #f0f2f5; padding: 3px 8px; border-radius: 5px; font-size: 12px; color: #444; border: 1px solid #e2e8f0; white-space: nowrap; font-weight: 500; }
     </style>
 </head>
 <body>
 
-    <div id="debug-bar">⌛ 正在同步全团数据...</div>
+    <div id="debug-bar">⌛ 正在同步全团 Supabase 数据...</div>
 
+    <!-- 登录区域 -->
     <div id="loginSection" class="hidden">
-        <div class="card" style="max-width:350px; margin: 80px auto; padding: 30px;">
-            <h2 style="text-align:center">🎀 团长登录</h2>
-            <input type="email" id="email" placeholder="邮箱" style="width:100%; margin-bottom:10px; padding:8px; border:1px solid #ddd; border-radius:5px;">
-            <input type="password" id="pw" placeholder="密码" style="width:100%; margin-bottom:10px; padding:8px; border:1px solid #ddd; border-radius:5px;">
-            <button class="btn btn-primary" style="width:100%" onclick="login()">进入后台</button>
+        <div class="card" style="max-width:360px; margin: 80px auto; padding: 30px; text-align:center;">
+            <h2 style="margin-top:0;">🎀 团长登录</h2>
+            <p style="font-size:12px; color:#888; margin-bottom:20px;">请输入团长账号与密码进入后台系统</p>
+            <input type="email" id="email" placeholder="邮箱" style="width:100%; margin-bottom:12px; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px;">
+            <input type="password" id="pw" placeholder="密码" style="width:100%; margin-bottom:15px; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px;">
+            <button class="btn btn-primary" style="width:100%; padding:10px;" onclick="login()">进入后台</button>
         </div>
     </div>
 
+    <!-- 管理后台主界面 -->
     <div id="adminSection" class="hidden">
         <nav>
-            <strong id="roleTag">团长后台</strong>
-            <span id="userEmail" style="font-size:12px; color:#666"></span>
-            <button class="btn btn-outline" onclick="logout()">退出</button>
+            <strong id="roleTag" style="font-size:16px;">👑 团长后台管理系统</strong>
+            <div>
+                <span id="userEmail" style="font-size:12px; color:#666; margin-right:12px;"></span>
+                <button class="btn btn-outline" style="padding:4px 10px; font-size:12px;" onclick="logout()">退出登录</button>
+            </div>
         </nav>
 
         <div class="tabs">
@@ -63,52 +69,57 @@
         </div>
 
         <div class="main-content">
+            <!-- Tab 1: 排表管理 -->
             <div id="tab-overview" class="tab-content">
                 <div class="card"><div id="statsArea"></div></div>
                 <div class="grid">
                     <div class="card">
-                        <h3>✍️ 录入/编辑</h3>
+                        <h3>✍️ 录入 / 编辑谷子</h3>
                         <input type="hidden" id="editItemId">
-                        <input type="text" id="itemName" placeholder="谷子名称" style="width:100%; margin-bottom:5px; padding:5px;">
-                        <input type="text" id="itemCN" placeholder="团员CN" style="width:100%; margin-bottom:5px; padding:5px;">
-                        <div style="display:flex; gap:5px; margin-bottom:5px"><input type="number" id="itemPrice" placeholder="单价" style="flex:1; padding:5px;"><input type="number" id="itemQty" value="1" style="width:50px; padding:5px;"></div>
-                        <select id="itemStatus" style="width:100%; padding:5px;">
+                        <input type="text" id="itemName" placeholder="谷子名称" style="width:100%; margin-bottom:8px; padding:8px; border:1px solid #ddd; border-radius:6px;">
+                        <input type="text" id="itemCN" placeholder="团员 CN" style="width:100%; margin-bottom:8px; padding:8px; border:1px solid #ddd; border-radius:6px;">
+                        <div style="display:flex; gap:8px; margin-bottom:8px">
+                            <input type="number" id="itemPrice" placeholder="单价 (元)" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:6px;">
+                            <input type="number" id="itemQty" value="1" placeholder="数量" style="width:70px; padding:8px; border:1px solid #ddd; border-radius:6px;">
+                        </div>
+                        <select id="itemStatus" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
                             <option>未出荷</option><option>已下单未到货</option><option>回国中</option><option>已到货</option><option>可排发</option><option>已申请发货</option><option>已排发</option><option>未付款</option>
                         </select>
-                        <button class="btn btn-pink" style="width:100%; margin-top:10px" onclick="saveItem()">保存记录</button>
+                        <button class="btn btn-pink" style="width:100%; margin-top:12px; padding:10px;" onclick="saveItem()">保存谷子记录</button>
                     </div>
                     <div class="card">
-                        <h3>📥 批量导入</h3>
-                        <textarea id="csvInput" rows="5" placeholder="直接粘贴 Excel 内容..." style="width:100%; box-sizing:border-box; padding:5px; border-radius:5px; border:1px solid #ddd;"></textarea>
-                        <button class="btn btn-primary" style="width:100%; margin-top:5px" onclick="previewImport()">识别并导入</button>
+                        <h3>📥 Excel 批量导入</h3>
+                        <textarea id="csvInput" rows="6" placeholder="直接粘贴 Excel 导出的表格数据..." style="width:100%; padding:8px; border-radius:6px; border:1px solid #ddd; font-size:12px;"></textarea>
+                        <button class="btn btn-primary" style="width:100%; margin-top:8px; padding:10px;" onclick="previewImport()">识别并批量导入</button>
                     </div>
                 </div>
 
                 <div class="card table-wrap">
-                    <div style="display:flex; gap:10px; margin-bottom:10px">
-                        <input type="text" id="universalSearchInput" placeholder="搜 CN 或谷子..." style="flex:1; padding:5px; border:1px solid #ddd; border-radius:5px;" onkeypress="if(event.keyCode==13) applySearchFilter()">
+                    <div style="display:flex; gap:10px; margin-bottom:12px">
+                        <input type="text" id="universalSearchInput" placeholder="输入 CN 或谷子名称快捷搜索..." style="flex:1; padding:8px 12px; border:1px solid #ddd; border-radius:6px;" onkeypress="if(event.keyCode==13) applySearchFilter()">
                         <button class="btn btn-primary" onclick="applySearchFilter()">搜索</button>
-                        <button class="btn btn-pink" onclick="openBatchImgModal()">🖼️ 补图</button>
+                        <button class="btn btn-pink" onclick="openBatchImgModal()">🖼️ 批量补图</button>
                     </div>
 
                     <div id="batchBar" class="batch-bar hidden">
-                        <span id="selectedTip">已选择 0 条记录</span>
+                        <span id="selectedTip" style="font-weight:bold; color:#d48806;">已选择 0 条记录</span>
                         <button class="btn btn-outline" onclick="openTransferModal(null)">🔄 批量转单</button>
                         <button class="btn btn-outline" onclick="openBatchStatusModal()">✏️ 批量改状态</button>
                         <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger)" onclick="batchDeleteItems()">🗑️ 批量删除</button>
                     </div>
 
                     <table>
-                        <thead><tr><th><input type="checkbox" onclick="toggleSelectAll(this.checked)"></th><th>图</th><th>谷名</th><th>CN</th><th>金额</th><th>状态</th><th>操作</th></tr></thead>
+                        <thead><tr><th><input type="checkbox" onclick="toggleSelectAll(this.checked)"></th><th>缩略图</th><th>谷名</th><th>CN</th><th>单价x数量</th><th>状态</th><th>操作</th></tr></thead>
                         <tbody id="tbody"></tbody>
                     </table>
                 </div>
             </div>
 
+            <!-- Tab 2: 排发工作台 -->
             <div id="tab-shipping" class="tab-content hidden">
                 <div style="display:flex; gap:15px; margin-bottom:15px;">
-                    <div class="card" style="flex:1; margin-bottom:0; text-align:center;"><h4 style="margin:0;color:#666">📦 待处理申请</h4><h2 id="pendingShipCount">0</h2></div>
-                    <div class="card" style="flex:1; margin-bottom:0; text-align:center;"><h4 style="margin:0;color:#666">✅ 累计已发货</h4><h2 id="completedShipCount">0</h2></div>
+                    <div class="card" style="flex:1; margin-bottom:0; text-align:center;"><h4 style="margin:0;color:#666">📦 待处理申请</h4><h2 id="pendingShipCount" style="margin:5px 0 0; color:var(--main);">0</h2></div>
+                    <div class="card" style="flex:1; margin-bottom:0; text-align:center;"><h4 style="margin:0;color:#666">✅ 累计已发货</h4><h2 id="completedShipCount" style="margin:5px 0 0; color:var(--success);">0</h2></div>
                 </div>
                 <div style="margin-bottom:15px;">
                     <button class="btn btn-primary" id="viewPendingBtn" onclick="toggleShipView('pending')">待处理申请</button>
@@ -116,64 +127,71 @@
                 </div>
                 <div class="table-wrap">
                     <table id="shippingTable">
-                        <thead><tr><th>申请时间</th><th>团员CN</th><th>谷子明细 (每排最多10个)</th><th>备注</th><th>操作</th></tr></thead>
+                        <thead><tr><th>申请时间</th><th>团员 CN</th><th>谷子明细 (单排最多展示10个)</th><th>备注</th><th>操作</th></tr></thead>
                         <tbody id="shipBody"></tbody>
                     </table>
                 </div>
             </div>
 
+            <!-- Tab 3: 转单记录 (支持单删、全选、批量删除) -->
             <div id="tab-logs" class="tab-content hidden">
                 <div class="card">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px; border-bottom:1px solid #eee; padding-bottom:10px;">
-                        <h3 style="margin:0;">🔄 转单日志</h3>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px; border-bottom:1px solid #eee; padding-bottom:12px;">
+                        <h3 style="margin:0;">🔄 转单历史日志</h3>
                         <div style="display:flex; align-items:center; gap:12px;">
                             <label style="font-size:13px; cursor:pointer; user-select:none; font-weight:bold; color:#555;">
-                                <input type="checkbox" id="selectAllLogs" onclick="toggleSelectAllLogs(this.checked)"> 全选
+                                <input type="checkbox" id="selectAllLogs" onclick="toggleSelectAllLogs(this.checked)"> 全选当前
                             </label>
-                            <button class="btn btn-outline" id="batchDeleteLogsBtn" style="color:var(--danger); border-color:var(--danger); font-size:12px; padding:5px 12px; font-weight:bold;" onclick="batchDeleteTransferLogs()">🗑️ 批量删除</button>
+                            <button class="btn btn-outline" id="batchDeleteLogsBtn" style="color:var(--danger); border-color:var(--danger); font-size:12px; padding:6px 14px; font-weight:bold;" onclick="batchDeleteTransferLogs()">🗑️ 批量删除</button>
                         </div>
                     </div>
                     <div id="transferLogsList"></div>
                 </div>
             </div>
             
-            <div id="tab-settings" class="tab-content hidden"><div class="card"><h3>⚙️ 设置</h3><p>密钥：<strong id="dispKey">-</strong></p></div></div>
+            <!-- Tab 4: 团务设置 -->
+            <div id="tab-settings" class="tab-content hidden"><div class="card"><h3>⚙️ 系统设置</h3><p>云端数据库查询 Key：<strong id="dispKey" style="color:var(--main);">-</strong></p></div></div>
         </div>
     </div>
 
-    <!-- 弹窗部分 -->
+    <!-- 弹窗组件 -->
     <div class="modal-overlay" id="transferModal">
         <div class="modal">
-            <h3 id="transferTitle">🔄 谷子转单</h3>
-            <input type="text" id="newCN" placeholder="新接手人的 CN" style="width:100%; margin-bottom:10px; padding:8px; border:1px solid #ddd; border-radius:5px;">
-            <textarea id="transferNote" placeholder="备注" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:5px;"></textarea>
-            <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="executeTransfer()">确认转单</button>
-            <button class="btn btn-outline" style="width:100%; margin-top:5px" onclick="document.getElementById('transferModal').style.display='none'">取消</button>
+            <h3 id="transferTitle" style="margin-top:0;">🔄 谷子转单</h3>
+            <input type="text" id="newCN" placeholder="请输入新接手人的 CN" style="width:100%; margin-bottom:10px; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:13px;">
+            <textarea id="transferNote" placeholder="转单备注 (选填)" style="width:100%; height:70px; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:13px;"></textarea>
+            <button class="btn btn-primary" style="width:100%; margin-top:12px; padding:10px;" onclick="executeTransfer()">确认转单</button>
+            <button class="btn btn-outline" style="width:100%; margin-top:6px; padding:8px;" onclick="document.getElementById('transferModal').style.display='none'">取消</button>
         </div>
     </div>
 
     <div class="modal-overlay" id="batchStatusModal">
         <div class="modal">
-            <h3>✏️ 批量修改状态</h3>
-            <select id="batchNewStatus" style="width:100%; padding:10px; border-radius:5px;">
+            <h3 style="margin-top:0;">✏️ 批量修改状态</h3>
+            <select id="batchNewStatus" style="width:100%; padding:10px; border-radius:6px; border:1px solid #ddd; font-size:13px;">
                 <option>未出荷</option><option>已下单未到货</option><option>回国中</option><option>已到货</option><option>可排发</option><option>已排发</option><option>未付款</option>
             </select>
-            <button class="btn btn-primary" style="width:100%; margin-top:15px" onclick="executeBatchStatusUpdate()">确认修改</button>
-            <button class="btn btn-outline" style="width:100%; margin-top:5px" onclick="document.getElementById('batchStatusModal').style.display='none'">取消</button>
+            <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:10px;" onclick="executeBatchStatusUpdate()">确认修改</button>
+            <button class="btn btn-outline" style="width:100%; margin-top:6px; padding:8px;" onclick="document.getElementById('batchStatusModal').style.display='none'">取消</button>
         </div>
     </div>
 
     <div class="modal-overlay" id="confirmShipModal">
         <div class="modal">
-            <h3>✅ 确认发货</h3>
-            <p id="shipConfirmInfo" style="font-size:14px; line-height:1.6;"></p>
-            <button class="btn btn-primary" style="width:100%" id="finalShipBtn" onclick="executeShipment()">确认已发出</button>
-            <button class="btn btn-outline" style="width:100%; margin-top:5px" onclick="document.getElementById('confirmShipModal').style.display='none'">取消</button>
+            <h3 style="margin-top:0;">✅ 确认发货</h3>
+            <p id="shipConfirmInfo" style="font-size:13px; line-height:1.6; color:#555;"></p>
+            <button class="btn btn-primary" style="width:100%; padding:10px;" id="finalShipBtn" onclick="executeShipment()">确认已发出</button>
+            <button class="btn btn-outline" style="width:100%; margin-top:6px; padding:8px;" onclick="document.getElementById('confirmShipModal').style.display='none'">取消</button>
         </div>
     </div>
 
     <div class="modal-overlay" id="batchImgModal">
-        <div class="modal"><h3>🖼️ 批量补图</h3><input type="file" id="batchImgFile" accept="image/*"><button class="btn btn-primary" style="width:100%; margin-top:15px" onclick="executeBatchImgUpdate()">✅ 确认补图</button></div>
+        <div class="modal">
+            <h3 style="margin-top:0;">🖼️ 批量补图</h3>
+            <input type="file" id="batchImgFile" accept="image/*" style="margin-bottom:12px;">
+            <button class="btn btn-primary" style="width:100%; margin-top:10px; padding:10px;" onclick="executeBatchImgUpdate()">✅ 确认上传并替换图片</button>
+            <button class="btn btn-outline" style="width:100%; margin-top:6px; padding:8px;" onclick="document.getElementById('batchImgModal').style.display='none'">取消</button>
+        </div>
     </div>
 
     <script>
@@ -188,24 +206,43 @@
 
         async function checkAuth() {
             const { data: { user } } = await supabaseClient.auth.getUser();
-            if (!user) { document.getElementById('loginSection').classList.remove('hidden'); document.getElementById('debug-bar').style.display='none'; return; }
+            if (!user) {
+                document.getElementById('loginSection').classList.remove('hidden');
+                document.getElementById('debug-bar').style.display='none';
+                return;
+            }
             currentUser = user;
             document.getElementById('loginSection').classList.add('hidden');
             document.getElementById('adminSection').classList.remove('hidden');
             document.getElementById('userEmail').innerText = user.email;
+            
             const { data } = await supabaseClient.from('leader_data').select('*');
-            if (data && data[0]) { currentData = data[0]; renderUI(); document.getElementById('debug-bar').style.display='none'; }
+            if (data && data[0]) {
+                currentData = data[0];
+                renderUI();
+                document.getElementById('debug-bar').style.display='none';
+            }
         }
 
         async function login() { 
-            const { error } = await supabaseClient.auth.signInWithPassword({ email:document.getElementById('email').value, password:document.getElementById('pw').value });
-            if (error) alert(error.message); else location.reload();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('pw').value.trim();
+            if(!email || !password) return alert("请输入邮箱和密码！");
+            const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            if (error) alert("登录失败：" + error.message); else location.reload();
         }
-        async function logout() { await supabaseClient.auth.signOut(); location.reload(); }
+
+        async function logout() {
+            await supabaseClient.auth.signOut();
+            location.reload();
+        }
 
         function switchTab(t) {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-            document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('active'); if(b.dataset.tab === t) b.classList.add('active'); });
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.remove('active');
+                if(b.dataset.tab === t) b.classList.add('active');
+            });
             document.getElementById('tab-' + t).classList.remove('hidden');
             if(t === 'shipping') renderShippingWorkbench();
             if(t === 'logs') { selectedLogIndices.clear(); renderLogs(); }
@@ -215,11 +252,16 @@
             const boxes = document.querySelectorAll('.item-checkbox');
             boxes.forEach(b => { b.checked = checked; updateSelection(b.dataset.id, checked); });
         }
+
         function updateSelection(id, checked) {
             if (checked) selectedIds.add(id); else selectedIds.delete(id);
             const bar = document.getElementById('batchBar');
-            if (selectedIds.size > 0) { bar.classList.remove('hidden'); document.getElementById('selectedTip').innerText = `已选择 ${selectedIds.size} 条记录`; }
-            else bar.classList.add('hidden');
+            if (selectedIds.size > 0) {
+                bar.classList.remove('hidden');
+                document.getElementById('selectedTip').innerText = `已选择 ${selectedIds.size} 条记录`;
+            } else {
+                bar.classList.add('hidden');
+            }
         }
 
         function openTransferModal(id) {
@@ -227,22 +269,40 @@
             document.getElementById('transferTitle').innerText = id ? "🔄 谷子转单" : `🔄 批量转单 (${selectedIds.size} 条)`;
             document.getElementById('transferModal').style.display = 'flex';
         }
+
         async function executeTransfer() {
             const newCN = document.getElementById('newCN').value.trim();
             const note = document.getElementById('transferNote').value.trim();
-            if (!newCN) return alert("写下新 CN 哦");
+            if (!newCN) return alert("请输入新接手人的 CN 哦！");
             let groupData = [...currentData.group_data];
             let logs = (currentData.image_data && currentData.image_data.transfer_logs) || [];
             const ids = transferTargetId ? [transferTargetId] : Array.from(selectedIds);
+            
             ids.forEach(id => {
                 const idx = groupData.findIndex(i => i.item_id === id);
                 if (idx > -1) {
-                    logs.push({ item_name: groupData[idx].name, from_cn: groupData[idx].cn, to_cn: newCN, time: new Date().toISOString(), note: note, operator: currentUser.email });
+                    logs.push({
+                        item_name: groupData[idx].name,
+                        from_cn: groupData[idx].cn,
+                        to_cn: newCN,
+                        time: new Date().toISOString(),
+                        note: note,
+                        operator: currentUser.email
+                    });
                     groupData[idx].cn = newCN;
                 }
             });
-            const { error } = await supabaseClient.from('leader_data').update({ group_data: groupData, image_data: { ...currentData.image_data, transfer_logs: logs } }).eq('query_key', currentData.query_key);
-            if (!error) location.reload();
+
+            const { error } = await supabaseClient.from('leader_data').update({
+                group_data: groupData,
+                image_data: { ...currentData.image_data, transfer_logs: logs }
+            }).eq('query_key', currentData.query_key);
+
+            if (!error) location.reload(); else alert("操作失败：" + error.message);
+        }
+
+        function openBatchStatusModal() {
+            document.getElementById('batchStatusModal').style.display = 'flex';
         }
 
         async function executeBatchStatusUpdate() {
@@ -250,11 +310,16 @@
             let groupData = [...currentData.group_data];
             groupData.forEach(item => { if(selectedIds.has(item.item_id)) item.status = newStatus; });
             const { error } = await supabaseClient.from('leader_data').update({ group_data: groupData }).eq('query_key', currentData.query_key);
-            if (!error) location.reload();
+            if (!error) location.reload(); else alert("修改失败：" + error.message);
         }
 
         let shipViewMode = 'pending';
-        function toggleShipView(mode) { shipViewMode = mode; renderShippingWorkbench(); }
+        function toggleShipView(mode) {
+            shipViewMode = mode;
+            document.getElementById('viewPendingBtn').className = mode === 'pending' ? 'btn btn-primary' : 'btn btn-outline';
+            document.getElementById('viewDoneBtn').className = mode === 'done' ? 'btn btn-primary' : 'btn btn-outline';
+            renderShippingWorkbench();
+        }
         
         function renderShippingWorkbench() {
             const apps = (currentData.image_data && currentData.image_data.applications) || [];
@@ -266,10 +331,13 @@
             const target = (shipViewMode === 'pending' ? pending : done).sort((a,b) => new Date(b.time) - new Date(a.time));
             const tbody = document.getElementById('shipBody');
             
-            if(target.length === 0) { tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:#999">🎉 当前没有记录</td></tr>`; return; }
+            if(target.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:#999">🎉 当前没有记录</td></tr>`;
+                return;
+            }
 
             tbody.innerHTML = target.map(app => {
-                // 每10个谷子自动切分为一排展示
+                // 每10个谷子切分为一排展示
                 const chunks = [];
                 for (let i = 0; i < app.items.length; i += 10) {
                     chunks.push(app.items.slice(i, i + 10));
@@ -285,15 +353,15 @@
                 let op = '';
                 if(shipViewMode === 'pending') {
                     op = `
-                        <div style="display:flex; gap:5px; flex-wrap:nowrap;">
-                            <button class="btn btn-primary" style="padding:4px 8px;" onclick="openShipConfirm('${app.time}', '${app.cn}')">确认发货</button>
-                            <button class="btn btn-outline" style="padding:4px 8px; color:var(--danger); border-color:var(--danger);" onclick="deletePendingShipRecord('${app.time}','${app.cn}')">🗑️ 删除申请</button>
+                        <div style="display:flex; gap:6px; flex-wrap:nowrap;">
+                            <button class="btn btn-primary" style="padding:4px 8px; font-size:12px;" onclick="openShipConfirm('${app.time}', '${app.cn}')">确认发货</button>
+                            <button class="btn btn-outline" style="padding:4px 8px; font-size:12px; color:var(--danger); border-color:var(--danger);" onclick="deletePendingShipRecord('${app.time}','${app.cn}')">🗑️ 删除申请</button>
                         </div>
                     `;
                 } else {
                     op = `
                         <div style="display:flex; flex-direction:column; gap:5px;">
-                            <small style="color:#888;">完成：${new Date(app.completed_time).toLocaleDateString()}</small>
+                            <small style="color:#888;">完成时间: ${new Date(app.completed_time).toLocaleDateString()}</small>
                             <button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger); padding:2px 6px; font-size:11px" onclick="deleteCompletedShipRecord('${app.time}','${app.cn}')">🗑️ 删除记录</button>
                         </div>
                     `;
@@ -304,7 +372,7 @@
         }
 
         async function deletePendingShipRecord(time, cn) {
-            if(!confirm("⚠️ 确认删除这条排发申请？\n\n删除后，申请中的谷子状态会恢复为“可排发”，团员可以重新申请。")) return;
+            if(!confirm("⚠️ 确认删除这条排发申请？\n\n删除后，申请中的谷子状态会自动恢复为“可排发”，团员可重新提交申请。")) return;
             
             const apps = (currentData.image_data && currentData.image_data.applications) || [];
             const targetApp = apps.find(a => a.time === time && a.cn === cn);
@@ -312,7 +380,7 @@
 
             const itemIdsToRollback = new Set(targetApp.items.map(i => i.item_id));
 
-            // 1. 回滚状态：把状态从 已申请发货 变回 可排发
+            // 1. 状态恢复：从“已申请发货”切回“可排发”
             let newGroupData = currentData.group_data.map(item => {
                 if(itemIdsToRollback.has(item.item_id)) {
                     return { ...item, status: '可排发' };
@@ -320,7 +388,7 @@
                 return item;
             });
 
-            // 2. 移除申请记录
+            // 2. 移除该待处理申请记录
             let newApps = apps.filter(a => !(a.time === time && a.cn === cn));
 
             const { error } = await supabaseClient.from('leader_data').update({ 
@@ -333,12 +401,12 @@
                 currentData.image_data.applications = newApps;
                 renderShippingWorkbench();
                 renderUI();
-                alert("✅ 申请已撤销，谷子已恢复为可排发状态。");
+                alert("✅ 申请已撤销，相关谷子已自动变回可排发状态！");
             } else { alert("操作失败: " + error.message); }
         }
 
         async function deleteCompletedShipRecord(time, cn) {
-            if(!confirm("⚠️ 确认删除这条排发记录？\n\n注意：同时会从排表记录中移除对应的谷子，此操作不可恢复。")) return;
+            if(!confirm("⚠️ 确认删除这条排发记录？\n\n注意：此操作同时会从排表中同步移除对应的谷子，且不可撤销。")) return;
             const apps = (currentData.image_data && currentData.image_data.applications) || [];
             const targetApp = apps.find(a => a.time === time && a.cn === cn);
             if(!targetApp) return alert("记录不存在");
@@ -369,12 +437,13 @@
         async function executeShipment() {
             const apps = [...currentData.image_data.applications];
             const app = apps[currentShipAppIndex];
-            app.status = "已发货"; app.completed_time = new Date().toISOString();
+            app.status = "已发货";
+            app.completed_time = new Date().toISOString();
             let groupData = [...currentData.group_data];
             const ids = app.items.map(i => i.item_id);
             groupData.forEach(item => { if(ids.includes(item.item_id)) item.status = "已排发"; });
             const { error } = await supabaseClient.from('leader_data').update({ group_data: groupData, image_data: { ...currentData.image_data, applications: apps } }).eq('query_key', currentData.query_key);
-            if (!error) location.reload();
+            if (!error) location.reload(); else alert("更新失败：" + error.message);
         }
 
         function renderUI() {
@@ -385,22 +454,27 @@
                 list = list.filter(i => (i.cn||"").toLowerCase().includes(k) || (i.name||"").toLowerCase().includes(k));
             }
             const total = list.reduce((s, i) => s + (parseFloat(i.price) * parseInt(i.quantity)), 0);
-            document.getElementById('statsArea').innerHTML = `<span class="stats-badge">项数: ${list.length}</span><span class="stats-badge">金额: ￥${total.toFixed(2)}</span>`;
+            document.getElementById('statsArea').innerHTML = `<span class="stats-badge">谷子总数: ${list.length}</span><span class="stats-badge">总金额: ￥${total.toFixed(2)}</span>`;
             const tbody = document.getElementById('tbody');
             tbody.innerHTML = list.slice().reverse().map(item => `
                 <tr style="${item.status==='已排发'?'opacity:0.5':''}">
                     <td><input type="checkbox" class="item-checkbox" data-id="${item.item_id}" onchange="updateSelection('${item.item_id}', this.checked)"></td>
-                    <td><img src="${item.image_url ? item.image_url+'?width=80' : ''}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;"></td>
-                    <td>${item.name}</td><td>${item.cn}</td><td>￥${item.price}x${item.quantity}</td>
+                    <td><img src="${item.image_url ? item.image_url+'?width=80' : ''}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;background:#eee;"></td>
+                    <td>${item.name}</td><td><b>${item.cn}</b></td><td>￥${item.price} x ${item.quantity}</td>
                     <td><span class="stats-badge" style="margin:0">${item.status}</span></td>
-                    <td><button class="btn btn-outline" style="padding:2px 6px; font-size:11px" onclick="editItem('${item.item_id}')">改</button><button class="btn btn-outline" style="padding:2px 6px; font-size:11px" onclick="openTransferModal('${item.item_id}')">转</button></td>
+                    <td>
+                        <button class="btn btn-outline" style="padding:2px 6px; font-size:11px; margin-right:4px;" onclick="editItem('${item.item_id}')">修改</button>
+                        <button class="btn btn-outline" style="padding:2px 6px; font-size:11px" onclick="openTransferModal('${item.item_id}')">转单</button>
+                    </td>
                 </tr>`).join('');
         }
 
         async function previewImport() {
             const raw = document.getElementById('csvInput').value.trim();
-            if(!raw) return;
+            if(!raw) return alert("请先粘贴 Excel 表格数据！");
             const lines = raw.split('\n').filter(l => l.trim());
+            if (lines.length < 5) return alert("解析失败，请确保复制了完整的包含名称、单价与数量的 Excel 区域。");
+            
             const itemNames = lines[2].split('\t').slice(2);
             const prices = lines[3].split('\t').slice(2).map(p => parseFloat(p.replace(/[¥,]/g, '')) || 0);
             let items = [];
@@ -410,19 +484,34 @@
                 if(!cn || cn === "昵称/总数") continue;
                 itemNames.forEach((name, idx) => {
                     const qty = parseInt(parseFloat(cells[idx+2]));
-                    if(qty > 0) items.push({ item_id: Date.now()+'_'+Math.random().toString(36).substr(2,4), name: name.trim(), country:"日本", price: prices[idx], quantity: qty, cn, status: "未出荷", image_url: "", created_at: new Date().toISOString() });
+                    if(qty > 0) items.push({
+                        item_id: Date.now()+'_'+Math.random().toString(36).substr(2,4),
+                        name: name.trim(),
+                        country: "日本",
+                        price: prices[idx],
+                        quantity: qty,
+                        cn: cn,
+                        status: "未出荷",
+                        image_url: "",
+                        created_at: new Date().toISOString()
+                    });
                 });
             }
             const newList = [...(currentData.group_data || []), ...items];
             await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
+            alert(`成功导入 ${items.length} 条谷子数据！`);
             location.reload();
         }
 
         async function saveItem() {
+            const name = document.getElementById('itemName').value.trim();
+            const cn = document.getElementById('itemCN').value.trim();
+            if(!name || !cn) return alert("请填写谷子名称和团员 CN！");
+            
             const newItem = {
                 item_id: document.getElementById('editItemId').value || Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-                name: document.getElementById('itemName').value,
-                cn: document.getElementById('itemCN').value,
+                name: name,
+                cn: cn,
                 price: parseFloat(document.getElementById('itemPrice').value) || 0,
                 quantity: parseInt(document.getElementById('itemQty').value) || 1,
                 status: document.getElementById('itemStatus').value,
@@ -432,7 +521,12 @@
             };
             let newList = [...(currentData.group_data || [])];
             const idx = newList.findIndex(i => i.item_id === newItem.item_id);
-            if (idx > -1) { newItem.image_url = newList[idx].image_url; newList[idx] = newItem; } else newList.push(newItem);
+            if (idx > -1) {
+                newItem.image_url = newList[idx].image_url;
+                newList[idx] = newItem;
+            } else {
+                newList.push(newItem);
+            }
             await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
             location.reload();
         }
@@ -445,10 +539,10 @@
             document.getElementById('itemPrice').value = item.price;
             document.getElementById('itemQty').value = item.quantity;
             document.getElementById('itemStatus').value = item.status;
-            window.scrollTo(0,0);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        /* ---------------- 转单日志批量删除逻辑 ---------------- */
+        /* ---------------- 转单日志批量删除 ---------------- */
         function toggleSelectAllLogs(checked) {
             selectedLogIndices.clear();
             const boxes = document.querySelectorAll('.log-checkbox');
@@ -486,7 +580,7 @@
             const logs = (currentData.image_data && currentData.image_data.transfer_logs) || [];
             const list = document.getElementById('transferLogsList');
             if(logs.length === 0) {
-                list.innerHTML = "<p style='color:#999;'>暂无转单记录</p>";
+                list.innerHTML = "<p style='color:#999; padding:20px; text-align:center;'>暂无转单记录</p>";
                 if(document.getElementById('selectAllLogs')) document.getElementById('selectAllLogs').checked = false;
                 updateLogBatchBtn();
                 return;
@@ -495,11 +589,11 @@
                 const realIndex = logs.length - 1 - index;
                 const isChecked = selectedLogIndices.has(realIndex) ? 'checked' : '';
                 return `
-                    <div style="border-bottom:1px solid #eee; padding:10px 0; display:flex; justify-content:space-between; align-items:center;">
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <input type="checkbox" class="log-checkbox" data-index="${realIndex}" ${isChecked} onchange="updateLogSelection()">
+                    <div style="border-bottom:1px solid #eee; padding:12px 0; display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                        <div style="display:flex; align-items:center; gap:12px; flex:1;">
+                            <input type="checkbox" class="log-checkbox" data-index="${realIndex}" ${isChecked} onchange="updateLogSelection()" style="width:16px; height:16px; cursor:pointer;">
                             <div style="font-size:13px; line-height:1.6;">
-                                <span style="color:#888; font-size:12px;">[${new Date(l.time).toLocaleString()}]</span> <b>${l.item_name}</b><br>
+                                <span style="color:#888; font-size:12px;">[${new Date(l.time).toLocaleString()}]</span> <b style="color:#222;">${l.item_name}</b><br>
                                 从 <b style="color:var(--main);">${l.from_cn}</b> 转给 <b style="color:var(--accent);">${l.to_cn}</b> | 备注：${l.note || '-'} | 操作人：${l.operator}
                             </div>
                         </div>
@@ -552,14 +646,17 @@
         }
 
         function batchDeleteItems() {
-            if(!confirm(`确认彻底删除这 ${selectedIds.size} 条记录吗？`)) return;
-            supabaseClient.from('leader_data').update({ group_data: currentData.group_data.filter(i => !selectedIds.has(i.item_id)) }).eq('query_key', currentData.query_key).then(() => location.reload());
+            if(!confirm(`确认彻底删除这 ${selectedIds.size} 条谷子记录吗？`)) return;
+            supabaseClient.from('leader_data').update({
+                group_data: currentData.group_data.filter(i => !selectedIds.has(i.item_id))
+            }).eq('query_key', currentData.query_key).then(() => location.reload());
         }
 
         function applySearchFilter() { currentSearchKey = document.getElementById('universalSearchInput').value; renderUI(); }
         function openBatchImgModal() { document.getElementById('batchImgModal').style.display='flex'; }
         async function executeBatchImgUpdate() {
             const file = document.getElementById('batchImgFile').files[0];
+            if(!file) return alert("请先选择图片文件！");
             const fileName = `${Date.now()}_batch_${file.name}`;
             await supabaseClient.storage.from('images').upload(fileName, file);
             const url = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
