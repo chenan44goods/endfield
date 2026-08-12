@@ -17,7 +17,6 @@
         input:focus { border-color: var(--accent); }
         button { width: 100%; padding: 12px; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.3s; }
         button:hover { background: #ff5e84; transform: translateY(-2px); }
-        
         .item-card { border-left: 5px solid var(--primary); margin-top: 15px; position: relative; display: flex; gap: 15px; }
         .item-img { width: 80px; height: 80px; border-radius: 8px; object-fit: cover; cursor: pointer; border: 1px solid #eee; }
         .item-info { flex: 1; }
@@ -26,7 +25,6 @@
         .status-已到货 { background: #f0fdf4; color: #166534; }
         .status-可排发 { background: #eff6ff; color: #1e40af; border: 1px dashed #1e40af; }
         .expiry-red { color: #ff0000; font-weight: bold; border: 1px solid #ff0000; padding: 2px 5px; border-radius: 4px; font-size: 0.8rem; }
-        
         .summary { background: var(--accent); color: #fff; text-align: center; font-size: 1.1rem; }
         .error { color: #ff5e84; text-align: center; margin-top: 10px; font-weight: bold; }
         #loading { text-align: center; display: none; }
@@ -48,11 +46,8 @@
             <div id="errorMsg" class="error"></div>
             <div id="loading">✨ 正在魔法检索中...</div>
         </div>
-
         <div id="resultArea"></div>
     </div>
-
-    <!-- 图片放大遮罩 -->
     <div id="imgModal" onclick="this.style.display='none'" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; justify-content:center; align-items:center; cursor:zoom-out;">
         <img id="modalImg" style="max-width:90%; max-height:90%; border-radius:10px;">
     </div>
@@ -60,7 +55,8 @@
     <script>
         const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_uW9cgyB0e6zIZCIcIZSlQ_bqm0MeJa';
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // 修复：修改变量名避免冲突
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         async function doQuery() {
             const key = document.getElementById('queryKey').value.trim();
@@ -70,65 +66,34 @@
             const loading = document.getElementById('loading');
 
             if (!key || !cn) { errorArea.innerText = "请填写密钥和CN"; return; }
-            
-            errorArea.innerText = "";
-            resArea.innerHTML = "";
-            loading.style.display = "block";
+            errorArea.innerText = ""; resArea.innerHTML = ""; loading.style.display = "block";
 
             try {
-                // 调用 RPC 函数
-                const { data, error } = await supabase.rpc('get_group_by_key', { p_query_key: key });
-
+                const { data, error } = await supabaseClient.rpc('get_group_by_key', { p_query_key: key });
                 if (error) throw error;
                 if (!data) { errorArea.innerText = "查询密钥错误，请联系团长"; return; }
 
-                // 过滤 CN
                 const myGoods = data.filter(item => item.cn === cn);
                 if (myGoods.length === 0) { errorArea.innerText = "未找到你的排谷记录，请检查CN是否正确"; return; }
 
-                // 渲染结果
-                let html = `<div class="card summary">
-                    <div>共计: ${myGoods.length} 项谷子</div>
-                    <div style="font-size:1.5rem; font-weight:bold; margin-top:5px;">应肾总计: ￥${myGoods.reduce((sum, i) => sum + (i.price * i.quantity), 0).toFixed(2)}</div>
-                </div>`;
-
+                let html = `<div class="card summary"><div>共计: ${myGoods.length} 项谷子</div><div style="font-size:1.5rem; font-weight:bold; margin-top:5px;">应肾总计: ￥${myGoods.reduce((sum, i) => sum + (i.price * i.quantity), 0).toFixed(2)}</div></div>`;
                 const today = new Date().toISOString().split('T')[0];
-
                 myGoods.forEach(item => {
                     let expiryInfo = "";
                     if (item.status === "可排发" && item.storage_expiry) {
                         const isExpired = today > item.storage_expiry;
-                        expiryInfo = `<div class="${isExpired ? 'expiry-red' : ''}" style="margin-top:5px; font-size:0.8rem;">
-                            📦 囤货截止：${item.storage_expiry} ${isExpired ? '[已到期]' : ''}
-                        </div>`;
+                        expiryInfo = `<div class="${isExpired ? 'expiry-red' : ''}" style="margin-top:5px; font-size:0.8rem;">📦 囤货截止：${item.storage_expiry} ${isExpired ? '[已到期]' : ''}</div>`;
                     }
-
-                    html += `
-                        <div class="card item-card">
-                            <img src="${item.image_url || 'https://via.placeholder.com/100?text=No+Pic'}" class="item-img" onclick="showImg('${item.image_url}')">
-                            <div class="item-info">
-                                <div style="font-weight:bold;">${item.name} <span style="font-weight:normal; color:#888; font-size:0.8rem;">(${item.country})</span></div>
-                                <div style="color:var(--accent); font-weight:bold;">￥${item.price} × ${item.quantity} = ￥${(item.price * item.quantity).toFixed(2)}</div>
-                                <div class="status-tag status-${item.status}">${item.status}</div>
-                                ${expiryInfo}
-                            </div>
-                        </div>
-                    `;
+                    html += `<div class="card item-card"><img src="${item.image_url || 'https://via.placeholder.com/100?text=No+Pic'}" class="item-img" onclick="showImg('${item.image_url}')"><div class="item-info"><div style="font-weight:bold;">${item.name} <span style="font-weight:normal; color:#888; font-size:0.8rem;">(${item.country})</span></div><div style="color:var(--accent); font-weight:bold;">￥${item.price} × ${item.quantity} = ￥${(item.price * item.quantity).toFixed(2)}</div><div class="status-tag status-${item.status}">${item.status}</div>${expiryInfo}</div></div>`;
                 });
                 resArea.innerHTML = html;
-
             } catch (e) {
                 errorArea.innerText = "查询失败：" + e.message;
             } finally {
                 loading.style.display = "none";
             }
         }
-
-        function showImg(url) {
-            if(!url) return;
-            document.getElementById('modalImg').src = url;
-            document.getElementById('imgModal').style.display = 'flex';
-        }
+        function showImg(url) { if(!url) return; document.getElementById('modalImg').src = url; document.getElementById('imgModal').style.display = 'flex'; }
     </script>
 </body>
 </html>
