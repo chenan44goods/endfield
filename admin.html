@@ -3,20 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>团长后台系统 🛠️</title>
+    <title>团长后台管理系统 🛠️</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        :root { --main: #6c5ce7; --bg: #f0f2f5; --pink: #ffb7c5; --accent: #ff85a2; }
+        :root { --main: #6c5ce7; --bg: #f0f2f5; --pink: #ffb7c5; --accent: #ff85a2; --danger: #ff4d4f; }
         body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); margin: 0; display: flex; flex-direction: column; height: 100vh; color: #333; }
         
+        /* 状态条 */
+        #debug-bar { background: #333; color: #fff; font-size: 12px; text-align: center; padding: 8px; position: fixed; top: 0; width: 100%; z-index: 9999; }
+
         /* 导航与标签 */
-        nav { background: #fff; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
-        .tabs { background: #fff; display: flex; padding: 0 20px; border-bottom: 1px solid #ddd; gap: 20px; }
+        nav { background: #fff; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; margin-top: 30px; }
+        .tabs { background: #fff; display: flex; padding: 0 20px; border-bottom: 1px solid #ddd; gap: 20px; position: sticky; top: 0; z-index: 100; }
         .tab-btn { padding: 12px 5px; border-bottom: 3px solid transparent; cursor: pointer; font-weight: bold; color: #666; font-size: 14px; }
         .tab-btn.active { color: var(--main); border-bottom-color: var(--main); }
         .main-content { flex: 1; overflow-y: auto; padding: 20px; }
 
-        /* 卡片与组件 */
+        /* 通用组件 */
         .card { background: #fff; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; }
         
@@ -29,44 +32,38 @@
         .filter-info { font-size: 12px; color: var(--main); margin-bottom: 10px; font-weight: bold; display: none; }
         .stats-badge { padding: 4px 12px; border-radius: 20px; background: #eee; font-size: 12px; margin-right: 8px; display: inline-block; font-weight: bold; }
 
-        /* 按钮与弹窗 */
+        /* 按钮与表单 */
+        input, select, textarea { padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; font-size: 14px; }
         .btn { padding: 8px 16px; border-radius: 8px; cursor: pointer; border: none; font-weight: bold; transition: 0.2s; white-space: nowrap; font-size: 13px; display: inline-flex; align-items: center; gap: 5px; }
         .btn-primary { background: var(--main); color: #fff; }
         .btn-pink { background: var(--pink); color: #fff; }
-        .btn-danger { background: #ff4d4f; color: #fff; }
+        .btn-danger { background: var(--danger); color: #fff; }
         .btn-outline { background: #fff; border: 1px solid #ddd; color: #666; }
-        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
         
+        /* 弹窗 */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
         .modal { background: #fff; padding: 20px; border-radius: 15px; width: 90%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-        .img-preview { width: 45px; height: 45px; object-fit: cover; border-radius: 4px; }
+        
+        /* 表格样式 */
+        .table-wrap { overflow-x: auto; background: #fff; border-radius: 12px; padding: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 600px; }
+        th, td { border-bottom: 1px solid #eee; padding: 12px 10px; text-align: left; }
+        .img-preview { width: 45px; height: 45px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; }
+        .selected-row { background-color: #f6f5ff !important; }
         .hidden { display: none !important; }
-
-        /* 选中行高亮 */
-        .selected-row { background: #fff0f5 !important; }
-        tr { transition: background 0.15s; }
-        tbody tr:hover { background: #fafafa; }
-
-        /* 单条图片预览 */
-        .item-preview-img { max-height: 100px; border-radius: 8px; border: 1px solid #eee; margin-top: 8px; display: none; }
-
-        /* 日志样式 */
-        .log-item { font-size: 12px; border-left: 3px solid var(--main); padding: 10px; margin-bottom: 10px; background: #f9f9f9; border-radius: 0 8px 8px 0; }
-        .log-time { color: #999; font-size: 11px; }
     </style>
 </head>
 <body>
 
-    <!-- 状态栏 -->
-    <div id="debug-bar" style="background:#333; color:#fff; font-size:12px; text-align:center; padding:8px;">⌛ 正在同步环境...</div>
+    <div id="debug-bar">⌛ 正在同步系统环境...</div>
 
     <!-- 登录模块 -->
     <div id="loginSection">
         <div class="card" style="max-width:350px; margin: 80px auto; padding: 30px;">
-            <h2 style="text-align:center; margin-top:0;">🎀 团长登录</h2>
-            <input type="email" id="email" placeholder="管理邮箱" style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box;">
-            <input type="password" id="pw" placeholder="密码" style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box;">
-            <button class="btn btn-primary" style="width:100%;" onclick="login()">立即进入后台</button>
+            <h2 style="text-align:center; margin-top:0;">🎀 团长管理登录</h2>
+            <input type="email" id="email" placeholder="管理邮箱">
+            <input type="password" id="pw" placeholder="密码">
+            <button class="btn btn-primary" style="width:100%; margin-top:10px" onclick="login()">进入后台</button>
             <p id="loginMsg" style="color:red; font-size:12px; text-align:center; margin-top:10px;"></p>
         </div>
     </div>
@@ -74,7 +71,7 @@
     <!-- 后台管理主体 -->
     <div id="adminSection" class="hidden">
         <nav>
-            <strong id="roleTag">后台载入中</strong>
+            <strong id="roleTag">载入中</strong>
             <div style="display:flex; align-items:center;">
                 <span id="userEmail" style="margin-right:10px; font-size:12px; color:#666"></span>
                 <button class="btn btn-outline" style="padding:4px 10px; font-size:11px;" onclick="logout()">退出</button>
@@ -88,61 +85,43 @@
         </div>
 
         <div class="main-content">
-            <!-- 排表管理页 -->
+            <!-- 标签页1: 排表管理 -->
             <div id="tab-overview" class="tab-content">
                 <div class="card"><div id="statsArea"></div></div>
 
                 <div class="grid">
-                    <!-- 单条录入 -->
                     <div class="card">
-                        <h3>✍️ 录入/编辑记录</h3>
+                        <h3>✍️ 排谷录入/编辑</h3>
                         <input type="hidden" id="editItemId">
-                        <input type="text" id="itemName" placeholder="谷子名称" style="width:100%; padding:8px; margin-bottom:8px; border:1px solid #ddd; border-radius:6px;">
-                        <select id="itemCountry" style="width:100%; padding:8px; margin-bottom:8px; border:1px solid #ddd; border-radius:6px;">
-                            <option value="国内">国内</option>
-                            <option value="台湾">台湾</option>
-                            <option value="泰国">泰国</option>
-                            <option value="印尼">印尼</option>
-                            <option value="美国">美国</option>
-                            <option value="日本" selected>日本</option>
-                            <option value="韩国">韩国</option>
-                        </select>
-                        <input type="text" id="itemCN" placeholder="团员CN" style="width:100%; padding:8px; margin-bottom:8px; border:1px solid #ddd; border-radius:6px;">
-                        <div style="display:flex; gap:5px; margin-bottom:8px;">
-                            <input type="number" id="itemPrice" placeholder="单价" step="0.01" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:6px;">
-                            <input type="number" id="itemQty" value="1" min="1" style="width:80px; padding:8px; border:1px solid #ddd; border-radius:6px;">
+                        <input type="text" id="itemName" placeholder="谷子名称">
+                        <select id="itemCountry"><option>日本</option><option>国内</option><option>台湾</option><option>美国</option></select>
+                        <input type="text" id="itemCN" placeholder="团员CN">
+                        <div style="display:flex; gap:5px">
+                            <input type="number" id="itemPrice" placeholder="单价" step="0.01">
+                            <input type="number" id="itemQty" value="1">
                         </div>
-                        <select id="itemStatus" style="width:100%; padding:8px; margin-bottom:8px; border:1px solid #ddd; border-radius:6px;">
-                            <option value="未出荷">未出荷</option>
-                            <option value="已下单未到货">已下单未到货</option>
-                            <option value="回国中">回国中</option>
-                            <option value="已到货">已到货</option>
-                            <option value="可排发">可排发</option>
-                            <option value="已排发">已排发</option>
-                            <option value="未付款">未付款</option>
+                        <select id="itemStatus">
+                            <option>未出荷</option><option>已下单未到货</option><option>回国中</option><option>已到货</option><option>可排发</option><option>已排发</option><option>未付款</option>
                         </select>
-                        <label style="font-size:12px; color:#666; display:block; margin-bottom:4px;">柄图（可选）：</label>
-                        <input type="file" id="itemFile" accept="image/*" style="font-size:12px;" onchange="previewItemFile()">
-                        <img id="itemPreview" class="item-preview-img">
-                        <button class="btn btn-pink" style="width:100%; margin-top:10px" id="saveItemBtn" onclick="saveItem()">💾 保存记录</button>
-                        <button class="btn btn-outline" style="width:100%; margin-top:5px" onclick="clearForm()">🗑️ 重置清空</button>
+                        <label style="font-size:11px; color:#666">柄图(可选)：</label>
+                        <input type="file" id="itemFile" accept="image/*" style="font-size:11px;">
+                        <button class="btn btn-pink" style="width:100%; margin-top:10px" onclick="saveItem()">保存记录</button>
+                        <button class="btn btn-outline" style="width:100%; margin-top:5px" onclick="clearForm()">清空重置</button>
                     </div>
 
-                    <!-- 批量导入 -->
                     <div class="card">
-                        <h3>📥 批量导入 (Excel)</h3>
-                        <textarea id="csvInput" rows="6" placeholder="直接粘贴 Excel 汇总表内容..." style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-family:monospace; font-size:12px;"></textarea>
-                        <button class="btn btn-primary" style="width:100%; margin-top:8px;" id="importBtn" onclick="previewImport()">解析并导入</button>
+                        <h3>📥 批量导入 (Excel Tab格式)</h3>
+                        <textarea id="csvInput" rows="8" placeholder="直接粘贴 Excel 汇总表内容..."></textarea>
+                        <button class="btn btn-primary" style="width:100%" onclick="previewImport()">识别并导入数据</button>
                     </div>
                 </div>
 
-                <!-- 排表表格 -->
-                <div class="card" style="overflow-x:auto;">
-                    <h3>📜 全团排单明细</h3>
-                    
+                <div class="card table-wrap">
+                    <h3>📜 全团明细</h3>
+                    <!-- 搜索与补图 -->
                     <div class="search-row">
                         <div class="search-input-group">
-                            <input type="text" id="universalSearchInput" placeholder="搜 CN 或 谷子名称..." onkeypress="if(event.keyCode==13) applySearchFilter()">
+                            <input type="text" id="universalSearchInput" placeholder="输入 CN 或 谷子名称 搜索..." onkeypress="if(event.keyCode==13) applySearchFilter()">
                         </div>
                         <button class="btn btn-primary" onclick="applySearchFilter()">搜索</button>
                         <button class="btn btn-outline" onclick="clearSearchFilter()">清除</button>
@@ -151,23 +130,19 @@
 
                     <div id="filterStatusText" class="filter-info"></div>
 
+                    <!-- 批量操作 -->
                     <div class="batch-bar">
-                        <input type="checkbox" id="selectAllCheck" onchange="toggleSelectAll(this.checked)" style="width:auto; margin-right:5px;">
+                        <input type="checkbox" id="selectAllCheck" onchange="toggleSelectAll(this.checked)" style="width:auto">
                         <span style="font-size:12px">已选 <strong id="selCount">0</strong> 条</span>
-                        <button class="btn btn-primary" style="padding:4px 10px; font-size:11px;" onclick="openTransferModal('batch')">批量转单</button>
-                        <button class="btn btn-danger" style="padding:4px 10px; font-size:11px;" onclick="batchDelete()">批量删除</button>
+                        <button class="btn btn-primary" style="padding:5px 12px; font-size:11px;" onclick="openTransferModal('batch')">🔄 批量转单</button>
+                        <button class="btn btn-danger" style="padding:5px 12px; font-size:11px;" onclick="batchDelete()">🗑️ 批量删除</button>
                     </div>
 
-                    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                    <table>
                         <thead>
-                            <tr style="background:#f5f5f5;">
-                                <th style="width:30px; padding:8px;"></th>
-                                <th style="padding:8px;">图</th>
-                                <th style="padding:8px;">名称</th>
-                                <th style="padding:8px;">CN</th>
-                                <th style="padding:8px;">金额</th>
-                                <th style="padding:8px;">状态</th>
-                                <th style="padding:8px;">操作</th>
+                            <tr>
+                                <th style="width:20px"></th>
+                                <th>图</th><th>名称</th><th>CN</th><th>金额</th><th>状态</th><th>操作</th>
                             </tr>
                         </thead>
                         <tbody id="tbody"></tbody>
@@ -175,54 +150,50 @@
                 </div>
             </div>
 
-            <!-- 转单记录页 -->
+            <!-- 标签页2: 转单记录 -->
             <div id="tab-logs" class="tab-content hidden">
                 <div class="card">
-                    <h3>🔄 转单历史日志</h3>
+                    <h3>🔄 历史转单日志 (最新 500 条)</h3>
                     <div id="transferLogsList"></div>
                 </div>
             </div>
 
-            <!-- 团务设置页 -->
+            <!-- 标签页3: 设置 -->
             <div id="tab-settings" class="tab-content hidden">
                 <div class="card">
-                    <h3>⚙️ 团务设置</h3>
-                    <p>查询密钥：<strong id="dispKey">-</strong></p>
-                    <div id="coAdminList" style="margin:10px 0;"></div>
-                    <div id="ownerOnlyArea" style="display:none;">
-                        <input type="email" id="newAdminEmail" placeholder="添加副团员邮箱" style="padding:8px; border:1px solid #ddd; border-radius:6px; width:200px;">
-                        <button class="btn btn-primary" onclick="addAdmin()">添加</button>
-                        <p style="font-size:12px; color:#999; margin-top:5px;">副团长上限 3 人，只能由团长添加</p>
-                    </div>
+                    <h3>⚙️ 团务管理</h3>
+                    <p>查询密钥：<strong id="dispKey" style="color:var(--main)">-</strong></p>
+                    <div id="coAdminList"></div>
+                    <input type="email" id="newAdminEmail" placeholder="副团长账号邮箱">
+                    <button class="btn btn-primary" onclick="addAdmin()">添加副团长</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 批量补图弹窗 -->
+    <!-- 弹窗: 批量补图 -->
     <div class="modal-overlay" id="batchImgModal">
         <div class="modal">
             <h3>🖼️ 批量补图</h3>
-            <p id="batchImgInfo" style="font-size:13px; color:var(--main); margin-bottom:15px;"></p>
-            <input type="file" id="batchImgFile" accept="image/*" style="margin-bottom:10px;">
-            <img id="batchImgPreview" style="max-height:120px; border-radius:8px; display:none; margin-bottom:10px;">
+            <p id="batchImgInfo" style="font-size:12px; color:var(--main); margin-bottom:15px;"></p>
+            <input type="file" id="batchImgFile" accept="image/*">
             <div style="margin-top:20px; display:flex; gap:10px">
-                <button class="btn btn-outline" style="flex:1" onclick="closeBatchImgModal()">取消</button>
+                <button class="btn btn-outline" style="flex:1" onclick="closeModal('batchImgModal')">取消</button>
                 <button class="btn btn-primary" id="confirmBatchImgBtn" style="flex:1" onclick="executeBatchImgUpdate()">✅ 确认补图</button>
             </div>
         </div>
     </div>
 
-    <!-- 转单弹窗 -->
+    <!-- 弹窗: 转单确认 -->
     <div class="modal-overlay" id="transferModal">
         <div class="modal">
-            <h3>🔄 订单转交</h3>
-            <p id="transferInfo" style="font-size:13px; color:#666; margin-bottom:15px;"></p>
-            <input type="text" id="newCNInput" placeholder="输入新接手人 CN" style="width:100%; padding:8px; margin-bottom:10px; border:1px solid #ddd; border-radius:6px;">
-            <input type="text" id="transferNote" placeholder="转单备注（可选）" style="width:100%; padding:8px; margin-bottom:10px; border:1px solid #ddd; border-radius:6px;">
-            <div style="display:flex; gap:10px">
-                <button class="btn btn-outline" style="flex:1" onclick="closeTransferModal()">取消</button>
-                <button class="btn btn-primary" style="flex:1" onclick="executeTransfer()">确认转单</button>
+            <h3>🔄 归属人交接</h3>
+            <p id="transferInfo" style="font-size:12px; color:#666"></p>
+            <input type="text" id="newCNInput" placeholder="输入新接手人 CN">
+            <input type="text" id="transferNote" placeholder="备注（如：转单、掉落）">
+            <div style="margin-top:20px; display:flex; gap:10px">
+                <button class="btn btn-outline" style="flex:1" onclick="closeModal('transferModal')">取消</button>
+                <button class="btn btn-primary" id="confirmTransferBtn" style="flex:1" onclick="executeTransfer()">确认转单</button>
             </div>
         </div>
     </div>
@@ -232,41 +203,233 @@
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        let currentData = null, currentUser = null, selectedIds = new Set(), currentSearchKey = '', currentFilteredList = [], transferTargets = [];
+        let currentData = null, currentUser = null, selectedIds = new Set(), currentSearchKey = '', currentFilteredList = [];
+        let transferTargets = [];
 
-        // 强制解锁保护
-        const unlock = () => { document.getElementById('debug-bar').style.display = 'none'; };
-        setTimeout(unlock, 2500);
+        // 自动解锁黑条保护
+        setTimeout(() => { document.getElementById('debug-bar').style.display = 'none'; }, 3000);
 
         async function checkAuth() {
-            const { data: { user } } = await supabaseClient.auth.getUser();
-            if (!user) { unlock(); return; }
-            currentUser = user;
-            document.getElementById('loginSection').classList.add('hidden');
-            document.getElementById('adminSection').classList.remove('hidden');
-            document.getElementById('userEmail').innerText = user.email;
-            const { data } = await supabaseClient.from('leader_data').select('*');
-            if (data && data[0]) { 
-                currentData = data[0]; 
-                // 判断是否是团长，显示副团长管理
-                const isOwner = currentData.user_id === user.id;
-                if (isOwner) document.getElementById('ownerOnlyArea').style.display = 'block';
-                renderUI(); 
-                unlock(); 
-            }
+            try {
+                const { data: { user } } = await supabaseClient.auth.getUser();
+                if (!user) { document.getElementById('loginSection').classList.remove('hidden'); return; }
+                
+                currentUser = user;
+                document.getElementById('loginSection').classList.add('hidden');
+                document.getElementById('adminSection').classList.remove('hidden');
+                document.getElementById('userEmail').innerText = user.email;
+
+                const { data } = await supabaseClient.from('leader_data').select('*');
+                if (data && data[0]) {
+                    currentData = data[0];
+                    renderUI();
+                }
+            } catch (e) { console.error(e); }
         }
 
         async function login() {
             const email = document.getElementById('email').value.trim();
             const pw = document.getElementById('pw').value.trim();
-            if(!email || !pw) return alert("请输入完整");
             const { error } = await supabaseClient.auth.signInWithPassword({ email, password: pw });
-            if (error) {
-                document.getElementById('loginMsg').innerText = error.message;
-            } else {
-                checkAuth();
-            }
+            if (error) alert("登录失败: " + error.message); else checkAuth();
         }
-        
-        async function logout() { 
-            await sup
+        async function logout() { await supabaseClient.auth.signOut(); location.reload(); }
+
+        // --- 核心渲染 ---
+        function renderUI() {
+            if (!currentData) return;
+            document.getElementById('dispKey').innerText = currentData.query_key;
+            
+            let list = currentData.group_data || [];
+            if (currentSearchKey) {
+                const k = currentSearchKey.toLowerCase();
+                list = list.filter(i => (i.cn||"").toLowerCase().includes(k) || (i.name||"").toLowerCase().includes(k));
+                document.getElementById('filterStatusText').innerText = `💡 搜索关键词: "${currentSearchKey}" (共 ${list.length} 条)`;
+                document.getElementById('filterStatusText').style.display = 'block';
+            } else { document.getElementById('filterStatusText').style.display = 'none'; }
+            
+            currentFilteredList = list;
+            const total = list.reduce((s, i) => s + (parseFloat(i.price) * parseInt(i.quantity)), 0);
+            document.getElementById('statsArea').innerHTML = `<span class="stats-badge">项数: ${list.length}</span><span class="stats-badge">应肾合计: ￥${total.toFixed(2)}</span>`;
+
+            const tbody = document.getElementById('tbody');
+            tbody.innerHTML = list.slice().reverse().map(item => `
+                <tr class="${selectedIds.has(item.item_id) ? 'selected-row' : ''}">
+                    <td><input type="checkbox" ${selectedIds.has(item.item_id) ? 'checked' : ''} onchange="toggleSelect('${item.item_id}')" style="width:auto"></td>
+                    <td><img src="${item.image_url ? item.image_url+'?width=80' : ''}" class="img-preview" onerror="this.src='https://via.placeholder.com/50'"></td>
+                    <td>${item.name}<br><small style="color:#999">${item.country}</small></td>
+                    <td>${item.cn}</td>
+                    <td>￥${item.price}x${item.quantity}</td>
+                    <td><span class="stats-badge" style="margin:0; font-size:10px">${item.status}</span></td>
+                    <td>
+                        <button class="btn btn-outline" style="padding:2px 8px; font-size:10px" onclick="openTransferModal(['${item.item_id}'])">转单</button>
+                        <button class="btn btn-outline" style="padding:2px 8px; font-size:10px" onclick="editItem('${item.item_id}')">改</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // --- 转单逻辑 (加固版) ---
+        function openTransferModal(ids) {
+            transferTargets = (ids === 'batch') ? Array.from(selectedIds) : ids;
+            if (transferTargets.length === 0) return alert("❌ 请先勾选要转单的记录");
+            document.getElementById('transferInfo').innerText = `即将转交 ${transferTargets.length} 项排单。`;
+            document.getElementById('transferModal').style.display = 'flex';
+        }
+
+        async function executeTransfer() {
+            const newCN = document.getElementById('newCNInput').value.trim();
+            const note = document.getElementById('transferNote').value.trim();
+            if (!newCN) return alert("请输入新接手人 CN");
+
+            const btn = document.getElementById('confirmTransferBtn');
+            btn.innerText = "⏳ 处理中..."; btn.disabled = true;
+
+            try {
+                let groupData = [...currentData.group_data];
+                let newLogs = [];
+                const now = new Date().toISOString();
+
+                transferTargets.forEach(id => {
+                    const idx = groupData.findIndex(x => x.item_id === id);
+                    if (idx > -1) {
+                        const oldCN = groupData[idx].cn;
+                        groupData[idx].cn = newCN;
+                        newLogs.push({ item_name: groupData[idx].name, from_cn: oldCN, to_cn: newCN, time: now, note, operator: currentUser.email });
+                    }
+                });
+
+                let imageData = currentData.image_data || {};
+                if (!imageData.transfer_logs) imageData.transfer_logs = [];
+                imageData.transfer_logs = [...newLogs, ...imageData.transfer_logs].slice(0, 500);
+
+                const { error } = await supabaseClient.from('leader_data').update({ group_data: groupData, image_data: imageData }).eq('query_key', currentData.query_key);
+                if (error) throw error;
+                
+                alert("✅ 转单成功！");
+                location.reload();
+            } catch (e) { alert("错误: " + e.message); btn.innerText = "确认转单"; btn.disabled = false; }
+        }
+
+        // --- 批量补图 ---
+        function openBatchImgModal() {
+            if (!currentSearchKey) return alert("❌ 请先搜索筛选出需要补图的谷子名称");
+            document.getElementById('batchImgInfo').innerText = `当前筛选: "${currentSearchKey}" (${currentFilteredList.length} 条记录)`;
+            document.getElementById('batchImgModal').style.display = 'flex';
+        }
+
+        async function executeBatchImgUpdate() {
+            const file = document.getElementById('batchImgFile').files[0];
+            if (!file) return alert("请选择图片");
+            const btn = document.getElementById('confirmBatchImgBtn');
+            btn.innerText = "⏳ 上传中..."; btn.disabled = true;
+
+            try {
+                const fileName = `${Date.now()}_batch_${file.name}`;
+                await supabaseClient.storage.from('images').upload(fileName, file);
+                const imageUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
+
+                const key = currentSearchKey.toLowerCase();
+                let newList = [...currentData.group_data];
+                newList.forEach(item => {
+                    if ((item.cn||"").toLowerCase().includes(key) || (item.name||"").toLowerCase().includes(key)) item.image_url = imageUrl;
+                });
+
+                const { error } = await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
+                if (error) throw error;
+                location.reload();
+            } catch (e) { alert(e.message); btn.innerText = "确认补图"; btn.disabled = false; }
+        }
+
+        // --- 基础功能 ---
+        async function saveItem() {
+            const file = document.getElementById('itemFile').files[0];
+            let imageUrl = document.getElementById('editItemId').dataset.img || "";
+            if (file) {
+                const fileName = `${Date.now()}_${file.name}`;
+                await supabaseClient.storage.from('images').upload(fileName, file);
+                imageUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
+            }
+            const newItem = {
+                item_id: document.getElementById('editItemId').value || Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                name: document.getElementById('itemName').value,
+                cn: document.getElementById('itemCN').value,
+                price: parseFloat(document.getElementById('itemPrice').value) || 0,
+                quantity: parseInt(document.getElementById('itemQty').value) || 1,
+                status: document.getElementById('itemStatus').value,
+                image_url: imageUrl,
+                country: document.getElementById('itemCountry').value,
+                created_at: new Date().toISOString()
+            };
+            let newList = [...(currentData.group_data || [])];
+            const idx = newList.findIndex(i => i.item_id === newItem.item_id);
+            if (idx > -1) newList[idx] = newItem; else newList.push(newItem);
+            await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
+            location.reload();
+        }
+
+        async function previewImport() {
+            const raw = document.getElementById('csvInput').value.trim();
+            if(!raw) return;
+            const lines = raw.split('\n').filter(l => l.trim());
+            if(lines.length < 6) return alert("格式错误，请确保复制了整表内容");
+            const itemNames = lines[2].split('\t').slice(2);
+            const prices = lines[3].split('\t').slice(2).map(p => parseFloat(p.replace(/[¥,]/g, '')) || 0);
+            let items = [];
+            for(let i = 5; i < lines.length; i++){
+                const cells = lines[i].split('\t');
+                const cn = cells[1]?.trim();
+                if(!cn || cn === "昵称/总数") continue;
+                itemNames.forEach((name, idx) => {
+                    const qty = parseInt(parseFloat(cells[idx+2]));
+                    if(qty > 0) items.push({ item_id: Date.now()+'_'+Math.random().toString(36).substr(2,4), name: name.trim(), country:"日本", price: prices[idx], quantity: qty, cn, status: "未出荷", created_at: new Date().toISOString() });
+                });
+            }
+            const newList = [...(currentData.group_data || []), ...items];
+            await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
+            location.reload();
+        }
+
+        function editItem(id) {
+            const item = currentData.group_data.find(i => i.item_id === id);
+            document.getElementById('editItemId').value = item.item_id;
+            document.getElementById('editItemId').dataset.img = item.image_url || "";
+            document.getElementById('itemName').value = item.name;
+            document.getElementById('itemCN').value = item.cn;
+            document.getElementById('itemPrice').value = item.price;
+            document.getElementById('itemQty').value = item.quantity;
+            document.getElementById('itemStatus').value = item.status;
+            document.getElementById('itemCountry').value = item.country;
+            window.scrollTo(0,0);
+        }
+
+        async function batchDelete() {
+            if(!selectedIds.size || !confirm(`确认删除选中的 ${selectedIds.size} 项？`)) return;
+            const newList = currentData.group_data.filter(i => !selectedIds.has(i.item_id));
+            await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
+            location.reload();
+        }
+
+        // --- 辅助 ---
+        function switchTab(t) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('active'); if(b.dataset.tab === t) b.classList.add('active'); });
+            document.getElementById('tab-' + t).classList.remove('hidden');
+            if(t==='logs') renderLogs();
+        }
+        function renderLogs() {
+            const logs = (currentData.image_data && currentData.image_data.transfer_logs) || [];
+            document.getElementById('transferLogsList').innerHTML = logs.map(l => `<div style="font-size:12px; border-left:3px solid var(--main); padding:8px; margin-bottom:10px; background:#f9f9f9;">
+                <strong>${l.item_name}</strong>: ${l.from_cn} ➔ ${l.to_cn} <br><small>${new Date(l.time).toLocaleString()} | 备注: ${l.note||'无'}</small></div>`).join('');
+        }
+        function toggleSelect(id) { if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id); document.getElementById('selCount').innerText = selectedIds.size; renderUI(); }
+        function toggleSelectAll(c) { if(c) currentFilteredList.forEach(i=>selectedIds.add(i.item_id)); else selectedIds.clear(); document.getElementById('selCount').innerText = selectedIds.size; renderUI(); }
+        function applySearchFilter() { currentSearchKey = document.getElementById('universalSearchInput').value; selectedIds.clear(); renderUI(); }
+        function clearSearchFilter() { document.getElementById('universalSearchInput').value = ""; currentSearchKey = ''; renderUI(); }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+        function clearForm() { document.getElementById('editItemId').value=""; document.getElementById('itemName').value=""; document.getElementById('itemCN').value=""; }
+
+        checkAuth();
+    </script>
+</body>
+</html>
