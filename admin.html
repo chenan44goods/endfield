@@ -24,13 +24,13 @@
         .stats-badge { padding: 3px 8px; border-radius: 12px; background: #f0f0f0; font-size: 11px; margin-right: 5px; border: 1px solid #ddd; }
         #initGuide { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: #fff; display: flex; justify-content: center; align-items: center; z-index: 999; }
         .img-preview { width: 45px; height: 45px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; }
-        .import-preview-area { background: #f9f9f9; padding: 10px; border-radius: 6px; border: 1px dashed #ccc; margin-top: 10px; font-size: 12px; max-height: 150px; overflow-y: auto; }
+        .import-preview-area { background: #f9f9f9; padding: 10px; border-radius: 6px; border: 1px dashed #ccc; margin-top: 10px; font-size: 12px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; }
         .hidden { display: none !important; }
     </style>
 </head>
 <body>
 
-    <div id="debug-bar">⏳ 正在同步系统状态...</div>
+    <div id="debug-bar">⏳ 系统环境检测中...</div>
 
     <!-- 登录模块 -->
     <div id="loginSection" class="login-box">
@@ -45,7 +45,7 @@
     <div id="initGuide" class="hidden">
         <div class="card" style="color:#333; width: 320px; text-align: center;">
             <h3>✨ 欢迎新团长</h3>
-            <p style="font-size: 14px; color: #666;">请设置你的查询密钥<br>(团员查询时需要输入此项)</p>
+            <p>请设置你的查询密钥(团员用)</p>
             <input type="text" id="newQueryKey" placeholder="例如：endfield">
             <button class="btn btn-primary" style="width: 100%;" onclick="initSystem()">完成初始化</button>
         </div>
@@ -75,7 +75,7 @@
                     <label>谷子名称</label><input type="text" id="itemName">
                     <label>地区</label>
                     <select id="itemCountry">
-                        <option>国内</option><option>日本</option><option>台湾</option><option>泰国</option><option>印尼</option><option>美国</option><option>韩国</option>
+                        <option>日本</option><option>国内</option><option>台湾</option><option>泰国</option><option>印尼</option><option>美国</option><option>韩国</option>
                     </select>
                     <label>团员昵称 (CN)</label><input type="text" id="itemCN">
                     <div style="display:flex; gap:10px">
@@ -93,25 +93,25 @@
                     <label>柄图上传</label>
                     <input type="file" id="itemFile" accept="image/*">
                     <button class="btn btn-pink" style="width:100%; margin-top:15px" onclick="saveItem()">保存记录</button>
-                    <button class="btn" style="width:100%; margin-top:5px" onclick="clearForm()">清空表单</button>
+                    <button class="btn" style="width:100%; margin-top:5px" onclick="clearForm()">清空重置</button>
                 </div>
 
                 <!-- 批量导入 -->
                 <div class="card">
-                    <h3>📥 批量导入通贩排表</h3>
+                    <h3>📥 批量导入通贩汇总表</h3>
                     <label>通贩地区</label>
                     <select id="importCountry">
                         <option>日本</option><option>国内</option><option>台湾</option><option>泰国</option><option>印尼</option><option>美国</option><option>韩国</option>
                     </select>
-                    <label>粘贴 CSV 数据（从 Excel 直接复制）</label>
-                    <textarea id="csvInput" rows="8" placeholder="总金额	CN	谷子A	谷子B...&#10;,单价,10,20...&#10;100,昵称,,1..."></textarea>
+                    <label>请粘贴 Excel 汇总内容</label>
+                    <textarea id="csvInput" rows="8" placeholder="请直接复制 Excel 完整表格粘贴在此..."></textarea>
                     
                     <div style="margin-top:10px">
-                        <button class="btn btn-primary" onclick="previewImport()">🔍 预览数据</button>
-                        <button class="btn btn-pink" id="confirmImportBtn" disabled onclick="executeImport()">✅ 确认导入</button>
+                        <button class="btn btn-primary" onclick="previewImport()">🔍 预览解析结果</button>
+                        <button class="btn btn-pink" id="confirmImportBtn" disabled onclick="executeImport()">✅ 确认导入数据库</button>
                     </div>
 
-                    <div id="importPreview" class="import-preview-area">尚未进行预览...</div>
+                    <div id="importPreview" class="import-preview-area">尚未解析数据...</div>
                     <p id="importResult" style="font-size:12px; margin-top:5px; color:var(--main)"></p>
                 </div>
 
@@ -120,18 +120,18 @@
                     <h3>⚙️ 团务设置</h3>
                     <p>查询密钥：<strong id="dispKey" style="color:var(--main); background:#eee; padding:2px 5px;"></strong></p>
                     <hr>
-                    <h4>副团长列表</h4>
+                    <h4>副团长管理</h4>
                     <div id="coAdminList" style="margin-bottom:15px;"></div>
-                    <label>添加副团长(邮箱)</label>
-                    <input type="email" id="newAdminEmail" placeholder="输入已注册的邮箱">
-                    <button class="btn btn-primary" style="width:100%;" onclick="addAdmin()">添加</button>
+                    <label>添加助理邮箱</label>
+                    <input type="email" id="newAdminEmail" placeholder="对方需已注册 Supabase">
+                    <button class="btn btn-primary" style="width:100%;" onclick="addAdmin()">添加助理</button>
                 </div>
             </div>
 
             <div class="card" style="margin-top:20px; overflow-x:auto;">
-                <h3>📜 排单明细</h3>
-                <table id="goodsTable">
-                    <thead><tr><th>图</th><th>谷名</th><th>CN</th><th>明细</th><th>状态</th><th>操作</th></tr></thead>
+                <h3>📜 排单明细 (共 <span id="totalCount">0</span> 条)</h3>
+                <table>
+                    <thead><tr><th>图</th><th>名称</th><th>CN</th><th>明细</th><th>状态</th><th>操作</th></tr></thead>
                     <tbody id="tbody"></tbody>
                 </table>
             </div>
@@ -145,14 +145,14 @@
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         let currentData = null;
         let currentUser = null;
-        let tempImportData = []; // 暂存解析后的数据
+        let tempImportData = [];
 
-        // --- 基础权限逻辑 ---
+        // --- 登录/身份 ---
         async function login() {
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('pw').value.trim();
             const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-            if (error) document.getElementById('loginStatus').innerText = "错误: " + error.message;
+            if (error) document.getElementById('loginStatus').innerText = "登录失败: " + error.message;
             else checkAuth();
         }
         async function logout() { await supabaseClient.auth.signOut(); location.reload(); }
@@ -160,7 +160,7 @@
         async function checkAuth() {
             const { data: { user } } = await supabaseClient.auth.getUser();
             if (!user) {
-                document.getElementById('debug-bar').innerText = "💡 请先登录团长账号";
+                document.getElementById('debug-bar').innerText = "💡 请登录";
                 document.getElementById('loginSection').classList.remove('hidden');
                 return;
             }
@@ -172,7 +172,7 @@
             const { data: records } = await supabaseClient.from('leader_data').select('*');
             if (records && records.length > 0) {
                 currentData = records[0];
-                document.getElementById('debug-bar').innerText = "✅ 数据同步成功";
+                document.getElementById('debug-bar').innerText = "✅ 已同步";
                 document.getElementById('debug-bar').style.background = "green";
                 renderUI();
             } else {
@@ -186,44 +186,56 @@
             if(error) alert(error.message); else location.reload();
         }
 
-        // --- 批量导入逻辑 ---
+        // --- 批量导入逻辑重构 ---
         function previewImport() {
-            const rawData = document.getElementById('csvInput').value.trim();
+            const raw = document.getElementById('csvInput').value.trim();
             const country = document.getElementById('importCountry').value;
             const previewArea = document.getElementById('importPreview');
-            const resultMsg = document.getElementById('importResult');
             const confirmBtn = document.getElementById('confirmImportBtn');
+            const resultMsg = document.getElementById('importResult');
 
-            if (!rawData) { alert("请先粘贴 CSV 数据"); return; }
+            if (!raw) { alert("请先粘贴 Excel 数据"); return; }
 
-            // 1. 解析行和列 (兼容 Tab 和 逗号)
-            const lines = rawData.split('\n').map(l => l.split(/[,\t]/).map(v => v.trim()));
-            if (lines.length < 3) { alert("格式错误：至少需要表头、单价和一行团员数据"); return; }
+            // 1. 按行拆分
+            const lines = raw.split(/\r?\n/).filter(l => l.trim() !== "");
+            
+            if (lines.length < 6) {
+                alert("格式错误：请确保粘贴的是完整的 Excel 汇总表（至少包含标题、种类、单价、表头、数据）");
+                return;
+            }
 
-            const headerRow = lines[0]; // 第1行：谷子名称
-            const priceRow = lines[1];  // 第2行：单价
-            const itemNames = headerRow.slice(2); // 从第3列起是名称
-            const itemPrices = priceRow.slice(2).map(p => parseFloat(p.replace(/[¥,]/g, '')) || 0);
+            // 2. 提取名称行 (第3行, index 2) 和 单价行 (第4行, index 3)
+            const rowNames = lines[2].split('\t').map(c => c.trim());
+            const rowPrices = lines[3].split('\t').map(c => c.trim());
 
-            if (itemNames.length === 0) { alert("格式错误：未在第1行找到谷子名称"); return; }
+            // 校验行首标记
+            if (rowNames[1] !== "种类") { alert("格式错误：第 3 行应为谷子名称（种类）"); return; }
+            if (rowPrices[1] !== "单价") { alert("格式错误：第 4 行应为单价"); return; }
+
+            // 提取核心数据：从第3列起 (index 2)
+            const itemNames = rowNames.slice(2);
+            const prices = rowPrices.slice(2).map(p => parseFloat(p.replace(/[¥,]/g, '')) || 0);
 
             tempImportData = [];
             let previewText = "";
 
-            // 2. 遍历团员行 (从第3行起)
-            for (let i = 2; i < lines.length; i++) {
-                const row = lines[i];
-                const cn = row[1]; // 第2列是 CN
-                if (!cn) continue;
+            // 3. 从第6行起遍历数据 (index 5)
+            for (let i = 5; i < lines.length; i++) {
+                const cells = lines[i].split('\t').map(c => c.trim());
+                const cn = cells[1]; // 第2列是 CN
+                if (!cn || cn === "昵称/总数") continue;
 
-                // 3. 遍历每一列谷子
+                // 遍历该团员的每一列数量
                 for (let j = 0; j < itemNames.length; j++) {
                     const itemName = itemNames[j];
-                    const price = itemPrices[j];
-                    const qtyVal = row[j + 2]; // 数量从第3列开始对应
-                    const qty = parseInt(qtyVal);
-
-                    if (itemName && !isNaN(qty) && qty > 0) {
+                    const price = prices[j];
+                    const qtyStr = cells[j + 2]; // 数量从第3列开始
+                    
+                    if (!qtyStr || qtyStr === "") continue;
+                    
+                    const qty = parseInt(parseFloat(qtyStr)); // 处理 3.0 -> 3
+                    
+                    if (qty > 0 && itemName) {
                         const newItem = {
                             item_id: Date.now() + "_" + Math.random().toString(36).substr(2, 5),
                             name: itemName,
@@ -239,27 +251,27 @@
                         tempImportData.push(newItem);
                         
                         if (tempImportData.length <= 5) {
-                            previewText += `${tempImportData.length}. ${cn} - ${itemName} x${qty} (￥${price}) - ${country}\n`;
+                            previewText += `${tempImportData.length}. [${cn}] 排了 ${itemName} x${qty} (单价￥${price})\n`;
                         }
                     }
                 }
             }
 
             if (tempImportData.length === 0) {
-                previewArea.innerText = "❌ 未找到有效排谷记录，请检查格式";
+                previewArea.innerText = "❌ 未找到有效排谷记录，请检查表格内容";
                 confirmBtn.disabled = true;
             } else {
-                previewArea.innerText = `预览(前5条)：\n${previewText}${tempImportData.length > 5 ? '...' : ''}`;
-                resultMsg.innerText = `解析成功：即将导入 ${tempImportData.length} 条记录`;
+                previewArea.innerText = `预览解析前5条：\n${previewText}${tempImportData.length > 5 ? '...等共计 ' + tempImportData.length + ' 条' : ''}`;
+                resultMsg.innerText = `解析成功：识别到 ${tempImportData.length} 条有效排项`;
                 confirmBtn.disabled = false;
             }
         }
 
         async function executeImport() {
-            if (tempImportData.length === 0) return;
+            if (!tempImportData.length) return;
             const btn = document.getElementById('confirmImportBtn');
-            btn.innerText = "🚀 正在导入...";
             btn.disabled = true;
+            btn.innerText = "正在写入数据库...";
 
             const newList = [...(currentData.group_data || []), ...tempImportData];
 
@@ -269,15 +281,15 @@
 
             if (error) {
                 alert("导入失败: " + error.message);
-                btn.innerText = "✅ 确认导入";
                 btn.disabled = false;
+                btn.innerText = "✅ 确认导入数据库";
             } else {
-                alert(`🎉 成功导入 ${tempImportData.length} 条排谷记录！`);
+                alert(`✅ 成功导入 ${tempImportData.length} 条记录！`);
                 location.reload();
             }
         }
 
-        // --- 原有管理逻辑 ---
+        // --- 渲染 UI ---
         function renderUI() {
             const isOwner = currentData.user_id === currentUser.id;
             if (isOwner) {
@@ -288,10 +300,12 @@
             document.getElementById('roleTag').innerText = isOwner ? "🎀 团长后台" : "助理后台";
             
             const list = currentData.group_data || [];
+            document.getElementById('totalCount').innerText = list.length;
             const totalSum = list.reduce((s, i) => s + (i.price * i.quantity), 0);
-            document.getElementById('statsArea').innerHTML = `<strong>总项: ${list.length}</strong> | <strong>应肾: ￥${totalSum.toFixed(2)}</strong>`;
+            document.getElementById('statsArea').innerHTML = `<strong>全团项数: ${list.length}</strong> | <strong>应肾总额: ￥${totalSum.toFixed(2)}</strong>`;
 
             const tbody = document.getElementById('tbody');
+            // 倒序显示，最新添加的在上面
             tbody.innerHTML = list.slice().reverse().map((item) => `
                 <tr>
                     <td><img src="${item.image_url || ''}" class="img-preview" onerror="this.src='https://via.placeholder.com/50?text=无图'"></td>
@@ -300,20 +314,21 @@
                     <td>￥${item.price}x${item.quantity}</td>
                     <td><span class="stats-badge">${item.status}</span></td>
                     <td>
-                        <button onclick="editItem('${item.item_id}')" style="font-size:11px">编辑</button>
+                        <button onclick="editItem('${item.item_id}')" style="font-size:11px">改</button>
                         <button onclick="deleteItem('${item.item_id}')" style="font-size:11px;color:red">删</button>
                     </td>
                 </tr>
             `).join('');
         }
 
+        // --- 单条保存/上传 ---
         async function saveItem() {
             const file = document.getElementById('itemFile').files[0];
             let imageUrl = document.getElementById('editItemId').dataset.img || "";
             if (file) {
                 const fileName = `${Date.now()}_${file.name}`;
-                const { error: uploadError } = await supabaseClient.storage.from('images').upload(fileName, file);
-                if (uploadError) return alert("上传失败");
+                const { error: upErr } = await supabaseClient.storage.from('images').upload(fileName, file);
+                if (upErr) return alert("上传失败");
                 imageUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
             }
             const newItem = {
@@ -333,7 +348,7 @@
             if (idx > -1) newList[idx] = newItem; else newList.push(newItem);
 
             const { error } = await supabaseClient.from('leader_data').update({ group_data: newList }).eq('query_key', currentData.query_key);
-            if (error) alert("保存失败: " + error.message); else location.reload();
+            if (error) alert("保存失败"); else location.reload();
         }
 
         function editItem(id) {
@@ -384,6 +399,7 @@
             document.getElementById('itemName').value = "";
             document.getElementById('itemCN').value = "";
             document.getElementById('itemFile').value = "";
+            document.getElementById('editItemId').dataset.img = "";
         }
 
         checkAuth();
