@@ -508,6 +508,7 @@
         <label for="adminQueryKey" style="font-size: 0.88rem; font-weight: 600;">当前 Query Key:</label>
         <input type="text" id="adminQueryKey" value="demo_key" placeholder="请输入 Query Key">
         <button class="btn btn-primary" onclick="loadDataByQueryKey()">切换并加载数据</button>
+        <button class="btn btn-secondary" onclick="copyQueryKey()">📋 复制 Key</button>
       </div>
       <div class="user-info">
         <span id="userEmailSpan" style="color: var(--text-muted);">已登录: 检查中...</span>
@@ -732,8 +733,11 @@
         <div class="card-title">🛠️ 团务与测试工具</div>
         <div style="display: flex; flex-direction: column; gap: 16px;">
           <div>
-            <label style="font-size: 0.88rem; font-weight: 600; display: block; margin-bottom: 6px;">发送给团员的自查链接：</label>
-            <button class="btn btn-primary" onclick="copyMemberLink()">📋 复制团员自查专属链接</button>
+            <label style="font-size: 0.88rem; font-weight: 600; display: block; margin-bottom: 6px;">发送给团员的自查链接与密钥：</label>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn btn-primary" onclick="copyMemberLink()">📋 复制团员自查专属链接</button>
+              <button class="btn btn-secondary" onclick="copyQueryKey()">📋 复制当前 Query Key</button>
+            </div>
           </div>
           <hr style="border: none; border-top: 1px solid var(--border);">
           <div>
@@ -1299,35 +1303,87 @@
     }
     window.batchDeleteItems = batchDeleteItems;
 
-    // 矩阵格式 Excel / 复制文本解析逻辑
+    // 矩阵格式 Excel / 复制文本解析逻辑 (动态智能定位行与列)
     function parseMatrixImportText(raw, batchCountry) {
       if (!raw) return [];
-      const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
-      if (lines.length < 5) return [];
+      const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length < 2) return [];
 
-      // 第2行（索引1）是谷子名称行，"种类"在索引0，所以从索引1开始 slice(1)
-      const itemNames = lines[1].split('\t').slice(1);
+      let nameLineIdx = -1;
+      let priceLineIdx = -1;
+      let headerLineIdx = -1;
 
-      // 第3行（索引2）是单价行，"单价"在索引0，所以从索引1开始 slice(1)
-      const prices = lines[2].split('\t').slice(1).map(p => parseFloat(p) || 0);
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (nameLineIdx === -1 && line.includes('种类')) {
+          nameLineIdx = i;
+        }
+        if (priceLineIdx === -1 && line.includes('单价')) {
+          priceLineIdx = i;
+        }
+        if (headerLineIdx === -1 && (line.includes('昵称') || line.includes('CN') || line.includes('总数'))) {
+          headerLineIdx = i;
+        }
+      }
 
+      // 如果未检索到关键字，兜底策略
+      if (nameLineIdx === -1) nameLineIdx = lines.length > 2 ? 2 : 1;
+      if (priceLineIdx === -1) priceLineIdx = lines.length > 3 ? 3 : nameLineIdx + 1;
+      if (headerLineIdx === -1) headerLineIdx = Math.max(nameLineIdx, priceLineIdx) + 1;
+
+      // 1. 动态定位谷子名称及列索引
+      const nameCells = lines[nameLineIdx].split('\t');
+      let kindColIdx = nameCells.findIndex(c => c.trim().includes('种类'));
+      if (kindColIdx === -1) kindColIdx = 0; // 找不到默认从第0列开始
+
+      const itemNamesWithOffset = [];
+      for (let col = kindColIdx + 1; col < nameCells.length; col++) {
+        const nameVal = nameCells[col]?.trim();
+        if (nameVal) {
+          itemNamesWithOffset.push({
+            name: nameVal,
+            offset: col - (kindColIdx + 1)
+          });
+        }
+      }
+
+      if (itemNamesWithOffset.length === 0) return [];
+
+      // 2. 动态定位单价及列索引
+      const priceCells = priceLineIdx < lines.length ? lines[priceLineIdx].split('\t') : [];
+      let priceColIdx = priceCells.findIndex(c => c.trim().includes('单价'));
+      if (priceColIdx === -1) priceColIdx = 0;
+
+      const prices = [];
+      for (let col = priceColIdx + 1; col < priceCells.length; col++) {
+        const p = parseFloat(priceCells[col]);
+        prices.push(isNaN(p) ? 0 : p);
+      }
+
+      // 3. 从表头行的下一行开始逐行读取团员数据
+      const dataStartIdx = headerLineIdx + 1;
       const items = [];
 
-      // 从第5行（索引4）开始是团员数据
-      for (let i = 4; i < lines.length; i++) {
+      for (let i = dataStartIdx; i < lines.length; i++) {
         const cells = lines[i].split('\t');
-        const cn = cells[1]?.trim(); // cells[1] 是 CN
-        if (!cn || cn === "昵称/总数" || cn === "CN" || cn === "昵称") continue; // 跳过表头/汇总行
+        if (cells.length < 2) continue;
 
-        itemNames.forEach((name, idx) => {
-          if (!name || !name.trim()) return;
-          const qty = parseFloat(cells[idx + 2]); // cells[2] 对应 itemNames[0]
-          if (qty > 0) {
+        // cells[0] 是总金额（忽略），cells[1] 是团员 CN
+        const cn = cells[1]?.trim();
+        if (!cn || cn === "昵称/总数" || cn === "CN" || cn === "昵称" || cn === "总数" || cn.includes("昵称/总数")) {
+          continue;
+        }
+
+        itemNamesWithOffset.forEach((itemObj, idx) => {
+          // cells[2] 对应第 1 个谷子的数量
+          const qtyColIdx = 2 + itemObj.offset;
+          const qty = parseFloat(cells[qtyColIdx]);
+          if (!isNaN(qty) && qty > 0) {
             items.push({
-              item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-              name: name.trim(),
+              item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + idx,
+              name: itemObj.name.trim(),
               country: batchCountry || '日本',
-              price: prices[idx] || 0,
+              price: prices[itemObj.offset] !== undefined ? prices[itemObj.offset] : (prices[idx] || 0),
               quantity: qty,
               cn: cn,
               status: "未出荷",
@@ -1644,6 +1700,16 @@
       });
     }
     window.copyMemberLink = copyMemberLink;
+
+    function copyQueryKey() {
+      if (!CURRENT_QUERY_KEY) return showToast('当前暂无 Query Key！');
+      navigator.clipboard.writeText(CURRENT_QUERY_KEY).then(() => {
+        showToast('📋 当前 Query Key 已复制到剪贴板！');
+      }).catch(() => {
+        prompt('请手动复制 Query Key：', CURRENT_QUERY_KEY);
+      });
+    }
+    window.copyQueryKey = copyQueryKey;
 
     // 生成演示测试数据
     async function generateSampleData() {
