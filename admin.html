@@ -214,6 +214,8 @@
     /* Table */
     .table-container {
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin-bottom: 12px;
     }
 
     table {
@@ -221,12 +223,14 @@
       border-collapse: collapse;
       text-align: left;
       font-size: 0.88rem;
+      min-width: 800px;
     }
 
     th, td {
       padding: 10px 12px;
       border-bottom: 1px solid var(--border);
       vertical-align: middle;
+      white-space: nowrap;
     }
 
     th {
@@ -244,6 +248,7 @@
       border-radius: 9999px;
       font-size: 0.75rem;
       font-weight: 600;
+      white-space: nowrap;
     }
 
     .badge-country {
@@ -308,6 +313,126 @@
     .toast.show {
       opacity: 1;
       transform: translateY(0);
+    }
+
+    /* 手机端卡片列表 (方案 A) */
+    .mobile-cards-view {
+      display: none;
+    }
+
+    @media (max-width: 768px) {
+      header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .nav-tabs {
+        overflow-x: auto;
+        white-space: nowrap;
+        padding-bottom: 4px;
+        -webkit-overflow-scrolling: touch;
+      }
+      .desktop-table-view {
+        display: none !important;
+      }
+      .mobile-cards-view {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .app-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .items-grid-10 {
+        grid-template-columns: repeat(2, 1fr) !important;
+      }
+      .grid-item-chip {
+        padding: 8px 6px;
+      }
+    }
+
+    .admin-card-mobile {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    .admin-card-mobile-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed var(--border);
+    }
+
+    .admin-card-mobile-body {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .admin-card-mobile-img {
+      width: 50px;
+      height: 50px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .admin-card-mobile-noimg {
+      width: 50px;
+      height: 50px;
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #94a3b8;
+      font-size: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    .admin-card-mobile-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .admin-card-mobile-title {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--text-main);
+      word-break: break-all;
+    }
+
+    .admin-card-mobile-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      flex-wrap: wrap;
+    }
+
+    .admin-card-mobile-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed var(--border);
     }
 
     /* 网格 10 排版样式 (严格每 10 个一排) */
@@ -520,7 +645,8 @@
           </select>
         </div>
 
-        <div class="table-container">
+        <!-- 桌面端表格视图 -->
+        <div class="table-container desktop-table-view">
           <table>
             <thead>
               <tr>
@@ -539,6 +665,11 @@
               <!-- 动态渲染 -->
             </tbody>
           </table>
+        </div>
+
+        <!-- 手机端卡片列表视图 (方案 A) -->
+        <div class="mobile-cards-view" id="adminMobileCardsView">
+          <!-- 动态渲染 -->
         </div>
       </div>
     </div>
@@ -870,6 +1001,7 @@
 
     function renderTable() {
       const tbody = document.getElementById('itemsTableBody');
+      const mobileCardsView = document.getElementById('adminMobileCardsView');
       const searchVal = document.getElementById('filterSearch').value.trim().toLowerCase();
       const countryVal = document.getElementById('filterCountry').value;
       const statusVal = document.getElementById('filterStatus').value;
@@ -889,14 +1021,20 @@
 
       if (filtered.length === 0) {
         tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</td></tr>`;
+        if (mobileCardsView) mobileCardsView.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</div>`;
         return;
       }
 
       let html = '';
+      let cardsHtml = '';
       filtered.forEach((item, index) => {
         const imgTag = item.image_url 
           ? `<img src="${escapeHtml(item.image_url)}" class="img-preview" alt="谷子">`
           : `<span style="color:#cbd5e1;font-size:0.75rem;">无图</span>`;
+
+        const mobileImgTag = item.image_url
+          ? `<img src="${escapeHtml(item.image_url)}" class="admin-card-mobile-img" alt="谷子">`
+          : `<div class="admin-card-mobile-noimg">无图</div>`;
 
         const countryStr = item.country || item.region || '日本';
 
@@ -916,9 +1054,37 @@
             </td>
           </tr>
         `;
+
+        cardsHtml += `
+          <div class="admin-card-mobile">
+            <div class="admin-card-mobile-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" class="item-checkbox" value="${index}">
+                <span class="badge badge-country">${escapeHtml(countryStr)}</span>
+              </div>
+              <span class="badge badge-status-${item.status || '未出荷'}">${escapeHtml(item.status || '未出荷')}</span>
+            </div>
+            <div class="admin-card-mobile-body">
+              ${mobileImgTag}
+              <div class="admin-card-mobile-info">
+                <div class="admin-card-mobile-title">${escapeHtml(item.name || '未命名')}</div>
+                <div class="admin-card-mobile-meta">
+                  <span>CN: <strong>${escapeHtml(item.cn || '无')}</strong></span>
+                  <span>￥${Number(item.price || 0).toFixed(2)}</span>
+                  <span>x${item.quantity || 1}</span>
+                </div>
+              </div>
+            </div>
+            <div class="admin-card-mobile-actions">
+              <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="editItemByIndex(${index})">✏️ 编辑</button>
+              <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="transferSingleByIndex(${index})">🔄 转单</button>
+            </div>
+          </div>
+        `;
       });
 
       tbody.innerHTML = html;
+      if (mobileCardsView) mobileCardsView.innerHTML = cardsHtml;
     }
 
     async function saveItemForm() {
