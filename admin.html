@@ -455,8 +455,8 @@
           </div>
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <button type="submit" class="btn btn-primary">保存谷子到 group_data</button>
-            <!-- Excel 批量导入 -->
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <!-- Excel 批量导入与粘贴导入 -->
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <span style="font-size: 0.85rem; color: var(--text-muted);">批量导入默认地区:</span>
               <select id="excelDefaultCountry" style="width: 100px; padding: 4px 8px;">
                 <option value="日本">日本</option>
@@ -464,11 +464,17 @@
                 <option value="淘宝店">淘宝店</option>
                 <option value="美国">美国</option>
                 <option value="韩国">韩国</option>
+                <option value="印尼">印尼</option>
+                <option value="泰国">泰国</option>
+                <option value="台湾">台湾</option>
               </select>
               <label class="btn btn-success" style="cursor: pointer; margin: 0;">
                 📁 导入 Excel 文件
                 <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleExcelImport(event)">
               </label>
+              <button type="button" class="btn btn-secondary" onclick="openPasteModal()">
+                📋 粘贴表格文本
+              </button>
             </div>
           </div>
         </form>
@@ -623,6 +629,24 @@
         </div>
         <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 10px;">登录后台</button>
       </form>
+    </div>
+  </div>
+
+  <!-- 粘贴表格文本导入 Modal Overlay -->
+  <div class="modal-overlay" id="pasteModal">
+    <div class="modal" style="max-width: 650px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="font-size: 1.1rem; font-weight: 700;">📋 粘贴 Excel / WPS 表格文本导入</h3>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closePasteModal()">✕</button>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">
+        提示：从 Excel / WPS 表格中复制包含【种类/谷名、单价、团员 CN 及数量】的内容，直接粘贴在下方框中解析导入：
+      </p>
+      <textarea id="pasteInputText" rows="10" placeholder="直接粘贴 Excel 表格复制内容（含制表符 \t 分隔）..." style="font-family: monospace; font-size: 0.82rem; margin-bottom: 12px; resize: vertical;"></textarea>
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button class="btn btn-secondary" onclick="closePasteModal()">取消</button>
+        <button class="btn btn-primary" onclick="submitPasteImport()">解析并导入 group_data</button>
+      </div>
     </div>
   </div>
 
@@ -1090,7 +1114,52 @@
     }
     window.batchDeleteItems = batchDeleteItems;
 
-    // Excel 导入
+    // 矩阵格式 Excel / 复制文本解析逻辑
+    function parseMatrixImportText(raw, batchCountry) {
+      if (!raw) return [];
+      const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
+      if (lines.length < 5) return [];
+
+      // 第 2 行（索引 1）是谷子名称行：种类 \t 杯垫-庄方宜 \t 杯垫-别礼 \t ...
+      // 从第 3 列（索引 2）开始是谷子名称数组
+      const itemNames = lines[1].split('\t').slice(2);
+
+      // 第 3 行（索引 2）是单价行：单价 \t 27.15 \t 27.15 \t ...
+      // 从第 3 列（索引 2）开始是对应单价数组
+      const prices = lines[2].split('\t').slice(2).map(p => parseFloat(p) || 0);
+
+      const items = [];
+
+      // 第 5 行开始（索引 4 及以后）是团员数据：总金额 \t CN \t 数量1 \t 数量2 \t ...
+      for (let i = 4; i < lines.length; i++) {
+        const cells = lines[i].split('\t');
+        const cn = cells[1]?.trim();
+        if (!cn || cn === "昵称/总数" || cn === "CN" || cn === "昵称") continue; // 跳过表头/汇总行
+
+        itemNames.forEach((name, idx) => {
+          if (!name || !name.trim()) return;
+          const qty = parseFloat(cells[idx + 2]); // cells[2] 对应第 1 个谷子
+          if (qty > 0) {
+            items.push({
+              item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+              name: name.trim(),
+              country: batchCountry || '日本',
+              price: prices[idx] || 0,
+              quantity: qty,
+              cn: cn,
+              status: "未出荷",
+              image_url: "",
+              created_at: new Date().toISOString()
+            });
+          }
+        });
+      }
+
+      return items;
+    }
+    window.parseMatrixImportText = parseMatrixImportText;
+
+    // Excel 文件导入
     function handleExcelImport(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -1103,32 +1172,43 @@
           const data = new Uint8Array(evt.target.result);
           const workbook = XLSX.read(data, { type: 'array' });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const jsonRows = XLSX.utils.sheet_to_json(firstSheet);
 
-          if (!jsonRows || jsonRows.length === 0) return showToast('Excel 表中未读取到有效行！');
+          // 1. 优先尝试使用矩阵格式解析（转换为 \t 分隔文本）
+          const csvText = XLSX.utils.sheet_to_csv(firstSheet, { FS: '\t' });
+          let parsedItems = parseMatrixImportText(csvText, defaultCountry);
 
-          let count = 0;
-          jsonRows.forEach(row => {
-            const name = row['谷子名称'] || row['名称'] || row['谷子'] || row['品名'];
-            const cn = row['认领CN'] || row['CN'] || row['姓名'] || row['圈名'];
-            if (name && cn) {
-              RAW_ITEMS.push({
-                item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random()*10000),
-                name: String(name).trim(),
-                cn: String(cn).trim(),
-                price: parseFloat(row['单价'] || row['价格'] || 0) || 0,
-                quantity: parseInt(row['数量'] || 1) || 1,
-                country: String(row['地区'] || row['country'] || defaultCountry).trim(),
-                status: String(row['状态'] || '未出荷').trim(),
-                image_url: row['图片'] || ''
+          // 2. 如果矩阵解析未获取到数据，尝试传统的纵向列表模式（谷子名称, 认领CN, 单价, 数量）
+          if (parsedItems.length === 0) {
+            const jsonRows = XLSX.utils.sheet_to_json(firstSheet);
+            if (jsonRows && jsonRows.length > 0) {
+              jsonRows.forEach(row => {
+                const name = row['谷子名称'] || row['名称'] || row['谷子'] || row['品名'];
+                const cn = row['认领CN'] || row['CN'] || row['姓名'] || row['圈名'];
+                if (name && cn) {
+                  parsedItems.push({
+                    item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+                    name: String(name).trim(),
+                    cn: String(cn).trim(),
+                    price: parseFloat(row['单价'] || row['价格'] || 0) || 0,
+                    quantity: parseInt(row['数量'] || 1) || 1,
+                    country: String(row['地区'] || row['country'] || defaultCountry).trim(),
+                    status: String(row['状态'] || '未出荷').trim(),
+                    image_url: row['图片'] || '',
+                    created_at: new Date().toISOString()
+                  });
+                }
               });
-              count++;
             }
-          });
+          }
 
+          if (parsedItems.length === 0) {
+            return showToast('Excel 表中未读取到有效谷子排单数据！请确认文件格式。');
+          }
+
+          RAW_ITEMS.push(...parsedItems);
           await saveDataToSupabase();
           renderTable();
-          showToast(`🎉 成功从 Excel 导入 ${count} 条谷子到 group_data！`);
+          showToast(`🎉 成功导入 ${parsedItems.length} 条谷子记录到 group_data！`);
           e.target.value = '';
         } catch (err) {
           console.error(err);
@@ -1139,6 +1219,39 @@
       reader.readAsArrayBuffer(file);
     }
     window.handleExcelImport = handleExcelImport;
+
+    // 粘贴文本 Modal 操作逻辑
+    function openPasteModal() {
+      document.getElementById('pasteInputText').value = '';
+      document.getElementById('pasteModal').classList.add('active');
+    }
+    window.openPasteModal = openPasteModal;
+
+    function closePasteModal() {
+      document.getElementById('pasteModal').classList.remove('active');
+    }
+    window.closePasteModal = closePasteModal;
+
+    async function submitPasteImport() {
+      const rawText = document.getElementById('pasteInputText').value;
+      if (!rawText || !rawText.trim()) {
+        return showToast('请先粘贴文本内容！');
+      }
+
+      const defaultCountry = document.getElementById('excelDefaultCountry').value || '日本';
+      const parsedItems = parseMatrixImportText(rawText, defaultCountry);
+
+      if (parsedItems.length === 0) {
+        return showToast('解析失败，未提取到有效排单数据！请检查粘贴内容格式。');
+      }
+
+      RAW_ITEMS.push(...parsedItems);
+      await saveDataToSupabase();
+      renderTable();
+      closePasteModal();
+      showToast(`🎉 成功解析并导入 ${parsedItems.length} 条谷子记录到 group_data！`);
+    }
+    window.submitPasteImport = submitPasteImport;
 
     /* --- 标签页 2：排发工作台逻辑 --- */
 
