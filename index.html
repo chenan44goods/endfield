@@ -626,7 +626,7 @@
         }
 
         if (!data || data.length === 0) {
-          showToast('未找到该密钥对应的团务数据，请核对密钥！');
+          showToast('未找到数据，请检查密钥是否正确，或联系团长确认后台权限设置');
           return null;
         }
 
@@ -736,8 +736,13 @@
       }
 
       if (items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">未查询到符合条件的谷子数据</td></tr>`;
-        mobileCardsView.innerHTML = `<div class="empty-state">未查询到符合条件的谷子数据</div>`;
+        const emptyHtml = `
+          <div class="empty-state">
+            <div>未查询到符合条件的谷子数据</div>
+            <div style="font-size:0.8rem; color:#94a3b8; margin-top:6px; font-weight:normal;">如果您确认密钥正确，请联系团长检查后台数据是否已录入</div>
+          </div>`;
+        tbody.innerHTML = `<tr><td colspan="7">${emptyHtml}</td></tr>`;
+        mobileCardsView.innerHTML = emptyHtml;
         return;
       }
 
