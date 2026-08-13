@@ -43,6 +43,40 @@
       margin: 0 auto;
     }
 
+    /* Auth Modal / Box */
+    .auth-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(15, 23, 42, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 3000;
+      backdrop-filter: blur(4px);
+    }
+
+    .auth-box {
+      background: white;
+      border-radius: var(--radius);
+      width: 90%;
+      max-width: 400px;
+      padding: 28px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+
+    .auth-box h2 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--text-main);
+    }
+
+    .auth-box p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+
     header {
       display: flex;
       justify-content: space-between;
@@ -52,6 +86,8 @@
       background: var(--card-bg);
       border-radius: var(--radius);
       border: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 12px;
     }
 
     header h1 {
@@ -66,6 +102,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      flex-wrap: wrap;
     }
 
     .key-selector input {
@@ -73,7 +110,7 @@
       border: 1px solid var(--border);
       border-radius: 6px;
       font-size: 0.9rem;
-      width: 180px;
+      width: 160px;
     }
 
     /* Tab Navigation */
@@ -150,7 +187,7 @@
       color: var(--text-muted);
     }
 
-    input[type="text"], input[type="number"], select, textarea {
+    input[type="text"], input[type="password"], input[type="number"], select, textarea {
       padding: 8px 12px;
       border: 1px solid var(--border);
       border-radius: 6px;
@@ -241,12 +278,16 @@
       font-weight: 600;
     }
 
-    .badge-region { background-color: #e2e8f0; color: #334155; }
-    .badge-status-未到货 { background-color: #fef3c7; color: #92400e; }
+    .badge-country { background-color: #e2e8f0; color: #334155; }
+    
+    .badge-status-未出荷 { background-color: #fee2e2; color: #991b1b; }
+    .badge-status-已下单未到货 { background-color: #ffedd5; color: #9a3412; }
+    .badge-status-回国中 { background-color: #fef3c7; color: #92400e; }
     .badge-status-已到货 { background-color: #e0f2fe; color: #075985; }
     .badge-status-可排发 { background-color: #d1fae5; color: #065f46; }
     .badge-status-已申请发货 { background-color: #f3e8ff; color: #6b21a8; }
     .badge-status-已排发 { background-color: #cbd5e1; color: #334155; }
+    .badge-status-未付款 { background-color: #fecdd3; color: #881337; }
 
     .stat-cards {
       display: grid;
@@ -271,7 +312,7 @@
       color: var(--primary);
     }
 
-    /* 严格每10个一行的网格布局 */
+    /* 严格每 10 个一行的网格布局 */
     .items-grid-10 {
       display: grid;
       grid-template-columns: repeat(10, minmax(80px, 1fr));
@@ -338,7 +379,7 @@
       padding: 10px 18px;
       border-radius: 8px;
       font-size: 0.9rem;
-      z-index: 2000;
+      z-index: 4000;
       opacity: 0;
       transition: opacity 0.3s;
       pointer-events: none;
@@ -369,14 +410,38 @@
   </style>
 </head>
 <body>
+
+  <!-- Supabase 邮箱密码登录遮罩 -->
+  <div class="auth-overlay" id="authOverlay">
+    <div class="auth-box">
+      <h2>🔐 团长身份验证</h2>
+      <p>请输入 Supabase 注册的邮箱与密码登录后台。</p>
+      <form id="loginForm" onsubmit="event.preventDefault(); handleLogin();">
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label for="loginEmail">Supabase 邮箱</label>
+          <input type="text" id="loginEmail" required placeholder="admin@example.com">
+        </div>
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label for="loginPassword">登录密码</label>
+          <input type="password" id="loginPassword" required placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 10px; font-size: 1rem;" id="btnLoginSubmit">
+          登录后台
+        </button>
+      </form>
+    </div>
+  </div>
+
   <div class="container">
     <header>
       <h1>👑 谷圈团长后台管理系统</h1>
       <div class="key-selector">
-        <label for="adminKeyInput" style="font-size: 0.85rem; font-weight:600;">当前密钥:</label>
-        <input type="text" id="adminKeyInput" placeholder="输入团务 Query Key">
-        <button class="btn btn-primary" id="btnLoadKey">切换/加载</button>
+        <span id="userInfoText" style="font-size:0.85rem; color:var(--text-muted);"></span>
+        <label for="adminKeyInput" style="font-size: 0.85rem; font-weight:600;">团务密钥:</label>
+        <input type="text" id="adminKeyInput" placeholder="输入 Query Key">
+        <button class="btn btn-primary" id="btnLoadKey">加载数据</button>
         <a href="index.html" class="btn btn-secondary" style="text-decoration: none;">团员自查页 &rarr;</a>
+        <button class="btn btn-danger" id="btnSignOut">退出登录</button>
       </div>
     </header>
 
@@ -415,8 +480,8 @@
               <input type="number" id="inputQuantity" value="1" min="1">
             </div>
             <div class="form-group">
-              <label>地区 (下拉选择)</label>
-              <select id="inputRegion">
+              <label>地区 (country)</label>
+              <select id="inputCountry">
                 <option value="日本">日本</option>
                 <option value="闲鱼">闲鱼</option>
                 <option value="淘宝店">淘宝店</option>
@@ -428,18 +493,21 @@
               </select>
             </div>
             <div class="form-group">
-              <label>状态</label>
+              <label>状态 (8种预设)</label>
               <select id="inputStatus">
-                <option value="未到货">未到货</option>
+                <option value="未出荷">未出荷</option>
+                <option value="已下单未到货">已下单未到货</option>
+                <option value="回国中">回国中</option>
                 <option value="已到货">已到货</option>
                 <option value="可排发">可排发</option>
                 <option value="已申请发货">已申请发货</option>
                 <option value="已排发">已排发</option>
+                <option value="未付款">未付款</option>
               </select>
             </div>
           </div>
           <div style="display: flex; gap: 10px;">
-            <button type="submit" class="btn btn-primary" id="btnSaveItem">保存入表</button>
+            <button type="submit" class="btn btn-primary" id="btnSaveItem">保存入表 (保存到 group_data)</button>
           </div>
         </form>
       </div>
@@ -449,8 +517,8 @@
         <div class="card-header">📂 Excel / CSV 批量导入</div>
         <div class="import-box">
           <div class="form-group">
-            <label style="margin-bottom:0;">默认地区 (如 Excel 未注明)：</label>
-            <select id="excelDefaultRegion">
+            <label style="margin-bottom:0;">默认地区 (country)：</label>
+            <select id="excelDefaultCountry">
               <option value="日本">日本</option>
               <option value="闲鱼">闲鱼</option>
               <option value="淘宝店">淘宝店</option>
@@ -465,7 +533,7 @@
             <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv">
           </div>
           <span style="font-size:0.8rem; color:var(--text-muted);">
-            (支持识别包含：名称/谷子, CN/姓名, 单价, 数量, 地区, 状态 列的 Excel 表)
+            (支持识别列：名称/谷子, CN/姓名, 单价, 数量, 地区/country, 状态)
           </span>
         </div>
       </div>
@@ -473,7 +541,7 @@
       <!-- 全团明细表格 -->
       <div class="card">
         <div class="card-header">
-          <span>📋 全团排表明细</span>
+          <span>📋 全团排表明细 (读取自 group_data)</span>
           <span style="font-size:0.85rem; font-weight:normal; color:var(--text-muted);" id="totalItemCount">共 0 件谷子</span>
         </div>
 
@@ -481,7 +549,7 @@
         <div class="action-bar">
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
             <input type="text" id="searchKeyword" placeholder="搜索名称或 CN..." oninput="renderTable()">
-            <select id="filterRegion" onchange="renderTable()">
+            <select id="filterCountry" onchange="renderTable()">
               <option value="">全部地区</option>
               <option value="日本">日本</option>
               <option value="闲鱼">闲鱼</option>
@@ -493,12 +561,15 @@
               <option value="台湾">台湾</option>
             </select>
             <select id="filterStatus" onchange="renderTable()">
-              <option value="">全部状态</option>
-              <option value="未到货">未到货</option>
+              <option value="">全部状态 (8种)</option>
+              <option value="未出荷">未出荷</option>
+              <option value="已下单未到货">已下单未到货</option>
+              <option value="回国中">回国中</option>
               <option value="已到货">已到货</option>
               <option value="可排发">可排发</option>
               <option value="已申请发货">已申请发货</option>
               <option value="已排发">已排发</option>
+              <option value="未付款">未付款</option>
             </select>
           </div>
 
@@ -506,7 +577,7 @@
           <div class="batch-btns">
             <button class="btn btn-secondary" onclick="batchTransferModal()">批量转单</button>
             <button class="btn btn-secondary" onclick="batchChangeStatusModal()">批量改状态</button>
-            <button class="btn btn-secondary" onclick="batchChangeRegionModal()">批量改地区</button>
+            <button class="btn btn-secondary" onclick="batchChangeCountryModal()">批量改地区</button>
             <button class="btn btn-secondary" onclick="batchSetImgModal()">批量补图</button>
             <button class="btn btn-danger" onclick="batchDeleteItems()">批量删除</button>
           </div>
@@ -522,7 +593,7 @@
                 <th>CN</th>
                 <th>单价</th>
                 <th>数量</th>
-                <th>地区</th>
+                <th>地区 (country)</th>
                 <th>状态</th>
                 <th>操作</th>
               </tr>
@@ -566,7 +637,7 @@
     <div class="tab-content" id="tabContent3">
       <div class="card">
         <div class="card-header">
-          <span>🔄 全团转单日志记录</span>
+          <span>🔄 全团转单日志记录 (image_data.transfer_logs)</span>
           <button class="btn btn-danger" onclick="clearAllTransferLogs()">清空转单日志</button>
         </div>
         <div class="table-container">
@@ -604,7 +675,9 @@
           </div>
           <hr style="border:none; border-top:1px solid var(--border);">
           <div style="font-size:0.85rem; color:var(--text-muted);">
-            数据同步于 Supabase `leader_data` 表。团员查询时输入同一 Query Key 即可实时读取排谷与排发状态。
+            数据结构规范：<br>
+            • 谷子存在 <code>group_data</code> (JSON数组，地区字段为 <code>country</code>)<br>
+            • 申请与转单记录存在 <code>image_data</code> (包含 <code>applications</code> 与 <code>transfer_logs</code>)
           </div>
         </div>
       </div>
@@ -622,9 +695,9 @@
     // 全局数据状态
     let CURRENT_QUERY_KEY = 'demo123';
     let CURRENT_RECORD_ID = null;
-    let RAW_ITEMS = [];
-    let RAW_APPLICATIONS = [];
-    let RAW_LOGS = [];
+    let RAW_ITEMS = []; // 对应 group_data
+    let RAW_APPLICATIONS = []; // 对应 image_data.applications
+    let RAW_LOGS = []; // 对应 image_data.transfer_logs
 
     // 恪守规范：按钮点击传参用数字索引 + 全局缓存
     window.ITEM_CACHE = [];
@@ -634,6 +707,9 @@
     let CURRENT_DISPATCH_SUBTAB = 'pending';
 
     window.addEventListener('DOMContentLoaded', () => {
+      // 检查 Auth 登录状态
+      checkAuthStatus();
+
       // 密钥初始化
       const savedKey = localStorage.getItem('ADMIN_QUERY_KEY') || 'demo123';
       document.getElementById('adminKeyInput').value = savedKey;
@@ -647,10 +723,9 @@
         loadLeaderData();
       });
 
+      document.getElementById('btnSignOut').addEventListener('click', handleSignOut);
       document.getElementById('btnClearForm').addEventListener('click', clearForm);
       document.getElementById('excelFileInput').addEventListener('change', handleExcelImport);
-
-      loadLeaderData();
     });
 
     function showToast(msg) {
@@ -658,6 +733,73 @@
       toast.innerText = msg;
       toast.classList.add('show');
       setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    /* --- Auth Supabase 邮箱密码登录 --- */
+    async function checkAuthStatus() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && session.user) {
+          hideLoginModal();
+          document.getElementById('userInfoText').innerText = `👤 ${session.user.email || '已登录'}`;
+          loadLeaderData();
+        } else {
+          showLoginModal();
+        }
+      } catch (err) {
+        console.error('Session check error:', err);
+        showLoginModal();
+      }
+    }
+
+    function showLoginModal() {
+      document.getElementById('authOverlay').style.display = 'flex';
+    }
+
+    function hideLoginModal() {
+      document.getElementById('authOverlay').style.display = 'none';
+    }
+
+    async function handleLogin() {
+      const email = document.getElementById('loginEmail').value.trim();
+      const password = document.getElementById('loginPassword').value;
+
+      if (!email || !password) return showToast('请输入邮箱和密码！');
+
+      const btn = document.getElementById('btnLoginSubmit');
+      btn.innerText = '登录中...';
+      btn.disabled = true;
+
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: email,
+          password: password
+        });
+
+        btn.innerText = '登录后台';
+        btn.disabled = false;
+
+        if (error) {
+          showToast('登录失败: ' + error.message);
+          return;
+        }
+
+        showToast('🎉 登录成功！');
+        hideLoginModal();
+        document.getElementById('userInfoText').innerText = `👤 ${data.user.email || '已登录'}`;
+        loadLeaderData();
+      } catch (err) {
+        btn.innerText = '登录后台';
+        btn.disabled = false;
+        console.error('Login error:', err);
+        showToast('登录出错，请重试');
+      }
+    }
+
+    async function handleSignOut() {
+      await supabase.auth.signOut();
+      showToast('已安全退出登录');
+      showLoginModal();
     }
 
     // 切换标签页
@@ -670,7 +812,7 @@
       document.getElementById(`tabContent${num}`).classList.add('active');
     }
 
-    // 从 Supabase 加载团务数据
+    // 从 Supabase 加载 leader_data (group_data + image_data)
     async function loadLeaderData() {
       if (!CURRENT_QUERY_KEY) return;
       document.getElementById('settingQueryKey').value = CURRENT_QUERY_KEY;
@@ -689,15 +831,23 @@
         if (data && data.length > 0) {
           const rec = data[0];
           CURRENT_RECORD_ID = rec.id;
+
+          // 1. 读取 group_data
+          let groupData = rec.group_data;
+          if (typeof groupData === 'string') {
+            try { groupData = JSON.parse(groupData); } catch (e) { groupData = []; }
+          }
+          RAW_ITEMS = Array.isArray(groupData) ? groupData : [];
+
+          // 2. 读取 image_data (applications + transfer_logs)
           let imgData = rec.image_data;
           if (typeof imgData === 'string') {
             try { imgData = JSON.parse(imgData); } catch (e) { imgData = {}; }
           }
-          if (!imgData) imgData = {};
+          if (!imgData || typeof imgData !== 'object') imgData = {};
 
-          RAW_ITEMS = imgData.items || [];
-          RAW_APPLICATIONS = imgData.applications || [];
-          RAW_LOGS = imgData.transfer_logs || [];
+          RAW_APPLICATIONS = Array.isArray(imgData.applications) ? imgData.applications : [];
+          RAW_LOGS = Array.isArray(imgData.transfer_logs) ? imgData.transfer_logs : [];
         } else {
           // 不存在该 key 记录，初始化本地
           CURRENT_RECORD_ID = null;
@@ -709,16 +859,15 @@
         renderTable();
         renderDispatchWorkbench();
         renderTransferLogs();
-        showToast(`已加载密钥 [${CURRENT_QUERY_KEY}] 数据`);
+        showToast(`已成功加载密钥 [${CURRENT_QUERY_KEY}] 数据`);
       } catch (err) {
         console.error('Load exception:', err);
       }
     }
 
-    // 保存全局结构至 Supabase
+    // 保存全局结构至 Supabase (同名写入 group_data 与 image_data)
     async function saveDataToSupabase() {
       const payloadImageData = {
-        items: RAW_ITEMS,
         applications: RAW_APPLICATIONS,
         transfer_logs: RAW_LOGS
       };
@@ -727,7 +876,10 @@
         if (CURRENT_RECORD_ID) {
           const { error } = await supabase
             .from('leader_data')
-            .update({ image_data: payloadImageData })
+            .update({
+              group_data: RAW_ITEMS,
+              image_data: payloadImageData
+            })
             .eq('id', CURRENT_RECORD_ID);
 
           if (error) {
@@ -738,7 +890,11 @@
           // 插入新记录
           const { data, error } = await supabase
             .from('leader_data')
-            .insert([{ query_key: CURRENT_QUERY_KEY, image_data: payloadImageData }])
+            .insert([{
+              query_key: CURRENT_QUERY_KEY,
+              group_data: RAW_ITEMS,
+              image_data: payloadImageData
+            }])
             .select();
 
           if (error) {
@@ -758,14 +914,14 @@
     // 渲染排表
     function renderTable() {
       const keyword = document.getElementById('searchKeyword').value.trim().toLowerCase();
-      const regionFilter = document.getElementById('filterRegion').value;
+      const countryFilter = document.getElementById('filterCountry').value;
       const statusFilter = document.getElementById('filterStatus').value;
 
       const filtered = RAW_ITEMS.filter(item => {
         const matchK = !keyword || (item.name || '').toLowerCase().includes(keyword) || (item.cn || '').toLowerCase().includes(keyword);
-        const matchR = !regionFilter || item.region === regionFilter;
+        const matchC = !countryFilter || (item.country || item.region) === countryFilter;
         const matchS = !statusFilter || item.status === statusFilter;
-        return matchK && matchR && matchS;
+        return matchK && matchC && matchS;
       });
 
       window.ITEM_CACHE = filtered; // 全局缓存保存对象数组
@@ -783,6 +939,8 @@
           ? `<img src="${escapeHtml(item.image_url)}" class="img-preview">`
           : `<span style="color:#cbd5e1;font-size:0.75rem;">无图</span>`;
 
+        const countryVal = item.country || item.region || '日本';
+
         html += `
           <tr>
             <td><input type="checkbox" class="item-checkbox" value="${index}"></td>
@@ -791,7 +949,7 @@
             <td>${escapeHtml(item.cn)}</td>
             <td>￥${Number(item.price || 0).toFixed(2)}</td>
             <td>${item.quantity || 1}</td>
-            <td><span class="badge badge-region">${escapeHtml(item.region || '日本')}</span></td>
+            <td><span class="badge badge-country">${escapeHtml(countryVal)}</span></td>
             <td><span class="badge badge-status-${item.status}">${escapeHtml(item.status || '未到货')}</span></td>
             <td>
               <button class="btn btn-secondary" style="padding: 2px 8px; font-size:0.8rem;" onclick="editItemByIndex(${index})">修改</button>
@@ -812,27 +970,27 @@
       const cn = document.getElementById('inputCn').value.trim();
       const price = parseFloat(document.getElementById('inputPrice').value) || 0;
       const quantity = parseInt(document.getElementById('inputQuantity').value) || 1;
-      const region = document.getElementById('inputRegion').value;
+      const country = document.getElementById('inputCountry').value;
       const status = document.getElementById('inputStatus').value;
 
       if (!name || !cn) return showToast('名称和 CN 为必填项！');
 
       if (editId) {
         // 编辑
-        const item = RAW_ITEMS.find(i => String(i.id) === String(editId));
+        const item = RAW_ITEMS.find(i => String(i.item_id || i.id) === String(editId));
         if (item) {
           item.name = name;
           item.cn = cn;
           item.price = price;
           item.quantity = quantity;
-          item.region = region;
+          item.country = country;
           item.status = status;
         }
       } else {
-        // 新增
+        // 新增 (写入 group_data)
         const newItem = {
-          id: 'item_' + Date.now() + '_' + Math.floor(Math.random()*1000),
-          name, cn, price, quantity, region, status,
+          item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random()*1000),
+          name, cn, price, quantity, country, status,
           image_url: ''
         };
         RAW_ITEMS.push(newItem);
@@ -841,19 +999,19 @@
       await saveDataToSupabase();
       clearForm();
       renderTable();
-      showToast('保存成功！');
+      showToast('已保存至 group_data！');
     }
 
     function editItemByIndex(index) {
       const item = window.ITEM_CACHE[index];
       if (!item) return;
 
-      document.getElementById('editItemId').value = item.id;
+      document.getElementById('editItemId').value = item.item_id || item.id;
       document.getElementById('inputName').value = item.name || '';
       document.getElementById('inputCn').value = item.cn || '';
       document.getElementById('inputPrice').value = item.price || 0;
       document.getElementById('inputQuantity').value = item.quantity || 1;
-      document.getElementById('inputRegion').value = item.region || '日本';
+      document.getElementById('inputCountry').value = item.country || item.region || '日本';
       document.getElementById('inputStatus').value = item.status || '未到货';
 
       document.getElementById('formTitle').innerText = '✏️ 修改谷子信息';
@@ -879,7 +1037,7 @@
       const oldCn = item.cn;
       item.cn = newCn.trim();
 
-      // 记录转单日志
+      // 记录转单日志到 image_data.transfer_logs
       RAW_LOGS.unshift({
         id: 'log_' + Date.now(),
         time: new Date().toLocaleString('zh-CN'),
@@ -938,12 +1096,12 @@
       showToast(`已成功将 ${selected.length} 件谷子转单给 CN [${newCn.trim()}]`);
     }
 
-    // 批量改状态
+    // 批量改状态 (支持8种预设)
     async function batchChangeStatusModal() {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选要修改的谷子！');
 
-      const status = prompt('请输入新状态（未到货 / 已到货 / 可排发 / 已申请发货 / 已排发）：');
+      const status = prompt('请输入新状态（未出荷/已下单未到货/回国中/已到货/可排发/已申请发货/已排发/未付款）：');
       if (!status || !status.trim()) return;
 
       selected.forEach(i => i.status = status.trim());
@@ -952,15 +1110,15 @@
       showToast('状态更新成功！');
     }
 
-    // 批量改地区
-    async function batchChangeRegionModal() {
+    // 批量改地区 (country)
+    async function batchChangeCountryModal() {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选要修改的谷子！');
 
-      const region = prompt('请输入新地区（日本 / 闲鱼 / 淘宝店 / 美国 / 韩国 / 印尼 / 泰国 / 台湾）：');
-      if (!region || !region.trim()) return;
+      const country = prompt('请输入新地区 country（日本 / 闲鱼 / 淘宝店 / 美国 / 韩国 / 印尼 / 泰国 / 台湾）：');
+      if (!country || !country.trim()) return;
 
-      selected.forEach(i => i.region = region.trim());
+      selected.forEach(i => i.country = country.trim());
       await saveDataToSupabase();
       renderTable();
       showToast('地区更新成功！');
@@ -987,12 +1145,12 @@
 
       if (!confirm(`确定彻底删除选中的 ${selected.length} 件谷子吗？此操作不可恢复！`)) return;
 
-      const deleteIds = new Set(selected.map(i => String(i.id)));
-      RAW_ITEMS = RAW_ITEMS.filter(i => !deleteIds.has(String(i.id)));
+      const deleteIds = new Set(selected.map(i => String(i.item_id || i.id)));
+      RAW_ITEMS = RAW_ITEMS.filter(i => !deleteIds.has(String(i.item_id || i.id)));
 
       await saveDataToSupabase();
       renderTable();
-      showToast('已删除选中谷子！');
+      showToast('已从 group_data 中删除选中谷子！');
     }
 
     // Excel 导入
@@ -1000,7 +1158,7 @@
       const file = e.target.files[0];
       if (!file) return;
 
-      const defaultRegion = document.getElementById('excelDefaultRegion').value || '日本';
+      const defaultCountry = document.getElementById('excelDefaultCountry').value || '日本';
       const reader = new FileReader();
 
       reader.onload = async function(evt) {
@@ -1018,13 +1176,13 @@
             const cn = row['认领CN'] || row['CN'] || row['姓名'] || row['圈名'];
             if (name && cn) {
               RAW_ITEMS.push({
-                id: 'item_' + Date.now() + '_' + Math.floor(Math.random()*10000),
+                item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random()*10000),
                 name: String(name).trim(),
                 cn: String(cn).trim(),
                 price: parseFloat(row['单价'] || row['价格'] || 0) || 0,
                 quantity: parseInt(row['数量'] || 1) || 1,
-                region: (row['地区'] || defaultRegion).trim(),
-                status: (row['状态'] || '未到货').trim(),
+                country: String(row['地区'] || row['country'] || defaultCountry).trim(),
+                status: String(row['状态'] || '未出荷').trim(),
                 image_url: row['图片'] || ''
               });
               count++;
@@ -1033,7 +1191,7 @@
 
           await saveDataToSupabase();
           renderTable();
-          showToast(`🎉 成功从 Excel 导入 ${count} 条排表谷子数据！`);
+          showToast(`🎉 成功从 Excel 导入 ${count} 条谷子到 group_data！`);
           e.target.value = '';
         } catch (err) {
           console.error(err);
@@ -1082,7 +1240,7 @@
       let html = '';
       targetList.forEach((app, appIndex) => {
         const items = app.items || [];
-        const itemChunks = chunkArray(items, 10); // 严格每10个一行切分数组
+        const itemChunks = chunkArray(items, 10); // 严格每 10 个一行切分数组
 
         let itemsGridHtml = '';
         itemChunks.forEach(chunk => {
@@ -1134,7 +1292,7 @@
       container.innerHTML = html;
     }
 
-    // 确认发货（待处理 -> 已完成，对应谷子 status 改为 已排发）
+    // 确认发货（待处理 -> 已完成，对应谷子在 group_data 中的 status 改为 已排发）
     async function confirmDispatchAppByIndex(appIndex) {
       const app = window.APP_CACHE[appIndex];
       if (!app) return;
@@ -1142,9 +1300,10 @@
       app.status = '已完成';
 
       // 将对应谷子 status 改为 "已排发"
-      const targetItemIds = new Set((app.items || []).map(i => String(i.item_id)));
+      const targetItemIds = new Set((app.items || []).map(i => String(i.item_id || i.id)));
       RAW_ITEMS.forEach(item => {
-        if (targetItemIds.has(String(item.id))) {
+        const itemId = String(item.item_id || item.id);
+        if (targetItemIds.has(itemId)) {
           item.status = '已排发';
         }
       });
@@ -1152,7 +1311,7 @@
       await saveDataToSupabase();
       renderDispatchWorkbench();
       renderTable();
-      showToast('已确认发货！对应谷子已标记为[已排发]');
+      showToast('已确认发货！对应谷子在 group_data 中已标记为[已排发]');
     }
 
     // 删除申请
@@ -1169,24 +1328,24 @@
       showToast('已删除申请！');
     }
 
-    // 恪守规则：删除记录按钮（联动删除排表谷子）
+    // 恪守规则：删除记录按钮（联动彻底删除 group_data 中排表的谷子）
     async function deleteCompletedAppByIndex(appIndex) {
       const app = window.APP_CACHE[appIndex];
       if (!app) return;
 
-      if (!confirm('确定删除此已完成发货记录吗？此操作将【联动彻底删除排表中对应已排发谷子】！')) return;
+      if (!confirm('确定删除此已完成发货记录吗？此操作将【联动彻底删除 group_data 中对应已排发的谷子】！')) return;
 
-      const targetItemIds = new Set((app.items || []).map(i => String(i.item_id)));
+      const targetItemIds = new Set((app.items || []).map(i => String(i.item_id || i.id)));
       
-      // 联动删除排表中对应谷子
-      RAW_ITEMS = RAW_ITEMS.filter(item => !targetItemIds.has(String(item.id)));
+      // 联动删除 group_data 中对应谷子
+      RAW_ITEMS = RAW_ITEMS.filter(item => !targetItemIds.has(String(item.item_id || item.id)));
       // 删除申请记录
       RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
 
       await saveDataToSupabase();
       renderDispatchWorkbench();
       renderTable();
-      showToast('已删除发货记录，并成功联动删除排表中对应已排发谷子！');
+      showToast('已删除发货记录，并联动删除 group_data 中对应谷子！');
     }
 
     /* --- 标签页 3：转单记录逻辑 --- */
@@ -1248,16 +1407,16 @@
       });
     }
 
-    // 生成演示测试数据
+    // 生成演示测试数据 (写入 group_data 与 image_data)
     async function generateSampleData() {
       if (!confirm('生成演示测试数据将向当前 Query Key 写入样例，确定生成吗？')) return;
 
       RAW_ITEMS = [
-        { id: 'item_1', name: '五条悟 20cm 亚克力立牌', cn: '小明', price: 65, quantity: 2, region: '日本', status: '可排发', image_url: '' },
-        { id: 'item_2', name: '夏油杰 75mm 闪粉徽章', cn: '小明', price: 25, quantity: 3, region: '闲鱼', status: '可排发', image_url: '' },
-        { id: 'item_3', name: '伏黑惠 烫金拍立得', cn: '小红', price: 15, quantity: 5, region: '淘宝店', status: '未到货', image_url: '' },
-        { id: 'item_4', name: '钉崎野蔷薇 色纸', cn: '小红', price: 30, quantity: 1, region: '美国', status: '已到货', image_url: '' },
-        { id: 'item_5', name: '宿傩 挂件', cn: '小刚', price: 40, quantity: 2, region: '韩国', status: '已排发', image_url: '' }
+        { item_id: 'item_1', name: '五条悟 20cm 亚克力立牌', cn: '小明', price: 65, quantity: 2, country: '日本', status: '可排发', image_url: '' },
+        { item_id: 'item_2', name: '夏油杰 75mm 闪粉徽章', cn: '小明', price: 25, quantity: 3, country: '闲鱼', status: '可排发', image_url: '' },
+        { item_id: 'item_3', name: '伏黑惠 烫金拍立得', cn: '小红', price: 15, quantity: 5, country: '淘宝店', status: '未出荷', image_url: '' },
+        { item_id: 'item_4', name: '钉崎野蔷薇 色纸', cn: '小红', price: 30, quantity: 1, country: '美国', status: '已到货', image_url: '' },
+        { item_id: 'item_5', name: '宿傩 挂件', cn: '小刚', price: 40, quantity: 2, country: '韩国', status: '已排发', image_url: '' }
       ];
 
       RAW_APPLICATIONS = [
@@ -1266,8 +1425,8 @@
           type: '排发申请',
           cn: '小明',
           items: [
-            { item_id: 'item_1', name: '五条悟 20cm 亚克力立牌', quantity: 2 },
-            { item_id: 'item_2', name: '夏油杰 75mm 闪粉徽章', quantity: 3 }
+            { item_id: 'item_1', name: '五条悟 20cm 亚克力立牌', quantity: 2, country: '日本' },
+            { item_id: 'item_2', name: '夏油杰 75mm 闪粉徽章', quantity: 3, country: '闲鱼' }
           ],
           note: '加固打包，寄顺丰到付',
           time: new Date().toLocaleString('zh-CN'),
@@ -1283,7 +1442,7 @@
       renderTable();
       renderDispatchWorkbench();
       renderTransferLogs();
-      showToast('🎉 样例测试数据生成成功！可以在团员页进行测试。');
+      showToast('🎉 样例测试数据生成成功！已存入 group_data 和 image_data。');
     }
 
     function escapeHtml(str) {
