@@ -919,29 +919,16 @@
         }
 
         if (!data || data.length === 0) {
-          // 不存在则创建一个初始空行记录
-          const newRow = {
-            query_key: CURRENT_QUERY_KEY,
-            group_data: [],
-            image_data: { applications: [], transfer_logs: [] }
-          };
-
-          const { data: insertData, error: insertErr } = await supabaseClient
-            .from('leader_data')
-            .insert([newRow])
-            .select();
-
-          if (insertErr) {
-            console.error('Insert error:', insertErr);
-            showToast('新建 Query Key 数据行失败: ' + insertErr.message);
-            return;
-          }
-
-          CURRENT_RECORD_ID = insertData[0].id;
+          CURRENT_RECORD_ID = null;
           RAW_ITEMS = [];
           RAW_APPLICATIONS = [];
           RAW_LOGS = [];
-          showToast(`已为 Key [${CURRENT_QUERY_KEY}] 新建数据库记录！`);
+          renderTable();
+          renderDispatchWorkbench();
+          renderTransferLogs();
+          alert('该密钥暂无数据，请联系团长初始化！');
+          showToast('该密钥暂无数据，请联系团长初始化！');
+          return;
         } else {
           const rec = data[0];
           CURRENT_RECORD_ID = rec.id;
@@ -979,29 +966,52 @@
     async function saveDataToSupabase() {
       if (!CURRENT_QUERY_KEY) return showToast('未指定 Query Key');
 
-      const payload = {
-        group_data: RAW_ITEMS,
-        image_data: {
-          applications: RAW_APPLICATIONS,
-          transfer_logs: RAW_LOGS
-        }
-      };
-
       try {
-        const { error } = await supabaseClient
+        // 方案 A：先查询，如果记录存在就更新，不要强行插入
+        const { data: existing, error: queryErr } = await supabaseClient
           .from('leader_data')
-          .update(payload)
+          .select('id')
           .eq('query_key', CURRENT_QUERY_KEY);
 
-        if (error) {
-          console.error('Save error:', error);
-          showToast('保存到 Supabase 失败: ' + error.message);
+        if (queryErr) {
+          console.error('Query error:', queryErr);
+          showToast('查询密钥记录失败: ' + queryErr.message);
           return false;
         }
-        return true;
+
+        const payload = {
+          group_data: RAW_ITEMS,
+          image_data: {
+            applications: RAW_APPLICATIONS,
+            transfer_logs: RAW_LOGS
+          }
+        };
+
+        if (existing && existing.length > 0) {
+          // 记录已存在，更新
+          const recId = existing[0].id;
+          CURRENT_RECORD_ID = recId;
+
+          const { error: updateErr } = await supabaseClient
+            .from('leader_data')
+            .update(payload)
+            .eq('id', recId);
+
+          if (updateErr) {
+            console.error('Save error:', updateErr);
+            showToast('保存到 Supabase 失败: ' + updateErr.message);
+            return false;
+          }
+          return true;
+        } else {
+          // 记录不存在，提示用户
+          alert('该密钥暂无数据，请联系团长初始化！');
+          showToast('该密钥暂无数据，请联系团长初始化！');
+          return false;
+        }
       } catch (err) {
         console.error('Save exception:', err);
-        showToast('保存异常，请重试');
+        showToast('保存失败，网络或系统异常');
         return false;
       }
     }
@@ -1295,25 +1305,23 @@
       const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
       if (lines.length < 5) return [];
 
-      // 第 2 行（索引 1）是谷子名称行：种类 \t 杯垫-庄方宜 \t 杯垫-别礼 \t ...
-      // 从第 3 列（索引 2）开始是谷子名称数组
-      const itemNames = lines[1].split('\t').slice(2);
+      // 第2行（索引1）是谷子名称行，"种类"在索引0，所以从索引1开始 slice(1)
+      const itemNames = lines[1].split('\t').slice(1);
 
-      // 第 3 行（索引 2）是单价行：单价 \t 27.15 \t 27.15 \t ...
-      // 从第 3 列（索引 2）开始是对应单价数组
-      const prices = lines[2].split('\t').slice(2).map(p => parseFloat(p) || 0);
+      // 第3行（索引2）是单价行，"单价"在索引0，所以从索引1开始 slice(1)
+      const prices = lines[2].split('\t').slice(1).map(p => parseFloat(p) || 0);
 
       const items = [];
 
-      // 第 5 行开始（索引 4 及以后）是团员数据：总金额 \t CN \t 数量1 \t 数量2 \t ...
+      // 从第5行（索引4）开始是团员数据
       for (let i = 4; i < lines.length; i++) {
         const cells = lines[i].split('\t');
-        const cn = cells[1]?.trim();
+        const cn = cells[1]?.trim(); // cells[1] 是 CN
         if (!cn || cn === "昵称/总数" || cn === "CN" || cn === "昵称") continue; // 跳过表头/汇总行
 
         itemNames.forEach((name, idx) => {
           if (!name || !name.trim()) return;
-          const qty = parseFloat(cells[idx + 2]); // cells[2] 对应第 1 个谷子
+          const qty = parseFloat(cells[idx + 2]); // cells[2] 对应 itemNames[0]
           if (qty > 0) {
             items.push({
               item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
