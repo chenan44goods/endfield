@@ -749,16 +749,16 @@
   <div class="modal-overlay active" id="authOverlay">
     <div class="modal">
       <h2 style="font-size: 1.3rem; margin-bottom: 16px; text-align: center;">🔐 团长后台 Supabase 登录</h2>
-      <form id="loginForm" onsubmit="event.preventDefault(); handleLogin();">
+      <form id="loginForm" onsubmit="event.preventDefault(); login();">
         <div class="form-group" style="margin-bottom: 12px;">
-          <label for="loginEmail">Supabase 邮箱账号</label>
-          <input type="text" id="loginEmail" required placeholder="your-email@example.com">
+          <label for="email">Supabase 邮箱账号</label>
+          <input type="text" id="email" required placeholder="your-email@example.com">
         </div>
         <div class="form-group" style="margin-bottom: 20px;">
-          <label for="loginPassword">密码</label>
-          <input type="password" id="loginPassword" required placeholder="••••••••">
+          <label for="password">密码</label>
+          <input type="password" id="password" required placeholder="••••••••">
         </div>
-        <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 10px;">登录后台</button>
+        <button type="submit" class="btn btn-primary" onclick="login()" style="width: 100%; justify-content: center; padding: 10px;">登录后台</button>
       </form>
     </div>
   </div>
@@ -786,11 +786,12 @@
 
   <script>
     // Supabase 配置
-    const SUPABASE_URL = "https://oknhlfhdqbsukskdxqre.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y";
+    const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
+    const SUPABASE_ANON_KEY = SUPABASE_KEY;
 
     // 严禁重复声明 supabase 变量！使用 supabaseClient
-    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const supabaseClient = (window.supabase || supabase).createClient(SUPABASE_URL, SUPABASE_KEY);
 
     // 全局数据状态缓存
     let CURRENT_RECORD_ID = null;
@@ -821,12 +822,17 @@
       setTimeout(() => toast.classList.remove('show'), 3000);
     }
 
-    // 登录处理函数（统一命名 handleLogin）
-    async function handleLogin() {
-      const email = document.getElementById('loginEmail').value.trim();
-      const password = document.getElementById('loginPassword').value.trim();
+    // 登录处理函数
+    async function login() {
+      const emailEl = document.getElementById('email') || document.getElementById('loginEmail');
+      const passwordEl = document.getElementById('password') || document.getElementById('loginPassword');
+      const email = emailEl ? emailEl.value.trim() : '';
+      const password = passwordEl ? passwordEl.value.trim() : '';
 
-      if (!email || !password) return showToast('请填写邮箱和密码！');
+      if (!email || !password) {
+        alert('请填写邮箱和密码！');
+        return;
+      }
 
       try {
         const { data, error } = await supabaseClient.auth.signInWithPassword({
@@ -836,20 +842,23 @@
 
         if (error) {
           console.error('Login error:', error);
-          showToast('登录失败: ' + error.message);
+          alert('登录失败: ' + error.message);
           return;
         }
 
         showToast('🎉 登录成功！');
         document.getElementById('authOverlay').classList.remove('active');
-        document.getElementById('userEmailSpan').innerText = `已登录: ${data.user.email}`;
+        if (document.getElementById('userEmailSpan')) {
+          document.getElementById('userEmailSpan').innerText = `已登录: ${data.user.email}`;
+        }
         loadDataByQueryKey();
       } catch (err) {
         console.error('Login exception:', err);
-        showToast('登录失败，请检查网络或配置');
+        alert('登录失败，请检查网络或配置: ' + err.message);
       }
     }
-    window.handleLogin = handleLogin;
+    window.login = login;
+    window.handleLogin = login;
 
     async function checkAuthStatus() {
       try {
