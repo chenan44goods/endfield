@@ -1,162 +1,761 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>谷子排单自查系统 🎀</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <style>
-        :root { 
-            --bg-url: url('https://oknhlfhdqbsukskdxqre.supabase.co/storage/v1/object/public/images/b0533210c53b57848b7f21eb8c11a9e2.jpg');
-            --primary: #ffb7c5; --accent: #ff85a2; --text: #5a4a4d; 
-        }
-        body { 
-            font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 15px; color: var(--text); 
-            background-image: linear-gradient(rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.4)), var(--bg-url);
-            background-size: cover; background-position: center; background-attachment: scroll; 
-        }
-        @media (min-width: 768px) { body { background-attachment: fixed; } }
-        .container { max-width: 600px; margin: 0 auto; }
-        .card { 
-            background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
-            border-radius: 12px; padding: 18px; box-shadow: 0 4px 15px rgba(255, 183, 197, 0.2); 
-            margin-bottom: 15px; border: 1px solid rgba(255, 255, 255, 0.4); 
-        }
-        h1 { text-align: center; color: var(--accent); margin: 0 0 15px 0; font-size: 1.4rem; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.85rem; }
-        input, textarea { width: 100%; padding: 12px; border: 2px solid var(--primary); border-radius: 10px; box-sizing: border-box; margin-bottom: 10px; font-size: 16px; }
-        .btn { width: 100%; padding: 12px; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-weight: bold; font-size: 1rem; cursor: pointer; margin-bottom: 8px; }
-        .btn-outline { background: #fff; color: var(--accent); border: 2px solid var(--accent); }
-        .item-card { border-left: 5px solid var(--primary); display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
-        .item-img { width: 70px; height: 70px; border-radius: 8px; object-fit: cover; background: #eee; }
-        .item-info { flex: 1; min-width: 0; }
-        .status-tag { display: inline-block; padding: 2px 8px; border-radius: 5px; font-size: 0.7rem; background: #fff; border: 1px solid var(--primary); margin-top: 5px; }
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box; }
-        .modal { background: #fff; padding: 20px; border-radius: 15px; width: 100%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-        .shippable-cn-card { border-top: 3px solid var(--accent); padding-top: 10px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>团员排谷自查页 - 谷圈团务系统</title>
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      line-height: 1.5;
+      padding: 16px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    header a {
+      color: var(--primary);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      background-color: #eef2ff;
+      transition: background-color 0.2s;
+    }
+
+    header a:hover {
+      background-color: #e0e7ff;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .search-box {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    input[type="text"], textarea {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="text"]:focus, textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 10px 18px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.1s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    .btn-primary {
+      background-color: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .btn-success {
+      background-color: var(--success);
+      color: white;
+    }
+
+    .btn-success:hover {
+      background-color: #059669;
+    }
+
+    .btn-secondary {
+      background-color: #f1f5f9;
+      color: var(--text-main);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background-color: #e2e8f0;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .badge-country {
+      background-color: #f1f5f9;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+    }
+
+    .badge-status-未出荷 { background-color: #fee2e2; color: #991b1b; }
+    .badge-status-已下单未到货 { background-color: #ffedd5; color: #9a3412; }
+    .badge-status-回国中 { background-color: #fef3c7; color: #92400e; }
+    .badge-status-已到货 { background-color: #e0f2fe; color: #075985; }
+    .badge-status-可排发 { background-color: #d1fae5; color: #065f46; }
+    .badge-status-已申请发货 { background-color: #f3e8ff; color: #6b21a8; }
+    .badge-status-已排发 { background-color: #e2e8f0; color: #475569; }
+    .badge-status-未付款 { background-color: #fecdd3; color: #881337; }
+
+    .table-container {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      background-color: #f8fafc;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    tr:hover {
+      background-color: #f8fafc;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(15, 23, 42, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal {
+      background: white;
+      border-radius: var(--radius);
+      width: 90%;
+      max-width: 500px;
+      padding: 24px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+      transform: translateY(10px);
+      transition: transform 0.2s ease;
+    }
+
+    .modal-overlay.active .modal {
+      transform: translateY(0);
+    }
+
+    .modal-header {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-body {
+      margin-bottom: 20px;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .item-summary-box {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+
+    .summary-item-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px dashed var(--border);
+      font-size: 0.88rem;
+    }
+
+    .summary-item-row:last-child {
+      border-bottom: none;
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #0f172a;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+      z-index: 2000;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.3s, transform 0.3s;
+      pointer-events: none;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .stat-bar {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      background-color: #f1f5f9;
+      padding: 8px 14px;
+      border-radius: 8px;
+    }
+
+    .stat-bar span strong {
+      color: var(--text-main);
+    }
+
+    .img-preview {
+      width: 40px;
+      height: 40px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <div class="card">
-            <h1>🎀 谷子排单自查</h1>
-            <label>查询密钥</label>
-            <input type="text" id="queryKey" value="4goods">
-            <label>团员昵称 (CN)</label>
-            <input type="text" id="cnName" placeholder="输入你的CN进行查询">
-            <button class="btn" onclick="doQuery()">🔍 查询我的排谷</button>
-            <button class="btn btn-outline" onclick="loadShippable()">📦 查看可排发谷子</button>
-            <div id="loading" style="display:none; text-align:center; padding:10px;">✨ 魔法加载中...</div>
+  <div class="container">
+    <header>
+      <h1>📦 团员排谷自查页</h1>
+      <a href="admin.html">团长后台入口 &rarr;</a>
+    </header>
+
+    <!-- 顶部输入区域 -->
+    <div class="card">
+      <div class="card-title">🔍 团员查询</div>
+      <div class="search-box">
+        <div class="form-group">
+          <label for="queryKeyInput">查询密钥 (Query Key)</label>
+          <input type="text" id="queryKeyInput" placeholder="请输入团长提供的查询密钥">
         </div>
-        <div id="resultArea"></div>
+        <div class="form-group">
+          <label for="cnInput">团员 CN (圈名/称呼)</label>
+          <input type="text" id="cnInput" placeholder="请输入您的 CN">
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" id="btnQueryMyItems">查询我的排谷</button>
+        <button class="btn btn-success" id="btnQueryDispatchable">查看可排发谷子</button>
+      </div>
     </div>
 
-    <!-- 申请发货弹窗 -->
-    <div class="modal-overlay" id="shippingModal">
-        <div class="modal">
-            <h3 style="margin-top:0; color:var(--accent);">✅ 申请排发确认</h3>
-            <div id="shippingItemsList" style="font-size:14px; background:#f9f9f9; padding:10px; border-radius:8px; max-height:150px; overflow-y:auto; margin-bottom:15px; border:1px dashed var(--primary);"></div>
-            <label>收货地址/备注（建议填写）</label>
-            <textarea id="shippingNote" style="height:80px;" placeholder="请在此输入您的收货地址或特别嘱托"></textarea>
-            <div style="display:flex; gap:10px; margin-top:15px">
-                <button class="btn btn-outline" style="flex:1" onclick="closeModal()">取消</button>
-                <button class="btn" style="flex:1" id="confirmShipBtn" onclick="submitShippingRequest()">确认申请</button>
-            </div>
-        </div>
+    <!-- 结果展示区域 -->
+    <div class="card" id="resultCard" style="display: none;">
+      <div class="card-title" id="resultTitle">
+        <span>📋 查询结果</span>
+      </div>
+
+      <div class="stat-bar" id="statBar">
+        <span>共找到 <strong id="statCount">0</strong> 种谷子</span>
+        <span>总件数: <strong id="statQty">0</strong></span>
+        <span>预计总额: ￥<strong id="statPrice">0.00</strong></span>
+      </div>
+
+      <!-- 批量排发操作栏（仅在查看可排发谷子时出现） -->
+      <div id="batchActionBox" style="display: none; margin-bottom: 16px;">
+        <button class="btn btn-success" id="btnApplyAllDispatchable">一键申请全部可排发谷子</button>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>图片</th>
+              <th>谷子名称</th>
+              <th>地区</th>
+              <th>单价 (元)</th>
+              <th>数量</th>
+              <th>状态</th>
+              <th id="actionTh" style="display: none;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="resultTableBody">
+            <!-- 动态渲染数据 -->
+          </tbody>
+        </table>
+      </div>
     </div>
+  </div>
 
-    <script>
-        const supabaseClient = supabase.createClient('https://oknhlfhdqbsukskdxqre.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y');
-        let currentShippableData = []; 
-        let currentShippableCN = "";
+  <!-- 申请排发弹窗 -->
+  <div class="modal-overlay" id="applyModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span>📮 申请排发确认</span>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" id="btnCloseModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 12px;">
+          即将为您提交以下谷子的排发申请：
+        </p>
+        <div class="item-summary-box" id="modalItemsSummary">
+          <!-- 拟排发谷子列表 -->
+        </div>
+        <div class="form-group">
+          <label for="applyNoteInput">备注说明（可选，如收货地址/联系电话/特殊打包要求）</label>
+          <textarea id="applyNoteInput" rows="3" placeholder="填写真实姓名、收货地址、联系电话等..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnCancelApply">取消</button>
+        <button class="btn btn-primary" id="btnConfirmApply">确认提交申请</button>
+      </div>
+    </div>
+  </div>
 
-        // 1. 查询我的排谷记录 (已排发的自动隐藏)
-        async function doQuery() {
-            const key = document.getElementById('queryKey').value.trim();
-            const cn = document.getElementById('cnName').value.trim();
-            const resArea = document.getElementById('resultArea');
-            if (!key || !cn) return alert("请先输入查询密钥和您的CN哦~");
-            resArea.innerHTML = ""; document.getElementById('loading').style.display="block";
-            
-            try {
-                const { data, error } = await supabaseClient.rpc('get_group_by_key', { p_query_key: key });
-                if (error) throw error;
-                const list = (data || []).filter(i => i.cn === cn && i.status !== "已排发");
-                if (list.length === 0) { resArea.innerHTML = '<div class="card" style="text-align:center;">🔍 未找到您的待收谷子记录</div>'; return; }
-                
-                let html = `<div class="card" style="background:var(--accent); color:#fff; font-weight:bold; text-align:center;">👤 ${cn} 的待收谷子</div>`;
-                list.forEach(item => {
-                    html += `
-                        <div class="card item-card">
-                            <img src="${item.image_url ? item.image_url+'?width=100' : 'https://via.placeholder.com/100'}" class="item-img">
-                            <div class="item-info">
-                                <div style="font-weight:bold;">${item.name}</div>
-                                <div style="color:var(--accent); font-size:14px;">￥${item.price} × ${item.quantity}</div>
-                                <div class="status-tag">${item.status}</div>
-                            </div>
-                        </div>`;
-                });
-                resArea.innerHTML = html;
-            } catch (e) { alert("查询失败"); } finally { document.getElementById('loading').style.display="none"; }
+  <!-- Toast 消息提示 -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // Supabase 配置（使用 supabaseClient 名字避开全局变量冲突）
+    const SUPABASE_URL = "https://oknhlfhdqbsukskdxqre.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y";
+
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // 全局缓存
+    window.ITEM_CACHE = [];
+    window.CURRENT_PENDING_APPLY_ITEMS = [];
+
+    // URL 参数自动填充与事件绑定
+    window.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const key = urlParams.get('key');
+      const cn = urlParams.get('cn');
+      if (key) document.getElementById('queryKeyInput').value = key;
+      if (cn) document.getElementById('cnInput').value = cn;
+
+      document.getElementById('btnQueryMyItems').addEventListener('click', handleQueryAll);
+      document.getElementById('btnQueryDispatchable').addEventListener('click', handleQueryDispatchable);
+      document.getElementById('btnCloseModal').addEventListener('click', closeModal);
+      document.getElementById('btnCancelApply').addEventListener('click', closeModal);
+      document.getElementById('btnConfirmApply').addEventListener('click', submitApply);
+      document.getElementById('btnApplyAllDispatchable').addEventListener('click', prepareApplyAll);
+    });
+
+    // Toast 提示
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.innerText = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    // 从 Supabase 读取 leader_data 数据
+    async function fetchLeaderData(queryKey) {
+      if (!queryKey) {
+        showToast('请先输入查询密钥！');
+        return null;
+      }
+      try {
+        const { data, error } = await supabaseClient
+          .from('leader_data')
+          .select('*')
+          .eq('query_key', queryKey.trim());
+
+        if (error) {
+          console.error('Supabase fetch error:', error);
+          showToast('查询数据失败: ' + error.message);
+          return null;
         }
 
-        // 2. 加载可排发 (按 CN 过滤)
-        async function loadShippable() {
-            const key = document.getElementById('queryKey').value.trim();
-            const cn = document.getElementById('cnName').value.trim();
-            const resArea = document.getElementById('resultArea');
-
-            if (!key) return alert("请输入查询密钥");
-            if (!cn) return alert("请先输入您的 CN，才能查看您名下可发货的谷子");
-
-            resArea.innerHTML = ""; document.getElementById('loading').style.display="block";
-
-            try {
-                const { data, error } = await supabaseClient.rpc('get_group_by_key', { p_query_key: key });
-                if (error) throw error;
-                
-                // 只看“可排发”且是“本人”的
-                const list = (data || []).filter(i => i.status === "可排发" && i.cn === cn);
-                if (list.length === 0) { resArea.innerHTML = `<div class="card" style="text-align:center;">🎉 团员 <b>${cn}</b> 当前没有可排发的谷子。</div>`; return; }
-
-                let html = `<div class="card" style="text-align:center; font-weight:bold; color:var(--accent)">📦 您的可排发清单</div>`;
-                const itemsDesc = list.map(i => `• ${i.name} x${i.quantity}`).join('<br>');
-                html += `
-                    <div class="card shippable-cn-card">
-                        <div style="font-weight:bold; font-size:1.1rem; margin-bottom:10px;">👤 ${cn}</div>
-                        <div style="font-size:13px; color:#666; margin-bottom:15px; line-height:1.6; background:#fffcfc; padding:8px; border-radius:5px;">${itemsDesc}</div>
-                        <button class="btn" onclick='openShippingModal("${cn}", ${JSON.stringify(list).replace(/'/g, "&apos;")})'>✅ 申请排发</button>
-                    </div>`;
-                resArea.innerHTML = html;
-            } catch (e) { alert("加载失败"); } finally { document.getElementById('loading').style.display="none"; }
+        if (!data || data.length === 0) {
+          showToast('未找到该密钥对应的团务数据，请核对密钥！');
+          return null;
         }
 
-        function openShippingModal(cn, items) {
-            currentShippableCN = cn; currentShippableData = items;
-            document.getElementById('shippingItemsList').innerHTML = items.map(i => `• ${i.name} x${i.quantity}`).join('<br>');
-            document.getElementById('shippingModal').style.display = 'flex';
+        const record = data[0];
+
+        let groupData = record.group_data;
+        if (typeof groupData === 'string') {
+          try { groupData = JSON.parse(groupData); } catch (e) { groupData = []; }
         }
-        function closeModal() { document.getElementById('shippingModal').style.display = 'none'; }
+        if (!Array.isArray(groupData)) groupData = [];
 
-        async function submitShippingRequest() {
-            const key = document.getElementById('queryKey').value.trim();
-            const note = document.getElementById('shippingNote').value.trim();
-            const btn = document.getElementById('confirmShipBtn');
-            btn.innerText = "⏳ 魔法发送中..."; btn.disabled = true;
-
-            const applicationData = {
-                type: "排发申请", cn: currentShippableCN,
-                items: currentShippableData.map(i => ({ item_id: i.item_id, name: i.name, quantity: i.quantity })),
-                note: note, time: new Date().toISOString(), status: "待处理"
-            };
-
-            try {
-                const { error } = await supabaseClient.rpc('submit_application', { p_query_key: key, p_data: applicationData });
-                if (error) throw error;
-                alert("✅ 申请提交成功！请耐心等待团长点下发货按钮。");
-                closeModal(); loadShippable();
-            } catch (e) { alert("提交失败"); btn.innerText = "确认申请"; btn.disabled = false; }
+        let imgData = record.image_data;
+        if (typeof imgData === 'string') {
+          try { imgData = JSON.parse(imgData); } catch (e) { imgData = {}; }
         }
-    </script>
+        if (!imgData || typeof imgData !== 'object') imgData = {};
+        if (!Array.isArray(imgData.applications)) imgData.applications = [];
+        if (!Array.isArray(imgData.transfer_logs)) imgData.transfer_logs = [];
+
+        return { recordId: record.id, queryKey: record.query_key, groupData, imgData };
+      } catch (err) {
+        console.error('Fetch exception:', err);
+        showToast('网络开小差了，请稍后重试');
+        return null;
+      }
+    }
+
+    // 功能 1：查询我的排谷
+    async function handleQueryAll() {
+      const queryKey = document.getElementById('queryKeyInput').value.trim();
+      const cn = document.getElementById('cnInput').value.trim();
+
+      if (!queryKey) return showToast('请输入查询密钥！');
+      if (!cn) return showToast('请输入您的 CN！');
+
+      const res = await fetchLeaderData(queryKey);
+      if (!res) return;
+
+      const allItems = res.groupData;
+
+      // 恪守规则：只看该 CN，彻底隐藏 status === "已排发" 的谷子
+      const myItems = allItems.filter(item => {
+        const matchCn = String(item.cn || '').trim().toLowerCase() === cn.toLowerCase();
+        const notShipped = item.status !== '已排发';
+        return matchCn && notShipped;
+      });
+
+      renderResults(myItems, `CN「${cn}」名下的排谷记录`, false);
+    }
+
+    // 功能 2：查看可排发谷子
+    async function handleQueryDispatchable() {
+      const queryKey = document.getElementById('queryKeyInput').value.trim();
+      const cn = document.getElementById('cnInput').value.trim();
+
+      if (!queryKey || !cn) {
+        return showToast('查看可排发谷子必须同时输入查询密钥和 CN！');
+      }
+
+      const res = await fetchLeaderData(queryKey);
+      if (!res) return;
+
+      const allItems = res.groupData;
+
+      const dispatchableItems = allItems.filter(item => {
+        const matchCn = String(item.cn || '').trim().toLowerCase() === cn.toLowerCase();
+        const isDispatchable = item.status === '可排发';
+        return matchCn && isDispatchable;
+      });
+
+      renderResults(dispatchableItems, `CN「${cn}」的可排发谷子`, true);
+    }
+
+    // 渲染结果表格
+    function renderResults(items, title, isDispatchMode) {
+      window.ITEM_CACHE = items;
+
+      const resultCard = document.getElementById('resultCard');
+      const resultTitle = document.getElementById('resultTitle');
+      const tbody = document.getElementById('resultTableBody');
+      const actionTh = document.getElementById('actionTh');
+      const batchActionBox = document.getElementById('batchActionBox');
+
+      resultTitle.innerHTML = `<span>📋 ${title}</span>`;
+      resultCard.style.display = 'block';
+
+      let totalQty = 0;
+      let totalPrice = 0;
+      items.forEach(i => {
+        const q = Number(i.quantity) || 1;
+        const p = Number(i.price) || 0;
+        totalQty += q;
+        totalPrice += p * q;
+      });
+
+      document.getElementById('statCount').innerText = items.length;
+      document.getElementById('statQty').innerText = totalQty;
+      document.getElementById('statPrice').innerText = totalPrice.toFixed(2);
+
+      if (isDispatchMode) {
+        actionTh.style.display = 'table-cell';
+        batchActionBox.style.display = items.length > 0 ? 'block' : 'none';
+      } else {
+        actionTh.style.display = 'none';
+        batchActionBox.style.display = 'none';
+      }
+
+      if (items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">未查询到符合条件的谷子数据</td></tr>`;
+        return;
+      }
+
+      let html = '';
+      items.forEach((item, index) => {
+        const imgTag = item.image_url 
+          ? `<img src="${escapeHtml(item.image_url)}" class="img-preview" alt="谷子">`
+          : `<span style="color:#cbd5e1;font-size:0.8rem;">无图</span>`;
+
+        const countryVal = item.country || item.region || '未设定';
+
+        html += `
+          <tr>
+            <td>${imgTag}</td>
+            <td style="font-weight: 600;">${escapeHtml(item.name || '未命名')}</td>
+            <td><span class="badge badge-country">${escapeHtml(countryVal)}</span></td>
+            <td>￥${Number(item.price || 0).toFixed(2)}</td>
+            <td>${item.quantity || 1}</td>
+            <td><span class="badge badge-status-${item.status}">${escapeHtml(item.status || '未到货')}</span></td>
+            ${isDispatchMode ? `
+              <td>
+                <button class="btn btn-success" style="padding: 4px 10px; font-size:0.8rem;" onclick="openApplyModalByIndex(${index})">
+                  申请排发
+                </button>
+              </td>
+            ` : ''}
+          </tr>
+        `;
+      });
+
+      tbody.innerHTML = html;
+    }
+
+    window.openApplyModalByIndex = function(index) {
+      const item = window.ITEM_CACHE[index];
+      if (!item) return showToast('获取谷子信息失败');
+      window.CURRENT_PENDING_APPLY_ITEMS = [item];
+      openModal();
+    };
+
+    function prepareApplyAll() {
+      if (!window.ITEM_CACHE || window.ITEM_CACHE.length === 0) {
+        return showToast('没有可排发的谷子');
+      }
+      window.CURRENT_PENDING_APPLY_ITEMS = [...window.ITEM_CACHE];
+      openModal();
+    }
+
+    function openModal() {
+      const summaryBox = document.getElementById('modalItemsSummary');
+      let html = '';
+      window.CURRENT_PENDING_APPLY_ITEMS.forEach(item => {
+        html += `
+          <div class="summary-item-row">
+            <span><strong>${escapeHtml(item.name)}</strong> (${escapeHtml(item.country || '日本')})</span>
+            <span>x ${item.quantity || 1}</span>
+          </div>
+        `;
+      });
+      summaryBox.innerHTML = html;
+      document.getElementById('applyNoteInput').value = '';
+      document.getElementById('applyModal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('applyModal').classList.remove('active');
+    }
+
+    async function submitApply() {
+      const queryKey = document.getElementById('queryKeyInput').value.trim();
+      const cn = document.getElementById('cnInput').value.trim();
+      const note = document.getElementById('applyNoteInput').value.trim();
+
+      if (!queryKey || !cn) return showToast('参数缺失，请重新查询！');
+      if (!window.CURRENT_PENDING_APPLY_ITEMS || window.CURRENT_PENDING_APPLY_ITEMS.length === 0) {
+        return showToast('未选择要排发的谷子！');
+      }
+
+      const res = await fetchLeaderData(queryKey);
+      if (!res) return;
+
+      const groupData = res.groupData;
+      const imgData = res.imgData;
+      const targetItemIds = new Set(window.CURRENT_PENDING_APPLY_ITEMS.map(i => String(i.item_id || i.id)));
+
+      groupData.forEach(item => {
+        const itemId = String(item.item_id || item.id);
+        if (targetItemIds.has(itemId)) {
+          item.status = '已申请发货';
+        }
+      });
+
+      const newApp = {
+        id: 'app_' + Date.now() + '_' + Math.floor(Math.random()*1000),
+        type: '排发申请',
+        cn: cn,
+        items: window.CURRENT_PENDING_APPLY_ITEMS.map(i => ({
+          item_id: i.item_id || i.id,
+          name: i.name,
+          quantity: i.quantity || 1,
+          country: i.country || '日本'
+        })),
+        note: note,
+        time: new Date().toLocaleString('zh-CN'),
+        status: '待处理'
+      };
+
+      if (!Array.isArray(imgData.applications)) imgData.applications = [];
+      imgData.applications.unshift(newApp);
+
+      try {
+        const { error } = await supabaseClient
+          .from('leader_data')
+          .update({
+            group_data: groupData,
+            image_data: imgData
+          })
+          .eq('query_key', queryKey);
+
+        if (error) {
+          console.error('Update error:', error);
+          return showToast('提交申请失败: ' + error.message);
+        }
+
+        showToast('🎉 排发申请提交成功！请等待团长处理。');
+        closeModal();
+        handleQueryDispatchable();
+      } catch (err) {
+        console.error('Update exception:', err);
+        showToast('网络异常，提交失败');
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
 </body>
 </html>
