@@ -147,6 +147,8 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
     }
 
     /* Form controls */
@@ -169,13 +171,14 @@
       color: var(--text-muted);
     }
 
-    input[type="text"], input[type="number"], select, textarea {
+    input[type="text"], input[type="number"], input[type="date"], input[type="url"], select, textarea {
       width: 100%;
       padding: 8px 12px;
       border: 1px solid var(--border);
       border-radius: 6px;
       font-size: 0.9rem;
       outline: none;
+      background: #ffffff;
     }
 
     input:focus, select:focus, textarea:focus {
@@ -257,6 +260,7 @@
       border: 1px solid #cbd5e1;
     }
 
+    /* 排表谷子状态颜色 */
     .badge-status-未出荷 { background-color: #fee2e2; color: #991b1b; }
     .badge-status-已下单未到货 { background-color: #ffedd5; color: #9a3412; }
     .badge-status-回国中 { background-color: #fef3c7; color: #92400e; }
@@ -266,7 +270,15 @@
     .badge-status-已排发 { background-color: #e2e8f0; color: #475569; }
     .badge-status-未付款 { background-color: #fecdd3; color: #881337; }
 
-    /* Auth Modal Overlay */
+    /* 国际物流状态颜色 */
+    .badge-log-已发货 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .badge-log-运输中 { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+    .badge-log-清关中 { background-color: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; }
+    .badge-log-国内派送 { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
+    .badge-log-已签收 { background-color: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .badge-log-异常滞留 { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+
+    /* Modal Overlay */
     .modal-overlay {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
@@ -289,9 +301,15 @@
       background: white;
       border-radius: var(--radius);
       width: 90%;
-      max-width: 400px;
+      max-width: 450px;
       padding: 24px;
       box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);
+    }
+
+    .modal-large {
+      max-width: 680px;
+      max-height: 90vh;
+      overflow-y: auto;
     }
 
     .toast {
@@ -315,7 +333,7 @@
       transform: translateY(0);
     }
 
-    /* 手机端卡片列表 (方案 A) */
+    /* 手机端卡片列表 */
     .mobile-cards-view {
       display: none;
     }
@@ -359,7 +377,7 @@
       background: #ffffff;
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 12px;
+      padding: 14px;
       display: flex;
       flex-direction: column;
       gap: 10px;
@@ -370,7 +388,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 6px;
+      padding-bottom: 8px;
       border-bottom: 1px dashed var(--border);
     }
 
@@ -431,11 +449,11 @@
       display: flex;
       justify-content: flex-end;
       gap: 8px;
-      padding-top: 6px;
+      padding-top: 8px;
       border-top: 1px dashed var(--border);
     }
 
-    /* 网格 10 排版样式 (严格每 10 个一排) */
+    /* 网格 10 排版样式 */
     .items-grid-10 {
       display: grid;
       grid-template-columns: repeat(10, 1fr);
@@ -495,6 +513,18 @@
       border-radius: 4px;
       border: 1px solid var(--border);
     }
+
+    /* 物流专属小卡片与标签 */
+    .linked-item-pill {
+      display: inline-block;
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 0.75rem;
+      margin: 2px;
+      color: #334155;
+    }
   </style>
 </head>
 <body>
@@ -520,6 +550,7 @@
     <!-- Nav Tabs -->
     <div class="nav-tabs">
       <button class="tab-btn active" onclick="switchTab('tabItems')">📊 排表管理 (group_data)</button>
+      <button class="tab-btn" onclick="switchTab('tabLogistics')">🌍 国际物流追踪</button>
       <button class="tab-btn" onclick="switchTab('tabDispatch')">🚀 排发工作台 (applications)</button>
       <button class="tab-btn" onclick="switchTab('tabLogs')">🔄 转单日志 (transfer_logs)</button>
       <button class="tab-btn" onclick="switchTab('tabSettings')">⚙️ 团务设置与实用工具</button>
@@ -668,14 +699,74 @@
           </table>
         </div>
 
-        <!-- 手机端卡片列表视图 (方案 A) -->
+        <!-- 手机端卡片列表视图 -->
         <div class="mobile-cards-view" id="adminMobileCardsView">
           <!-- 动态渲染 -->
         </div>
       </div>
     </div>
 
-    <!-- 标签页 2：排发工作台 -->
+    <!-- 标签页 2：国际物流追踪 -->
+    <div class="tab-content" id="tabLogistics">
+      <div class="card">
+        <div class="card-title">
+          <span>🌍 国际物流列表 (logistics_data)</span>
+          <button class="btn btn-primary" onclick="openLogisticsModal()">➕ 新增国际物流记录</button>
+        </div>
+
+        <!-- 物流筛选与搜索 -->
+        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+          <input type="text" id="logFilterSearch" placeholder="搜索单号 / 批次 / 谷子..." style="max-width: 260px;" oninput="renderLogisticsList()">
+          <select id="logFilterCountry" style="max-width: 160px;" onchange="renderLogisticsList()">
+            <option value="">全部发货国家</option>
+            <option value="日本">日本</option>
+            <option value="美国">美国</option>
+            <option value="韩国">韩国</option>
+            <option value="印尼">印尼</option>
+            <option value="泰国">泰国</option>
+            <option value="台湾">台湾</option>
+            <option value="其它">其它</option>
+          </select>
+          <select id="logFilterStatus" style="max-width: 160px;" onchange="renderLogisticsList()">
+            <option value="">全部物流状态</option>
+            <option value="已发货">已发货</option>
+            <option value="运输中">运输中</option>
+            <option value="清关中">清关中</option>
+            <option value="国内派送">国内派送</option>
+            <option value="已签收">已签收/已到货</option>
+            <option value="异常滞留">异常/滞留</option>
+          </select>
+        </div>
+
+        <!-- 桌面端物流表格 -->
+        <div class="table-container desktop-table-view">
+          <table>
+            <thead>
+              <tr>
+                <th>状态</th>
+                <th>物流单号 / 运输方式</th>
+                <th>发货国 / 批次名称</th>
+                <th>关联谷子</th>
+                <th>关键日期</th>
+                <th>运费/税费</th>
+                <th>备注</th>
+                <th style="text-align: right;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="logisticsTableBody">
+              <!-- 动态渲染 -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 手机端物流卡片视图 -->
+        <div class="mobile-cards-view" id="logisticsCardsContainer">
+          <!-- 动态渲染 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- 标签页 3：排发工作台 -->
     <div class="tab-content" id="tabDispatch">
       <div class="card">
         <div style="display: flex; gap: 16px; margin-bottom: 20px;">
@@ -700,7 +791,7 @@
       </div>
     </div>
 
-    <!-- 标签页 3：转单日志 -->
+    <!-- 标签页 4：转单日志 -->
     <div class="tab-content" id="tabLogs">
       <div class="card">
         <div class="card-title">
@@ -727,7 +818,7 @@
       </div>
     </div>
 
-    <!-- 标签页 4：团务设置与实用工具 -->
+    <!-- 标签页 5：团务设置与实用工具 -->
     <div class="tab-content" id="tabSettings">
       <div class="card">
         <div class="card-title">🛠️ 团务与测试工具</div>
@@ -742,7 +833,7 @@
           <hr style="border: none; border-top: 1px solid var(--border);">
           <div>
             <label style="font-size: 0.88rem; font-weight: 600; display: block; margin-bottom: 6px;">生成演示测试数据 (写入当前 Query Key 的 group_data 和 image_data)：</label>
-            <button class="btn btn-success" onclick="generateSampleData()">🎉 一键生成 5 条演示谷子和 1 条排发申请</button>
+            <button class="btn btn-success" onclick="generateSampleData()">🎉 一键生成 5 条演示谷子、1 条排发申请与 1 条国际物流</button>
           </div>
         </div>
       </div>
@@ -776,6 +867,115 @@
           <input type="password" id="password" required placeholder="••••••••">
         </div>
         <button type="submit" class="btn btn-primary" onclick="login()" style="width: 100%; justify-content: center; padding: 10px;">登录后台</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 国际物流 录入/编辑 Modal Overlay -->
+  <div class="modal-overlay" id="logisticsModal">
+    <div class="modal modal-large">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 id="logisticsModalTitle" style="font-size: 1.15rem; font-weight: 700;">➕ 新增国际物流</h3>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeLogisticsModal()">✕</button>
+      </div>
+      <form id="logisticsForm" onsubmit="handleSaveLogistics(event)">
+        <input type="hidden" id="logEditId">
+        
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="logTrackingNo">物流单号 *</label>
+            <input type="text" id="logTrackingNo" required placeholder="如：EG123456789JP">
+          </div>
+          <div class="form-group">
+            <label for="logCarrier">物流公司 / 方式</label>
+            <input type="text" id="logCarrier" list="carrierPresets" placeholder="选择或输入，如 EMS / DHL / 空运">
+            <datalist id="carrierPresets">
+              <option value="日本邮政 EMS">
+              <option value="佐川急便 (Sagawa)">
+              <option value="黑猫宅急便 (Yamato)">
+              <option value="DHL Express">
+              <option value="FedEx">
+              <option value="空运专线 (包税)">
+              <option value="海运拼箱 (慢速低价)">
+            </datalist>
+          </div>
+          <div class="form-group">
+            <label for="logCountry">发货国家</label>
+            <select id="logCountry">
+              <option value="日本">日本</option>
+              <option value="美国">美国</option>
+              <option value="韩国">韩国</option>
+              <option value="印尼">印尼</option>
+              <option value="泰国">泰国</option>
+              <option value="台湾">台湾</option>
+              <option value="其它">其它</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="logStatus">当前状态</label>
+            <select id="logStatus">
+              <option value="已发货">已发货</option>
+              <option value="运输中">运输中</option>
+              <option value="清关中">清关中</option>
+              <option value="国内派送">国内派送</option>
+              <option value="已签收">已签收/已到货</option>
+              <option value="异常滞留">异常/滞留</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="logBatchName">批次名称 / 备注标签</label>
+            <input type="text" id="logBatchName" placeholder="如：7月通贩第一批 / 场贩代购">
+          </div>
+          <div class="form-group">
+            <label for="logTrackingUrl">物流查询链接 (URL)</label>
+            <input type="url" id="logTrackingUrl" placeholder="https://www.17track.net/zh-cn">
+          </div>
+        </div>
+
+        <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
+          <div class="form-group">
+            <label for="logShipDate">发货日期</label>
+            <input type="date" id="logShipDate">
+          </div>
+          <div class="form-group">
+            <label for="logEstDate">预计到达</label>
+            <input type="date" id="logEstDate">
+          </div>
+          <div class="form-group">
+            <label for="logArrDate">实际到达</label>
+            <input type="date" id="logArrDate">
+          </div>
+          <div class="form-group">
+            <label for="logFee">运费/税费 (元)</label>
+            <input type="number" id="logFee" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+
+        <!-- 关联当前排表中的谷子 -->
+        <div class="form-group" style="margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">
+              📦 关联排表谷子 (可选，标记此包裹包含哪些谷子)：
+            </label>
+            <input type="text" id="logItemSearch" placeholder="快速筛选谷子..." style="width: 150px; padding: 2px 6px; font-size: 0.75rem;" oninput="filterLogisticsItemCheckboxes()">
+          </div>
+          <div id="logisticsItemSelector" style="max-height: 140px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px; background: #f8fafc;">
+            <!-- 动态生成谷子多选框 -->
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label for="logNote">备注信息</label>
+          <textarea id="logNote" rows="2" placeholder="箱子体积、申报品名、注意事项等..."></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeLogisticsModal()">取消</button>
+          <button type="submit" class="btn btn-primary">保存国际物流记录</button>
+        </div>
       </form>
     </div>
   </div>
@@ -816,11 +1016,13 @@
     let RAW_ITEMS = [];         // group_data (谷子列表)
     let RAW_APPLICATIONS = [];  // image_data.applications (排发申请列表)
     let RAW_LOGS = [];          // image_data.transfer_logs (转单历史)
+    let RAW_LOGISTICS = [];     // image_data.logistics_data (国际物流记录)
     let CURRENT_DISPATCH_SUBTAB = 'pending';
 
     window.ITEM_CACHE = [];
     window.APP_CACHE = [];
     window.LOG_CACHE = [];
+    window.LOGISTICS_CACHE = [];
 
     // 初始化检查 Auth 状态
     window.addEventListener('DOMContentLoaded', () => {
@@ -906,10 +1108,18 @@
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
-      event.currentTarget.classList.add('active');
-      document.getElementById(tabId).classList.add('active');
+      if (event && event.currentTarget) {
+        event.currentTarget.classList.add('active');
+      } else {
+        const activeBtn = document.querySelector(`.tab-btn[onclick*="${tabId}"]`);
+        if (activeBtn) activeBtn.classList.add('active');
+      }
+
+      const targetEl = document.getElementById(tabId);
+      if (targetEl) targetEl.classList.add('active');
 
       if (tabId === 'tabItems') renderTable();
+      if (tabId === 'tabLogistics') renderLogisticsList();
       if (tabId === 'tabDispatch') renderDispatchWorkbench();
       if (tabId === 'tabLogs') renderTransferLogs();
     }
@@ -940,7 +1150,9 @@
           RAW_ITEMS = [];
           RAW_APPLICATIONS = [];
           RAW_LOGS = [];
+          RAW_LOGISTICS = [];
           renderTable();
+          renderLogisticsList();
           renderDispatchWorkbench();
           renderTransferLogs();
           alert('该密钥暂无数据，请联系团长初始化！');
@@ -965,11 +1177,13 @@
           if (!iData || typeof iData !== 'object') iData = {};
           RAW_APPLICATIONS = Array.isArray(iData.applications) ? iData.applications : [];
           RAW_LOGS = Array.isArray(iData.transfer_logs) ? iData.transfer_logs : [];
+          RAW_LOGISTICS = Array.isArray(iData.logistics_data) ? iData.logistics_data : [];
 
           showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的团务数据 (${RAW_ITEMS.length} 条谷子)`);
         }
 
         renderTable();
+        renderLogisticsList();
         renderDispatchWorkbench();
         renderTransferLogs();
       } catch (err) {
@@ -984,7 +1198,6 @@
       if (!CURRENT_QUERY_KEY) return showToast('未指定 Query Key');
 
       try {
-        // 方案 A：先查询，如果记录存在就更新，不要强行插入
         const { data: existing, error: queryErr } = await supabaseClient
           .from('leader_data')
           .select('id')
@@ -1000,12 +1213,12 @@
           group_data: RAW_ITEMS,
           image_data: {
             applications: RAW_APPLICATIONS,
-            transfer_logs: RAW_LOGS
+            transfer_logs: RAW_LOGS,
+            logistics_data: RAW_LOGISTICS
           }
         };
 
         if (existing && existing.length > 0) {
-          // 记录已存在，更新
           const recId = existing[0].id;
           CURRENT_RECORD_ID = recId;
 
@@ -1021,7 +1234,6 @@
           }
           return true;
         } else {
-          // 记录不存在，提示用户
           alert('该密钥暂无数据，请联系团长初始化！');
           showToast('该密钥暂无数据，请联系团长初始化！');
           return false;
@@ -1135,13 +1347,11 @@
       if (!name || !cn) return showToast('请填写谷子名称和 CN！');
 
       if (editId) {
-        // 编辑模式
         const idx = RAW_ITEMS.findIndex(i => String(i.item_id || i.id) === String(editId));
         if (idx !== -1) {
           RAW_ITEMS[idx] = { ...RAW_ITEMS[idx], name, cn, price, quantity, country, status };
         }
       } else {
-        // 新增模式
         const newItem = {
           item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random()*1000),
           name, cn, price, quantity, country, status,
@@ -1167,7 +1377,7 @@
       document.getElementById('inputPrice').value = item.price || 0;
       document.getElementById('inputQuantity').value = item.quantity || 1;
       document.getElementById('inputCountry').value = item.country || item.region || '日本';
-      document.getElementById('inputStatus').value = item.status || '未到货';
+      document.getElementById('inputStatus').value = item.status || '未出荷';
 
       document.getElementById('formTitle').innerText = '✏️ 修改谷子信息';
       document.getElementById('btnClearForm').style.display = 'inline-block';
@@ -1183,7 +1393,6 @@
     }
     window.clearForm = clearForm;
 
-    // 单条转单
     async function transferSingleByIndex(index) {
       const item = window.ITEM_CACHE[index];
       if (!item) return;
@@ -1210,7 +1419,6 @@
     }
     window.transferSingleByIndex = transferSingleByIndex;
 
-    // 批量勾选
     function toggleSelectAll(master) {
       const checkboxes = document.querySelectorAll('.item-checkbox');
       checkboxes.forEach(cb => cb.checked = master.checked);
@@ -1227,7 +1435,6 @@
       return selected;
     }
 
-    // 批量转单
     async function batchTransferModal() {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选要转单的谷子！');
@@ -1255,7 +1462,6 @@
     }
     window.batchTransferModal = batchTransferModal;
 
-    // 批量改状态 (8种)
     async function batchChangeStatusModal() {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选要修改的谷子！');
@@ -1270,7 +1476,6 @@
     }
     window.batchChangeStatusModal = batchChangeStatusModal;
 
-    // 批量改地区 (country)
     async function batchChangeCountryModal() {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选要修改的谷子！');
@@ -1285,7 +1490,6 @@
     }
     window.batchChangeCountryModal = batchChangeCountryModal;
 
-    // 批量补图
     async function batchSetImgModal() {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选要补图的谷子！');
@@ -1300,7 +1504,6 @@
     }
     window.batchSetImgModal = batchSetImgModal;
 
-    // 批量删除
     async function batchDeleteItems() {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选要删除的谷子！');
@@ -1316,7 +1519,7 @@
     }
     window.batchDeleteItems = batchDeleteItems;
 
-    // 矩阵格式 Excel / 复制文本解析逻辑 (动态智能定位行与列)
+    // 矩阵格式 Excel / 复制文本解析逻辑
     function parseMatrixImportText(raw, batchCountry) {
       if (!raw) return [];
       const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
@@ -1339,15 +1542,13 @@
         }
       }
 
-      // 如果未检索到关键字，兜底策略
       if (nameLineIdx === -1) nameLineIdx = lines.length > 2 ? 2 : 1;
       if (priceLineIdx === -1) priceLineIdx = lines.length > 3 ? 3 : nameLineIdx + 1;
       if (headerLineIdx === -1) headerLineIdx = Math.max(nameLineIdx, priceLineIdx) + 1;
 
-      // 1. 动态定位谷子名称及列索引
       const nameCells = lines[nameLineIdx].split('\t');
       let kindColIdx = nameCells.findIndex(c => c.trim().includes('种类'));
-      if (kindColIdx === -1) kindColIdx = 0; // 找不到默认从第0列开始
+      if (kindColIdx === -1) kindColIdx = 0;
 
       const itemNamesWithOffset = [];
       for (let col = kindColIdx + 1; col < nameCells.length; col++) {
@@ -1362,7 +1563,6 @@
 
       if (itemNamesWithOffset.length === 0) return [];
 
-      // 2. 动态定位单价及列索引
       const priceCells = priceLineIdx < lines.length ? lines[priceLineIdx].split('\t') : [];
       let priceColIdx = priceCells.findIndex(c => c.trim().includes('单价'));
       if (priceColIdx === -1) priceColIdx = 0;
@@ -1373,7 +1573,6 @@
         prices.push(isNaN(p) ? 0 : p);
       }
 
-      // 3. 从表头行的下一行开始逐行读取团员数据
       const dataStartIdx = headerLineIdx + 1;
       const items = [];
 
@@ -1381,14 +1580,12 @@
         const cells = lines[i].split('\t');
         if (cells.length < 2) continue;
 
-        // cells[0] 是总金额（忽略），cells[1] 是团员 CN
         const cn = cells[1]?.trim();
         if (!cn || cn === "昵称/总数" || cn === "CN" || cn === "昵称" || cn === "总数" || cn.includes("昵称/总数")) {
           continue;
         }
 
         itemNamesWithOffset.forEach((itemObj, idx) => {
-          // cells[2] 对应第 1 个谷子的数量
           const qtyColIdx = 2 + itemObj.offset;
           const qty = parseFloat(cells[qtyColIdx]);
           if (!isNaN(qty) && qty > 0) {
@@ -1411,7 +1608,6 @@
     }
     window.parseMatrixImportText = parseMatrixImportText;
 
-    // Excel 文件导入
     function handleExcelImport(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -1425,11 +1621,9 @@
           const workbook = XLSX.read(data, { type: 'array' });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
 
-          // 1. 优先尝试使用矩阵格式解析（转换为 \t 分隔文本）
           const csvText = XLSX.utils.sheet_to_csv(firstSheet, { FS: '\t' });
           let parsedItems = parseMatrixImportText(csvText, defaultCountry);
 
-          // 2. 如果矩阵解析未获取到数据，尝试传统的纵向列表模式（谷子名称, 认领CN, 单价, 数量）
           if (parsedItems.length === 0) {
             const jsonRows = XLSX.utils.sheet_to_json(firstSheet);
             if (jsonRows && jsonRows.length > 0) {
@@ -1472,7 +1666,6 @@
     }
     window.handleExcelImport = handleExcelImport;
 
-    // 粘贴文本 Modal 操作逻辑
     function openPasteModal() {
       document.getElementById('pasteInputText').value = '';
       document.getElementById('pasteModal').classList.add('active');
@@ -1505,7 +1698,279 @@
     }
     window.submitPasteImport = submitPasteImport;
 
-    /* --- 标签页 2：排发工作台逻辑 --- */
+    /* --- 标签页 2：国际物流追踪逻辑 --- */
+
+    function getLogisticsStatusBadgeClass(status) {
+      const map = {
+        '已发货': 'badge-log-已发货',
+        '运输中': 'badge-log-运输中',
+        '清关中': 'badge-log-清关中',
+        '国内派送': 'badge-log-国内派送',
+        '已签收': 'badge-log-已签收',
+        '已到货': 'badge-log-已签收',
+        '异常滞留': 'badge-log-异常滞留',
+        '异常': 'badge-log-异常滞留',
+        '滞留': 'badge-log-异常滞留'
+      };
+      return map[status] || 'badge-log-运输中';
+    }
+
+    function renderLogisticsList() {
+      const tbody = document.getElementById('logisticsTableBody');
+      const mobileContainer = document.getElementById('logisticsCardsContainer');
+      const searchVal = (document.getElementById('logFilterSearch')?.value || '').trim().toLowerCase();
+      const countryVal = document.getElementById('logFilterCountry')?.value || '';
+      const statusVal = document.getElementById('logFilterStatus')?.value || '';
+
+      const filtered = RAW_LOGISTICS.filter(log => {
+        const trackMatch = (log.tracking_no || '').toLowerCase().includes(searchVal);
+        const carrierMatch = (log.carrier || '').toLowerCase().includes(searchVal);
+        const batchMatch = (log.batch_name || '').toLowerCase().includes(searchVal);
+        const noteMatch = (log.note || '').toLowerCase().includes(searchVal);
+        const itemsMatch = (log.linked_items || []).some(it => String(it.name || it).toLowerCase().includes(searchVal));
+        const matchSearch = !searchVal || (trackMatch || carrierMatch || batchMatch || noteMatch || itemsMatch);
+
+        const matchCountry = !countryVal || log.country === countryVal;
+        const matchStatus = !statusVal || log.status === statusVal;
+
+        return matchSearch && matchCountry && matchStatus;
+      });
+
+      window.LOGISTICS_CACHE = filtered;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);">暂无匹配的国际物流记录</td></tr>`;
+        if (mobileContainer) mobileContainer.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">暂无匹配的国际物流记录</div>`;
+        return;
+      }
+
+      let html = '';
+      let cardsHtml = '';
+
+      filtered.forEach((log, index) => {
+        const badgeClass = getLogisticsStatusBadgeClass(log.status || '已发货');
+        const trackingLink = log.tracking_url 
+          ? `<a href="${escapeHtml(log.tracking_url)}" target="_blank" style="color:var(--primary); font-weight:600; text-decoration:underline;">${escapeHtml(log.tracking_no)}</a> 🔗`
+          : `<strong>${escapeHtml(log.tracking_no || '无单号')}</strong>`;
+
+        let linkedPills = '';
+        if (Array.isArray(log.linked_items) && log.linked_items.length > 0) {
+          linkedPills = log.linked_items.map(it => {
+            const name = typeof it === 'string' ? it : (it.name || '谷子');
+            const qty = it.quantity ? ` x${it.quantity}` : '';
+            return `<span class="linked-item-pill" title="${escapeHtml(name)}">${escapeHtml(name)}${qty}</span>`;
+          }).join('');
+        } else {
+          linkedPills = `<span style="color:var(--text-muted); font-size:0.75rem;">未指定</span>`;
+        }
+
+        const dateStr = `发: ${log.ship_date || '-'}<br><span style="color:var(--text-muted); font-size:0.75rem;">预: ${log.est_date || '-'} | 实: ${log.arr_date || '-'}</span>`;
+        const feeStr = log.fee ? `￥${parseFloat(log.fee).toFixed(2)}` : '-';
+
+        // 桌面端表格行
+        html += `
+          <tr>
+            <td><span class="badge ${badgeClass}">${escapeHtml(log.status || '已发货')}</span></td>
+            <td>
+              <div>${trackingLink}</div>
+              <div style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(log.carrier || '默认线路')}</div>
+            </td>
+            <td>
+              <div><span class="badge badge-country">${escapeHtml(log.country || '日本')}</span></div>
+              <div style="font-size:0.8rem; font-weight:600; margin-top:2px;">${escapeHtml(log.batch_name || '-')}</div>
+            </td>
+            <td style="max-width:240px; white-space:normal;">${linkedPills}</td>
+            <td style="font-size:0.8rem;">${dateStr}</td>
+            <td><strong>${feeStr}</strong></td>
+            <td style="max-width:160px; white-space:normal; font-size:0.8rem; color:var(--text-muted);">${escapeHtml(log.note || '-')}</td>
+            <td style="text-align: right;">
+              <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editLogisticsByIndex(${index})">编辑</button>
+              <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogisticsByIndex(${index})">删除</button>
+            </td>
+          </tr>
+        `;
+
+        // 移动端卡片
+        cardsHtml += `
+          <div class="admin-card-mobile">
+            <div class="admin-card-mobile-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="badge badge-country">${escapeHtml(log.country || '日本')}</span>
+                <strong style="font-size:0.9rem;">${escapeHtml(log.batch_name || '海外包裹')}</strong>
+              </div>
+              <span class="badge ${badgeClass}">${escapeHtml(log.status || '已发货')}</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; font-size:0.85rem;">
+              <div>单号: ${trackingLink} <span style="color:var(--text-muted); font-size:0.75rem;">(${escapeHtml(log.carrier || '国际快递')})</span></div>
+              <div>关联谷子: <div>${linkedPills}</div></div>
+              <div style="display:flex; justify-content:space-between; color:var(--text-muted); font-size:0.8rem;">
+                <span>发货: ${log.ship_date || '-'}</span>
+                <span>预达: ${log.est_date || '-'}</span>
+                <span>费用: <strong>${feeStr}</strong></span>
+              </div>
+              ${log.note ? `<div style="font-size:0.8rem; background:#f8fafc; padding:6px; border-radius:4px; border:1px dashed var(--border);">📝 ${escapeHtml(log.note)}</div>` : ''}
+            </div>
+            <div class="admin-card-mobile-actions">
+              <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="editLogisticsByIndex(${index})">✏️ 编辑</button>
+              <button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteLogisticsByIndex(${index})">🗑️ 删除</button>
+            </div>
+          </div>
+        `;
+      });
+
+      tbody.innerHTML = html;
+      if (mobileContainer) mobileContainer.innerHTML = cardsHtml;
+    }
+    window.renderLogisticsList = renderLogisticsList;
+
+    function populateLogisticsItemSelector(selectedNames = []) {
+      const container = document.getElementById('logisticsItemSelector');
+      if (!container) return;
+
+      // 提取排表中不重复的谷子名称和汇总数量
+      const itemSummaryMap = new Map();
+      RAW_ITEMS.forEach(it => {
+        const name = (it.name || '未命名谷子').trim();
+        const cur = itemSummaryMap.get(name) || { name: name, count: 0, country: it.country || '日本' };
+        cur.count += (it.quantity || 1);
+        itemSummaryMap.set(name, cur);
+      });
+
+      if (itemSummaryMap.size === 0) {
+        container.innerHTML = `<span style="font-size:0.8rem; color:var(--text-muted);">排表中暂无谷子，可稍后在排表录入后再关联</span>`;
+        return;
+      }
+
+      let html = '';
+      itemSummaryMap.forEach(item => {
+        const isChecked = selectedNames.some(s => (typeof s === 'string' ? s : s.name) === item.name);
+        html += `
+          <label class="log-item-label" style="display:flex; align-items:center; gap:8px; font-size:0.82rem; cursor:pointer;">
+            <input type="checkbox" class="log-item-chk" value="${escapeHtml(item.name)}" ${isChecked ? 'checked' : ''}>
+            <span>${escapeHtml(item.name)} <span style="color:var(--text-muted); font-size:0.75rem;">(排表总量:${item.count} | ${escapeHtml(item.country)})</span></span>
+          </label>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    function filterLogisticsItemCheckboxes() {
+      const search = (document.getElementById('logItemSearch')?.value || '').trim().toLowerCase();
+      const labels = document.querySelectorAll('.log-item-label');
+      labels.forEach(lbl => {
+        const text = lbl.innerText.toLowerCase();
+        lbl.style.display = text.includes(search) ? 'flex' : 'none';
+      });
+    }
+    window.filterLogisticsItemCheckboxes = filterLogisticsItemCheckboxes;
+
+    function openLogisticsModal() {
+      document.getElementById('logEditId').value = '';
+      document.getElementById('logisticsForm').reset();
+      document.getElementById('logisticsModalTitle').innerText = '➕ 新增国际物流';
+      populateLogisticsItemSelector([]);
+      document.getElementById('logisticsModal').classList.add('active');
+    }
+    window.openLogisticsModal = openLogisticsModal;
+
+    function closeLogisticsModal() {
+      document.getElementById('logisticsModal').classList.remove('active');
+    }
+    window.closeLogisticsModal = closeLogisticsModal;
+
+    function editLogisticsByIndex(index) {
+      const log = window.LOGISTICS_CACHE[index];
+      if (!log) return;
+
+      document.getElementById('logEditId').value = log.id;
+      document.getElementById('logTrackingNo').value = log.tracking_no || '';
+      document.getElementById('logCarrier').value = log.carrier || '';
+      document.getElementById('logCountry').value = log.country || '日本';
+      document.getElementById('logStatus').value = log.status || '已发货';
+      document.getElementById('logBatchName').value = log.batch_name || '';
+      document.getElementById('logTrackingUrl').value = log.tracking_url || '';
+      document.getElementById('logShipDate').value = log.ship_date || '';
+      document.getElementById('logEstDate').value = log.est_date || '';
+      document.getElementById('logArrDate').value = log.arr_date || '';
+      document.getElementById('logFee').value = log.fee || '';
+      document.getElementById('logNote').value = log.note || '';
+
+      populateLogisticsItemSelector(log.linked_items || []);
+
+      document.getElementById('logisticsModalTitle').innerText = '✏️ 编辑国际物流记录';
+      document.getElementById('logisticsModal').classList.add('active');
+    }
+    window.editLogisticsByIndex = editLogisticsByIndex;
+
+    async function handleSaveLogistics(e) {
+      e.preventDefault();
+      const editId = document.getElementById('logEditId').value;
+      const tracking_no = document.getElementById('logTrackingNo').value.trim();
+      const carrier = document.getElementById('logCarrier').value.trim();
+      const country = document.getElementById('logCountry').value;
+      const status = document.getElementById('logStatus').value;
+      const batch_name = document.getElementById('logBatchName').value.trim();
+      const tracking_url = document.getElementById('logTrackingUrl').value.trim();
+      const ship_date = document.getElementById('logShipDate').value;
+      const est_date = document.getElementById('logEstDate').value;
+      const arr_date = document.getElementById('logArrDate').value;
+      const fee = document.getElementById('logFee').value;
+      const note = document.getElementById('logNote').value.trim();
+
+      if (!tracking_no) return showToast('请填写物流单号！');
+
+      // 提取勾选的关联谷子
+      const checkedBoxes = document.querySelectorAll('.log-item-chk:checked');
+      const linked_items = Array.from(checkedBoxes).map(cb => ({ name: cb.value }));
+
+      const recordData = {
+        tracking_no,
+        carrier,
+        country,
+        status,
+        batch_name,
+        tracking_url,
+        ship_date,
+        est_date,
+        arr_date,
+        fee: fee ? parseFloat(fee) : 0,
+        note,
+        linked_items,
+        updated_at: new Date().toISOString()
+      };
+
+      if (editId) {
+        const idx = RAW_LOGISTICS.findIndex(l => String(l.id) === String(editId));
+        if (idx !== -1) {
+          RAW_LOGISTICS[idx] = { ...RAW_LOGISTICS[idx], ...recordData };
+        }
+      } else {
+        recordData.id = 'logistics_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+        recordData.created_at = new Date().toISOString();
+        RAW_LOGISTICS.unshift(recordData);
+      }
+
+      await saveDataToSupabase();
+      closeLogisticsModal();
+      renderLogisticsList();
+      showToast('国际物流记录已保存至 Supabase！');
+    }
+    window.handleSaveLogistics = handleSaveLogistics;
+
+    async function deleteLogisticsByIndex(index) {
+      const log = window.LOGISTICS_CACHE[index];
+      if (!log) return;
+
+      if (!confirm(`确定删除单号为「${log.tracking_no}」的物流记录吗？`)) return;
+
+      RAW_LOGISTICS = RAW_LOGISTICS.filter(l => String(l.id) !== String(log.id));
+      await saveDataToSupabase();
+      renderLogisticsList();
+      showToast('已删除国际物流记录！');
+    }
+    window.deleteLogisticsByIndex = deleteLogisticsByIndex;
+
+    /* --- 标签页 3：排发工作台逻辑 --- */
 
     function switchDispatchSubTab(sub) {
       CURRENT_DISPATCH_SUBTAB = sub;
@@ -1515,7 +1980,6 @@
     }
     window.switchDispatchSubTab = switchDispatchSubTab;
 
-    // 辅助函数：严格每 10 个一组切分数组
     function chunkArray(arr, chunkSize = 10) {
       const results = [];
       for (let i = 0; i < arr.length; i += chunkSize) {
@@ -1596,7 +2060,6 @@
       container.innerHTML = html;
     }
 
-    // 确认发货（待处理 -> 已完成，对应谷子在 group_data 中的 status 改为 已排发）
     async function confirmDispatchAppByIndex(appIndex) {
       const app = window.APP_CACHE[appIndex];
       if (!app) return;
@@ -1618,7 +2081,6 @@
     }
     window.confirmDispatchAppByIndex = confirmDispatchAppByIndex;
 
-    // 删除申请
     async function deleteAppByIndex(appIndex) {
       const app = window.APP_CACHE[appIndex];
       if (!app) return;
@@ -1633,7 +2095,6 @@
     }
     window.deleteAppByIndex = deleteAppByIndex;
 
-    // 删除记录（联动彻底删除 group_data 中对应的谷子）
     async function deleteCompletedAppByIndex(appIndex) {
       const app = window.APP_CACHE[appIndex];
       if (!app) return;
@@ -1652,7 +2113,7 @@
     }
     window.deleteCompletedAppByIndex = deleteCompletedAppByIndex;
 
-    /* --- 标签页 3：转单记录逻辑 --- */
+    /* --- 标签页 4：转单记录逻辑 --- */
 
     function renderTransferLogs() {
       const tbody = document.getElementById('transferLogsTableBody');
@@ -1702,7 +2163,7 @@
     }
     window.clearAllTransferLogs = clearAllTransferLogs;
 
-    /* --- 标签页 4：团务设置与实用工具 --- */
+    /* --- 标签页 5：团务设置与实用工具 --- */
 
     function copyMemberLink() {
       const url = `${window.location.origin}/index.html?key=${encodeURIComponent(CURRENT_QUERY_KEY)}`;
@@ -1734,13 +2195,13 @@
     }
     window.copyRlsGuide = copyRlsGuide;
 
-    // 生成演示测试数据
+    // 生成演示测试数据（含国际物流）
     async function generateSampleData() {
       if (!confirm('生成演示测试数据将向当前 Query Key 写入样例，确定生成吗？')) return;
 
       RAW_ITEMS = [
-        { item_id: 'item_1', name: '五条悟 20cm 亚克力立牌', cn: '小明', price: 65, quantity: 2, country: '日本', status: '可排发', image_url: '' },
-        { item_id: 'item_2', name: '夏油杰 75mm 闪粉徽章', cn: '小明', price: 25, quantity: 3, country: '闲鱼', status: '可排发', image_url: '' },
+        { item_id: 'item_1', name: '五条悟 20cm 亚克力立牌', cn: '小明', price: 65, quantity: 2, country: '日本', status: '回国中', image_url: '' },
+        { item_id: 'item_2', name: '夏油杰 75mm 闪粉徽章', cn: '小明', price: 25, quantity: 3, country: '日本', status: '回国中', image_url: '' },
         { item_id: 'item_3', name: '伏黑惠 烫金拍立得', cn: '小红', price: 15, quantity: 5, country: '淘宝店', status: '未出荷', image_url: '' },
         { item_id: 'item_4', name: '钉崎野蔷薇 色纸', cn: '小红', price: 30, quantity: 1, country: '美国', status: '已到货', image_url: '' },
         { item_id: 'item_5', name: '宿傩 挂件', cn: '小刚', price: 40, quantity: 2, country: '韩国', status: '已排发', image_url: '' }
@@ -1750,10 +2211,9 @@
         {
           id: 'app_sample_1',
           type: '排发申请',
-          cn: '小明',
+          cn: '小红',
           items: [
-            { item_id: 'item_1', name: '五条悟 20cm 亚克力立牌', quantity: 2, country: '日本' },
-            { item_id: 'item_2', name: '夏油杰 75mm 闪粉徽章', quantity: 3, country: '闲鱼' }
+            { item_id: 'item_4', name: '钉崎野蔷薇 色纸', quantity: 1, country: '美国' }
           ],
           note: '加固打包，寄顺丰到付',
           time: new Date().toLocaleString('zh-CN'),
@@ -1765,11 +2225,33 @@
         { id: 'log_sample_1', time: new Date().toLocaleString('zh-CN'), from_cn: '路人甲', to_cn: '小明', item_name: '五条悟 20cm 亚克力立牌', quantity: 2 }
       ];
 
+      RAW_LOGISTICS = [
+        {
+          id: 'logistics_sample_1',
+          tracking_no: 'EG987654321JP',
+          carrier: '日本邮政 EMS',
+          country: '日本',
+          batch_name: '7月JUMP通贩第一批',
+          status: '运输中',
+          tracking_url: 'https://www.post.japanpost.jp/index.html',
+          ship_date: new Date(Date.now() - 3*86400000).toISOString().split('T')[0],
+          est_date: new Date(Date.now() + 4*86400000).toISOString().split('T')[0],
+          arr_date: '',
+          fee: 185.50,
+          note: '箱内含五条悟立牌及夏油杰徽章，已加气泡膜加固',
+          linked_items: [
+            { name: '五条悟 20cm 亚克力立牌' },
+            { name: '夏油杰 75mm 闪粉徽章' }
+          ]
+        }
+      ];
+
       await saveDataToSupabase();
       renderTable();
+      renderLogisticsList();
       renderDispatchWorkbench();
       renderTransferLogs();
-      showToast('🎉 样例测试数据生成成功！已存入 group_data 和 image_data。');
+      showToast('🎉 样例测试数据生成成功！已存入 group_data、logistics_data 和 image_data。');
     }
     window.generateSampleData = generateSampleData;
 
