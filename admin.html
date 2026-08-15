@@ -4,9 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>👑 团长后台管理系统 - 谷圈团务系统</title>
-  <!-- Supabase CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- SheetJS (用于 Excel 批量导入) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -20,32 +18,31 @@
       --success: #10b981;
       --warning: #f59e0b;
       --danger: #ef4444;
-      --purple: #8b5cf6;
       --radius: 12px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
     body { background-color: var(--bg); color: var(--text-main); line-height: 1.5; padding: 16px; min-height: 100vh; }
-    .container { max-width: 1320px; margin: 0 auto; }
+    .container { max-width: 1280px; margin: 0 auto; }
     header { background: var(--card-bg); border-radius: var(--radius); padding: 16px 24px; margin-bottom: 20px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 12px; }
     .header-title { display: flex; align-items: center; gap: 12px; }
-    .header-title h1 { font-size: 1.35rem; font-weight: 700; }
+    .header-title h1 { font-size: 1.4rem; font-weight: 700; }
     .key-selector { display: flex; align-items: center; gap: 8px; }
-    .key-selector input { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; width: 170px; }
-    .user-info { display: flex; align-items: center; gap: 10px; font-size: 0.88rem; }
-    .nav-tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid var(--border); padding-bottom: 0; overflow-x: auto; white-space: nowrap; }
-    .tab-btn { padding: 10px 18px; background: transparent; border: none; border-bottom: 3px solid transparent; font-size: 0.92rem; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.2s; }
+    .key-selector input { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; width: 180px; }
+    .user-info { display: flex; align-items: center; gap: 12px; font-size: 0.88rem; }
+    .nav-tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid var(--border); padding-bottom: 0; }
+    .tab-btn { padding: 10px 20px; background: transparent; border: none; border-bottom: 3px solid transparent; font-size: 0.95rem; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.2s; }
     .tab-btn:hover { color: var(--primary); }
     .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); background: var(--card-bg); border-top-left-radius: 8px; border-top-right-radius: 8px; }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
     .card { background: var(--card-bg); border-radius: var(--radius); border: 1px solid var(--border); padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    .card-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 14px; }
-    .form-group { display: flex; flex-direction: column; gap: 5px; }
-    .form-group label { font-size: 0.84rem; font-weight: 600; color: var(--text-muted); }
-    input[type="text"], input[type="number"], input[type="date"], select, textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.88rem; outline: none; background: #ffffff; }
+    .card-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
+    input[type="text"], input[type="number"], input[type="date"], select, textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; outline: none; background: #ffffff; }
     input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15); }
-    .btn { padding: 8px 15px; border: none; border-radius: 6px; font-size: 0.86rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s; display: inline-flex; align-items: center; gap: 6px; }
     .btn-primary { background-color: var(--primary); color: white; }
     .btn-primary:hover { background-color: var(--primary-hover); }
     .btn-success { background-color: var(--success); color: white; }
@@ -54,20 +51,14 @@
     .btn-secondary:hover { background-color: #cbd5e1; }
     .btn-danger { background-color: var(--danger); color: white; }
     .btn-danger:hover { background-color: #dc2626; }
-    .btn-purple { background-color: var(--purple); color: white; }
-    .btn-purple:hover { background-color: #7c3aed; }
     .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
     .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 12px; }
-    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.86rem; min-width: 800px; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88rem; min-width: 800px; }
     th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; }
     th { background-color: #f8fafc; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
     tr:hover { background-color: #f8fafc; }
-    .badge { display: inline-block; padding: 3px 9px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
-    .badge-interactive { cursor: pointer; user-select: none; transition: transform 0.1s; }
-    .badge-interactive:hover { transform: scale(1.05); }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
     .badge-country { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
-    
-    /* 排表谷子状态 */
     .badge-status-未出荷 { background-color: #fee2e2; color: #991b1b; }
     .badge-status-已下单未到货 { background-color: #ffedd5; color: #9a3412; }
     .badge-status-回国中 { background-color: #fef3c7; color: #92400e; }
@@ -76,25 +67,16 @@
     .badge-status-已申请发货 { background-color: #f3e8ff; color: #6b21a8; }
     .badge-status-已排发 { background-color: #e2e8f0; color: #475569; }
     .badge-status-未付款 { background-color: #fecdd3; color: #881337; }
-
-    /* 国际物流状态 */
     .badge-log-已发货 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
     .badge-log-运输中 { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
     .badge-log-清关中 { background-color: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; }
     .badge-log-国内派送 { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
     .badge-log-已签收 { background-color: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
     .badge-log-异常滞留 { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
-
-    /* 肾表缴费状态 */
-    .badge-fee-未交 { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-    .badge-fee-已交 { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
-    .badge-fee-免交 { background-color: #e2e8f0; color: #475569; border: 1px solid #cbd5e1; }
-
-    /* 模态框与通用组件 */
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.7); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
     .modal-overlay.active { opacity: 1; pointer-events: auto; }
     .modal { background: white; border-radius: var(--radius); width: 90%; max-width: 450px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2); }
-    .modal-large { max-width: 820px; max-height: 90vh; overflow-y: auto; }
+    .modal-large { max-width: 680px; max-height: 90vh; overflow-y: auto; }
     .toast { position: fixed; bottom: 24px; right: 24px; background: #0f172a; color: white; padding: 12px 20px; border-radius: 8px; font-size: 0.9rem; z-index: 3000; opacity: 0; transform: translateY(10px); transition: opacity 0.3s, transform 0.3s; pointer-events: none; }
     .toast.show { opacity: 1; transform: translateY(0); }
     .mobile-cards-view { display: none; }
@@ -104,6 +86,10 @@
       .desktop-table-view { display: none !important; }
       .mobile-cards-view { display: flex; flex-direction: column; gap: 12px; }
       .app-header { flex-direction: column; align-items: flex-start; gap: 6px; }
+    }
+    @media (max-width: 600px) {
+      .items-grid-10 { grid-template-columns: repeat(2, 1fr) !important; }
+      .grid-item-chip { padding: 8px 6px; }
     }
     .admin-card-mobile { background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
     .admin-card-mobile-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
@@ -123,18 +109,25 @@
     .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
     .img-preview { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
     .linked-item-pill { display: inline-block; background: #f1f5f9; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; margin: 2px; color: #334155; }
-    
-    /* 肾表面板统计卡片 */
-    .fee-stat-box {
-      flex: 1; min-width: 140px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-align: center;
-    }
-    .fee-stat-val { font-size: 1.25rem; font-weight: 700; margin-top: 4px; }
+
+    .badge-fee-未交 { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .badge-fee-已交 { background-color: #d1fae5; color: #065f46; border: 1px solid #bbf7d0; }
+    .badge-fee-免交 { background-color: #e2e8f0; color: #475569; border: 1px solid #cbd5e1; }
+    .fee-stats { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .fee-stat-card { flex: 1; min-width: 100px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-align: center; }
+    .fee-stat-card .num { font-size: 1.3rem; font-weight: 700; }
+    .fee-stat-card .label { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
+    .fee-stat-card.unpaid .num { color: var(--danger); }
+    .fee-stat-card.paid .num { color: var(--success); }
+    .fee-panel-section { margin-bottom: 18px; }
+    .fee-panel-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 10px; color: var(--text-muted); }
+    .fee-mobile-card { background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); margin-bottom: 10px; }
+    .fee-mobile-header { display: flex; justify-content: space-between; align-items: center; }
+    .fee-mobile-body { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-muted); }
   </style>
-<base target="_blank">
 </head>
 <body>
   <div class="container">
-    <!-- Header -->
     <header>
       <div class="header-title"><h1>👑 团长后台管理系统</h1></div>
       <div class="key-selector">
@@ -150,13 +143,12 @@
       </div>
     </header>
 
-    <!-- Nav Tabs -->
     <div class="nav-tabs">
-      <button class="tab-btn active" id="tab-btn-tabItems" onclick="switchTab('tabItems')">📊 排表管理 (group_data)</button>
-      <button class="tab-btn" id="tab-btn-tabLogistics" onclick="switchTab('tabLogistics')">🌍 国际物流追踪</button>
-      <button class="tab-btn" id="tab-btn-tabDispatch" onclick="switchTab('tabDispatch')">🚀 排发工作台 (applications)</button>
-      <button class="tab-btn" id="tab-btn-tabLogs" onclick="switchTab('tabLogs')">🔄 转单日志 (transfer_logs)</button>
-      <button class="tab-btn" id="tab-btn-tabSettings" onclick="switchTab('tabSettings')">⚙️ 团务设置与实用工具</button>
+      <button class="tab-btn active" onclick="switchTab('tabItems')">📊 排表管理 (group_data)</button>
+      <button class="tab-btn" onclick="switchTab('tabLogistics')">🌍 国际物流追踪</button>
+      <button class="tab-btn" onclick="switchTab('tabDispatch')">🚀 排发工作台 (applications)</button>
+      <button class="tab-btn" onclick="switchTab('tabLogs')">🔄 转单日志 (transfer_logs)</button>
+      <button class="tab-btn" onclick="switchTab('tabSettings')">⚙️ 团务设置与实用工具</button>
     </div>
 
     <!-- 标签页 1：排表管理 -->
@@ -252,18 +244,13 @@
       </div>
     </div>
 
-    <!-- 标签页 2：国际物流追踪（含国际肾表入口） -->
+    <!-- 标签页 2：国际物流追踪 -->
     <div class="tab-content" id="tabLogistics">
       <div class="card">
         <div class="card-title">
-          <span>🌍 国际物流追踪与肾表管理 (logistics_data)</span>
+          <span>🌍 国际物流列表 (logistics_data)</span>
           <button class="btn btn-primary" onclick="openLogisticsModal()">➕ 新增国际物流记录</button>
         </div>
-        
-        <p style="font-size: 0.86rem; color: var(--text-muted); margin-bottom: 14px;">
-          💡 <strong>团长贴士：</strong>点击物流记录右侧的 <strong>「💰 管理肾表」</strong> 即可进入该批次独立的运费分摊和收款看板。
-        </p>
-
         <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
           <input type="text" id="logFilterSearch" placeholder="搜索批次 / 谷子..." style="max-width: 260px;" oninput="renderLogisticsList()">
           <select id="logFilterCountry" style="max-width: 160px;" onchange="renderLogisticsList()">
@@ -277,20 +264,11 @@
             <option value="国内派送">国内派送</option><option value="已签收">已签收/已到货</option><option value="异常滞留">异常/滞留</option>
           </select>
         </div>
-
         <div class="table-container desktop-table-view">
           <table>
             <thead>
               <tr>
-                <th>状态</th>
-                <th>批次名称</th>
-                <th>发货国家</th>
-                <th>包含谷子</th>
-                <th>关键日期</th>
-                <th>总运费/税费</th>
-                <th>💰 国际肾表 (收款进度)</th>
-                <th>备注</th>
-                <th style="text-align: right;">操作</th>
+                <th>状态</th><th>批次名称</th><th>发货国家</th><th>关联谷子</th><th>关键日期</th><th>运费/税费</th><th>肾表</th><th>备注</th><th style="text-align: right;">操作</th>
               </tr>
             </thead>
             <tbody id="logisticsTableBody"></tbody>
@@ -353,8 +331,8 @@
           </div>
           <hr style="border: none; border-top: 1px solid var(--border);">
           <div>
-            <label style="font-size: 0.88rem; font-weight: 600; display: block; margin-bottom: 6px;">生成演示测试数据 (包含国际物流与肾表)：</label>
-            <button class="btn btn-success" onclick="generateSampleData()">🎉 一键生成全套演示数据</button>
+            <label style="font-size: 0.88rem; font-weight: 600; display: block; margin-bottom: 6px;">生成演示测试数据：</label>
+            <button class="btn btn-success" onclick="generateSampleData()">🎉 一键生成 5 条演示谷子、1 条排发申请与 1 条国际物流</button>
           </div>
         </div>
       </div>
@@ -368,150 +346,25 @@
     </div>
   </div>
 
-  <!-- ==================== 国际肾表管理模态框 (Fee Sheet Modal) ==================== -->
-  <div class="modal-overlay" id="feeSheetModal">
-    <div class="modal modal-large">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 id="feeSheetModalTitle" style="font-size: 1.2rem; font-weight: 700; color: var(--text-main);">💰 管理国际肾表</h3>
-        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeFeeSheetModal()">✕</button>
-      </div>
-
-      <!-- A. 顶部统计看板 -->
-      <div style="display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;">
-        <div class="fee-stat-box">
-          <div style="font-size:0.8rem; color:var(--text-muted);">参与总人数</div>
-          <div class="fee-stat-val" id="fsStatTotalCount" style="color:var(--primary);">0 人</div>
+  <!-- 登录 Modal -->
+  <div class="modal-overlay active" id="authOverlay">
+    <div class="modal">
+      <h2 style="font-size: 1.3rem; margin-bottom: 16px; text-align: center;">🔐 团长后台 Supabase 登录</h2>
+      <form id="loginForm" onsubmit="event.preventDefault(); login();">
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label for="email">Supabase 邮箱账号</label>
+          <input type="text" id="email" required placeholder="your-email@example.com">
         </div>
-        <div class="fee-stat-box">
-          <div style="font-size:0.8rem; color:var(--text-muted);">未交 / 已交 / 免交</div>
-          <div class="fee-stat-val" style="font-size:1.05rem;">
-            <span id="fsStatUnpaidCount" style="color:var(--danger);">0</span> / 
-            <span id="fsStatPaidCount" style="color:var(--success);">0</span> / 
-            <span id="fsStatFreeCount" style="color:var(--text-muted);">0</span>
-          </div>
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label for="password">密码</label>
+          <input type="password" id="password" required placeholder="••••••••">
         </div>
-        <div class="fee-stat-box">
-          <div style="font-size:0.8rem; color:var(--text-muted);">应收总额</div>
-          <div class="fee-stat-val" id="fsStatTotalDue" style="color:var(--danger);">￥0.00</div>
-        </div>
-        <div class="fee-stat-box">
-          <div style="font-size:0.8rem; color:var(--text-muted);">实收总额</div>
-          <div class="fee-stat-val" id="fsStatTotalPaid" style="color:var(--success);">￥0.00</div>
-        </div>
-      </div>
-
-      <!-- B. 导入与快捷工具栏 -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
-        <div class="btn-group">
-          <button class="btn btn-secondary" onclick="openFeePasteModal()">📋 粘贴表格文本导入</button>
-          <label class="btn btn-success" style="cursor: pointer; margin: 0;">
-            📁 导入 Excel 文件
-            <input type="file" id="feeSheetExcelInput" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleFeeExcelImport(event)">
-          </label>
-          <button class="btn btn-purple" onclick="copyQqFeeBroadcastText()">🤖 复制未交催款名单</button>
-        </div>
-        <div style="font-size: 0.8rem; color: var(--text-muted);">💡 提示：点击列表中的状态标签可快速变色切换</div>
-      </div>
-
-      <!-- C. 手动添加单条记录表单 -->
-      <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
-        <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 8px;">➕ 手动添加团员缴费记录：</div>
-        <form onsubmit="handleManualAddFeeMember(event)" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) 90px; gap: 8px; align-items: end;">
-          <div>
-            <label style="font-size: 0.75rem; color: var(--text-muted);">圈名 (CN) *</label>
-            <input type="text" id="fsInputCn" required placeholder="如：小明" style="padding: 6px 8px; font-size: 0.82rem;">
-          </div>
-          <div>
-            <label style="font-size: 0.75rem; color: var(--text-muted);">应交金额 (元) *</label>
-            <input type="number" id="fsInputDue" step="0.01" required placeholder="0.00" style="padding: 6px 8px; font-size: 0.82rem;">
-          </div>
-          <div>
-            <label style="font-size: 0.75rem; color: var(--text-muted);">实交金额 (元)</label>
-            <input type="number" id="fsInputPaid" step="0.01" value="0" placeholder="0.00" style="padding: 6px 8px; font-size: 0.82rem;">
-          </div>
-          <div>
-            <label style="font-size: 0.75rem; color: var(--text-muted);">初始状态</label>
-            <select id="fsInputStatus" style="padding: 6px 8px; font-size: 0.82rem;">
-              <option value="未交">未交</option>
-              <option value="已交">已交</option>
-              <option value="免交">免交</option>
-            </select>
-          </div>
-          <div>
-            <label style="font-size: 0.75rem; color: var(--text-muted);">备注</label>
-            <input type="text" id="fsInputNote" placeholder="可选备注" style="padding: 6px 8px; font-size: 0.82rem;">
-          </div>
-          <button type="submit" class="btn btn-primary" style="padding: 6px 12px; font-size: 0.82rem; height: 34px;">添加</button>
-        </form>
-      </div>
-
-      <!-- D. 批量操作 & 搜索筛选 -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-        <div class="btn-group">
-          <button class="btn btn-success" style="padding: 4px 10px; font-size: 0.8rem;" onclick="batchSetFeeStatus('已交')">批量已交</button>
-          <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.8rem;" onclick="batchSetFeeStatus('未交')">批量未交</button>
-          <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.8rem;" onclick="batchSetFeeStatus('免交')">批量免交</button>
-          <button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.8rem;" onclick="batchDeleteFeeMembers()">批量删除</button>
-        </div>
-        <div style="display: flex; gap: 8px;">
-          <input type="text" id="fsFilterSearch" placeholder="搜索圈名/备注..." style="width: 140px; padding: 4px 8px; font-size: 0.8rem;" oninput="renderFeeSheetTable()">
-          <select id="fsFilterStatus" style="width: 100px; padding: 4px 8px; font-size: 0.8rem;" onchange="renderFeeSheetTable()">
-            <option value="">全部状态</option>
-            <option value="未交">未交</option>
-            <option value="已交">已交</option>
-            <option value="免交">免交</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- E. 团员缴费明细表格 -->
-      <div class="table-container desktop-table-view" style="max-height: 340px; overflow-y: auto;">
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 40px;"><input type="checkbox" id="selectAllFeeCheckbox" onchange="toggleSelectAllFee(this)"></th>
-              <th>圈名 (CN)</th>
-              <th>应交金额</th>
-              <th>实交金额</th>
-              <th>缴费状态 (点击切换)</th>
-              <th>备注</th>
-              <th style="text-align: right;">操作</th>
-            </tr>
-          </thead>
-          <tbody id="feeSheetTableBody"></tbody>
-        </table>
-      </div>
-
-      <div class="mobile-cards-view" id="feeSheetMobileContainer" style="max-height: 380px; overflow-y: auto;"></div>
-
-      <div style="display: flex; justify-content: flex-end; margin-top: 16px;">
-        <button class="btn btn-secondary" onclick="closeFeeSheetModal()">关闭肾表面板</button>
-      </div>
+        <button type="submit" class="btn btn-primary" onclick="login()" style="width: 100%; justify-content: center; padding: 10px;">登录后台</button>
+      </form>
     </div>
   </div>
 
-  <!-- 国际肾表 粘贴导入 Modal -->
-  <div class="modal-overlay" id="feePasteModal">
-    <div class="modal" style="max-width: 600px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="font-size: 1.1rem; font-weight: 700;">📋 粘贴 Excel / 表格文本导入肾表</h3>
-        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeFeePasteModal()">✕</button>
-      </div>
-      <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 8px;">
-        提示：直接从 Excel 复制 <strong>【圈名/CN】、【应交金额】、【备注(可选)】</strong> 列粘贴到下方，支持自动识别，默认状态为“未交”。
-      </p>
-      <textarea id="feePasteText" rows="9" placeholder="例如：
-小明	45.50	五条悟立牌
-小红	30.00	色纸
-小刚	20.00" style="font-family: monospace; font-size: 0.84rem; margin-bottom: 12px; resize: vertical;"></textarea>
-      <div style="display: flex; justify-content: flex-end; gap: 8px;">
-        <button class="btn btn-secondary" onclick="closeFeePasteModal()">取消</button>
-        <button class="btn btn-primary" onclick="submitFeePasteImport()">解析并导入此肾表</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 国际物流 录入/编辑 Modal -->
+  <!-- 新增/编辑国际物流 Modal -->
   <div class="modal-overlay" id="logisticsModal">
     <div class="modal modal-large">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -544,49 +397,28 @@
           <div class="form-group"><label for="logShipDate">发货日期</label><input type="date" id="logShipDate"></div>
           <div class="form-group"><label for="logEstDate">预计到达</label><input type="date" id="logEstDate"></div>
           <div class="form-group"><label for="logArrDate">实际到达</label><input type="date" id="logArrDate"></div>
-          <div class="form-group"><label for="logFee">运费/税费总额 (元)</label><input type="number" id="logFee" step="0.01" placeholder="0.00"></div>
+          <div class="form-group"><label for="logFee">运费/税费 (元)</label><input type="number" id="logFee" step="0.01" placeholder="0.00"></div>
         </div>
         <div class="form-group" style="margin-bottom: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">📦 关联排表谷子 (可选)：</label>
             <input type="text" id="logItemSearch" placeholder="快速筛选谷子..." style="width: 150px; padding: 2px 6px; font-size: 0.75rem;" oninput="filterLogisticsItemCheckboxes()">
           </div>
-          <div id="logisticsItemSelector" style="max-height: 130px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px; background: #f8fafc;"></div>
+          <div id="logisticsItemSelector" style="max-height: 140px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px; background: #f8fafc;"></div>
         </div>
         <div class="form-group" style="margin-bottom: 20px;">
           <label for="logNote">备注信息</label>
           <textarea id="logNote" rows="2" placeholder="箱子体积、申报品名、注意事项等..."></textarea>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-          <button type="button" id="btnLogModalGoFee" class="btn btn-purple" style="display: none;" onclick="openFeeSheetFromLogModal()">💰 管理此批次肾表</button>
-          <div style="display: flex; gap: 8px; margin-left: auto;">
-            <button type="button" class="btn btn-secondary" onclick="closeLogisticsModal()">取消</button>
-            <button type="submit" class="btn btn-primary">保存国际物流记录</button>
-          </div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeLogisticsModal()">取消</button>
+          <button type="submit" class="btn btn-primary">保存国际物流记录</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Auth 登录 Modal -->
-  <div class="modal-overlay active" id="authOverlay">
-    <div class="modal">
-      <h2 style="font-size: 1.3rem; margin-bottom: 16px; text-align: center;">🔐 团长后台 Supabase 登录</h2>
-      <form id="loginForm" onsubmit="event.preventDefault(); login();">
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label for="email">Supabase 邮箱账号</label>
-          <input type="text" id="email" required placeholder="your-email@example.com">
-        </div>
-        <div class="form-group" style="margin-bottom: 20px;">
-          <label for="password">密码</label>
-          <input type="password" id="password" required placeholder="••••••••">
-        </div>
-        <button type="submit" class="btn btn-primary" onclick="login()" style="width: 100%; justify-content: center; padding: 10px;">登录后台</button>
-      </form>
-    </div>
-  </div>
-
-  <!-- 粘贴表格文本导入排表 Modal -->
+  <!-- 粘贴排表 Modal -->
   <div class="modal-overlay" id="pasteModal">
     <div class="modal" style="max-width: 650px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
@@ -602,16 +434,91 @@
     </div>
   </div>
 
-  <!-- Toast 消息 -->
+  <!-- 国际肾表管理 Modal -->
+  <div class="modal-overlay" id="feeModal">
+    <div class="modal modal-large">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 id="feeModalTitle" style="font-size: 1.15rem; font-weight: 700;">💰 管理国际肾表</h3>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeFeeModal()">✕</button>
+      </div>
+      <div class="fee-stats" id="feeStatsContainer"></div>
+      <div class="fee-panel-section">
+        <div class="fee-panel-title">📥 导入团员缴费表</div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center;">
+          <select id="feeImportDefaultStatus" style="width: 130px; padding: 6px 10px; font-size: 0.85rem; border: 1px solid var(--border); border-radius: 6px;">
+            <option value="未交">默认: 未交</option>
+            <option value="已交">默认: 已交</option>
+            <option value="免交">默认: 免交</option>
+          </select>
+          <label class="btn btn-success" style="cursor: pointer; margin: 0;">
+            📁 导入 Excel
+            <input type="file" id="feeExcelInput" accept=".xlsx,.xls,.csv" style="display: none;" onchange="handleFeeExcelImport(event)">
+          </label>
+          <button class="btn btn-secondary" onclick="openFeePasteModal()">📋 粘贴表格</button>
+        </div>
+      </div>
+      <div class="fee-panel-section">
+        <div class="fee-panel-title">➕ 手动添加团员</div>
+        <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));">
+          <div class="form-group"><label>圈名(CN)</label><input type="text" id="feeInputCn" placeholder="如：小明"></div>
+          <div class="form-group"><label>应交金额</label><input type="number" id="feeInputDue" step="0.01" placeholder="0.00"></div>
+          <div class="form-group"><label>实交金额</label><input type="number" id="feeInputPaid" step="0.01" value="0"></div>
+          <div class="form-group"><label>状态</label><select id="feeInputStatus"><option value="未交">未交</option><option value="已交">已交</option><option value="免交">免交</option></select></div>
+          <div class="form-group"><label>备注</label><input type="text" id="feeInputNote" placeholder="可选"></div>
+        </div>
+        <button class="btn btn-primary" onclick="addFeeMember()" style="margin-top: 8px;">添加团员记录</button>
+      </div>
+      <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
+        <input type="text" id="feeFilterSearch" placeholder="搜索圈名..." style="max-width: 200px;" oninput="renderFeeMembers()">
+        <select id="feeFilterStatus" style="max-width: 140px;" onchange="renderFeeMembers()">
+          <option value="">全部状态</option>
+          <option value="未交">未交</option>
+          <option value="已交">已交</option>
+          <option value="免交">免交</option>
+        </select>
+        <button class="btn btn-secondary" onclick="batchFeeMark('已交')">批量标已交</button>
+        <button class="btn btn-secondary" onclick="batchFeeMark('未交')">批量标未交</button>
+        <button class="btn btn-secondary" onclick="batchFeeMark('免交')">批量标免交</button>
+        <button class="btn btn-danger" onclick="batchFeeDelete()">批量删除</button>
+      </div>
+      <div class="table-container desktop-table-view">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 40px;"><input type="checkbox" id="feeSelectAll" onchange="toggleFeeSelectAll(this)"></th>
+              <th>圈名</th><th>应交金额</th><th>实交金额</th><th>缴费状态</th><th>备注</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="feeTableBody"></tbody>
+        </table>
+      </div>
+      <div class="mobile-cards-view" id="feeMobileCardsView"></div>
+    </div>
+  </div>
+
+  <!-- 粘贴肾表 Modal -->
+  <div class="modal-overlay" id="feePasteModal">
+    <div class="modal" style="max-width: 650px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="font-size: 1.1rem; font-weight: 700;">📋 粘贴肾表数据导入</h3>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeFeePasteModal()">✕</button>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">从 Excel / WPS 复制包含【圈名、应交金额、备注】的内容，直接粘贴：</p>
+      <textarea id="feePasteInput" rows="10" placeholder="直接粘贴表格内容（制表符分隔）..." style="font-family: monospace; font-size: 0.82rem; margin-bottom: 12px; resize: vertical;"></textarea>
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button class="btn btn-secondary" onclick="closeFeePasteModal()">取消</button>
+        <button class="btn btn-primary" onclick="submitFeePasteImport()">解析并导入</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script>
-    // Supabase 配置
     const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
     const supabaseClient = (window.supabase || supabase).createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // 全局数据状态
     let CURRENT_RECORD_ID = null;
     let CURRENT_QUERY_KEY = 'demo_key';
     let RAW_ITEMS = [];
@@ -619,13 +526,11 @@
     let RAW_LOGS = [];
     let RAW_LOGISTICS = [];
     let CURRENT_DISPATCH_SUBTAB = 'pending';
-    let CURRENT_FEE_LOG_ID = null; // 当前正在查看肾表的物流批次 ID
 
     window.ITEM_CACHE = [];
     window.APP_CACHE = [];
     window.LOG_CACHE = [];
     window.LOGISTICS_CACHE = [];
-    window.FEESHEET_CACHE = [];
 
     window.addEventListener('DOMContentLoaded', () => {
       const savedKey = localStorage.getItem('ADMIN_QUERY_KEY');
@@ -644,12 +549,14 @@
     }
 
     async function login() {
-      const email = (document.getElementById('email')?.value || '').trim();
-      const password = (document.getElementById('password')?.value || '').trim();
-      if (!email || !password) return alert('请填写邮箱和密码！');
+      const emailEl = document.getElementById('email');
+      const passwordEl = document.getElementById('password');
+      const email = emailEl ? emailEl.value.trim() : '';
+      const password = passwordEl ? passwordEl.value.trim() : '';
+      if (!email || !password) { alert('请填写邮箱和密码！'); return; }
       try {
         const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-        if (error) return alert('登录失败: ' + error.message);
+        if (error) { alert('登录失败: ' + error.message); return; }
         showToast('🎉 登录成功！');
         document.getElementById('authOverlay').classList.remove('active');
         document.getElementById('userEmailSpan').innerText = '已登录: ' + data.user.email;
@@ -683,8 +590,11 @@
     function switchTab(tabId) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      const activeBtn = document.getElementById('tab-btn-' + tabId);
-      if (activeBtn) activeBtn.classList.add('active');
+      if (event && event.currentTarget) { event.currentTarget.classList.add('active'); }
+      else {
+        const btns = document.querySelectorAll('.tab-btn');
+        btns.forEach(b => { if (b.getAttribute('onclick') && b.getAttribute('onclick').includes(tabId)) b.classList.add('active'); });
+      }
       const targetEl = document.getElementById(tabId);
       if (targetEl) targetEl.classList.add('active');
       if (tabId === 'tabItems') renderTable();
@@ -701,25 +611,24 @@
       localStorage.setItem('ADMIN_QUERY_KEY', CURRENT_QUERY_KEY);
       try {
         const { data, error } = await supabaseClient.from('leader_data').select('*').eq('query_key', CURRENT_QUERY_KEY);
-        if (error) return showToast('读取失败: ' + error.message);
+        if (error) { showToast('读取 leader_data 失败: ' + error.message); return; }
         if (!data || data.length === 0) {
           CURRENT_RECORD_ID = null; RAW_ITEMS = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_LOGISTICS = [];
           renderTable(); renderLogisticsList(); renderDispatchWorkbench(); renderTransferLogs();
-          alert('该密钥暂无数据，请联系团长初始化！'); return;
+          alert('该密钥暂无数据，请联系团长初始化！'); showToast('该密钥暂无数据，请联系团长初始化！'); return;
+        } else {
+          const rec = data[0]; CURRENT_RECORD_ID = rec.id;
+          let gData = rec.group_data;
+          if (typeof gData === 'string') { try { gData = JSON.parse(gData); } catch (e) { gData = []; } }
+          RAW_ITEMS = Array.isArray(gData) ? gData : [];
+          let iData = rec.image_data;
+          if (typeof iData === 'string') { try { iData = JSON.parse(iData); } catch (e) { iData = {}; } }
+          if (!iData || typeof iData !== 'object') iData = {};
+          RAW_APPLICATIONS = Array.isArray(iData.applications) ? iData.applications : [];
+          RAW_LOGS = Array.isArray(iData.transfer_logs) ? iData.transfer_logs : [];
+          RAW_LOGISTICS = Array.isArray(iData.logistics_data) ? iData.logistics_data : [];
+          showToast('已加载 Key [' + CURRENT_QUERY_KEY + '] 的团务数据 (' + RAW_ITEMS.length + ' 条谷子)');
         }
-        const rec = data[0];
-        CURRENT_RECORD_ID = rec.id;
-        let gData = rec.group_data;
-        if (typeof gData === 'string') { try { gData = JSON.parse(gData); } catch (e) { gData = []; } }
-        RAW_ITEMS = Array.isArray(gData) ? gData : [];
-        let iData = rec.image_data;
-        if (typeof iData === 'string') { try { iData = JSON.parse(iData); } catch (e) { iData = {}; } }
-        if (!iData || typeof iData !== 'object') iData = {};
-        RAW_APPLICATIONS = Array.isArray(iData.applications) ? iData.applications : [];
-        RAW_LOGS = Array.isArray(iData.transfer_logs) ? iData.transfer_logs : [];
-        RAW_LOGISTICS = Array.isArray(iData.logistics_data) ? iData.logistics_data : [];
-
-        showToast('已加载 Key [' + CURRENT_QUERY_KEY + '] 的团务数据 (' + RAW_ITEMS.length + ' 条谷子)');
         renderTable(); renderLogisticsList(); renderDispatchWorkbench(); renderTransferLogs();
       } catch (err) { showToast('数据加载网络异常'); }
     }
@@ -740,12 +649,11 @@
           if (updateErr) { showToast('保存到 Supabase 失败: ' + updateErr.message); return false; }
           return true;
         } else {
-          alert('该密钥暂无数据，请先初始化！'); return false;
+          alert('该密钥暂无数据，请联系团长初始化！'); showToast('该密钥暂无数据，请联系团长初始化！'); return false;
         }
-      } catch (err) { showToast('保存失败，网络异常'); return false; }
+      } catch (err) { showToast('保存失败，网络或系统异常'); return false; }
     }
 
-    /* --- 排表管理逻辑 --- */
     function renderTable() {
       const tbody = document.getElementById('itemsTableBody');
       const mobileCardsView = document.getElementById('adminMobileCardsView');
@@ -990,7 +898,6 @@
       const searchVal = (document.getElementById('logFilterSearch')?.value || '').trim().toLowerCase();
       const countryVal = document.getElementById('logFilterCountry')?.value || '';
       const statusVal = document.getElementById('logFilterStatus')?.value || '';
-
       const filtered = RAW_LOGISTICS.filter(log => {
         const batchMatch = (log.batch_name || '').toLowerCase().includes(searchVal);
         const noteMatch = (log.note || '').toLowerCase().includes(searchVal);
@@ -1001,89 +908,33 @@
         return matchSearch && matchCountry && matchStatus;
       });
       window.LOGISTICS_CACHE = filtered;
-
       if (filtered.length === 0) {
         tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--text-muted);">暂无匹配的国际物流记录</td></tr>';
         if (mobileContainer) mobileContainer.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted);">暂无匹配的国际物流记录</div>';
         return;
       }
-
       let html = ''; let cardsHtml = '';
       filtered.forEach((log, index) => {
         const badgeClass = getLogisticsStatusBadgeClass(log.status || '已发货');
         let linkedPills = '';
         if (Array.isArray(log.linked_items) && log.linked_items.length > 0) {
           linkedPills = log.linked_items.map(it => { const name = typeof it === 'string' ? it : (it.name || '谷子'); const qty = it.quantity ? ' x' + it.quantity : ''; return '<span class="linked-item-pill" title="' + escapeHtml(name) + '">' + escapeHtml(name) + qty + '</span>'; }).join('');
-        } else { linkedPills = '<span style="color:var(--text-muted); font-size:0.75rem;">未关联</span>'; }
-        
+        } else { linkedPills = '<span style="color:var(--text-muted); font-size:0.75rem;">未指定</span>'; }
         const dateStr = '发: ' + (log.ship_date || '-') + '<br><span style="color:var(--text-muted); font-size:0.75rem;">预: ' + (log.est_date || '-') + ' | 实: ' + (log.arr_date || '-') + '</span>';
         const feeStr = log.fee ? '￥' + parseFloat(log.fee).toFixed(2) : '-';
-
-        // 肾表摘要计算
-        const members = Array.isArray(log.fee_members) ? log.fee_members : [];
-        let feeSummaryBtn = '';
-        if (members.length === 0) {
-          feeSummaryBtn = `<button class="btn btn-secondary" style="padding:3px 8px; font-size:0.78rem;" onclick="openFeeSheetModal('${log.id}')">💰 未建肾表</button>`;
-        } else {
-          const totalCount = members.length;
-          const paidCount = members.filter(m => m.status === '已交' || m.status === '免交').length;
-          const totalDue = members.reduce((sum, m) => sum + (parseFloat(m.amount_due) || 0), 0);
-          const totalPaid = members.reduce((sum, m) => sum + (parseFloat(m.amount_paid) || 0), 0);
-          const isAllDone = paidCount >= totalCount;
-          const btnColorClass = isAllDone ? 'btn-success' : 'btn-purple';
-          
-          feeSummaryBtn = `
-            <button class="btn ${btnColorClass}" style="padding:3px 8px; font-size:0.78rem;" onclick="openFeeSheetModal('${log.id}')">
-              💰 已收 ${paidCount}/${totalCount}人 (￥${totalPaid.toFixed(1)}/￥${totalDue.toFixed(1)})
-            </button>
-          `;
-        }
-
-        html += `
-          <tr>
-            <td><span class="badge ${badgeClass}">${escapeHtml(log.status || '已发货')}</span></td>
-            <td><div style="font-weight:600;">${escapeHtml(log.batch_name || '-')}</div></td>
-            <td><span class="badge badge-country">${escapeHtml(log.country || '日本')}</span></td>
-            <td style="max-width:200px; white-space:normal;">${linkedPills}</td>
-            <td style="font-size:0.8rem;">${dateStr}</td>
-            <td><strong>${feeStr}</strong></td>
-            <td>${feeSummaryBtn}</td>
-            <td style="max-width:140px; white-space:normal; font-size:0.8rem; color:var(--text-muted);">${escapeHtml(log.note || '-')}</td>
-            <td style="text-align: right;">
-              <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editLogisticsByIndex(${index})">编辑</button>
-              <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogisticsByIndex(${index})">删除</button>
-            </td>
-          </tr>
-        `;
-
-        cardsHtml += `
-          <div class="admin-card-mobile">
-            <div class="admin-card-mobile-header">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span class="badge badge-country">${escapeHtml(log.country || '日本')}</span>
-                <strong style="font-size:0.9rem;">${escapeHtml(log.batch_name || '海外包裹')}</strong>
-              </div>
-              <span class="badge ${badgeClass}">${escapeHtml(log.status || '已发货')}</span>
-            </div>
-            <div style="display:flex; flex-direction:column; gap:6px; font-size:0.85rem;">
-              <div>关联谷子: <div>${linkedPills}</div></div>
-              <div style="display:flex; justify-content:space-between; color:var(--text-muted); font-size:0.8rem;">
-                <span>发货: ${log.ship_date || '-'}</span>
-                <span>预达: ${log.est_date || '-'}</span>
-                <span>总运费: <strong>${feeStr}</strong></span>
-              </div>
-              <div style="display:flex; align-items:center; justify-content:space-between; margin-top:4px;">
-                <span style="font-size:0.8rem; font-weight:600;">肾表状态:</span>
-                ${feeSummaryBtn}
-              </div>
-              ${log.note ? `<div style="font-size:0.8rem; background:#f8fafc; padding:6px; border-radius:4px; border:1px dashed var(--border);">📝 ${escapeHtml(log.note)}</div>` : ''}
-            </div>
-            <div class="admin-card-mobile-actions">
-              <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="editLogisticsByIndex(${index})">✏️ 编辑</button>
-              <button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteLogisticsByIndex(${index})">🗑️ 删除</button>
-            </div>
-          </div>
-        `;
+        const feeSummary = (function(log){ const ms=log.fee_members||[]; const t=ms.length; const p=ms.filter(m=>m.status==='已交').length; const u=ms.filter(m=>m.status==='未交').length; const f=ms.filter(m=>m.status==='免交').length; const td=ms.reduce((s,m)=>s+(parseFloat(m.amount_due)||0),0); const tp=ms.reduce((s,m)=>s+(parseFloat(m.amount_paid)||0),0); return {total:t,paid:p,unpaid:u,free:f,totalDue:td,totalPaid:tp}; })(log);
+        let feeColHtml = '';
+        if (feeSummary.total === 0) { feeColHtml = '<span style="font-size:0.75rem; color:var(--text-muted);">未建肾表</span>'; }
+        else { const allPaid = feeSummary.unpaid === 0 && feeSummary.total > 0; const c = allPaid ? 'color:var(--success);' : 'color:var(--danger);'; feeColHtml = '<div style="font-size:0.78rem; line-height:1.4;"><div style="' + c + ' font-weight:600;">' + feeSummary.paid + '/' + feeSummary.total + ' 人已交</div><div style="font-size:0.72rem; color:var(--text-muted);">实收: ￥' + feeSummary.totalPaid.toFixed(2) + ' / 应收: ￥' + feeSummary.totalDue.toFixed(2) + '</div></div>'; }
+        
+        // 核心修复：添加正确的转义引号 \'
+        html += '<tr><td><span class="badge ' + badgeClass + '">' + escapeHtml(log.status || '已发货') + '</span></td><td><div style="font-weight:600;">' + escapeHtml(log.batch_name || '-') + '</div></td><td><span class="badge badge-country">' + escapeHtml(log.country || '日本') + '</span></td><td style="max-width:240px; white-space:normal;">' + linkedPills + '</td><td style="font-size:0.8rem;">' + dateStr + '</td><td><strong>' + feeStr + '</strong></td><td style="min-width:110px;">' + feeColHtml + '</td><td style="max-width:160px; white-space:normal; font-size:0.8rem; color:var(--text-muted);">' + escapeHtml(log.note || '-') + '</td><td style="text-align: right;"><button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem; margin-bottom:2px;" onclick="openFeeModal(\'' + log.id + '\')">💰 肾表</button><br><button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editLogisticsByIndex(' + index + ')">编辑</button> <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogisticsByIndex(' + index + ')">删除</button></td></tr>';
+        
+        let feeMobileHtml = '';
+        if (feeSummary.total > 0) { const allPaid = feeSummary.unpaid === 0; const c = allPaid ? 'var(--success)' : 'var(--danger)'; feeMobileHtml = '<div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; padding:6px 8px; border-radius:6px; border:1px solid var(--border); font-size:0.8rem;"><span>💰 肾表: <strong style="color:' + c + ';">' + feeSummary.paid + '/' + feeSummary.total + ' 人已交</strong></span><span>实收 ￥' + feeSummary.totalPaid.toFixed(2) + '</span></div>'; }
+        
+        // 核心修复：移动端也加上正确的转义引号 \'
+        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><div style="display:flex; align-items:center; gap:8px;"><span class="badge badge-country">' + escapeHtml(log.country || '日本') + '</span><strong style="font-size:0.9rem;">' + escapeHtml(log.batch_name || '海外包裹') + '</strong></div><span class="badge ' + badgeClass + '">' + escapeHtml(log.status || '已发货') + '</span></div><div style="display:flex; flex-direction:column; gap:6px; font-size:0.85rem;"><div>关联谷子: <div>' + linkedPills + '</div></div>' + feeMobileHtml + '<div style="display:flex; justify-content:space-between; color:var(--text-muted); font-size:0.8rem;"><span>发货: ' + (log.ship_date || '-') + '</span><span>预达: ' + (log.est_date || '-') + '</span><span>费用: <strong>' + feeStr + '</strong></span></div>' + (log.note ? '<div style="font-size:0.8rem; background:#f8fafc; padding:6px; border-radius:4px; border:1px dashed var(--border);">📝 ' + escapeHtml(log.note) + '</div>' : '') + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openFeeModal(\'' + log.id + '\')">💰 管理肾表</button><button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="editLogisticsByIndex(' + index + ')">✏️ 编辑</button><button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteLogisticsByIndex(' + index + ')">🗑️ 删除</button></div></div>';
       });
       tbody.innerHTML = html;
       if (mobileContainer) mobileContainer.innerHTML = cardsHtml;
@@ -1119,7 +970,6 @@
       document.getElementById('logEditId').value = '';
       document.getElementById('logisticsForm').reset();
       document.getElementById('logisticsModalTitle').innerText = '➕ 新增国际物流';
-      document.getElementById('btnLogModalGoFee').style.display = 'none';
       populateLogisticsItemSelector([]);
       document.getElementById('logisticsModal').classList.add('active');
     }
@@ -1139,11 +989,6 @@
       document.getElementById('logArrDate').value = log.arr_date || '';
       document.getElementById('logFee').value = log.fee || '';
       document.getElementById('logNote').value = log.note || '';
-      
-      const feeBtn = document.getElementById('btnLogModalGoFee');
-      feeBtn.style.display = 'inline-flex';
-      feeBtn.setAttribute('onclick', `openFeeSheetModal('${log.id}')`);
-
       populateLogisticsItemSelector(log.linked_items || []);
       document.getElementById('logisticsModalTitle').innerText = '✏️ 编辑国际物流记录';
       document.getElementById('logisticsModal').classList.add('active');
@@ -1165,15 +1010,11 @@
       const checkedBoxes = document.querySelectorAll('.log-item-chk:checked');
       const linked_items = Array.from(checkedBoxes).map(cb => ({ name: cb.value }));
       const recordData = { batch_name, country, status, ship_date, est_date, arr_date, fee: fee ? parseFloat(fee) : 0, note, linked_items, updated_at: new Date().toISOString() };
-      
       if (editId) {
         const idx = RAW_LOGISTICS.findIndex(l => String(l.id) === String(editId));
-        if (idx !== -1) {
-          RAW_LOGISTICS[idx] = { ...RAW_LOGISTICS[idx], ...recordData };
-        }
+        if (idx !== -1) RAW_LOGISTICS[idx] = { ...RAW_LOGISTICS[idx], ...recordData };
       } else {
         recordData.id = 'logistics_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
-        recordData.fee_members = []; // 初始化肾表数组
         recordData.created_at = new Date().toISOString();
         RAW_LOGISTICS.unshift(recordData);
       }
@@ -1183,429 +1024,14 @@
 
     async function deleteLogisticsByIndex(index) {
       const log = window.LOGISTICS_CACHE[index]; if (!log) return;
-      if (!confirm('确定删除批次「' + log.batch_name + '」的物流及对应肾表记录吗？此操作不可恢复！')) return;
+      if (!confirm('确定删除批次「' + log.batch_name + '」的物流记录吗？')) return;
       RAW_LOGISTICS = RAW_LOGISTICS.filter(l => String(l.id) !== String(log.id));
       await saveDataToSupabase(); renderLogisticsList(); showToast('已删除国际物流记录！');
     }
     window.deleteLogisticsByIndex = deleteLogisticsByIndex;
 
-    /* ==================== 国际肾表 (Fee Sheet) 核心逻辑 ==================== */
-
-    function getTargetLogisticsById(id) {
-      return RAW_LOGISTICS.find(l => String(l.id) === String(id));
-    }
-
-    function openFeeSheetModal(logId) {
-      CURRENT_FEE_LOG_ID = logId;
-      const log = getTargetLogisticsById(logId);
-      if (!log) return showToast('未找到对应的物流批次！');
-
-      if (!Array.isArray(log.fee_members)) {
-        log.fee_members = [];
-      }
-
-      document.getElementById('feeSheetModalTitle').innerText = `💰 管理「${log.batch_name || '海外批次'}」的国际肾表`;
-      document.getElementById('feeSheetModal').classList.add('active');
-      renderFeeSheetTable();
-    }
-    window.openFeeSheetModal = openFeeSheetModal;
-
-    function closeFeeSheetModal() {
-      document.getElementById('feeSheetModal').classList.remove('active');
-      CURRENT_FEE_LOG_ID = null;
-      renderLogisticsList(); // 刷新外层物流表格中的肾表进度摘要
-    }
-    window.closeFeeSheetModal = closeFeeSheetModal;
-
-    function renderFeeSheetTable() {
-      const log = getTargetLogisticsById(CURRENT_FEE_LOG_ID);
-      if (!log) return;
-
-      const members = log.fee_members || [];
-      const searchVal = (document.getElementById('fsFilterSearch')?.value || '').trim().toLowerCase();
-      const statusVal = document.getElementById('fsFilterStatus')?.value || '';
-
-      // 统计看板计算
-      const totalCount = members.length;
-      const unpaidCount = members.filter(m => m.status === '未交').length;
-      const paidCount = members.filter(m => m.status === '已交').length;
-      const freeCount = members.filter(m => m.status === '免交').length;
-      const totalDue = members.reduce((sum, m) => sum + (parseFloat(m.amount_due) || 0), 0);
-      const totalPaid = members.reduce((sum, m) => sum + (parseFloat(m.amount_paid) || 0), 0);
-
-      document.getElementById('fsStatTotalCount').innerText = `${totalCount} 人`;
-      document.getElementById('fsStatUnpaidCount').innerText = unpaidCount;
-      document.getElementById('fsStatPaidCount').innerText = paidCount;
-      document.getElementById('fsStatFreeCount').innerText = freeCount;
-      document.getElementById('fsStatTotalDue').innerText = `￥${totalDue.toFixed(2)}`;
-      document.getElementById('fsStatTotalPaid').innerText = `￥${totalPaid.toFixed(2)}`;
-
-      const filtered = members.filter(m => {
-        const cnMatch = (m.cn || '').toLowerCase().includes(searchVal);
-        const noteMatch = (m.note || '').toLowerCase().includes(searchVal);
-        const matchSearch = !searchVal || (cnMatch || noteMatch);
-        const matchStatus = !statusVal || m.status === statusVal;
-        return matchSearch && matchStatus;
-      });
-
-      window.FEESHEET_CACHE = filtered;
-
-      const tbody = document.getElementById('feeSheetTableBody');
-      const mobileContainer = document.getElementById('feeSheetMobileContainer');
-
-      if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--text-muted);">暂无团员缴费记录，可点击上方导入或手动添加</td></tr>';
-        if (mobileContainer) mobileContainer.innerHTML = '<div style="text-align:center; padding:24px; color:var(--text-muted);">暂无团员缴费记录</div>';
-        return;
-      }
-
-      let html = '';
-      let cardsHtml = '';
-
-      filtered.forEach((item, index) => {
-        const statusClass = item.status === '已交' ? 'badge-fee-已交' : (item.status === '免交' ? 'badge-fee-免交' : 'badge-fee-未交');
-        const dueStr = `￥${Number(item.amount_due || 0).toFixed(2)}`;
-        const paidStr = `￥${Number(item.amount_paid || 0).toFixed(2)}`;
-
-        html += `
-          <tr>
-            <td><input type="checkbox" class="fee-item-checkbox" value="${index}"></td>
-            <td><strong>${escapeHtml(item.cn)}</strong></td>
-            <td style="color:var(--danger); font-weight:600;">${dueStr}</td>
-            <td style="color:var(--success); font-weight:600;">${paidStr}</td>
-            <td>
-              <span class="badge badge-interactive ${statusClass}" title="点击切换缴费状态" onclick="cycleFeeMemberStatus(${index})">
-                ${escapeHtml(item.status || '未交')} 🔄
-              </span>
-            </td>
-            <td style="font-size:0.8rem; color:var(--text-muted); max-width:140px; white-space:normal;">${escapeHtml(item.note || '-')}</td>
-            <td style="text-align: right;">
-              <button class="btn btn-secondary" style="padding:2px 6px; font-size:0.75rem;" onclick="editFeeMemberByIndex(${index})">编辑</button>
-              <button class="btn btn-danger" style="padding:2px 6px; font-size:0.75rem;" onclick="deleteFeeMemberByIndex(${index})">删除</button>
-            </td>
-          </tr>
-        `;
-
-        cardsHtml += `
-          <div class="admin-card-mobile" style="padding:10px; margin-bottom:8px;">
-            <div class="admin-card-mobile-header" style="padding-bottom:4px;">
-              <div style="display:flex; align-items:center; gap:6px;">
-                <input type="checkbox" class="fee-item-checkbox" value="${index}">
-                <strong>${escapeHtml(item.cn)}</strong>
-              </div>
-              <span class="badge badge-interactive ${statusClass}" onclick="cycleFeeMemberStatus(${index})">${escapeHtml(item.status || '未交')} 🔄</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; font-size:0.82rem; margin:4px 0;">
-              <span>应交: <strong style="color:var(--danger);">${dueStr}</strong></span>
-              <span>实交: <strong style="color:var(--success);">${paidStr}</strong></span>
-            </div>
-            ${item.note ? `<div style="font-size:0.75rem; color:var(--text-muted);">备注: ${escapeHtml(item.note)}</div>` : ''}
-            <div class="admin-card-mobile-actions" style="padding-top:4px;">
-              <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.75rem;" onclick="editFeeMemberByIndex(${index})">编辑</button>
-              <button class="btn btn-danger" style="padding:2px 8px; font-size:0.75rem;" onclick="deleteFeeMemberByIndex(${index})">删除</button>
-            </div>
-          </div>
-        `;
-      });
-
-      tbody.innerHTML = html;
-      if (mobileContainer) mobileContainer.innerHTML = cardsHtml;
-    }
-    window.renderFeeSheetTable = renderFeeSheetTable;
-
-    // 点击状态 badge 循环切换状态：未交 → 已交 (自动补满实交金额) → 免交 → 未交
-    async function cycleFeeMemberStatus(index) {
-      const item = window.FEESHEET_CACHE[index];
-      if (!item) return;
-
-      if (item.status === '未交') {
-        item.status = '已交';
-        item.amount_paid = item.amount_due; // 标记已交时自动填入实交金额
-      } else if (item.status === '已交') {
-        item.status = '免交';
-        item.amount_paid = 0;
-      } else {
-        item.status = '未交';
-        item.amount_paid = 0;
-      }
-
-      await saveDataToSupabase();
-      renderFeeSheetTable();
-      showToast(`已将「${item.cn}」状态切换为 [${item.status}]`);
-    }
-    window.cycleFeeMemberStatus = cycleFeeMemberStatus;
-
-    // 手动添加单条记录
-    async function handleManualAddFeeMember(e) {
-      e.preventDefault();
-      const log = getTargetLogisticsById(CURRENT_FEE_LOG_ID);
-      if (!log) return;
-
-      const cn = document.getElementById('fsInputCn').value.trim();
-      const amount_due = parseFloat(document.getElementById('fsInputDue').value) || 0;
-      let amount_paid = parseFloat(document.getElementById('fsInputPaid').value) || 0;
-      const status = document.getElementById('fsInputStatus').value;
-      const note = document.getElementById('fsInputNote').value.trim();
-
-      if (!cn) return showToast('请填写圈名！');
-
-      if (status === '已交' && amount_paid === 0) {
-        amount_paid = amount_due;
-      }
-
-      if (!Array.isArray(log.fee_members)) log.fee_members = [];
-
-      log.fee_members.push({
-        id: 'feem_' + Date.now() + '_' + Math.floor(Math.random()*100),
-        cn,
-        amount_due,
-        amount_paid,
-        status,
-        note
-      });
-
-      await saveDataToSupabase();
-      document.getElementById('fsInputCn').value = '';
-      document.getElementById('fsInputDue').value = '';
-      document.getElementById('fsInputPaid').value = '0';
-      document.getElementById('fsInputNote').value = '';
-      renderFeeSheetTable();
-      showToast(`已添加「${cn}」至本批次肾表！`);
-    }
-    window.handleManualAddFeeMember = handleManualAddFeeMember;
-
-    // 单条编辑
-    async function editFeeMemberByIndex(index) {
-      const item = window.FEESHEET_CACHE[index];
-      if (!item) return;
-
-      const newDue = prompt(`修改「${item.cn}」的应交金额：`, item.amount_due);
-      if (newDue === null) return;
-      const parsedDue = parseFloat(newDue) || 0;
-
-      const newPaid = prompt(`修改「${item.cn}」的实交金额：`, item.amount_paid);
-      if (newPaid === null) return;
-      const parsedPaid = parseFloat(newPaid) || 0;
-
-      const newNote = prompt(`修改备注：`, item.note || '');
-      if (newNote === null) return;
-
-      item.amount_due = parsedDue;
-      item.amount_paid = parsedPaid;
-      item.note = newNote.trim();
-
-      if (item.amount_paid >= item.amount_due && item.amount_due > 0) {
-        item.status = '已交';
-      }
-
-      await saveDataToSupabase();
-      renderFeeSheetTable();
-      showToast('已更新该团员记录！');
-    }
-    window.editFeeMemberByIndex = editFeeMemberByIndex;
-
-    // 单条删除
-    async function deleteFeeMemberByIndex(index) {
-      const item = window.FEESHEET_CACHE[index];
-      if (!item) return;
-
-      if (!confirm(`确定从肾表中删除「${item.cn}」吗？`)) return;
-
-      const log = getTargetLogisticsById(CURRENT_FEE_LOG_ID);
-      if (!log) return;
-
-      log.fee_members = (log.fee_members || []).filter(m => m !== item && String(m.id || m.cn) !== String(item.id || item.cn));
-      await saveDataToSupabase();
-      renderFeeSheetTable();
-      showToast('已删除记录！');
-    }
-    window.deleteFeeMemberByIndex = deleteFeeMemberByIndex;
-
-    // 勾选与批量操作
-    function toggleSelectAllFee(master) {
-      document.querySelectorAll('.fee-item-checkbox').forEach(cb => cb.checked = master.checked);
-    }
-    window.toggleSelectAllFee = toggleSelectAllFee;
-
-    function getSelectedFeeMembers() {
-      const selected = [];
-      document.querySelectorAll('.fee-item-checkbox:checked').forEach(cb => {
-        const idx = parseInt(cb.value);
-        if (window.FEESHEET_CACHE[idx]) selected.push(window.FEESHEET_CACHE[idx]);
-      });
-      return selected;
-    }
-
-    async function batchSetFeeStatus(targetStatus) {
-      const selected = getSelectedFeeMembers();
-      if (selected.length === 0) return showToast('请先勾选团员！');
-
-      selected.forEach(m => {
-        m.status = targetStatus;
-        if (targetStatus === '已交') m.amount_paid = m.amount_due;
-        if (targetStatus === '未交' || targetStatus === '免交') m.amount_paid = 0;
-      });
-
-      await saveDataToSupabase();
-      renderFeeSheetTable();
-      showToast(`已批量将 ${selected.length} 人标记为 [${targetStatus}]`);
-    }
-    window.batchSetFeeStatus = batchSetFeeStatus;
-
-    async function batchDeleteFeeMembers() {
-      const selected = getSelectedFeeMembers();
-      if (selected.length === 0) return showToast('请先勾选要删除的团员！');
-
-      if (!confirm(`确定批量删除选中的 ${selected.length} 条缴费记录吗？`)) return;
-
-      const log = getTargetLogisticsById(CURRENT_FEE_LOG_ID);
-      if (!log) return;
-
-      const deleteSet = new Set(selected);
-      log.fee_members = (log.fee_members || []).filter(m => !deleteSet.has(m));
-
-      await saveDataToSupabase();
-      renderFeeSheetTable();
-      showToast(`已批量删除 ${selected.length} 条记录！`);
-    }
-    window.batchDeleteFeeMembers = batchDeleteFeeMembers;
-
-    // 粘贴表格导入肾表
-    function openFeePasteModal() {
-      document.getElementById('feePasteText').value = '';
-      document.getElementById('feePasteModal').classList.add('active');
-    }
-    window.openFeePasteModal = openFeePasteModal;
-
-    function closeFeePasteModal() {
-      document.getElementById('feePasteModal').classList.remove('active');
-    }
-    window.closeFeePasteModal = closeFeePasteModal;
-
-    async function submitFeePasteImport() {
-      const rawText = document.getElementById('feePasteText').value;
-      if (!rawText || !rawText.trim()) return showToast('请先粘贴内容！');
-
-      const log = getTargetLogisticsById(CURRENT_FEE_LOG_ID);
-      if (!log) return;
-
-      const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-      let count = 0;
-      if (!Array.isArray(log.fee_members)) log.fee_members = [];
-
-      lines.forEach(line => {
-        const cells = line.split('\t').map(c => c.trim());
-        if (cells.length >= 2) {
-          const cn = cells[0];
-          const due = parseFloat(cells[1]);
-          const note = cells[2] || '';
-          if (cn && !isNaN(due) && cn !== 'CN' && cn !== '圈名' && cn !== '昵称') {
-            log.fee_members.push({
-              id: 'feem_' + Date.now() + '_' + Math.floor(Math.random()*1000) + '_' + count,
-              cn,
-              amount_due: due,
-              amount_paid: 0,
-              status: '未交',
-              note
-            });
-            count++;
-          }
-        }
-      });
-
-      if (count === 0) return showToast('未解析到有效记录，请确认包含【圈名】和【金额】两列！');
-
-      await saveDataToSupabase();
-      closeFeePasteModal();
-      renderFeeSheetTable();
-      showToast(`🎉 成功导入 ${count} 条团员肾表记录！`);
-    }
-    window.submitFeePasteImport = submitFeePasteImport;
-
-    // Excel 导入肾表
-    function handleFeeExcelImport(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const log = getTargetLogisticsById(CURRENT_FEE_LOG_ID);
-      if (!log) return;
-
-      const reader = new FileReader();
-      reader.onload = async function(evt) {
-        try {
-          const data = new Uint8Array(evt.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const jsonRows = XLSX.utils.sheet_to_json(firstSheet);
-
-          if (!jsonRows || jsonRows.length === 0) return showToast('Excel 表格为空！');
-
-          if (!Array.isArray(log.fee_members)) log.fee_members = [];
-          let count = 0;
-
-          jsonRows.forEach(row => {
-            const cn = row['圈名'] || row['CN'] || row['昵称'] || row['姓名'] || row['团员'];
-            const due = parseFloat(row['应交金额'] || row['应交'] || row['金额'] || row['运费'] || row['补款'] || 0);
-            const paid = parseFloat(row['实交金额'] || row['实交'] || row['已交'] || 0);
-            const status = row['状态'] || row['缴费状态'] || (paid >= due && due > 0 ? '已交' : '未交');
-            const note = row['备注'] || '';
-
-            if (cn && !isNaN(due)) {
-              log.fee_members.push({
-                id: 'feem_' + Date.now() + '_' + Math.floor(Math.random()*1000) + '_' + count,
-                cn: String(cn).trim(),
-                amount_due: due,
-                amount_paid: paid,
-                status: String(status).trim(),
-                note: String(note).trim()
-              });
-              count++;
-            }
-          });
-
-          if (count === 0) return showToast('未读取到有效记录，请确认表头包含 圈名/CN 和 应交金额！');
-
-          await saveDataToSupabase();
-          renderFeeSheetTable();
-          showToast(`🎉 成功从 Excel 导入 ${count} 条记录到肾表！`);
-          e.target.value = '';
-        } catch (err) {
-          showToast('Excel 解析失败，请检查格式！');
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    }
-    window.handleFeeExcelImport = handleFeeExcelImport;
-
-    // 复制 QQ 群催款文案
-    function copyQqFeeBroadcastText() {
-      const log = getTargetLogisticsById(CURRENT_FEE_LOG_ID);
-      if (!log) return;
-
-      const members = log.fee_members || [];
-      const unpaidList = members.filter(m => m.status === '未交');
-
-      if (unpaidList.length === 0) {
-        return showToast('太棒了！本批次所有团员均已交齐或免交！🎉');
-      }
-
-      let text = `【📢 国际运费/肾表催缴通知】\n📦 批次：${log.batch_name || '海外包裹'}\n`;
-      text += `------------------------\n`;
-      unpaidList.forEach(m => {
-        text += `@${m.cn} 应补: ￥${Number(m.amount_due || 0).toFixed(2)}${m.note ? ` (${m.note})` : ''}\n`;
-      });
-      text += `------------------------\n`;
-      text += `请以上团员尽快补款，感谢大家配合！❤️`;
-
-      navigator.clipboard.writeText(text).then(() => {
-        showToast('📋 QQ群催款文案已复制到剪贴板！');
-      }).catch(() => {
-        prompt('请手动复制催款文案：', text);
-      });
-    }
-    window.copyQqFeeBroadcastText = copyQqFeeBroadcastText;
-
     /* --- 排发工作台逻辑 --- */
+
     function switchDispatchSubTab(sub) {
       CURRENT_DISPATCH_SUBTAB = sub;
       document.getElementById('btnSubPending').classList.toggle('btn-primary', sub === 'pending');
@@ -1677,6 +1103,7 @@
     window.deleteCompletedAppByIndex = deleteCompletedAppByIndex;
 
     /* --- 转单记录逻辑 --- */
+
     function renderTransferLogs() {
       const tbody = document.getElementById('transferLogsTableBody');
       window.LOG_CACHE = RAW_LOGS;
@@ -1705,6 +1132,7 @@
     window.clearAllTransferLogs = clearAllTransferLogs;
 
     /* --- 团务设置与实用工具 --- */
+
     function copyMemberLink() {
       const url = window.location.origin + '/index.html?key=' + encodeURIComponent(CURRENT_QUERY_KEY);
       navigator.clipboard.writeText(url).then(() => showToast('团员自查链接已复制到剪贴板！')).catch(() => prompt('请手动复制链接：', url));
@@ -1740,26 +1168,21 @@
       ];
       RAW_LOGISTICS = [
         {
-          id: 'logistics_sample_1',
-          batch_name: '7月JUMP通贩第一批',
-          country: '日本',
-          status: '运输中',
+          id: 'logistics_sample_1', batch_name: '7月JUMP通贩第一批', country: '日本', status: '运输中',
           ship_date: new Date(Date.now() - 3*86400000).toISOString().split('T')[0],
           est_date: new Date(Date.now() + 4*86400000).toISOString().split('T')[0],
-          arr_date: '',
-          fee: 185.50,
-          note: '箱内含五条悟立牌及夏油杰徽章，已加气泡膜加固',
+          arr_date: '', fee: 185.50, note: '箱内含五条悟立牌及夏油杰徽章，已加气泡膜加固',
           linked_items: [{ name: '五条悟 20cm 亚克力立牌' }, { name: '夏油杰 75mm 闪粉徽章' }],
           fee_members: [
-            { id: 'feem_1', cn: '小明', amount_due: 45.50, amount_paid: 0, status: '未交', note: '等下个月一起补' },
-            { id: 'feem_2', cn: '小红', amount_due: 30.00, amount_paid: 30.00, status: '已交', note: '支付宝已收' },
-            { id: 'feem_3', cn: '小刚', amount_due: 20.00, amount_paid: 0, status: '免交', note: '帮团长带场贩' }
+            { cn: '小明', amount_due: 92.75, amount_paid: 0, status: '未交', note: '等补款通知' },
+            { cn: '小红', amount_due: 62.50, amount_paid: 62.50, status: '已交', note: '' },
+            { cn: '小刚', amount_due: 30.25, amount_paid: 0, status: '未交', note: '' }
           ]
         }
       ];
       await saveDataToSupabase();
       renderTable(); renderLogisticsList(); renderDispatchWorkbench(); renderTransferLogs();
-      showToast('🎉 样例测试数据生成成功！已存入 group_data、logistics_data 和国际肾表。');
+      showToast('🎉 样例测试数据生成成功！已存入 group_data、logistics_data 和 image_data。');
     }
     window.generateSampleData = generateSampleData;
 
@@ -1767,6 +1190,253 @@
       if (!str) return '';
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
+
+    /* --- 国际肾表逻辑 --- */
+    let CURRENT_FEE_LOGISTICS_ID = null;
+    let CURRENT_FEE_MEMBERS = [];
+
+    function openFeeModal(logId) {
+      const log = RAW_LOGISTICS.find(l => String(l.id) === String(logId));
+      if (!log) return;
+      CURRENT_FEE_LOGISTICS_ID = logId;
+      if (!Array.isArray(log.fee_members)) log.fee_members = [];
+      document.getElementById('feeModalTitle').innerText = '💰 管理「' + (log.batch_name || '海外包裹') + '」的国际肾表';
+      document.getElementById('feeModal').classList.add('active');
+      renderFeeMembers();
+    }
+    window.openFeeModal = openFeeModal;
+
+    function closeFeeModal() {
+      document.getElementById('feeModal').classList.remove('active');
+      CURRENT_FEE_LOGISTICS_ID = null;
+      CURRENT_FEE_MEMBERS = [];
+    }
+    window.closeFeeModal = closeFeeModal;
+
+    function renderFeeMembers() {
+      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
+      if (!log) return;
+      const members = log.fee_members || [];
+      const searchVal = (document.getElementById('feeFilterSearch')?.value || '').trim().toLowerCase();
+      const statusVal = document.getElementById('feeFilterStatus')?.value || '';
+      const filtered = members.filter(m => {
+        const matchSearch = !searchVal || (m.cn || '').toLowerCase().includes(searchVal);
+        const matchStatus = !statusVal || m.status === statusVal;
+        return matchSearch && matchStatus;
+      });
+      CURRENT_FEE_MEMBERS = filtered;
+
+      const total = members.length;
+      const paid = members.filter(m => m.status === '已交').length;
+      const unpaid = members.filter(m => m.status === '未交').length;
+      const free = members.filter(m => m.status === '免交').length;
+      const totalDue = members.reduce((s, m) => s + (parseFloat(m.amount_due) || 0), 0);
+      const totalPaid = members.reduce((s, m) => s + (parseFloat(m.amount_paid) || 0), 0);
+
+      const statsHtml = '<div class="fee-stat-card"><div class="num">' + total + '</div><div class="label">参与人数</div></div>' +
+        '<div class="fee-stat-card unpaid"><div class="num">' + unpaid + '</div><div class="label">未交</div></div>' +
+        '<div class="fee-stat-card paid"><div class="num">' + paid + '</div><div class="label">已交</div></div>' +
+        '<div class="fee-stat-card"><div class="num">' + free + '</div><div class="label">免交</div></div>' +
+        '<div class="fee-stat-card unpaid"><div class="num">￥' + totalDue.toFixed(2) + '</div><div class="label">应收总额</div></div>' +
+        '<div class="fee-stat-card paid"><div class="num">￥' + totalPaid.toFixed(2) + '</div><div class="label">实收总额</div></div>';
+      document.getElementById('feeStatsContainer').innerHTML = statsHtml;
+
+      const tbody = document.getElementById('feeTableBody');
+      const mobileView = document.getElementById('feeMobileCardsView');
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">暂无团员缴费记录</td></tr>';
+        if (mobileView) mobileView.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted);">暂无团员缴费记录</div>';
+        return;
+      }
+      let html = '', cardsHtml = '';
+      filtered.forEach((m, idx) => {
+        const realIdx = members.indexOf(m);
+        html += '<tr><td><input type="checkbox" class="fee-checkbox" value="' + realIdx + '"></td><td><strong>' + escapeHtml(m.cn) + '</strong></td><td>￥' + (parseFloat(m.amount_due)||0).toFixed(2) + '</td><td>￥' + (parseFloat(m.amount_paid)||0).toFixed(2) + '</td><td><span class="badge badge-fee-' + (m.status||'未交') + '" style="cursor:pointer;" onclick="toggleFeeStatus(' + realIdx + ')">' + escapeHtml(m.status||'未交') + '</span></td><td>' + escapeHtml(m.note||'') + '</td><td><button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editFeeMember(' + realIdx + ')">编辑</button> <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteFeeMember(' + realIdx + ')">删除</button></td></tr>';
+        cardsHtml += '<div class="fee-mobile-card"><div class="fee-mobile-header"><div style="display:flex; align-items:center; gap:8px;"><input type="checkbox" class="fee-checkbox" value="' + realIdx + '"><strong>' + escapeHtml(m.cn) + '</strong></div><span class="badge badge-fee-' + (m.status||'未交') + '" style="cursor:pointer;" onclick="toggleFeeStatus(' + realIdx + ')">' + escapeHtml(m.status||'未交') + '</span></div><div class="fee-mobile-body"><div>应交: <strong>￥' + (parseFloat(m.amount_due)||0).toFixed(2) + '</strong> | 实交: <strong>￥' + (parseFloat(m.amount_paid)||0).toFixed(2) + '</strong></div>' + (m.note ? '<div>备注: ' + escapeHtml(m.note) + '</div>' : '') + '</div><div class="admin-card-mobile-actions"><button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="editFeeMember(' + realIdx + ')">✏️ 编辑</button><button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteFeeMember(' + realIdx + ')">🗑️ 删除</button></div></div>';
+      });
+      tbody.innerHTML = html;
+      if (mobileView) mobileView.innerHTML = cardsHtml;
+    }
+    window.renderFeeMembers = renderFeeMembers;
+
+    function toggleFeeStatus(idx) {
+      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
+      if (!log || !log.fee_members[idx]) return;
+      const cur = log.fee_members[idx].status || '未交';
+      const next = cur === '未交' ? '已交' : (cur === '已交' ? '免交' : '未交');
+      log.fee_members[idx].status = next;
+      if (next === '已交') log.fee_members[idx].amount_paid = log.fee_members[idx].amount_due;
+      else if (next === '未交') log.fee_members[idx].amount_paid = 0;
+      saveDataToSupabase(); renderFeeMembers(); renderLogisticsList();
+    }
+    window.toggleFeeStatus = toggleFeeStatus;
+
+    function addFeeMember() {
+      const cn = document.getElementById('feeInputCn').value.trim();
+      const due = parseFloat(document.getElementById('feeInputDue').value) || 0;
+      const paid = parseFloat(document.getElementById('feeInputPaid').value) || 0;
+      const status = document.getElementById('feeInputStatus').value;
+      const note = document.getElementById('feeInputNote').value.trim();
+      if (!cn) return showToast('请填写圈名！');
+      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
+      if (!log) return;
+      if (!Array.isArray(log.fee_members)) log.fee_members = [];
+      log.fee_members.push({ cn, amount_due: due, amount_paid: paid, status, note });
+      document.getElementById('feeInputCn').value = '';
+      document.getElementById('feeInputDue').value = '';
+      document.getElementById('feeInputPaid').value = '0';
+      document.getElementById('feeInputNote').value = '';
+      saveDataToSupabase(); renderFeeMembers(); renderLogisticsList(); showToast('已添加团员缴费记录！');
+    }
+    window.addFeeMember = addFeeMember;
+
+    function editFeeMember(idx) {
+      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
+      if (!log || !log.fee_members[idx]) return;
+      const m = log.fee_members[idx];
+      const newDue = prompt('修改应交金额（当前：￥' + (m.amount_due||0) + '）：', m.amount_due || 0);
+      if (newDue === null) return;
+      const newPaid = prompt('修改实交金额（当前：￥' + (m.amount_paid||0) + '）：', m.amount_paid || 0);
+      if (newPaid === null) return;
+      const newNote = prompt('修改备注（当前：' + (m.note||'') + '）：', m.note || '');
+      if (newNote === null) return;
+      m.amount_due = parseFloat(newDue) || 0;
+      m.amount_paid = parseFloat(newPaid) || 0;
+      m.note = newNote;
+      saveDataToSupabase(); renderFeeMembers(); renderLogisticsList(); showToast('已更新！');
+    }
+    window.editFeeMember = editFeeMember;
+
+    function deleteFeeMember(idx) {
+      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
+      if (!log || !log.fee_members[idx]) return;
+      if (!confirm('确定删除 ' + log.fee_members[idx].cn + ' 的缴费记录吗？')) return;
+      log.fee_members.splice(idx, 1);
+      saveDataToSupabase(); renderFeeMembers(); renderLogisticsList(); showToast('已删除！');
+    }
+    window.deleteFeeMember = deleteFeeMember;
+
+    function toggleFeeSelectAll(master) { document.querySelectorAll('.fee-checkbox').forEach(cb => cb.checked = master.checked); }
+    window.toggleFeeSelectAll = toggleFeeSelectAll;
+
+    function getSelectedFeeMembers() {
+      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
+      if (!log) return [];
+      const selected = [];
+      document.querySelectorAll('.fee-checkbox:checked').forEach(cb => {
+        const idx = parseInt(cb.value);
+        if (log.fee_members[idx]) selected.push({ member: log.fee_members[idx], index: idx });
+      });
+      return selected;
+    }
+
+    function batchFeeMark(status) {
+      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
+      if (!log) return;
+      const selected = getSelectedFeeMembers();
+      if (selected.length === 0) return showToast('请先勾选要标记的团员！');
+      selected.forEach(s => {
+        s.member.status = status;
+        if (status === '已交') s.member.amount_paid = s.member.amount_due;
+        else if (status === '未交') s.member.amount_paid = 0;
+      });
+      saveDataToSupabase(); renderFeeMembers(); renderLogisticsList();
+      showToast('已批量标记 ' + selected.length + ' 人为「' + status + '」');
+    }
+    window.batchFeeMark = batchFeeMark;
+
+    function batchFeeDelete() {
+      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
+      if (!log) return;
+      const selected = getSelectedFeeMembers();
+      if (selected.length === 0) return showToast('请先勾选要删除的团员！');
+      if (!confirm('确定删除选中的 ' + selected.length + ' 条缴费记录吗？')) return;
+      const indices = selected.map(s => s.index).sort((a,b) => b-a);
+      indices.forEach(idx => log.fee_members.splice(idx, 1));
+      saveDataToSupabase(); renderFeeMembers(); renderLogisticsList(); showToast('已批量删除！');
+    }
+    window.batchFeeDelete = batchFeeDelete;
+
+    function openFeePasteModal() { document.getElementById('feePasteInput').value = ''; document.getElementById('feePasteModal').classList.add('active'); }
+    window.openFeePasteModal = openFeePasteModal;
+    function closeFeePasteModal() { document.getElementById('feePasteModal').classList.remove('active'); }
+    window.closeFeePasteModal = closeFeePasteModal;
+
+    function parseFeePasteText(raw) {
+      if (!raw) return [];
+      const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length < 1) return [];
+      const defaultStatus = document.getElementById('feeImportDefaultStatus')?.value || '未交';
+      const items = [];
+      const headers = lines[0].split('\t').map(h => h.trim());
+      const cnIdx = headers.findIndex(h => h.includes('CN') || h.includes('圈名') || h.includes('昵称') || h.includes('姓名'));
+      const dueIdx = headers.findIndex(h => h.includes('应交') || h.includes('金额') || h.includes('费用') || h.includes('价格'));
+      const noteIdx = headers.findIndex(h => h.includes('备注') || h.includes('说明'));
+      const startRow = (cnIdx !== -1 && dueIdx !== -1) ? 1 : 0;
+      for (let i = startRow; i < lines.length; i++) {
+        const cells = lines[i].split('\t');
+        const cn = cells[cnIdx !== -1 ? cnIdx : 0]?.trim();
+        const dueStr = cells[dueIdx !== -1 ? dueIdx : 1]?.trim();
+        const note = noteIdx !== -1 ? (cells[noteIdx]?.trim() || '') : (cells[2]?.trim() || '');
+        if (!cn || cn === '圈名' || cn === 'CN' || cn === '昵称' || cn === '姓名') continue;
+        const due = parseFloat(dueStr);
+        if (isNaN(due)) continue;
+        items.push({ cn, amount_due: due, amount_paid: defaultStatus === '已交' ? due : 0, status: defaultStatus, note });
+      }
+      return items;
+    }
+
+    async function submitFeePasteImport() {
+      const raw = document.getElementById('feePasteInput').value;
+      if (!raw || !raw.trim()) return showToast('请先粘贴文本！');
+      const parsed = parseFeePasteText(raw);
+      if (parsed.length === 0) return showToast('解析失败，未提取到有效数据！');
+      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
+      if (!log) return;
+      if (!Array.isArray(log.fee_members)) log.fee_members = [];
+      log.fee_members.push(...parsed);
+      await saveDataToSupabase(); renderFeeMembers(); renderLogisticsList(); closeFeePasteModal();
+      showToast('🎉 成功导入 ' + parsed.length + ' 条缴费记录！');
+    }
+    window.submitFeePasteImport = submitFeePasteImport;
+
+    function handleFeeExcelImport(e) {
+      const file = e.target.files[0]; if (!file) return;
+      const defaultStatus = document.getElementById('feeImportDefaultStatus')?.value || '未交';
+      const reader = new FileReader();
+      reader.onload = async function(evt) {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonRows = XLSX.utils.sheet_to_json(firstSheet);
+          const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
+          if (!log) return;
+          if (!Array.isArray(log.fee_members)) log.fee_members = [];
+          let count = 0;
+          jsonRows.forEach(row => {
+            const cn = row['圈名'] || row['CN'] || row['昵称'] || row['姓名'] || row['cn'];
+            const due = parseFloat(row['应交金额'] || row['金额'] || row['费用'] || row['price'] || 0);
+            if (cn && !isNaN(due)) {
+              log.fee_members.push({ cn: String(cn).trim(), amount_due: due, amount_paid: defaultStatus === '已交' ? due : 0, status: defaultStatus, note: String(row['备注'] || row['note'] || '') });
+              count++;
+            }
+          });
+          if (count === 0) {
+            const csvText = XLSX.utils.sheet_to_csv(firstSheet, { FS: '\t' });
+            const pasted = parseFeePasteText(csvText);
+            if (pasted.length > 0) { log.fee_members.push(...pasted); count = pasted.length; }
+          }
+          if (count === 0) return showToast('Excel 中未读取到有效数据！');
+          await saveDataToSupabase(); renderFeeMembers(); renderLogisticsList();
+          showToast('🎉 成功导入 ' + count + ' 条缴费记录！');
+          e.target.value = '';
+        } catch (err) { showToast('Excel 解析失败！'); }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+    window.handleFeeExcelImport = handleFeeExcelImport;
+
   </script>
 </body>
 </html>
