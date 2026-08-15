@@ -4,7 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>👑 团长后台管理系统 - 谷圈团务系统</title>
+  <!-- Supabase 核心组件 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Excel 文件解析组件 -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -18,6 +20,7 @@
       --success: #10b981;
       --warning: #f59e0b;
       --danger: #ef4444;
+      --purple: #8b5cf6;
       --radius: 12px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
@@ -51,6 +54,8 @@
     .btn-secondary:hover { background-color: #cbd5e1; }
     .btn-danger { background-color: var(--danger); color: white; }
     .btn-danger:hover { background-color: #dc2626; }
+    .btn-purple { background-color: var(--purple); color: white; }
+    .btn-purple:hover { background-color: #7c3aed; }
     .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
     .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 12px; }
     table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88rem; min-width: 800px; }
@@ -73,10 +78,24 @@
     .badge-log-国内派送 { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
     .badge-log-已签收 { background-color: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
     .badge-log-异常滞留 { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+    .badge-fee-未交 { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .badge-fee-已交 { background-color: #d1fae5; color: #065f46; border: 1px solid #bbf7d0; }
+    .badge-fee-免交 { background-color: #e2e8f0; color: #475569; border: 1px solid #cbd5e1; }
+    .fee-stats { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .fee-stat-card { flex: 1; min-width: 100px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-align: center; }
+    .fee-stat-card .num { font-size: 1.3rem; font-weight: 700; }
+    .fee-stat-card .label { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
+    .fee-stat-card.unpaid .num { color: var(--danger); }
+    .fee-stat-card.paid .num { color: var(--success); }
+    .fee-panel-section { margin-bottom: 18px; }
+    .fee-panel-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 10px; color: var(--text-muted); }
+    .fee-mobile-card { background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); margin-bottom: 10px; }
+    .fee-mobile-header { display: flex; justify-content: space-between; align-items: center; }
+    .fee-mobile-body { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-muted); }
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.7); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
     .modal-overlay.active { opacity: 1; pointer-events: auto; }
     .modal { background: white; border-radius: var(--radius); width: 90%; max-width: 450px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2); }
-    .modal-large { max-width: 680px; max-height: 90vh; overflow-y: auto; }
+    .modal-large { max-width: 780px; max-height: 90vh; overflow-y: auto; }
     .toast { position: fixed; bottom: 24px; right: 24px; background: #0f172a; color: white; padding: 12px 20px; border-radius: 8px; font-size: 0.9rem; z-index: 3000; opacity: 0; transform: translateY(10px); transition: opacity 0.3s, transform 0.3s; pointer-events: none; }
     .toast.show { opacity: 1; transform: translateY(0); }
     .mobile-cards-view { display: none; }
@@ -109,21 +128,6 @@
     .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
     .img-preview { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
     .linked-item-pill { display: inline-block; background: #f1f5f9; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; margin: 2px; color: #334155; }
-
-    .badge-fee-未交 { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-    .badge-fee-已交 { background-color: #d1fae5; color: #065f46; border: 1px solid #bbf7d0; }
-    .badge-fee-免交 { background-color: #e2e8f0; color: #475569; border: 1px solid #cbd5e1; }
-    .fee-stats { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-    .fee-stat-card { flex: 1; min-width: 100px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-align: center; }
-    .fee-stat-card .num { font-size: 1.3rem; font-weight: 700; }
-    .fee-stat-card .label { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
-    .fee-stat-card.unpaid .num { color: var(--danger); }
-    .fee-stat-card.paid .num { color: var(--success); }
-    .fee-panel-section { margin-bottom: 18px; }
-    .fee-panel-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 10px; color: var(--text-muted); }
-    .fee-mobile-card { background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); margin-bottom: 10px; }
-    .fee-mobile-header { display: flex; justify-content: space-between; align-items: center; }
-    .fee-mobile-body { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-muted); }
   </style>
 </head>
 <body>
@@ -249,7 +253,14 @@
       <div class="card">
         <div class="card-title">
           <span>🌍 国际物流列表 (logistics_data)</span>
-          <button class="btn btn-primary" onclick="openLogisticsModal()">➕ 新增国际物流记录</button>
+          <div class="btn-group">
+            <button class="btn btn-primary" onclick="openLogisticsModal()">➕ 新增国际物流记录</button>
+            <label class="btn btn-success" style="cursor: pointer; margin: 0;">
+              📁 批量导入多Sheet肾表Excel
+              <input type="file" id="multiSheetExcelInput" accept=".xlsx,.xls,.csv" style="display: none;" onchange="handleFeeExcelImport(event)">
+            </label>
+            <button class="btn btn-purple" onclick="openFeePasteModal()">📋 粘贴肾表数据</button>
+          </div>
         </div>
         <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
           <input type="text" id="logFilterSearch" placeholder="搜索批次 / 谷子..." style="max-width: 260px;" oninput="renderLogisticsList()">
@@ -443,7 +454,7 @@
       </div>
       <div class="fee-stats" id="feeStatsContainer"></div>
       <div class="fee-panel-section">
-        <div class="fee-panel-title">📥 导入团员缴费表</div>
+        <div class="fee-panel-title">📥 导入当前批次缴费表</div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center;">
           <select id="feeImportDefaultStatus" style="width: 130px; padding: 6px 10px; font-size: 0.85rem; border: 1px solid var(--border); border-radius: 6px;">
             <option value="未交">默认: 未交</option>
@@ -451,18 +462,18 @@
             <option value="免交">默认: 免交</option>
           </select>
           <label class="btn btn-success" style="cursor: pointer; margin: 0;">
-            📁 导入 Excel
+            📁 导入 Excel (支持多Sheet)
             <input type="file" id="feeExcelInput" accept=".xlsx,.xls,.csv" style="display: none;" onchange="handleFeeExcelImport(event)">
           </label>
-          <button class="btn btn-secondary" onclick="openFeePasteModal()">📋 粘贴表格</button>
+          <button class="btn btn-secondary" onclick="openFeePasteModal()">📋 粘贴表格数据</button>
         </div>
       </div>
       <div class="fee-panel-section">
         <div class="fee-panel-title">➕ 手动添加团员</div>
         <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));">
           <div class="form-group"><label>圈名(CN)</label><input type="text" id="feeInputCn" placeholder="如：小明"></div>
-          <div class="form-group"><label>应交金额</label><input type="number" id="feeInputDue" step="0.01" placeholder="0.00"></div>
-          <div class="form-group"><label>实交金额</label><input type="number" id="feeInputPaid" step="0.01" value="0"></div>
+          <div class="form-group"><label>应交金额</label><input type="number" id="feeInputDue" step="0.001" placeholder="0.00"></div>
+          <div class="form-group"><label>实交金额</label><input type="number" id="feeInputPaid" step="0.001" value="0"></div>
           <div class="form-group"><label>状态</label><select id="feeInputStatus"><option value="未交">未交</option><option value="已交">已交</option><option value="免交">免交</option></select></div>
           <div class="form-group"><label>备注</label><input type="text" id="feeInputNote" placeholder="可选"></div>
         </div>
@@ -496,18 +507,43 @@
     </div>
   </div>
 
-  <!-- 粘贴肾表 Modal -->
+  <!-- 粘贴肾表 Modal (支持智能识别批次 & 三列并排) -->
   <div class="modal-overlay" id="feePasteModal">
-    <div class="modal" style="max-width: 650px;">
+    <div class="modal modal-large">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="font-size: 1.1rem; font-weight: 700;">📋 粘贴肾表数据导入</h3>
+        <h3 style="font-size: 1.1rem; font-weight: 700;">📋 粘贴肾表数据导入 (三列并排多团员)</h3>
         <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeFeePasteModal()">✕</button>
       </div>
-      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">从 Excel / WPS 复制包含【圈名、应交金额、备注】的内容，直接粘贴：</p>
-      <textarea id="feePasteInput" rows="10" placeholder="直接粘贴表格内容（制表符分隔）..." style="font-family: monospace; font-size: 0.82rem; margin-bottom: 12px; resize: vertical;"></textarea>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+        <div>
+          <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">目标物流批次：</label>
+          <select id="feePasteBatchSelect" style="margin-top: 4px;">
+            <!-- JS 动态填入现有批次，支持新建 -->
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">默认缴费状态：</label>
+          <select id="feePasteDefaultStatus" style="margin-top: 4px;">
+            <option value="未交">未交</option>
+            <option value="已交">已交</option>
+            <option value="免交">免交</option>
+          </select>
+        </div>
+      </div>
+
+      <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 6px;">
+        💡 <strong>支持直接复制 Excel 整表</strong>：第 1 行批次名、第 3 行表头、第 4 行起数据（每 3 列提取一组：CN + 重量 + 金额），系统自动提取第 3 列金额！
+      </p>
+      <textarea id="feePasteInput" rows="9" placeholder="直接粘贴从 Excel 复制的内容，例如：
+台湾国际 0.08/g ddl4.5
+cn	重量	金额	cn	重量	金额	cn	重量	金额
+yukio	7.3	0.584	星辞	10.4	0.832	吕阿草	14.5	1.16
+酚酞	2.2	0.176	陆生	9.7	0.776	rats	26.2	2.096" style="font-family: monospace; font-size: 0.82rem; margin-bottom: 12px; resize: vertical;"></textarea>
+      
       <div style="display: flex; justify-content: flex-end; gap: 8px;">
         <button class="btn btn-secondary" onclick="closeFeePasteModal()">取消</button>
-        <button class="btn btn-primary" onclick="submitFeePasteImport()">解析并导入</button>
+        <button class="btn btn-primary" onclick="submitFeePasteImport()">解析并导入此批次</button>
       </div>
     </div>
   </div>
@@ -927,13 +963,11 @@
         if (feeSummary.total === 0) { feeColHtml = '<span style="font-size:0.75rem; color:var(--text-muted);">未建肾表</span>'; }
         else { const allPaid = feeSummary.unpaid === 0 && feeSummary.total > 0; const c = allPaid ? 'color:var(--success);' : 'color:var(--danger);'; feeColHtml = '<div style="font-size:0.78rem; line-height:1.4;"><div style="' + c + ' font-weight:600;">' + feeSummary.paid + '/' + feeSummary.total + ' 人已交</div><div style="font-size:0.72rem; color:var(--text-muted);">实收: ￥' + feeSummary.totalPaid.toFixed(2) + ' / 应收: ￥' + feeSummary.totalDue.toFixed(2) + '</div></div>'; }
         
-        // 核心修复：添加正确的转义引号 \'
         html += '<tr><td><span class="badge ' + badgeClass + '">' + escapeHtml(log.status || '已发货') + '</span></td><td><div style="font-weight:600;">' + escapeHtml(log.batch_name || '-') + '</div></td><td><span class="badge badge-country">' + escapeHtml(log.country || '日本') + '</span></td><td style="max-width:240px; white-space:normal;">' + linkedPills + '</td><td style="font-size:0.8rem;">' + dateStr + '</td><td><strong>' + feeStr + '</strong></td><td style="min-width:110px;">' + feeColHtml + '</td><td style="max-width:160px; white-space:normal; font-size:0.8rem; color:var(--text-muted);">' + escapeHtml(log.note || '-') + '</td><td style="text-align: right;"><button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem; margin-bottom:2px;" onclick="openFeeModal(\'' + log.id + '\')">💰 肾表</button><br><button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editLogisticsByIndex(' + index + ')">编辑</button> <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogisticsByIndex(' + index + ')">删除</button></td></tr>';
         
         let feeMobileHtml = '';
         if (feeSummary.total > 0) { const allPaid = feeSummary.unpaid === 0; const c = allPaid ? 'var(--success)' : 'var(--danger)'; feeMobileHtml = '<div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; padding:6px 8px; border-radius:6px; border:1px solid var(--border); font-size:0.8rem;"><span>💰 肾表: <strong style="color:' + c + ';">' + feeSummary.paid + '/' + feeSummary.total + ' 人已交</strong></span><span>实收 ￥' + feeSummary.totalPaid.toFixed(2) + '</span></div>'; }
         
-        // 核心修复：移动端也加上正确的转义引号 \'
         cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><div style="display:flex; align-items:center; gap:8px;"><span class="badge badge-country">' + escapeHtml(log.country || '日本') + '</span><strong style="font-size:0.9rem;">' + escapeHtml(log.batch_name || '海外包裹') + '</strong></div><span class="badge ' + badgeClass + '">' + escapeHtml(log.status || '已发货') + '</span></div><div style="display:flex; flex-direction:column; gap:6px; font-size:0.85rem;"><div>关联谷子: <div>' + linkedPills + '</div></div>' + feeMobileHtml + '<div style="display:flex; justify-content:space-between; color:var(--text-muted); font-size:0.8rem;"><span>发货: ' + (log.ship_date || '-') + '</span><span>预达: ' + (log.est_date || '-') + '</span><span>费用: <strong>' + feeStr + '</strong></span></div>' + (log.note ? '<div style="font-size:0.8rem; background:#f8fafc; padding:6px; border-radius:4px; border:1px dashed var(--border);">📝 ' + escapeHtml(log.note) + '</div>' : '') + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openFeeModal(\'' + log.id + '\')">💰 管理肾表</button><button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="editLogisticsByIndex(' + index + ')">✏️ 编辑</button><button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteLogisticsByIndex(' + index + ')">🗑️ 删除</button></div></div>';
       });
       tbody.innerHTML = html;
@@ -1015,6 +1049,7 @@
         if (idx !== -1) RAW_LOGISTICS[idx] = { ...RAW_LOGISTICS[idx], ...recordData };
       } else {
         recordData.id = 'logistics_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+        recordData.fee_members = [];
         recordData.created_at = new Date().toISOString();
         RAW_LOGISTICS.unshift(recordData);
       }
@@ -1168,21 +1203,21 @@
       ];
       RAW_LOGISTICS = [
         {
-          id: 'logistics_sample_1', batch_name: '7月JUMP通贩第一批', country: '日本', status: '运输中',
+          id: 'logistics_sample_1', batch_name: '台湾国际 0.08/g ddl4.5', country: '台湾', status: '运输中',
           ship_date: new Date(Date.now() - 3*86400000).toISOString().split('T')[0],
           est_date: new Date(Date.now() + 4*86400000).toISOString().split('T')[0],
-          arr_date: '', fee: 185.50, note: '箱内含五条悟立牌及夏油杰徽章，已加气泡膜加固',
-          linked_items: [{ name: '五条悟 20cm 亚克力立牌' }, { name: '夏油杰 75mm 闪粉徽章' }],
+          arr_date: '', fee: 185.50, note: '箱内含立牌与色纸',
+          linked_items: [{ name: '五条悟 20cm 亚克力立牌' }],
           fee_members: [
-            { cn: '小明', amount_due: 92.75, amount_paid: 0, status: '未交', note: '等补款通知' },
-            { cn: '小红', amount_due: 62.50, amount_paid: 62.50, status: '已交', note: '' },
-            { cn: '小刚', amount_due: 30.25, amount_paid: 0, status: '未交', note: '' }
+            { cn: 'yukio', amount_due: 0.584, amount_paid: 0, status: '未交', note: '' },
+            { cn: '星辞', amount_due: 0.832, amount_paid: 0.832, status: '已交', note: '' },
+            { cn: '吕阿草', amount_due: 1.16, amount_paid: 0, status: '未交', note: '' }
           ]
         }
       ];
       await saveDataToSupabase();
       renderTable(); renderLogisticsList(); renderDispatchWorkbench(); renderTransferLogs();
-      showToast('🎉 样例测试数据生成成功！已存入 group_data、logistics_data 和 image_data。');
+      showToast('🎉 样例测试数据生成成功！已存入 group_data、logistics_data 和国际肾表。');
     }
     window.generateSampleData = generateSampleData;
 
@@ -1191,7 +1226,9 @@
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 
-    /* --- 国际肾表逻辑 --- */
+    /* =========================================================
+       🚀 核心：三列并排多团员 & 多 Sheet 国际肾表解析模块
+       ========================================================= */
     let CURRENT_FEE_LOGISTICS_ID = null;
     let CURRENT_FEE_MEMBERS = [];
 
@@ -1249,10 +1286,10 @@
         return;
       }
       let html = '', cardsHtml = '';
-      filtered.forEach((m, idx) => {
+      filtered.forEach((m) => {
         const realIdx = members.indexOf(m);
-        html += '<tr><td><input type="checkbox" class="fee-checkbox" value="' + realIdx + '"></td><td><strong>' + escapeHtml(m.cn) + '</strong></td><td>￥' + (parseFloat(m.amount_due)||0).toFixed(2) + '</td><td>￥' + (parseFloat(m.amount_paid)||0).toFixed(2) + '</td><td><span class="badge badge-fee-' + (m.status||'未交') + '" style="cursor:pointer;" onclick="toggleFeeStatus(' + realIdx + ')">' + escapeHtml(m.status||'未交') + '</span></td><td>' + escapeHtml(m.note||'') + '</td><td><button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editFeeMember(' + realIdx + ')">编辑</button> <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteFeeMember(' + realIdx + ')">删除</button></td></tr>';
-        cardsHtml += '<div class="fee-mobile-card"><div class="fee-mobile-header"><div style="display:flex; align-items:center; gap:8px;"><input type="checkbox" class="fee-checkbox" value="' + realIdx + '"><strong>' + escapeHtml(m.cn) + '</strong></div><span class="badge badge-fee-' + (m.status||'未交') + '" style="cursor:pointer;" onclick="toggleFeeStatus(' + realIdx + ')">' + escapeHtml(m.status||'未交') + '</span></div><div class="fee-mobile-body"><div>应交: <strong>￥' + (parseFloat(m.amount_due)||0).toFixed(2) + '</strong> | 实交: <strong>￥' + (parseFloat(m.amount_paid)||0).toFixed(2) + '</strong></div>' + (m.note ? '<div>备注: ' + escapeHtml(m.note) + '</div>' : '') + '</div><div class="admin-card-mobile-actions"><button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="editFeeMember(' + realIdx + ')">✏️ 编辑</button><button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteFeeMember(' + realIdx + ')">🗑️ 删除</button></div></div>';
+        html += '<tr><td><input type="checkbox" class="fee-checkbox" value="' + realIdx + '"></td><td><strong>' + escapeHtml(m.cn) + '</strong></td><td>￥' + (parseFloat(m.amount_due)||0).toFixed(3) + '</td><td>￥' + (parseFloat(m.amount_paid)||0).toFixed(3) + '</td><td><span class="badge badge-fee-' + (m.status||'未交') + '" style="cursor:pointer;" onclick="toggleFeeStatus(' + realIdx + ')">' + escapeHtml(m.status||'未交') + ' 🔄</span></td><td>' + escapeHtml(m.note||'') + '</td><td><button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editFeeMember(' + realIdx + ')">编辑</button> <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteFeeMember(' + realIdx + ')">删除</button></td></tr>';
+        cardsHtml += '<div class="fee-mobile-card"><div class="fee-mobile-header"><div style="display:flex; align-items:center; gap:8px;"><input type="checkbox" class="fee-checkbox" value="' + realIdx + '"><strong>' + escapeHtml(m.cn) + '</strong></div><span class="badge badge-fee-' + (m.status||'未交') + '" style="cursor:pointer;" onclick="toggleFeeStatus(' + realIdx + ')">' + escapeHtml(m.status||'未交') + ' 🔄</span></div><div class="fee-mobile-body"><div>应交: <strong>￥' + (parseFloat(m.amount_due)||0).toFixed(3) + '</strong> | 实交: <strong>￥' + (parseFloat(m.amount_paid)||0).toFixed(3) + '</strong></div>' + (m.note ? '<div>备注: ' + escapeHtml(m.note) + '</div>' : '') + '</div><div class="admin-card-mobile-actions"><button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="editFeeMember(' + realIdx + ')">✏️ 编辑</button><button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteFeeMember(' + realIdx + ')">🗑️ 删除</button></div></div>';
       });
       tbody.innerHTML = html;
       if (mobileView) mobileView.innerHTML = cardsHtml;
@@ -1357,86 +1394,259 @@
     }
     window.batchFeeDelete = batchFeeDelete;
 
-    function openFeePasteModal() { document.getElementById('feePasteInput').value = ''; document.getElementById('feePasteModal').classList.add('active'); }
-    window.openFeePasteModal = openFeePasteModal;
-    function closeFeePasteModal() { document.getElementById('feePasteModal').classList.remove('active'); }
-    window.closeFeePasteModal = closeFeePasteModal;
+    // 通用三列矩阵提取算法（用于 Excel 和 粘贴文本）
+    function extractTripletMembersFromRows(rows, startRowIdx, defaultStatus) {
+      const members = [];
+      const seenCn = new Set();
+      const invalidWords = new Set(['cn', '圈名', '昵称', '姓名', '重量', '金额', '总计', '合计', '总数', '总额', 'null', 'undefined']);
 
-    function parseFeePasteText(raw) {
-      if (!raw) return [];
-      const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-      if (lines.length < 1) return [];
-      const defaultStatus = document.getElementById('feeImportDefaultStatus')?.value || '未交';
-      const items = [];
-      const headers = lines[0].split('\t').map(h => h.trim());
-      const cnIdx = headers.findIndex(h => h.includes('CN') || h.includes('圈名') || h.includes('昵称') || h.includes('姓名'));
-      const dueIdx = headers.findIndex(h => h.includes('应交') || h.includes('金额') || h.includes('费用') || h.includes('价格'));
-      const noteIdx = headers.findIndex(h => h.includes('备注') || h.includes('说明'));
-      const startRow = (cnIdx !== -1 && dueIdx !== -1) ? 1 : 0;
-      for (let i = startRow; i < lines.length; i++) {
-        const cells = lines[i].split('\t');
-        const cn = cells[cnIdx !== -1 ? cnIdx : 0]?.trim();
-        const dueStr = cells[dueIdx !== -1 ? dueIdx : 1]?.trim();
-        const note = noteIdx !== -1 ? (cells[noteIdx]?.trim() || '') : (cells[2]?.trim() || '');
-        if (!cn || cn === '圈名' || cn === 'CN' || cn === '昵称' || cn === '姓名') continue;
-        const due = parseFloat(dueStr);
-        if (isNaN(due)) continue;
-        items.push({ cn, amount_due: due, amount_paid: defaultStatus === '已交' ? due : 0, status: defaultStatus, note });
+      for (let r = startRowIdx; r < rows.length; r++) {
+        const row = rows[r];
+        if (!row || !Array.isArray(row) || row.length === 0) continue;
+
+        // 每次跳 3 列提取 [CN, 重量, 金额]
+        for (let c = 0; c < row.length; c += 3) {
+          const cnRaw = row[c];
+          const amountRaw = row[c + 2]; // 严格取第 3 列为应交金额 (金额)
+
+          if (cnRaw === undefined || cnRaw === null) continue;
+          const cn = String(cnRaw).trim();
+
+          // 过滤无效 CN、表头词汇、空值
+          if (!cn || invalidWords.has(cn.toLowerCase())) continue;
+
+          // 解析金额，过滤非数字与无效行
+          const amount = parseFloat(amountRaw);
+          if (isNaN(amount) || amount === null) continue;
+
+          // 批次内同 CN 简单去重
+          if (!seenCn.has(cn)) {
+            seenCn.add(cn);
+            members.push({
+              cn: cn,
+              amount_due: amount,
+              amount_paid: defaultStatus === '已交' ? amount : 0,
+              status: defaultStatus || '未交',
+              note: ''
+            });
+          }
+        }
       }
-      return items;
+      return members;
     }
 
-    async function submitFeePasteImport() {
-      const raw = document.getElementById('feePasteInput').value;
-      if (!raw || !raw.trim()) return showToast('请先粘贴文本！');
-      const parsed = parseFeePasteText(raw);
-      if (parsed.length === 0) return showToast('解析失败，未提取到有效数据！');
-      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
-      if (!log) return;
-      if (!Array.isArray(log.fee_members)) log.fee_members = [];
-      log.fee_members.push(...parsed);
-      await saveDataToSupabase(); renderFeeMembers(); renderLogisticsList(); closeFeePasteModal();
-      showToast('🎉 成功导入 ' + parsed.length + ' 条缴费记录！');
-    }
-    window.submitFeePasteImport = submitFeePasteImport;
-
+    // 1. 处理 Excel 文件导入（支持多 Sheet、每 Sheet 独立建批次、三列并排）
     function handleFeeExcelImport(e) {
-      const file = e.target.files[0]; if (!file) return;
+      const file = e.target.files[0];
+      if (!file) return;
+
       const defaultStatus = document.getElementById('feeImportDefaultStatus')?.value || '未交';
       const reader = new FileReader();
+
       reader.onload = async function(evt) {
         try {
           const data = new Uint8Array(evt.target.result);
           const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const jsonRows = XLSX.utils.sheet_to_json(firstSheet);
-          const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
-          if (!log) return;
-          if (!Array.isArray(log.fee_members)) log.fee_members = [];
-          let count = 0;
-          jsonRows.forEach(row => {
-            const cn = row['圈名'] || row['CN'] || row['昵称'] || row['姓名'] || row['cn'];
-            const due = parseFloat(row['应交金额'] || row['金额'] || row['费用'] || row['price'] || 0);
-            if (cn && !isNaN(due)) {
-              log.fee_members.push({ cn: String(cn).trim(), amount_due: due, amount_paid: defaultStatus === '已交' ? due : 0, status: defaultStatus, note: String(row['备注'] || row['note'] || '') });
-              count++;
+          let totalImportedBatches = 0;
+          let totalImportedMembers = 0;
+
+          // 遍历 Excel 中所有 Sheet
+          workbook.SheetNames.forEach(sheetName => {
+            const sheet = workbook.Sheets[sheetName];
+            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+            if (!rows || rows.length < 2) return;
+
+            // 第 1 行：提取批次名称（如空则用 sheet 名字）
+            let batchName = '';
+            if (rows[0] && rows[0].length > 0) {
+              batchName = String(rows[0][0] || '').trim();
             }
+            if (!batchName) batchName = sheetName.trim();
+
+            // 智能定位数据开始行（第 4 行，即下标为 3）
+            let dataStartIdx = 3;
+            for (let i = 0; i < Math.min(5, rows.length); i++) {
+              const rowStr = (rows[i] || []).join(' ').toLowerCase();
+              if (rowStr.includes('cn') && (rowStr.includes('金额') || rowStr.includes('重量'))) {
+                dataStartIdx = i + 1;
+                break;
+              }
+            }
+
+            // 解析当前 Sheet 中的三列并排数据
+            const sheetMembers = extractTripletMembersFromRows(rows, dataStartIdx, defaultStatus);
+            if (sheetMembers.length === 0) return;
+
+            // 查找或新建物流批次
+            let targetLog = RAW_LOGISTICS.find(l => (l.batch_name || '').trim() === batchName);
+            if (!targetLog) {
+              targetLog = {
+                id: 'logistics_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
+                batch_name: batchName,
+                country: batchName.includes('台湾') ? '台湾' : (batchName.includes('日本') || batchName.includes('日泡') ? '日本' : '日本'),
+                status: '运输中',
+                ship_date: new Date().toISOString().split('T')[0],
+                est_date: '',
+                arr_date: '',
+                fee: 0,
+                note: '通过 Excel 自动导入建立',
+                linked_items: [],
+                fee_members: [],
+                created_at: new Date().toISOString()
+              };
+              RAW_LOGISTICS.unshift(targetLog);
+            }
+
+            if (!Array.isArray(targetLog.fee_members)) targetLog.fee_members = [];
+
+            // 增量合并团员数据（同 CN 自动去重）
+            const existingCnSet = new Set(targetLog.fee_members.map(m => m.cn));
+            sheetMembers.forEach(m => {
+              if (!existingCnSet.has(m.cn)) {
+                targetLog.fee_members.push(m);
+                existingCnSet.add(m.cn);
+                totalImportedMembers++;
+              }
+            });
+
+            totalImportedBatches++;
           });
-          if (count === 0) {
-            const csvText = XLSX.utils.sheet_to_csv(firstSheet, { FS: '\t' });
-            const pasted = parseFeePasteText(csvText);
-            if (pasted.length > 0) { log.fee_members.push(...pasted); count = pasted.length; }
+
+          if (totalImportedMembers === 0) {
+            return showToast('未从 Excel 中解析到有效数据，请检查表格是否包含 CN 与 金额！');
           }
-          if (count === 0) return showToast('Excel 中未读取到有效数据！');
-          await saveDataToSupabase(); renderFeeMembers(); renderLogisticsList();
-          showToast('🎉 成功导入 ' + count + ' 条缴费记录！');
+
+          await saveDataToSupabase();
+          renderLogisticsList();
+          if (CURRENT_FEE_LOGISTICS_ID) renderFeeMembers();
+          showToast(`🎉 成功解析 ${totalImportedBatches} 个批次，共导入 ${totalImportedMembers} 条团员肾表数据！`);
           e.target.value = '';
-        } catch (err) { showToast('Excel 解析失败！'); }
+        } catch (err) {
+          console.error(err);
+          showToast('Excel 文件解析失败，请检查文件格式！');
+        }
       };
       reader.readAsArrayBuffer(file);
     }
     window.handleFeeExcelImport = handleFeeExcelImport;
 
+    // 2. 处理粘贴表格文本导入
+    function openFeePasteModal() {
+      const selectEl = document.getElementById('feePasteBatchSelect');
+      selectEl.innerHTML = '';
+
+      // 选项 1：自动根据粘贴文本第 1 行识别
+      const autoOpt = document.createElement('option');
+      autoOpt.value = '__AUTO__';
+      autoOpt.innerText = '✨ [自动识别] 从粘贴文本第 1 行读取批次名称';
+      selectEl.appendChild(autoOpt);
+
+      // 如果当前正打开某个批次的肾表，优先默认选中
+      RAW_LOGISTICS.forEach(log => {
+        const opt = document.createElement('option');
+        opt.value = log.id;
+        opt.innerText = `📦 导入到现有批次：${log.batch_name}`;
+        if (CURRENT_FEE_LOGISTICS_ID && String(log.id) === String(CURRENT_FEE_LOGISTICS_ID)) {
+          opt.selected = true;
+        }
+        selectEl.appendChild(opt);
+      });
+
+      document.getElementById('feePasteInput').value = '';
+      document.getElementById('feePasteModal').classList.add('active');
+    }
+    window.openFeePasteModal = openFeePasteModal;
+
+    function closeFeePasteModal() {
+      document.getElementById('feePasteModal').classList.remove('active');
+    }
+    window.closeFeePasteModal = closeFeePasteModal;
+
+    async function submitFeePasteImport() {
+      const rawText = document.getElementById('feePasteInput').value;
+      if (!rawText || !rawText.trim()) return showToast('请先粘贴文本内容！');
+
+      const defaultStatus = document.getElementById('feePasteDefaultStatus')?.value || '未交';
+      const selectedBatchId = document.getElementById('feePasteBatchSelect')?.value;
+
+      const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length === 0) return showToast('粘贴内容为空！');
+
+      // 将粘贴文本转为二维数组
+      const rows = lines.map(l => l.split('\t').map(c => c.trim()));
+
+      // 提取批次名称（如果选择自动识别）
+      let batchName = '';
+      let dataStartIdx = 0;
+
+      // 如果第 1 行没有连续的制表符或只有 1 列，则判定第 1 行为批次名称
+      if (rows[0].length <= 2 && !rows[0][0].toLowerCase().includes('cn')) {
+        batchName = rows[0][0];
+        dataStartIdx = 1;
+      }
+
+      // 寻找表头行跳过
+      for (let i = dataStartIdx; i < Math.min(4, rows.length); i++) {
+        const rowStr = rows[i].join(' ').toLowerCase();
+        if (rowStr.includes('cn') || rowStr.includes('重量') || rowStr.includes('金额')) {
+          dataStartIdx = i + 1;
+          break;
+        }
+      }
+
+      // 解析三列并排团员数据
+      const parsedMembers = extractTripletMembersFromRows(rows, dataStartIdx, defaultStatus);
+      if (parsedMembers.length === 0) return showToast('解析失败，未提取到有效的 [CN + 金额] 数据！');
+
+      // 确定目标批次
+      let targetLog = null;
+      if (selectedBatchId && selectedBatchId !== '__AUTO__') {
+        targetLog = RAW_LOGISTICS.find(l => String(l.id) === String(selectedBatchId));
+      } else {
+        if (!batchName) batchName = '海外通贩批次_' + new Date().toLocaleDateString();
+        targetLog = RAW_LOGISTICS.find(l => (l.batch_name || '').trim() === batchName.trim());
+        if (!targetLog) {
+          targetLog = {
+            id: 'logistics_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
+            batch_name: batchName,
+            country: '日本',
+            status: '运输中',
+            ship_date: new Date().toISOString().split('T')[0],
+            est_date: '',
+            arr_date: '',
+            fee: 0,
+            note: '粘贴自动建批次',
+            linked_items: [],
+            fee_members: [],
+            created_at: new Date().toISOString()
+          };
+          RAW_LOGISTICS.unshift(targetLog);
+        }
+      }
+
+      if (!targetLog) return showToast('未指定有效的物流批次！');
+      if (!Array.isArray(targetLog.fee_members)) targetLog.fee_members = [];
+
+      // 增量合并
+      let addedCount = 0;
+      const existingCnSet = new Set(targetLog.fee_members.map(m => m.cn));
+      parsedMembers.forEach(m => {
+        if (!existingCnSet.has(m.cn)) {
+          targetLog.fee_members.push(m);
+          existingCnSet.add(m.cn);
+          addedCount++;
+        }
+      });
+
+      await saveDataToSupabase();
+      closeFeePasteModal();
+      renderLogisticsList();
+      if (CURRENT_FEE_LOGISTICS_ID) renderFeeMembers();
+      showToast(`🎉 成功解析并导入 ${addedCount} 条团员数据至「${targetLog.batch_name}」！`);
+    }
+    window.submitFeePasteImport = submitFeePasteImport;
+
   </script>
 </body>
 </html>
+```
