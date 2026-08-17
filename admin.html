@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>👑 团长后台管理系统 - 谷圈团务系统</title>
-  <!-- Supabase 核心组件 -->
+  <!-- Supabase CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- Excel 文件解析组件 -->
+  <!-- SheetJS (用于 Excel 批量导入) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -23,29 +23,185 @@
       --purple: #8b5cf6;
       --radius: 12px;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-    body { background-color: var(--bg); color: var(--text-main); line-height: 1.5; padding: 16px; min-height: 100vh; }
-    .container { max-width: 1280px; margin: 0 auto; }
-    header { background: var(--card-bg); border-radius: var(--radius); padding: 16px 24px; margin-bottom: 20px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 12px; }
-    .header-title { display: flex; align-items: center; gap: 12px; }
-    .header-title h1 { font-size: 1.4rem; font-weight: 700; }
-    .key-selector { display: flex; align-items: center; gap: 8px; }
-    .key-selector input { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; width: 180px; }
-    .user-info { display: flex; align-items: center; gap: 12px; font-size: 0.88rem; }
-    .nav-tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid var(--border); padding-bottom: 0; }
-    .tab-btn { padding: 10px 20px; background: transparent; border: none; border-bottom: 3px solid transparent; font-size: 0.95rem; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.2s; }
-    .tab-btn:hover { color: var(--primary); }
-    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); background: var(--card-bg); border-top-left-radius: 8px; border-top-right-radius: 8px; }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-    .card { background: var(--card-bg); border-radius: var(--radius); border: 1px solid var(--border); padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    .card-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 16px; }
-    .form-group { display: flex; flex-direction: column; gap: 6px; }
-    .form-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
-    input[type="text"], input[type="number"], input[type="date"], select, textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; outline: none; background: #ffffff; }
-    input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15); }
-    .btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      line-height: 1.5;
+      padding: 16px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 16px 24px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-title h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+
+    .key-selector {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .key-selector input {
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.9rem;
+      width: 180px;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.88rem;
+    }
+
+    /* Tabs */
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 0;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .tab-btn {
+      padding: 10px 20px;
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab-btn:hover {
+      color: var(--primary);
+    }
+
+    .tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+      background: var(--card-bg);
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    /* Form controls */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    input[type="text"], input[type="number"], select, textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.9rem;
+      outline: none;
+      background: #ffffff;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
     .btn-primary { background-color: var(--primary); color: white; }
     .btn-primary:hover { background-color: var(--primary-hover); }
     .btn-success { background-color: var(--success); color: white; }
@@ -56,14 +212,59 @@
     .btn-danger:hover { background-color: #dc2626; }
     .btn-purple { background-color: var(--purple); color: white; }
     .btn-purple:hover { background-color: #7c3aed; }
-    .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
-    .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 12px; }
-    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88rem; min-width: 800px; }
-    th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; }
-    th { background-color: #f8fafc; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Table */
+    .table-container {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin-bottom: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.88rem;
+      min-width: 800px;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    th {
+      background-color: #f8fafc;
+      color: var(--text-muted);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
     tr:hover { background-color: #f8fafc; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
-    .badge-country { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .badge-country {
+      background-color: #f1f5f9;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+    }
+
     .badge-status-未出荷 { background-color: #fee2e2; color: #991b1b; }
     .badge-status-已下单未到货 { background-color: #ffedd5; color: #9a3412; }
     .badge-status-回国中 { background-color: #fef3c7; color: #92400e; }
@@ -72,91 +273,261 @@
     .badge-status-已申请发货 { background-color: #f3e8ff; color: #6b21a8; }
     .badge-status-已排发 { background-color: #e2e8f0; color: #475569; }
     .badge-status-未付款 { background-color: #fecdd3; color: #881337; }
-    .badge-log-已发货 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
-    .badge-log-运输中 { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
-    .badge-log-清关中 { background-color: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; }
-    .badge-log-国内派送 { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
-    .badge-log-已签收 { background-color: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-    .badge-log-异常滞留 { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
-    .badge-fee-未交 { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-    .badge-fee-已交 { background-color: #d1fae5; color: #065f46; border: 1px solid #bbf7d0; }
-    .badge-fee-免交 { background-color: #e2e8f0; color: #475569; border: 1px solid #cbd5e1; }
-    .fee-stats { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-    .fee-stat-card { flex: 1; min-width: 100px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-align: center; }
-    .fee-stat-card .num { font-size: 1.3rem; font-weight: 700; }
-    .fee-stat-card .label { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
-    .fee-stat-card.unpaid .num { color: var(--danger); }
-    .fee-stat-card.paid .num { color: var(--success); }
-    .fee-panel-section { margin-bottom: 18px; }
-    .fee-panel-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 10px; color: var(--text-muted); }
-    .fee-mobile-card { background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); margin-bottom: 10px; }
-    .fee-mobile-header { display: flex; justify-content: space-between; align-items: center; }
-    .fee-mobile-body { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-muted); }
-    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.7); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
-    .modal-overlay.active { opacity: 1; pointer-events: auto; }
-    .modal { background: white; border-radius: var(--radius); width: 90%; max-width: 450px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2); }
-    .modal-large { max-width: 780px; max-height: 90vh; overflow-y: auto; }
-    .toast { position: fixed; bottom: 24px; right: 24px; background: #0f172a; color: white; padding: 12px 20px; border-radius: 8px; font-size: 0.9rem; z-index: 3000; opacity: 0; transform: translateY(10px); transition: opacity 0.3s, transform 0.3s; pointer-events: none; }
-    .toast.show { opacity: 1; transform: translateY(0); }
-    .mobile-cards-view { display: none; }
+
+    /* 反馈标签状态 */
+    .badge-fb-未读 { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .badge-fb-已读 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .badge-fb-已处理 { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+    .badge-category { background-color: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
+
+    /* Modal Overlay */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(15, 23, 42, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 2000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal {
+      background: white;
+      border-radius: var(--radius);
+      width: 90%;
+      max-width: 520px;
+      padding: 24px;
+      box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #0f172a;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      z-index: 3000;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.3s, transform 0.3s;
+      pointer-events: none;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* 手机端卡片列表 */
+    .mobile-cards-view {
+      display: none;
+    }
+
     @media (max-width: 768px) {
-      header { flex-direction: column; align-items: stretch; }
-      .nav-tabs { overflow-x: auto; white-space: nowrap; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
-      .desktop-table-view { display: none !important; }
-      .mobile-cards-view { display: flex; flex-direction: column; gap: 12px; }
-      .app-header { flex-direction: column; align-items: flex-start; gap: 6px; }
+      header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .desktop-table-view {
+        display: none !important;
+      }
+      .mobile-cards-view {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .app-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+      }
     }
-    @media (max-width: 600px) {
-      .items-grid-10 { grid-template-columns: repeat(2, 1fr) !important; }
-      .grid-item-chip { padding: 8px 6px; }
+
+    .admin-card-mobile {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
     }
-    .admin-card-mobile { background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
-    .admin-card-mobile-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
-    .admin-card-mobile-body { display: flex; gap: 12px; align-items: center; }
-    .admin-card-mobile-img { width: 50px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); flex-shrink: 0; }
-    .admin-card-mobile-noimg { width: 50px; height: 50px; background: #f1f5f9; border: 1px solid var(--border); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 0.75rem; flex-shrink: 0; }
-    .admin-card-mobile-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-    .admin-card-mobile-title { font-weight: 700; font-size: 0.95rem; color: var(--text-main); word-break: break-all; }
-    .admin-card-mobile-meta { display: flex; align-items: center; gap: 12px; font-size: 0.85rem; color: var(--text-muted); flex-wrap: wrap; }
-    .admin-card-mobile-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
-    .items-grid-10 { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; margin-top: 8px; margin-bottom: 8px; }
-    @media (max-width: 900px) { .items-grid-10 { grid-template-columns: repeat(5, 1fr); } }
-    .grid-item-chip { background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 6px; font-size: 0.75rem; text-align: center; }
-    .grid-item-chip .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .grid-item-chip .qty { color: var(--primary); font-weight: 700; }
-    .app-card { border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; background: #ffffff; }
-    .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
-    .img-preview { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
-    .linked-item-pill { display: inline-block; background: #f1f5f9; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; margin: 2px; color: #334155; }
+
+    .admin-card-mobile-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed var(--border);
+    }
+
+    .admin-card-mobile-body {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .admin-card-mobile-img {
+      width: 50px;
+      height: 50px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .admin-card-mobile-noimg {
+      width: 50px;
+      height: 50px;
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #94a3b8;
+      font-size: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    .admin-card-mobile-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .admin-card-mobile-title {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--text-main);
+      word-break: break-all;
+    }
+
+    .admin-card-mobile-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      flex-wrap: wrap;
+    }
+
+    .admin-card-mobile-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed var(--border);
+      flex-wrap: wrap;
+    }
+
+    /* 网格 10 排版样式 */
+    .items-grid-10 {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 6px;
+      margin-top: 8px;
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 900px) {
+      .items-grid-10 {
+        grid-template-columns: repeat(5, 1fr);
+      }
+    }
+
+    .grid-item-chip {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px;
+      font-size: 0.75rem;
+      text-align: center;
+    }
+
+    .grid-item-chip .name {
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .grid-item-chip .qty {
+      color: var(--primary);
+      font-weight: 700;
+    }
+
+    .app-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      background: #ffffff;
+    }
+
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed var(--border);
+    }
+
+    .img-preview {
+      width: 36px;
+      height: 36px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
   </style>
 </head>
 <body>
   <div class="container">
+    <!-- Header -->
     <header>
-      <div class="header-title"><h1>👑 团长后台管理系统</h1></div>
+      <div class="header-title">
+        <h1>👑 团长后台管理系统</h1>
+      </div>
       <div class="key-selector">
         <label for="adminQueryKey" style="font-size: 0.88rem; font-weight: 600;">当前 Query Key:</label>
         <input type="text" id="adminQueryKey" value="demo_key" placeholder="请输入 Query Key">
         <button class="btn btn-primary" onclick="loadDataByQueryKey()">切换并加载数据</button>
-        <button class="btn btn-secondary" onclick="copyQueryKey()">📋 复制 Key</button>
       </div>
       <div class="user-info">
         <span id="userEmailSpan" style="color: var(--text-muted);">已登录: 检查中...</span>
-        <a href="index.html" target="_blank" class="btn btn-secondary" style="text-decoration: none;">打开团员自查页 ↗</a>
+        <a href="index.html" target="_blank" class="btn btn-secondary" style="text-decoration: none;">打开团员自查页 &nearr;</a>
         <button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.8rem;" onclick="handleSignOut()">退出登录</button>
       </div>
     </header>
 
+    <!-- Nav Tabs -->
     <div class="nav-tabs">
       <button class="tab-btn active" onclick="switchTab('tabItems')">📊 排表管理 (group_data)</button>
-      <button class="tab-btn" onclick="switchTab('tabLogistics')">🌍 国际物流追踪</button>
       <button class="tab-btn" onclick="switchTab('tabDispatch')">🚀 排发工作台 (applications)</button>
       <button class="tab-btn" onclick="switchTab('tabLogs')">🔄 转单日志 (transfer_logs)</button>
+      <button class="tab-btn" onclick="switchTab('tabFeedback')">📮 匿名反馈箱 (feedback)</button>
       <button class="tab-btn" onclick="switchTab('tabSettings')">⚙️ 团务设置与实用工具</button>
     </div>
 
     <!-- 标签页 1：排表管理 -->
     <div class="tab-content active" id="tabItems">
+      <!-- 录入与编辑表单 -->
       <div class="card">
         <div class="card-title">
           <span id="formTitle">📝 录入/编辑谷子</span>
@@ -165,25 +536,46 @@
         <form id="itemForm" onsubmit="event.preventDefault(); saveItemForm();">
           <input type="hidden" id="editItemId">
           <div class="form-grid">
-            <div class="form-group"><label for="inputName">谷子名称 *</label><input type="text" id="inputName" required placeholder="如：五条悟亚克力立牌"></div>
-            <div class="form-group"><label for="inputCn">认领 CN (圈名) *</label><input type="text" id="inputCn" required placeholder="如：小明"></div>
-            <div class="form-group"><label for="inputPrice">单价 (元)</label><input type="number" id="inputPrice" step="0.01" value="0"></div>
-            <div class="form-group"><label for="inputQuantity">数量</label><input type="number" id="inputQuantity" value="1" min="1"></div>
+            <div class="form-group">
+              <label for="inputName">谷子名称 *</label>
+              <input type="text" id="inputName" required placeholder="如：五条悟亚克力立牌">
+            </div>
+            <div class="form-group">
+              <label for="inputCn">认领 CN (圈名) *</label>
+              <input type="text" id="inputCn" required placeholder="如：小明">
+            </div>
+            <div class="form-group">
+              <label for="inputPrice">单价 (元)</label>
+              <input type="number" id="inputPrice" step="0.01" value="0">
+            </div>
+            <div class="form-group">
+              <label for="inputQuantity">数量</label>
+              <input type="number" id="inputQuantity" value="1" min="1">
+            </div>
             <div class="form-group">
               <label for="inputCountry">地区 (country)</label>
               <select id="inputCountry">
-                <option value="日本">日本</option><option value="闲鱼">闲鱼</option><option value="淘宝店">淘宝店</option>
-                <option value="美国">美国</option><option value="韩国">韩国</option><option value="印尼">印尼</option>
-                <option value="泰国">泰国</option><option value="台湾">台湾</option>
+                <option value="日本">日本</option>
+                <option value="闲鱼">闲鱼</option>
+                <option value="淘宝店">淘宝店</option>
+                <option value="美国">美国</option>
+                <option value="韩国">韩国</option>
+                <option value="印尼">印尼</option>
+                <option value="泰国">泰国</option>
+                <option value="台湾">台湾</option>
               </select>
             </div>
             <div class="form-group">
               <label for="inputStatus">状态 (8种预设)</label>
               <select id="inputStatus">
-                <option value="未出荷">未出荷</option><option value="已下单未到货">已下单未到货</option>
-                <option value="回国中">回国中</option><option value="已到货">已到货</option>
-                <option value="可排发">可排发</option><option value="已申请发货">已申请发货</option>
-                <option value="已排发">已排发</option><option value="未付款">未付款</option>
+                <option value="未出荷">未出荷</option>
+                <option value="已下单未到货">已下单未到货</option>
+                <option value="回国中">回国中</option>
+                <option value="已到货">已到货</option>
+                <option value="可排发">可排发</option>
+                <option value="已申请发货">已申请发货</option>
+                <option value="已排发">已排发</option>
+                <option value="未付款">未付款</option>
               </select>
             </div>
           </div>
@@ -192,20 +584,28 @@
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <span style="font-size: 0.85rem; color: var(--text-muted);">批量导入默认地区:</span>
               <select id="excelDefaultCountry" style="width: 100px; padding: 4px 8px;">
-                <option value="日本">日本</option><option value="闲鱼">闲鱼</option><option value="淘宝店">淘宝店</option>
-                <option value="美国">美国</option><option value="韩国">韩国</option><option value="印尼">印尼</option>
-                <option value="泰国">泰国</option><option value="台湾">台湾</option>
+                <option value="日本">日本</option>
+                <option value="闲鱼">闲鱼</option>
+                <option value="淘宝店">淘宝店</option>
+                <option value="美国">美国</option>
+                <option value="韩国">韩国</option>
+                <option value="印尼">印尼</option>
+                <option value="泰国">泰国</option>
+                <option value="台湾">台湾</option>
               </select>
               <label class="btn btn-success" style="cursor: pointer; margin: 0;">
                 📁 导入 Excel 文件
                 <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleExcelImport(event)">
               </label>
-              <button type="button" class="btn btn-secondary" onclick="openPasteModal()">📋 粘贴表格文本</button>
+              <button type="button" class="btn btn-secondary" onclick="openPasteModal()">
+                📋 粘贴表格文本
+              </button>
             </div>
           </div>
         </form>
       </div>
 
+      <!-- 数据表格与批量操作 -->
       <div class="card">
         <div class="card-title">
           <span>📦 谷子排表明细 (group_data)</span>
@@ -217,79 +617,57 @@
             <button class="btn btn-danger" onclick="batchDeleteItems()">批量彻底删除</button>
           </div>
         </div>
+
         <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
           <input type="text" id="filterSearch" placeholder="搜索谷子名称/CN..." style="max-width: 240px;" oninput="renderTable()">
           <select id="filterCountry" style="max-width: 160px;" onchange="renderTable()">
-            <option value="">全部地区</option>
-            <option value="日本">日本</option><option value="闲鱼">闲鱼</option><option value="淘宝店">淘宝店</option>
-            <option value="美国">美国</option><option value="韩国">韩国</option><option value="印尼">印尼</option>
-            <option value="泰国">泰国</option><option value="台湾">台湾</option>
+            <option value="">全部地区 (country)</option>
+            <option value="日本">日本</option>
+            <option value="闲鱼">闲鱼</option>
+            <option value="淘宝店">淘宝店</option>
+            <option value="美国">美国</option>
+            <option value="韩国">韩国</option>
+            <option value="印尼">印尼</option>
+            <option value="泰国">泰国</option>
+            <option value="台湾">台湾</option>
           </select>
           <select id="filterStatus" style="max-width: 160px;" onchange="renderTable()">
             <option value="">全部状态</option>
-            <option value="未出荷">未出荷</option><option value="已下单未到货">已下单未到货</option>
-            <option value="回国中">回国中</option><option value="已到货">已到货</option>
-            <option value="可排发">可排发</option><option value="已申请发货">已申请发货</option>
-            <option value="已排发">已排发</option><option value="未付款">未付款</option>
+            <option value="未出荷">未出荷</option>
+            <option value="已下单未到货">已下单未到货</option>
+            <option value="回国中">回国中</option>
+            <option value="已到货">已到货</option>
+            <option value="可排发">可排发</option>
+            <option value="已申请发货">已申请发货</option>
+            <option value="已排发">已排发</option>
+            <option value="未付款">未付款</option>
           </select>
         </div>
+
         <div class="table-container desktop-table-view">
           <table>
             <thead>
               <tr>
                 <th style="width: 40px;"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
-                <th>图片</th><th>谷子名称</th><th>认领 CN</th><th>单价 (元)</th><th>数量</th><th>地区</th><th>状态</th><th>操作</th>
+                <th>图片</th>
+                <th>谷子名称</th>
+                <th>认领 CN</th>
+                <th>单价 (元)</th>
+                <th>数量</th>
+                <th>地区 (country)</th>
+                <th>状态</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody id="itemsTableBody"></tbody>
           </table>
         </div>
+
         <div class="mobile-cards-view" id="adminMobileCardsView"></div>
       </div>
     </div>
 
-    <!-- 标签页 2：国际物流追踪 -->
-    <div class="tab-content" id="tabLogistics">
-      <div class="card">
-        <div class="card-title">
-          <span>🌍 国际物流列表 (logistics_data)</span>
-          <div class="btn-group">
-            <button class="btn btn-primary" onclick="openLogisticsModal()">➕ 新增国际物流记录</button>
-            <label class="btn btn-success" style="cursor: pointer; margin: 0;">
-              📁 批量导入多Sheet肾表Excel
-              <input type="file" id="multiSheetExcelInput" accept=".xlsx,.xls,.csv" style="display: none;" onchange="handleFeeExcelImport(event)">
-            </label>
-            <button class="btn btn-purple" onclick="openFeePasteModal()">📋 粘贴肾表数据</button>
-          </div>
-        </div>
-        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
-          <input type="text" id="logFilterSearch" placeholder="搜索批次 / 谷子..." style="max-width: 260px;" oninput="renderLogisticsList()">
-          <select id="logFilterCountry" style="max-width: 160px;" onchange="renderLogisticsList()">
-            <option value="">全部发货国家</option>
-            <option value="日本">日本</option><option value="美国">美国</option><option value="韩国">韩国</option>
-            <option value="印尼">印尼</option><option value="泰国">泰国</option><option value="台湾">台湾</option><option value="其它">其它</option>
-          </select>
-          <select id="logFilterStatus" style="max-width: 160px;" onchange="renderLogisticsList()">
-            <option value="">全部物流状态</option>
-            <option value="已发货">已发货</option><option value="运输中">运输中</option><option value="清关中">清关中</option>
-            <option value="国内派送">国内派送</option><option value="已签收">已签收/已到货</option><option value="异常滞留">异常/滞留</option>
-          </select>
-        </div>
-        <div class="table-container desktop-table-view">
-          <table>
-            <thead>
-              <tr>
-                <th>状态</th><th>批次名称</th><th>发货国家</th><th>关联谷子</th><th>关键日期</th><th>运费/税费</th><th>肾表</th><th>备注</th><th style="text-align: right;">操作</th>
-              </tr>
-            </thead>
-            <tbody id="logisticsTableBody"></tbody>
-          </table>
-        </div>
-        <div class="mobile-cards-view" id="logisticsCardsContainer"></div>
-      </div>
-    </div>
-
-    <!-- 标签页 3：排发工作台 -->
+    <!-- 标签页 2：排发工作台 -->
     <div class="tab-content" id="tabDispatch">
       <div class="card">
         <div style="display: flex; gap: 16px; margin-bottom: 20px;">
@@ -302,15 +680,17 @@
             <div style="font-size: 1.8rem; font-weight: 700; color: var(--success);" id="statCompletedCount">0</div>
           </div>
         </div>
+
         <div class="btn-group" style="margin-bottom: 16px;">
           <button class="btn btn-primary" id="btnSubPending" onclick="switchDispatchSubTab('pending')">待处理申请列表</button>
           <button class="btn btn-secondary" id="btnSubCompleted" onclick="switchDispatchSubTab('completed')">已完成记录列表</button>
         </div>
+
         <div id="dispatchSubContent"></div>
       </div>
     </div>
 
-    <!-- 标签页 4：转单日志 -->
+    <!-- 标签页 3：转单日志 -->
     <div class="tab-content" id="tabLogs">
       <div class="card">
         <div class="card-title">
@@ -320,11 +700,89 @@
         <div class="table-container">
           <table>
             <thead>
-              <tr><th>时间</th><th>原 CN</th><th>转给新 CN</th><th>谷子名称</th><th>数量</th><th>操作</th></tr>
+              <tr>
+                <th>时间</th>
+                <th>原 CN</th>
+                <th>转给新 CN</th>
+                <th>谷子名称</th>
+                <th>数量</th>
+                <th>操作</th>
+              </tr>
             </thead>
             <tbody id="transferLogsTableBody"></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- 标签页 4：📮 匿名反馈箱 -->
+    <div class="tab-content" id="tabFeedback">
+      <div class="card">
+        <div class="card-title">
+          <span>📮 团员匿名反馈箱 (feedback)</span>
+          <div class="btn-group">
+            <button class="btn btn-secondary" onclick="batchMarkFeedbackRead()">全部标为已读</button>
+            <button class="btn btn-danger" onclick="clearAllFeedback()">清空所有反馈</button>
+          </div>
+        </div>
+
+        <!-- 统计面板 -->
+        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 120px; background: #fee2e2; border-radius: 8px; padding: 12px; text-align: center;">
+            <div style="font-size: 0.8rem; color: #991b1b;">未读反馈</div>
+            <div style="font-size: 1.5rem; font-weight: 700; color: #991b1b;" id="statFbUnread">0</div>
+          </div>
+          <div style="flex: 1; min-width: 120px; background: #e0f2fe; border-radius: 8px; padding: 12px; text-align: center;">
+            <div style="font-size: 0.8rem; color: #075985;">已读反馈</div>
+            <div style="font-size: 1.5rem; font-weight: 700; color: #075985;" id="statFbRead">0</div>
+          </div>
+          <div style="flex: 1; min-width: 120px; background: #d1fae5; border-radius: 8px; padding: 12px; text-align: center;">
+            <div style="font-size: 0.8rem; color: #065f46;">已处理</div>
+            <div style="font-size: 1.5rem; font-weight: 700; color: #065f46;" id="statFbHandled">0</div>
+          </div>
+          <div style="flex: 1; min-width: 120px; background: #f1f5f9; border-radius: 8px; padding: 12px; text-align: center;">
+            <div style="font-size: 0.8rem; color: var(--text-muted);">总反馈数</div>
+            <div style="font-size: 1.5rem; font-weight: 700; color: var(--text-main);" id="statFbTotal">0</div>
+          </div>
+        </div>
+
+        <!-- 筛选与搜索 -->
+        <div style="display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;">
+          <input type="text" id="fbFilterSearch" placeholder="搜索反馈内容 / 回复..." style="max-width: 220px;" oninput="renderFeedbackList()">
+          <select id="fbFilterStatus" style="max-width: 140px;" onchange="renderFeedbackList()">
+            <option value="">全部状态</option>
+            <option value="未读">未读</option>
+            <option value="已读">已读</option>
+            <option value="已处理">已处理</option>
+          </select>
+          <select id="fbFilterCategory" style="max-width: 140px;" onchange="renderFeedbackList()">
+            <option value="">全部分类</option>
+            <option value="建议">💡 建议</option>
+            <option value="问题反馈">⚠️ 问题反馈</option>
+            <option value="投诉">🚨 投诉</option>
+            <option value="其他">💬 其他</option>
+          </select>
+        </div>
+
+        <!-- 桌面表格视图 -->
+        <div class="table-container desktop-table-view">
+          <table>
+            <thead>
+              <tr>
+                <th>状态</th>
+                <th>分类</th>
+                <th>提交时间</th>
+                <th>反馈内容 (点击展开)</th>
+                <th>团长回复</th>
+                <th style="text-align: right;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="feedbackTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- 手机端卡片视图 -->
+        <div class="mobile-cards-view" id="feedbackMobileCardsView"></div>
       </div>
     </div>
 
@@ -334,30 +792,51 @@
         <div class="card-title">🛠️ 团务与测试工具</div>
         <div style="display: flex; flex-direction: column; gap: 16px;">
           <div>
-            <label style="font-size: 0.88rem; font-weight: 600; display: block; margin-bottom: 6px;">发送给团员的自查链接与密钥：</label>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button class="btn btn-primary" onclick="copyMemberLink()">📋 复制团员自查专属链接</button>
-              <button class="btn btn-secondary" onclick="copyQueryKey()">📋 复制当前 Query Key</button>
-            </div>
+            <label style="font-size: 0.88rem; font-weight: 600; display: block; margin-bottom: 6px;">发送给团员的自查链接：</label>
+            <button class="btn btn-primary" onclick="copyMemberLink()">📋 复制团员自查专属链接</button>
           </div>
           <hr style="border: none; border-top: 1px solid var(--border);">
           <div>
-            <label style="font-size: 0.88rem; font-weight: 600; display: block; margin-bottom: 6px;">生成演示测试数据：</label>
-            <button class="btn btn-success" onclick="generateSampleData()">🎉 一键生成 5 条演示谷子、1 条排发申请与 1 条国际物流</button>
+            <label style="font-size: 0.88rem; font-weight: 600; display: block; margin-bottom: 6px;">生成演示测试数据 (写入当前 Query Key 的 group_data 和 image_data)：</label>
+            <button class="btn btn-success" onclick="generateSampleData()">🎉 一键生成演示谷子、排发申请及匿名反馈</button>
           </div>
         </div>
-      </div>
-      <div class="card" style="border: 1px solid #fde047; background: #fefce8; margin-top: 16px;">
-        <div class="card-title" style="color: #854d0e; display: flex; align-items: center; gap: 8px;">⚠️ 团员端无法查询？</div>
-        <p style="font-size: 0.9rem; color: #713f12; line-height: 1.6; margin-bottom: 12px;">
-          如果团员输入正确密钥后仍显示'未找到数据'，请检查 Supabase 控制台中 <strong>leader_data</strong> 表的 RLS 策略是否允许匿名用户 SELECT。
-        </p>
-        <button class="btn btn-secondary" onclick="copyRlsGuide()" style="background: #ffffff; border-color: #fde047; color: #854d0e;">📋 复制 RLS 配置教程链接</button>
       </div>
     </div>
   </div>
 
-  <!-- 登录 Modal -->
+  <!-- 反馈回复/详情弹窗 -->
+  <div class="modal-overlay" id="feedbackModal">
+    <div class="modal">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 1.15rem; font-weight: 700;">📮 反馈详情与回复</h3>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeFeedbackModal()">✕</button>
+      </div>
+      <input type="hidden" id="modalFbIndex">
+      <div style="margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+          <span class="badge badge-category" id="modalFbCategory">分类</span>
+          <span style="font-size: 0.8rem; color: var(--text-muted);" id="modalFbTime">时间</span>
+        </div>
+        <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 0.9rem; max-height: 180px; overflow-y: auto; line-height: 1.5; word-break: break-all;" id="modalFbContent">
+          反馈内容
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom: 16px;">
+        <label for="modalFbReply">团长处理/回复备注 (团员自查或内部记录)</label>
+        <textarea id="modalFbReply" rows="3" placeholder="填写对此条反馈的处理说明或答复..."></textarea>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="btn-group">
+          <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 0.8rem;" onclick="setModalFbStatus('已读')">标为已读</button>
+          <button class="btn btn-success" style="padding: 6px 10px; font-size: 0.8rem;" onclick="setModalFbStatus('已处理')">标为已处理</button>
+        </div>
+        <button class="btn btn-primary" onclick="saveModalFbReply()">保存回复</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Auth 登录 Modal Overlay -->
   <div class="modal-overlay active" id="authOverlay">
     <div class="modal">
       <h2 style="font-size: 1.3rem; margin-bottom: 16px; text-align: center;">🔐 团长后台 Supabase 登录</h2>
@@ -375,69 +854,17 @@
     </div>
   </div>
 
-  <!-- 新增/编辑国际物流 Modal -->
-  <div class="modal-overlay" id="logisticsModal">
-    <div class="modal modal-large">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 id="logisticsModalTitle" style="font-size: 1.15rem; font-weight: 700;">➕ 新增国际物流</h3>
-        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeLogisticsModal()">✕</button>
-      </div>
-      <form id="logisticsForm" onsubmit="handleSaveLogistics(event)">
-        <input type="hidden" id="logEditId">
-        <div class="form-grid">
-          <div class="form-group">
-            <label for="logBatchName">批次名称 / 备注标签 *</label>
-            <input type="text" id="logBatchName" required placeholder="如：7月通贩第一批 / 场贩代购">
-          </div>
-          <div class="form-group">
-            <label for="logCountry">发货国家</label>
-            <select id="logCountry">
-              <option value="日本">日本</option><option value="美国">美国</option><option value="韩国">韩国</option>
-              <option value="印尼">印尼</option><option value="泰国">泰国</option><option value="台湾">台湾</option><option value="其它">其它</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="logStatus">当前状态</label>
-            <select id="logStatus">
-              <option value="已发货">已发货</option><option value="运输中">运输中</option><option value="清关中">清关中</option>
-              <option value="国内派送">国内派送</option><option value="已签收">已签收/已到货</option><option value="异常滞留">异常/滞留</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
-          <div class="form-group"><label for="logShipDate">发货日期</label><input type="date" id="logShipDate"></div>
-          <div class="form-group"><label for="logEstDate">预计到达</label><input type="date" id="logEstDate"></div>
-          <div class="form-group"><label for="logArrDate">实际到达</label><input type="date" id="logArrDate"></div>
-          <div class="form-group"><label for="logFee">运费/税费 (元)</label><input type="number" id="logFee" step="0.01" placeholder="0.00"></div>
-        </div>
-        <div class="form-group" style="margin-bottom: 16px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">📦 关联排表谷子 (可选)：</label>
-            <input type="text" id="logItemSearch" placeholder="快速筛选谷子..." style="width: 150px; padding: 2px 6px; font-size: 0.75rem;" oninput="filterLogisticsItemCheckboxes()">
-          </div>
-          <div id="logisticsItemSelector" style="max-height: 140px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px; background: #f8fafc;"></div>
-        </div>
-        <div class="form-group" style="margin-bottom: 20px;">
-          <label for="logNote">备注信息</label>
-          <textarea id="logNote" rows="2" placeholder="箱子体积、申报品名、注意事项等..."></textarea>
-        </div>
-        <div style="display: flex; justify-content: flex-end; gap: 10px;">
-          <button type="button" class="btn btn-secondary" onclick="closeLogisticsModal()">取消</button>
-          <button type="submit" class="btn btn-primary">保存国际物流记录</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- 粘贴排表 Modal -->
+  <!-- 粘贴表格文本导入 Modal Overlay -->
   <div class="modal-overlay" id="pasteModal">
     <div class="modal" style="max-width: 650px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <h3 style="font-size: 1.1rem; font-weight: 700;">📋 粘贴 Excel / WPS 表格文本导入</h3>
         <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closePasteModal()">✕</button>
       </div>
-      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">提示：从 Excel / WPS 表格中复制包含【种类/谷名、单价、团员 CN 及数量】的内容，直接粘贴在下方框中解析导入：</p>
-      <textarea id="pasteInputText" rows="10" placeholder="直接粘贴 Excel 表格复制内容（含制表符分隔）..." style="font-family: monospace; font-size: 0.82rem; margin-bottom: 12px; resize: vertical;"></textarea>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">
+        提示：从 Excel / WPS 表格中复制包含【种类/谷名、单价、团员 CN 及数量】的内容，直接粘贴在下方框中解析导入：
+      </p>
+      <textarea id="pasteInputText" rows="10" placeholder="直接粘贴 Excel 表格复制内容（含制表符 \t 分隔）..." style="font-family: monospace; font-size: 0.82rem; margin-bottom: 12px; resize: vertical;"></textarea>
       <div style="display: flex; justify-content: flex-end; gap: 8px;">
         <button class="btn btn-secondary" onclick="closePasteModal()">取消</button>
         <button class="btn btn-primary" onclick="submitPasteImport()">解析并导入 group_data</button>
@@ -445,114 +872,14 @@
     </div>
   </div>
 
-  <!-- 国际肾表管理 Modal -->
-  <div class="modal-overlay" id="feeModal">
-    <div class="modal modal-large">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 id="feeModalTitle" style="font-size: 1.15rem; font-weight: 700;">💰 管理国际肾表</h3>
-        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeFeeModal()">✕</button>
-      </div>
-      <div class="fee-stats" id="feeStatsContainer"></div>
-      <div class="fee-panel-section">
-        <div class="fee-panel-title">📥 导入当前批次缴费表</div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center;">
-          <select id="feeImportDefaultStatus" style="width: 130px; padding: 6px 10px; font-size: 0.85rem; border: 1px solid var(--border); border-radius: 6px;">
-            <option value="未交">默认: 未交</option>
-            <option value="已交">默认: 已交</option>
-            <option value="免交">默认: 免交</option>
-          </select>
-          <label class="btn btn-success" style="cursor: pointer; margin: 0;">
-            📁 导入 Excel (支持多Sheet)
-            <input type="file" id="feeExcelInput" accept=".xlsx,.xls,.csv" style="display: none;" onchange="handleFeeExcelImport(event)">
-          </label>
-          <button class="btn btn-secondary" onclick="openFeePasteModal()">📋 粘贴表格数据</button>
-        </div>
-      </div>
-      <div class="fee-panel-section">
-        <div class="fee-panel-title">➕ 手动添加团员</div>
-        <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));">
-          <div class="form-group"><label>圈名(CN)</label><input type="text" id="feeInputCn" placeholder="如：小明"></div>
-          <div class="form-group"><label>应交金额</label><input type="number" id="feeInputDue" step="0.001" placeholder="0.00"></div>
-          <div class="form-group"><label>实交金额</label><input type="number" id="feeInputPaid" step="0.001" value="0"></div>
-          <div class="form-group"><label>状态</label><select id="feeInputStatus"><option value="未交">未交</option><option value="已交">已交</option><option value="免交">免交</option></select></div>
-          <div class="form-group"><label>备注</label><input type="text" id="feeInputNote" placeholder="可选"></div>
-        </div>
-        <button class="btn btn-primary" onclick="addFeeMember()" style="margin-top: 8px;">添加团员记录</button>
-      </div>
-      <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
-        <input type="text" id="feeFilterSearch" placeholder="搜索圈名..." style="max-width: 200px;" oninput="renderFeeMembers()">
-        <select id="feeFilterStatus" style="max-width: 140px;" onchange="renderFeeMembers()">
-          <option value="">全部状态</option>
-          <option value="未交">未交</option>
-          <option value="已交">已交</option>
-          <option value="免交">免交</option>
-        </select>
-        <button class="btn btn-secondary" onclick="batchFeeMark('已交')">批量标已交</button>
-        <button class="btn btn-secondary" onclick="batchFeeMark('未交')">批量标未交</button>
-        <button class="btn btn-secondary" onclick="batchFeeMark('免交')">批量标免交</button>
-        <button class="btn btn-danger" onclick="batchFeeDelete()">批量删除</button>
-      </div>
-      <div class="table-container desktop-table-view">
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 40px;"><input type="checkbox" id="feeSelectAll" onchange="toggleFeeSelectAll(this)"></th>
-              <th>圈名</th><th>应交金额</th><th>实交金额</th><th>缴费状态</th><th>备注</th><th>操作</th>
-            </tr>
-          </thead>
-          <tbody id="feeTableBody"></tbody>
-        </table>
-      </div>
-      <div class="mobile-cards-view" id="feeMobileCardsView"></div>
-    </div>
-  </div>
-
-  <!-- 粘贴肾表 Modal (支持智能识别批次 & 三列并排) -->
-  <div class="modal-overlay" id="feePasteModal">
-    <div class="modal modal-large">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="font-size: 1.1rem; font-weight: 700;">📋 粘贴肾表数据导入 (三列并排多团员)</h3>
-        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeFeePasteModal()">✕</button>
-      </div>
-      
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-        <div>
-          <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">目标物流批次：</label>
-          <select id="feePasteBatchSelect" style="margin-top: 4px;">
-            <!-- JS 动态填入现有批次，支持新建 -->
-          </select>
-        </div>
-        <div>
-          <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">默认缴费状态：</label>
-          <select id="feePasteDefaultStatus" style="margin-top: 4px;">
-            <option value="未交">未交</option>
-            <option value="已交">已交</option>
-            <option value="免交">免交</option>
-          </select>
-        </div>
-      </div>
-
-      <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 6px;">
-        💡 <strong>支持直接复制 Excel 整表</strong>：第 1 行批次名、第 3 行表头、第 4 行起数据（每 3 列提取一组：CN + 重量 + 金额），系统自动提取第 3 列金额！
-      </p>
-      <textarea id="feePasteInput" rows="9" placeholder="直接粘贴从 Excel 复制的内容，例如：
-台湾国际 0.08/g ddl4.5
-cn	重量	金额	cn	重量	金额	cn	重量	金额
-yukio	7.3	0.584	星辞	10.4	0.832	吕阿草	14.5	1.16
-酚酞	2.2	0.176	陆生	9.7	0.776	rats	26.2	2.096" style="font-family: monospace; font-size: 0.82rem; margin-bottom: 12px; resize: vertical;"></textarea>
-      
-      <div style="display: flex; justify-content: flex-end; gap: 8px;">
-        <button class="btn btn-secondary" onclick="closeFeePasteModal()">取消</button>
-        <button class="btn btn-primary" onclick="submitFeePasteImport()">解析并导入此批次</button>
-      </div>
-    </div>
-  </div>
-
+  <!-- Toast -->
   <div class="toast" id="toast"></div>
 
   <script>
     const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
+    const SUPABASE_ANON_KEY = SUPABASE_KEY;
+
     const supabaseClient = (window.supabase || supabase).createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let CURRENT_RECORD_ID = null;
@@ -560,13 +887,13 @@ yukio	7.3	0.584	星辞	10.4	0.832	吕阿草	14.5	1.16
     let RAW_ITEMS = [];
     let RAW_APPLICATIONS = [];
     let RAW_LOGS = [];
-    let RAW_LOGISTICS = [];
+    let RAW_FEEDBACK = [];
     let CURRENT_DISPATCH_SUBTAB = 'pending';
 
     window.ITEM_CACHE = [];
     window.APP_CACHE = [];
     window.LOG_CACHE = [];
-    window.LOGISTICS_CACHE = [];
+    window.FEEDBACK_CACHE = [];
 
     window.addEventListener('DOMContentLoaded', () => {
       const savedKey = localStorage.getItem('ADMIN_QUERY_KEY');
@@ -585,19 +912,32 @@ yukio	7.3	0.584	星辞	10.4	0.832	吕阿草	14.5	1.16
     }
 
     async function login() {
-      const emailEl = document.getElementById('email');
-      const passwordEl = document.getElementById('password');
+      const emailEl = document.getElementById('email') || document.getElementById('loginEmail');
+      const passwordEl = document.getElementById('password') || document.getElementById('loginPassword');
       const email = emailEl ? emailEl.value.trim() : '';
       const password = passwordEl ? passwordEl.value.trim() : '';
-      if (!email || !password) { alert('请填写邮箱和密码！'); return; }
+
+      if (!email || !password) {
+        alert('请填写邮箱和密码！');
+        return;
+      }
+
       try {
         const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-        if (error) { alert('登录失败: ' + error.message); return; }
+        if (error) {
+          alert('登录失败: ' + error.message);
+          return;
+        }
+
         showToast('🎉 登录成功！');
         document.getElementById('authOverlay').classList.remove('active');
-        document.getElementById('userEmailSpan').innerText = '已登录: ' + data.user.email;
+        if (document.getElementById('userEmailSpan')) {
+          document.getElementById('userEmailSpan').innerText = `已登录: ${data.user.email}`;
+        }
         loadDataByQueryKey();
-      } catch (err) { alert('登录失败: ' + err.message); }
+      } catch (err) {
+        alert('登录失败，请检查网络或配置: ' + err.message);
+      }
     }
     window.login = login;
 
@@ -606,19 +946,21 @@ yukio	7.3	0.584	星辞	10.4	0.832	吕阿草	14.5	1.16
         const { data: { session } } = await supabaseClient.auth.getSession();
         if (session && session.user) {
           document.getElementById('authOverlay').classList.remove('active');
-          document.getElementById('userEmailSpan').innerText = '已登录: ' + session.user.email;
+          document.getElementById('userEmailSpan').innerText = `已登录: ${session.user.email}`;
           loadDataByQueryKey();
         } else {
           document.getElementById('authOverlay').classList.add('active');
-          document.getElementById('userEmailSpan').innerText = '未登录';
+          document.getElementById('userEmailSpan').innerText = `未登录`;
         }
-      } catch (e) { document.getElementById('authOverlay').classList.add('active'); }
+      } catch (e) {
+        document.getElementById('authOverlay').classList.add('active');
+      }
     }
 
     async function handleSignOut() {
       await supabaseClient.auth.signOut();
       document.getElementById('authOverlay').classList.add('active');
-      document.getElementById('userEmailSpan').innerText = '未登录';
+      document.getElementById('userEmailSpan').innerText = `未登录`;
       showToast('已退出登录');
     }
     window.handleSignOut = handleSignOut;
@@ -626,98 +968,214 @@ yukio	7.3	0.584	星辞	10.4	0.832	吕阿草	14.5	1.16
     function switchTab(tabId) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      if (event && event.currentTarget) { event.currentTarget.classList.add('active'); }
-      else {
-        const btns = document.querySelectorAll('.tab-btn');
-        btns.forEach(b => { if (b.getAttribute('onclick') && b.getAttribute('onclick').includes(tabId)) b.classList.add('active'); });
+
+      if (event && event.currentTarget) {
+        event.currentTarget.classList.add('active');
       }
       const targetEl = document.getElementById(tabId);
       if (targetEl) targetEl.classList.add('active');
+
       if (tabId === 'tabItems') renderTable();
-      if (tabId === 'tabLogistics') renderLogisticsList();
       if (tabId === 'tabDispatch') renderDispatchWorkbench();
       if (tabId === 'tabLogs') renderTransferLogs();
+      if (tabId === 'tabFeedback') renderFeedbackList();
     }
     window.switchTab = switchTab;
 
     async function loadDataByQueryKey() {
       const keyInput = document.getElementById('adminQueryKey').value.trim();
       if (!keyInput) return showToast('请输入 Query Key！');
+
       CURRENT_QUERY_KEY = keyInput;
       localStorage.setItem('ADMIN_QUERY_KEY', CURRENT_QUERY_KEY);
+
       try {
-        const { data, error } = await supabaseClient.from('leader_data').select('*').eq('query_key', CURRENT_QUERY_KEY);
-        if (error) { showToast('读取 leader_data 失败: ' + error.message); return; }
+        const { data, error } = await supabaseClient
+          .from('leader_data')
+          .select('*')
+          .eq('query_key', CURRENT_QUERY_KEY);
+
+        if (error) {
+          showToast('读取 leader_data 失败: ' + error.message);
+          return;
+        }
+
         if (!data || data.length === 0) {
-          CURRENT_RECORD_ID = null; RAW_ITEMS = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_LOGISTICS = [];
-          renderTable(); renderLogisticsList(); renderDispatchWorkbench(); renderTransferLogs();
-          alert('该密钥暂无数据，请联系团长初始化！'); showToast('该密钥暂无数据，请联系团长初始化！'); return;
+          CURRENT_RECORD_ID = null;
+          RAW_ITEMS = [];
+          RAW_APPLICATIONS = [];
+          RAW_LOGS = [];
+          RAW_FEEDBACK = [];
+          renderTable();
+          renderDispatchWorkbench();
+          renderTransferLogs();
+          renderFeedbackList();
+          alert('该密钥暂无数据，请联系团长初始化！');
+          return;
         } else {
-          const rec = data[0]; CURRENT_RECORD_ID = rec.id;
+          const rec = data[0];
+          CURRENT_RECORD_ID = rec.id;
+
           let gData = rec.group_data;
-          if (typeof gData === 'string') { try { gData = JSON.parse(gData); } catch (e) { gData = []; } }
+          if (typeof gData === 'string') {
+            try { gData = JSON.parse(gData); } catch (e) { gData = []; }
+          }
           RAW_ITEMS = Array.isArray(gData) ? gData : [];
+
           let iData = rec.image_data;
-          if (typeof iData === 'string') { try { iData = JSON.parse(iData); } catch (e) { iData = {}; } }
+          if (typeof iData === 'string') {
+            try { iData = JSON.parse(iData); } catch (e) { iData = {}; }
+          }
           if (!iData || typeof iData !== 'object') iData = {};
           RAW_APPLICATIONS = Array.isArray(iData.applications) ? iData.applications : [];
           RAW_LOGS = Array.isArray(iData.transfer_logs) ? iData.transfer_logs : [];
-          RAW_LOGISTICS = Array.isArray(iData.logistics_data) ? iData.logistics_data : [];
-          showToast('已加载 Key [' + CURRENT_QUERY_KEY + '] 的团务数据 (' + RAW_ITEMS.length + ' 条谷子)');
+          RAW_FEEDBACK = Array.isArray(iData.feedback) ? iData.feedback : [];
+
+          showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)`);
         }
-        renderTable(); renderLogisticsList(); renderDispatchWorkbench(); renderTransferLogs();
-      } catch (err) { showToast('数据加载网络异常'); }
+
+        renderTable();
+        renderDispatchWorkbench();
+        renderTransferLogs();
+        renderFeedbackList();
+      } catch (err) {
+        showToast('数据加载网络异常');
+      }
     }
     window.loadDataByQueryKey = loadDataByQueryKey;
 
     async function saveDataToSupabase() {
       if (!CURRENT_QUERY_KEY) return showToast('未指定 Query Key');
+
       try {
-        const { data: existing, error: queryErr } = await supabaseClient.from('leader_data').select('id').eq('query_key', CURRENT_QUERY_KEY);
-        if (queryErr) { showToast('查询密钥记录失败: ' + queryErr.message); return false; }
+        const { data: existing, error: queryErr } = await supabaseClient
+          .from('leader_data')
+          .select('id')
+          .eq('query_key', CURRENT_QUERY_KEY);
+
+        if (queryErr) {
+          showToast('查询密钥记录失败: ' + queryErr.message);
+          return false;
+        }
+
         const payload = {
           group_data: RAW_ITEMS,
-          image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, logistics_data: RAW_LOGISTICS }
+          image_data: {
+            applications: RAW_APPLICATIONS,
+            transfer_logs: RAW_LOGS,
+            feedback: RAW_FEEDBACK
+          }
         };
+
         if (existing && existing.length > 0) {
-          const recId = existing[0].id; CURRENT_RECORD_ID = recId;
-          const { error: updateErr } = await supabaseClient.from('leader_data').update(payload).eq('id', recId);
-          if (updateErr) { showToast('保存到 Supabase 失败: ' + updateErr.message); return false; }
+          const recId = existing[0].id;
+          CURRENT_RECORD_ID = recId;
+
+          const { error: updateErr } = await supabaseClient
+            .from('leader_data')
+            .update(payload)
+            .eq('id', recId);
+
+          if (updateErr) {
+            showToast('保存到 Supabase 失败: ' + updateErr.message);
+            return false;
+          }
           return true;
         } else {
-          alert('该密钥暂无数据，请联系团长初始化！'); showToast('该密钥暂无数据，请联系团长初始化！'); return false;
+          alert('该密钥暂无数据，请联系团长初始化！');
+          return false;
         }
-      } catch (err) { showToast('保存失败，网络或系统异常'); return false; }
+      } catch (err) {
+        showToast('保存失败，网络或系统异常');
+        return false;
+      }
     }
 
+    /* --- 标签页 1：排表管理逻辑 --- */
     function renderTable() {
       const tbody = document.getElementById('itemsTableBody');
       const mobileCardsView = document.getElementById('adminMobileCardsView');
       const searchVal = document.getElementById('filterSearch').value.trim().toLowerCase();
       const countryVal = document.getElementById('filterCountry').value;
       const statusVal = document.getElementById('filterStatus').value;
+
       const filtered = RAW_ITEMS.filter(item => {
         const nameMatch = (item.name || '').toLowerCase().includes(searchVal);
         const cnMatch = (item.cn || '').toLowerCase().includes(searchVal);
         const matchSearch = nameMatch || cnMatch;
+
         const matchCountry = !countryVal || (item.country || item.region) === countryVal;
         const matchStatus = !statusVal || item.status === statusVal;
+
         return matchSearch && matchCountry && matchStatus;
       });
+
       window.ITEM_CACHE = filtered;
+
       if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</td></tr>';
-        if (mobileCardsView) mobileCardsView.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</div>';
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</td></tr>`;
+        if (mobileCardsView) mobileCardsView.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</div>`;
         return;
       }
-      let html = ''; let cardsHtml = '';
+
+      let html = '';
+      let cardsHtml = '';
       filtered.forEach((item, index) => {
-        const imgTag = item.image_url ? '<img src="' + escapeHtml(item.image_url) + '" class="img-preview" alt="谷子">' : '<span style="color:#cbd5e1;font-size:0.75rem;">无图</span>';
-        const mobileImgTag = item.image_url ? '<img src="' + escapeHtml(item.image_url) + '" class="admin-card-mobile-img" alt="谷子">' : '<div class="admin-card-mobile-noimg">无图</div>';
+        const imgTag = item.image_url 
+          ? `<img src="${escapeHtml(item.image_url)}" class="img-preview" alt="谷子">`
+          : `<span style="color:#cbd5e1;font-size:0.75rem;">无图</span>`;
+
+        const mobileImgTag = item.image_url
+          ? `<img src="${escapeHtml(item.image_url)}" class="admin-card-mobile-img" alt="谷子">`
+          : `<div class="admin-card-mobile-noimg">无图</div>`;
+
         const countryStr = item.country || item.region || '日本';
-        html += '<tr><td><input type="checkbox" class="item-checkbox" value="' + index + '"></td><td>' + imgTag + '</td><td style="font-weight:600;">' + escapeHtml(item.name) + '</td><td><strong>' + escapeHtml(item.cn) + '</strong></td><td>￥' + Number(item.price || 0).toFixed(2) + '</td><td>' + (item.quantity || 1) + '</td><td><span class="badge badge-country">' + escapeHtml(countryStr) + '</span></td><td><span class="badge badge-status-' + (item.status || '未出荷') + '">' + escapeHtml(item.status || '未出荷') + '</span></td><td><button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editItemByIndex(' + index + ')">编辑</button> <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="transferSingleByIndex(' + index + ')">转单</button></td></tr>';
-        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><div style="display:flex; align-items:center; gap:8px;"><input type="checkbox" class="item-checkbox" value="' + index + '"><span class="badge badge-country">' + escapeHtml(countryStr) + '</span></div><span class="badge badge-status-' + (item.status || '未出荷') + '">' + escapeHtml(item.status || '未出荷') + '</span></div><div class="admin-card-mobile-body">' + mobileImgTag + '<div class="admin-card-mobile-info"><div class="admin-card-mobile-title">' + escapeHtml(item.name || '未命名') + '</div><div class="admin-card-mobile-meta"><span>CN: <strong>' + escapeHtml(item.cn || '无') + '</strong></span><span>￥' + Number(item.price || 0).toFixed(2) + '</span><span>x' + (item.quantity || 1) + '</span></div></div></div><div class="admin-card-mobile-actions"><button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="editItemByIndex(' + index + ')">✏️ 编辑</button><button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="transferSingleByIndex(' + index + ')">🔄 转单</button></div></div>';
+
+        html += `
+          <tr>
+            <td><input type="checkbox" class="item-checkbox" value="${index}"></td>
+            <td>${imgTag}</td>
+            <td style="font-weight:600;">${escapeHtml(item.name)}</td>
+            <td><strong>${escapeHtml(item.cn)}</strong></td>
+            <td>￥${Number(item.price || 0).toFixed(2)}</td>
+            <td>${item.quantity || 1}</td>
+            <td><span class="badge badge-country">${escapeHtml(countryStr)}</span></td>
+            <td><span class="badge badge-status-${item.status || '未出荷'}">${escapeHtml(item.status || '未出荷')}</span></td>
+            <td>
+              <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editItemByIndex(${index})">编辑</button>
+              <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="transferSingleByIndex(${index})">转单</button>
+            </td>
+          </tr>
+        `;
+
+        cardsHtml += `
+          <div class="admin-card-mobile">
+            <div class="admin-card-mobile-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" class="item-checkbox" value="${index}">
+                <span class="badge badge-country">${escapeHtml(countryStr)}</span>
+              </div>
+              <span class="badge badge-status-${item.status || '未出荷'}">${escapeHtml(item.status || '未出荷')}</span>
+            </div>
+            <div class="admin-card-mobile-body">
+              ${mobileImgTag}
+              <div class="admin-card-mobile-info">
+                <div class="admin-card-mobile-title">${escapeHtml(item.name || '未命名')}</div>
+                <div class="admin-card-mobile-meta">
+                  <span>CN: <strong>${escapeHtml(item.cn || '无')}</strong></span>
+                  <span>￥${Number(item.price || 0).toFixed(2)}</span>
+                  <span>x${item.quantity || 1}</span>
+                </div>
+              </div>
+            </div>
+            <div class="admin-card-mobile-actions">
+              <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="editItemByIndex(${index})">✏️ 编辑</button>
+              <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="transferSingleByIndex(${index})">🔄 转单</button>
+            </div>
+          </div>
+        `;
       });
+
       tbody.innerHTML = html;
       if (mobileCardsView) mobileCardsView.innerHTML = cardsHtml;
     }
@@ -730,19 +1188,34 @@ yukio	7.3	0.584	星辞	10.4	0.832	吕阿草	14.5	1.16
       const quantity = parseInt(document.getElementById('inputQuantity').value) || 1;
       const country = document.getElementById('inputCountry').value;
       const status = document.getElementById('inputStatus').value;
+
       if (!name || !cn) return showToast('请填写谷子名称和 CN！');
+
       if (editId) {
         const idx = RAW_ITEMS.findIndex(i => String(i.item_id || i.id) === String(editId));
-        if (idx !== -1) RAW_ITEMS[idx] = { ...RAW_ITEMS[idx], name, cn, price, quantity, country, status };
+        if (idx !== -1) {
+          RAW_ITEMS[idx] = { ...RAW_ITEMS[idx], name, cn, price, quantity, country, status };
+        }
       } else {
-        RAW_ITEMS.unshift({ item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random()*1000), name, cn, price, quantity, country, status, image_url: '' });
+        const newItem = {
+          item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random()*1000),
+          name, cn, price, quantity, country, status,
+          image_url: ''
+        };
+        RAW_ITEMS.unshift(newItem);
       }
-      await saveDataToSupabase(); clearForm(); renderTable(); showToast('已保存至 group_data！');
+
+      await saveDataToSupabase();
+      clearForm();
+      renderTable();
+      showToast('已保存至 group_data！');
     }
     window.saveItemForm = saveItemForm;
 
     function editItemByIndex(index) {
-      const item = window.ITEM_CACHE[index]; if (!item) return;
+      const item = window.ITEM_CACHE[index];
+      if (!item) return;
+
       document.getElementById('editItemId').value = item.item_id || item.id;
       document.getElementById('inputName').value = item.name || '';
       document.getElementById('inputCn').value = item.cn || '';
@@ -750,6 +1223,7 @@ yukio	7.3	0.584	星辞	10.4	0.832	吕阿草	14.5	1.16
       document.getElementById('inputQuantity').value = item.quantity || 1;
       document.getElementById('inputCountry').value = item.country || item.region || '日本';
       document.getElementById('inputStatus').value = item.status || '未出荷';
+
       document.getElementById('formTitle').innerText = '✏️ 修改谷子信息';
       document.getElementById('btnClearForm').style.display = 'inline-block';
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -768,178 +1242,182 @@ yukio	7.3	0.584	星辞	10.4	0.832	吕阿草	14.5	1.16
       const item = window.ITEM_CACHE[index];
       if (!item) return;
 
-      const currentQty = parseInt(item.quantity) || 1;
-      const oldCn = item.cn || '未命名';
+      const newCn = prompt(`将谷子「${item.name}」从原 CN [${item.cn}] 转单给哪位新 CN？`);
+      if (!newCn || !newCn.trim()) return;
 
-      // 1. 输入新 CN
-      const newCn = prompt(`将谷子「${item.name}」从原 CN [${oldCn}] 转单给哪位新 CN？`);
-      if (newCn === null) return;
-      const trimmedCn = newCn.trim();
-      if (!trimmedCn) {
-        showToast('⚠️ 新 CN 不能为空！');
-        return;
-      }
+      const oldCn = item.cn;
+      item.cn = newCn.trim();
 
-      // 2. 输入转单数量（默认填当前持有的全部数量）
-      const qtyInput = prompt(`请输入转单数量：\n（团员 [${oldCn}] 当前持有 ${currentQty} 个）`, currentQty);
-      if (qtyInput === null) return;
-
-      const transferQty = parseInt(qtyInput.trim());
-
-      // 3. 校验数量
-      if (isNaN(transferQty) || transferQty <= 0) {
-        alert('⚠️ 转单数量必须是大于 0 的有效整数！');
-        return;
-      }
-      if (transferQty > currentQty) {
-        alert(`⚠️ 转单数量不能超过当前持有数量！（当前仅持有 ${currentQty} 个）`);
-        return;
-      }
-
-      // 4. 执行转单
-      if (transferQty === currentQty) {
-        // 全部转走：直接改名字
-        item.cn = trimmedCn;
-      } else {
-        // 转走一部分：原谷子扣减数量，生成一条新记录给新 CN
-        item.quantity = currentQty - transferQty;
-        const newItem = {
-          ...item,
-          item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-          cn: trimmedCn,
-          quantity: transferQty,
-          created_at: new Date().toISOString()
-        };
-        RAW_ITEMS.unshift(newItem);
-      }
-
-      // 5. 写入转单日志
       RAW_LOGS.unshift({
-        id: 'log_' + Date.now() + '_' + Math.floor(Math.random() * 100),
+        id: 'log_' + Date.now(),
         time: new Date().toLocaleString('zh-CN'),
         from_cn: oldCn,
-        to_cn: trimmedCn,
+        to_cn: item.cn,
         item_name: item.name,
-        quantity: transferQty
+        quantity: item.quantity || 1
       });
 
-      // 6. 保存并刷新
       await saveDataToSupabase();
       renderTable();
       renderTransferLogs();
-
-      showToast(`🎉 成功将 ${transferQty} 个「${item.name}」转给 [${trimmedCn}]！`);
+      showToast('转单成功！');
     }
     window.transferSingleByIndex = transferSingleByIndex;
-    function toggleSelectAll(master) { document.querySelectorAll('.item-checkbox').forEach(cb => cb.checked = master.checked); }
+
+    function toggleSelectAll(master) {
+      const checkboxes = document.querySelectorAll('.item-checkbox');
+      checkboxes.forEach(cb => cb.checked = master.checked);
+    }
     window.toggleSelectAll = toggleSelectAll;
 
     function getSelectedCacheItems() {
+      const checkboxes = document.querySelectorAll('.item-checkbox:checked');
       const selected = [];
-      document.querySelectorAll('.item-checkbox:checked').forEach(cb => {
-        const idx = parseInt(cb.value); if (window.ITEM_CACHE[idx]) selected.push(window.ITEM_CACHE[idx]);
+      checkboxes.forEach(cb => {
+        const idx = parseInt(cb.value);
+        if (window.ITEM_CACHE[idx]) selected.push(window.ITEM_CACHE[idx]);
       });
       return selected;
     }
 
     async function batchTransferModal() {
-      const selected = getSelectedCacheItems(); if (selected.length === 0) return showToast('请先勾选要转单的谷子！');
-      const newCn = prompt('共选中 ' + selected.length + ' 件谷子，请输入转入的新 CN：'); if (!newCn || !newCn.trim()) return;
+      const selected = getSelectedCacheItems();
+      if (selected.length === 0) return showToast('请先勾选要转单的谷子！');
+
+      const newCn = prompt(`共选中 ${selected.length} 件谷子，请输入转入的新 CN：`);
+      if (!newCn || !newCn.trim()) return;
+
       selected.forEach(item => {
-        const oldCn = item.cn; item.cn = newCn.trim();
-        RAW_LOGS.unshift({ id: 'log_' + Date.now() + '_' + Math.floor(Math.random()*100), time: new Date().toLocaleString('zh-CN'), from_cn: oldCn, to_cn: item.cn, item_name: item.name, quantity: item.quantity || 1 });
+        const oldCn = item.cn;
+        item.cn = newCn.trim();
+        RAW_LOGS.unshift({
+          id: 'log_' + Date.now() + '_' + Math.floor(Math.random()*100),
+          time: new Date().toLocaleString('zh-CN'),
+          from_cn: oldCn,
+          to_cn: item.cn,
+          item_name: item.name,
+          quantity: item.quantity || 1
+        });
       });
-      await saveDataToSupabase(); renderTable(); renderTransferLogs(); showToast('已成功将 ' + selected.length + ' 件谷子转单给 CN [' + newCn.trim() + ']');
+
+      await saveDataToSupabase();
+      renderTable();
+      renderTransferLogs();
+      showToast(`已成功将 ${selected.length} 件谷子转单给 CN [${newCn.trim()}]`);
     }
     window.batchTransferModal = batchTransferModal;
 
     async function batchChangeStatusModal() {
-      const selected = getSelectedCacheItems(); if (selected.length === 0) return showToast('请先勾选要修改的谷子！');
-      const status = prompt('请输入新状态（未出荷/已下单未到货/回国中/已到货/可排发/已申请发货/已排发/未付款）：'); if (!status || !status.trim()) return;
-      selected.forEach(i => i.status = status.trim()); await saveDataToSupabase(); renderTable(); showToast('状态更新成功！');
+      const selected = getSelectedCacheItems();
+      if (selected.length === 0) return showToast('请先勾选要修改的谷子！');
+
+      const status = prompt('请输入新状态（未出荷/已下单未到货/回国中/已到货/可排发/已申请发货/已排发/未付款）：');
+      if (!status || !status.trim()) return;
+
+      selected.forEach(i => i.status = status.trim());
+      await saveDataToSupabase();
+      renderTable();
+      showToast('状态更新成功！');
     }
     window.batchChangeStatusModal = batchChangeStatusModal;
 
     async function batchChangeCountryModal() {
-      const selected = getSelectedCacheItems(); if (selected.length === 0) return showToast('请先勾选要修改的谷子！');
-      const country = prompt('请输入新地区 country（日本 / 闲鱼 / 淘宝店 / 美国 / 韩国 / 印尼 / 泰国 / 台湾）：'); if (!country || !country.trim()) return;
-      selected.forEach(i => i.country = country.trim()); await saveDataToSupabase(); renderTable(); showToast('地区更新成功！');
+      const selected = getSelectedCacheItems();
+      if (selected.length === 0) return showToast('请先勾选要修改的谷子！');
+
+      const country = prompt('请输入新地区 country（日本 / 闲鱼 / 淘宝店 / 美国 / 韩国 / 印尼 / 泰国 / 台湾）：');
+      if (!country || !country.trim()) return;
+
+      selected.forEach(i => i.country = country.trim());
+      await saveDataToSupabase();
+      renderTable();
+      showToast('地区更新成功！');
     }
     window.batchChangeCountryModal = batchChangeCountryModal;
 
     async function batchSetImgModal() {
-      const selected = getSelectedCacheItems(); if (selected.length === 0) return showToast('请先勾选要补图的谷子！');
-      const url = prompt('请输入图片 URL 链接：'); if (!url) return;
-      selected.forEach(i => i.image_url = url.trim()); await saveDataToSupabase(); renderTable(); showToast('批量补图成功！');
+      const selected = getSelectedCacheItems();
+      if (selected.length === 0) return showToast('请先勾选要补图的谷子！');
+
+      const url = prompt('请输入图片 URL 链接：');
+      if (!url) return;
+
+      selected.forEach(i => i.image_url = url.trim());
+      await saveDataToSupabase();
+      renderTable();
+      showToast('批量补图成功！');
     }
     window.batchSetImgModal = batchSetImgModal;
 
     async function batchDeleteItems() {
-      const selected = getSelectedCacheItems(); if (selected.length === 0) return showToast('请先勾选要删除的谷子！');
-      if (!confirm('确定彻底删除选中的 ' + selected.length + ' 件谷子吗？此操作不可恢复！')) return;
+      const selected = getSelectedCacheItems();
+      if (selected.length === 0) return showToast('请先勾选要删除的谷子！');
+
+      if (!confirm(`确定彻底删除选中的 ${selected.length} 件谷子吗？此操作不可恢复！`)) return;
+
       const deleteIds = new Set(selected.map(i => String(i.item_id || i.id)));
       RAW_ITEMS = RAW_ITEMS.filter(i => !deleteIds.has(String(i.item_id || i.id)));
-      await saveDataToSupabase(); renderTable(); showToast('已从 group_data 中删除选中谷子！');
+
+      await saveDataToSupabase();
+      renderTable();
+      showToast('已从 group_data 中删除选中谷子！');
     }
     window.batchDeleteItems = batchDeleteItems;
 
     function parseMatrixImportText(raw, batchCountry) {
       if (!raw) return [];
-      const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-      if (lines.length < 2) return [];
-      let nameLineIdx = -1, priceLineIdx = -1, headerLineIdx = -1;
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (nameLineIdx === -1 && line.includes('种类')) nameLineIdx = i;
-        if (priceLineIdx === -1 && line.includes('单价')) priceLineIdx = i;
-        if (headerLineIdx === -1 && (line.includes('昵称') || line.includes('CN') || line.includes('总数'))) headerLineIdx = i;
-      }
-      if (nameLineIdx === -1) nameLineIdx = lines.length > 2 ? 2 : 1;
-      if (priceLineIdx === -1) priceLineIdx = lines.length > 3 ? 3 : nameLineIdx + 1;
-      if (headerLineIdx === -1) headerLineIdx = Math.max(nameLineIdx, priceLineIdx) + 1;
-      const nameCells = lines[nameLineIdx].split('\t');
-      let kindColIdx = nameCells.findIndex(c => c.trim().includes('种类'));
-      if (kindColIdx === -1) kindColIdx = 0;
-      const itemNamesWithOffset = [];
-      for (let col = kindColIdx + 1; col < nameCells.length; col++) {
-        const nameVal = nameCells[col]?.trim();
-        if (nameVal) itemNamesWithOffset.push({ name: nameVal, offset: col - (kindColIdx + 1) });
-      }
-      if (itemNamesWithOffset.length === 0) return [];
-      const priceCells = priceLineIdx < lines.length ? lines[priceLineIdx].split('\t') : [];
-      let priceColIdx = priceCells.findIndex(c => c.trim().includes('单价'));
-      if (priceColIdx === -1) priceColIdx = 0;
-      const prices = [];
-      for (let col = priceColIdx + 1; col < priceCells.length; col++) {
-        const p = parseFloat(priceCells[col]); prices.push(isNaN(p) ? 0 : p);
-      }
-      const dataStartIdx = headerLineIdx + 1; const items = [];
-      for (let i = dataStartIdx; i < lines.length; i++) {
-        const cells = lines[i].split('\t'); if (cells.length < 2) continue;
+      const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
+      if (lines.length < 5) return [];
+
+      const itemNames = lines[1].split('\t').slice(1);
+      const prices = lines[2].split('\t').slice(1).map(p => parseFloat(p) || 0);
+
+      const items = [];
+
+      for (let i = 4; i < lines.length; i++) {
+        const cells = lines[i].split('\t');
         const cn = cells[1]?.trim();
-        if (!cn || cn === "昵称/总数" || cn === "CN" || cn === "昵称" || cn === "总数" || cn.includes("昵称/总数")) continue;
-        itemNamesWithOffset.forEach((itemObj, idx) => {
-          const qtyColIdx = 2 + itemObj.offset; const qty = parseFloat(cells[qtyColIdx]);
-          if (!isNaN(qty) && qty > 0) {
-            items.push({ item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + idx, name: itemObj.name.trim(), country: batchCountry || '日本', price: prices[itemObj.offset] !== undefined ? prices[itemObj.offset] : (prices[idx] || 0), quantity: qty, cn: cn, status: "未出荷", image_url: "", created_at: new Date().toISOString() });
+        if (!cn || cn === "昵称/总数" || cn === "CN" || cn === "昵称") continue;
+
+        itemNames.forEach((name, idx) => {
+          if (!name || !name.trim()) return;
+          const qty = parseFloat(cells[idx + 2]);
+          if (qty > 0) {
+            items.push({
+              item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+              name: name.trim(),
+              country: batchCountry || '日本',
+              price: prices[idx] || 0,
+              quantity: qty,
+              cn: cn,
+              status: "未出荷",
+              image_url: "",
+              created_at: new Date().toISOString()
+            });
           }
         });
       }
+
       return items;
     }
     window.parseMatrixImportText = parseMatrixImportText;
 
     function handleExcelImport(e) {
-      const file = e.target.files[0]; if (!file) return;
+      const file = e.target.files[0];
+      if (!file) return;
+
       const defaultCountry = document.getElementById('excelDefaultCountry').value || '日本';
       const reader = new FileReader();
+
       reader.onload = async function(evt) {
         try {
           const data = new Uint8Array(evt.target.result);
           const workbook = XLSX.read(data, { type: 'array' });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+
           const csvText = XLSX.utils.sheet_to_csv(firstSheet, { FS: '\t' });
           let parsedItems = parseMatrixImportText(csvText, defaultCountry);
+
           if (parsedItems.length === 0) {
             const jsonRows = XLSX.utils.sheet_to_json(firstSheet);
             if (jsonRows && jsonRows.length > 0) {
@@ -947,763 +1425,525 @@ yukio	7.3	0.584	星辞	10.4	0.832	吕阿草	14.5	1.16
                 const name = row['谷子名称'] || row['名称'] || row['谷子'] || row['品名'];
                 const cn = row['认领CN'] || row['CN'] || row['姓名'] || row['圈名'];
                 if (name && cn) {
-                  parsedItems.push({ item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6), name: String(name).trim(), cn: String(cn).trim(), price: parseFloat(row['单价'] || row['价格'] || 0) || 0, quantity: parseInt(row['数量'] || 1) || 1, country: String(row['地区'] || row['country'] || defaultCountry).trim(), status: String(row['状态'] || '未出荷').trim(), image_url: row['图片'] || '', created_at: new Date().toISOString() });
+                  parsedItems.push({
+                    item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+                    name: String(name).trim(),
+                    cn: String(cn).trim(),
+                    price: parseFloat(row['单价'] || row['价格'] || 0) || 0,
+                    quantity: parseInt(row['数量'] || 1) || 1,
+                    country: String(row['地区'] || row['country'] || defaultCountry).trim(),
+                    status: String(row['状态'] || '未出荷').trim(),
+                    image_url: row['图片'] || '',
+                    created_at: new Date().toISOString()
+                  });
                 }
               });
             }
           }
-          if (parsedItems.length === 0) return showToast('Excel 表中未读取到有效谷子排单数据！请确认文件格式。');
-          RAW_ITEMS.push(...parsedItems); await saveDataToSupabase(); renderTable();
-          showToast('🎉 成功导入 ' + parsedItems.length + ' 条谷子记录到 group_data！');
+
+          if (parsedItems.length === 0) {
+            return showToast('Excel 表中未读取到有效谷子排单数据！请确认文件格式。');
+          }
+
+          RAW_ITEMS.push(...parsedItems);
+          await saveDataToSupabase();
+          renderTable();
+          showToast(`🎉 成功导入 ${parsedItems.length} 条谷子记录到 group_data！`);
           e.target.value = '';
-        } catch (err) { showToast('Excel 解析失败，请确认文件格式！'); }
+        } catch (err) {
+          console.error(err);
+          showToast('Excel 解析失败，请确认文件格式！');
+        }
       };
+
       reader.readAsArrayBuffer(file);
     }
     window.handleExcelImport = handleExcelImport;
 
-    function openPasteModal() { document.getElementById('pasteInputText').value = ''; document.getElementById('pasteModal').classList.add('active'); }
+    function openPasteModal() {
+      document.getElementById('pasteInputText').value = '';
+      document.getElementById('pasteModal').classList.add('active');
+    }
     window.openPasteModal = openPasteModal;
-    function closePasteModal() { document.getElementById('pasteModal').classList.remove('active'); }
+
+    function closePasteModal() {
+      document.getElementById('pasteModal').classList.remove('active');
+    }
     window.closePasteModal = closePasteModal;
 
     async function submitPasteImport() {
       const rawText = document.getElementById('pasteInputText').value;
-      if (!rawText || !rawText.trim()) return showToast('请先粘贴文本内容！');
+      if (!rawText || !rawText.trim()) {
+        return showToast('请先粘贴文本内容！');
+      }
+
       const defaultCountry = document.getElementById('excelDefaultCountry').value || '日本';
       const parsedItems = parseMatrixImportText(rawText, defaultCountry);
-      if (parsedItems.length === 0) return showToast('解析失败，未提取到有效排单数据！请检查粘贴内容格式。');
-      RAW_ITEMS.push(...parsedItems); await saveDataToSupabase(); renderTable(); closePasteModal();
-      showToast('🎉 成功解析并导入 ' + parsedItems.length + ' 条谷子记录到 group_data！');
+
+      if (parsedItems.length === 0) {
+        return showToast('解析失败，未提取到有效排单数据！请检查粘贴内容格式。');
+      }
+
+      RAW_ITEMS.push(...parsedItems);
+      await saveDataToSupabase();
+      renderTable();
+      closePasteModal();
+      showToast(`🎉 成功解析并导入 ${parsedItems.length} 条谷子记录到 group_data！`);
     }
     window.submitPasteImport = submitPasteImport;
 
-    /* --- 国际物流追踪逻辑 --- */
-
-    function getLogisticsStatusBadgeClass(status) {
-      const map = { '已发货': 'badge-log-已发货', '运输中': 'badge-log-运输中', '清关中': 'badge-log-清关中', '国内派送': 'badge-log-国内派送', '已签收': 'badge-log-已签收', '已到货': 'badge-log-已签收', '异常滞留': 'badge-log-异常滞留', '异常': 'badge-log-异常滞留', '滞留': 'badge-log-异常滞留' };
-      return map[status] || 'badge-log-运输中';
-    }
-
-    function renderLogisticsList() {
-      const tbody = document.getElementById('logisticsTableBody');
-      const mobileContainer = document.getElementById('logisticsCardsContainer');
-      const searchVal = (document.getElementById('logFilterSearch')?.value || '').trim().toLowerCase();
-      const countryVal = document.getElementById('logFilterCountry')?.value || '';
-      const statusVal = document.getElementById('logFilterStatus')?.value || '';
-      const filtered = RAW_LOGISTICS.filter(log => {
-        const batchMatch = (log.batch_name || '').toLowerCase().includes(searchVal);
-        const noteMatch = (log.note || '').toLowerCase().includes(searchVal);
-        const itemsMatch = (log.linked_items || []).some(it => String(it.name || it).toLowerCase().includes(searchVal));
-        const matchSearch = !searchVal || (batchMatch || noteMatch || itemsMatch);
-        const matchCountry = !countryVal || log.country === countryVal;
-        const matchStatus = !statusVal || log.status === statusVal;
-        return matchSearch && matchCountry && matchStatus;
-      });
-      window.LOGISTICS_CACHE = filtered;
-      if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--text-muted);">暂无匹配的国际物流记录</td></tr>';
-        if (mobileContainer) mobileContainer.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted);">暂无匹配的国际物流记录</div>';
-        return;
-      }
-      let html = ''; let cardsHtml = '';
-      filtered.forEach((log, index) => {
-        const badgeClass = getLogisticsStatusBadgeClass(log.status || '已发货');
-        let linkedPills = '';
-        if (Array.isArray(log.linked_items) && log.linked_items.length > 0) {
-          linkedPills = log.linked_items.map(it => { const name = typeof it === 'string' ? it : (it.name || '谷子'); const qty = it.quantity ? ' x' + it.quantity : ''; return '<span class="linked-item-pill" title="' + escapeHtml(name) + '">' + escapeHtml(name) + qty + '</span>'; }).join('');
-        } else { linkedPills = '<span style="color:var(--text-muted); font-size:0.75rem;">未指定</span>'; }
-        const dateStr = '发: ' + (log.ship_date || '-') + '<br><span style="color:var(--text-muted); font-size:0.75rem;">预: ' + (log.est_date || '-') + ' | 实: ' + (log.arr_date || '-') + '</span>';
-        const feeStr = log.fee ? '￥' + parseFloat(log.fee).toFixed(2) : '-';
-        const feeSummary = (function(log){ const ms=log.fee_members||[]; const t=ms.length; const p=ms.filter(m=>m.status==='已交').length; const u=ms.filter(m=>m.status==='未交').length; const f=ms.filter(m=>m.status==='免交').length; const td=ms.reduce((s,m)=>s+(parseFloat(m.amount_due)||0),0); const tp=ms.reduce((s,m)=>s+(parseFloat(m.amount_paid)||0),0); return {total:t,paid:p,unpaid:u,free:f,totalDue:td,totalPaid:tp}; })(log);
-        let feeColHtml = '';
-        if (feeSummary.total === 0) { feeColHtml = '<span style="font-size:0.75rem; color:var(--text-muted);">未建肾表</span>'; }
-        else { const allPaid = feeSummary.unpaid === 0 && feeSummary.total > 0; const c = allPaid ? 'color:var(--success);' : 'color:var(--danger);'; feeColHtml = '<div style="font-size:0.78rem; line-height:1.4;"><div style="' + c + ' font-weight:600;">' + feeSummary.paid + '/' + feeSummary.total + ' 人已交</div><div style="font-size:0.72rem; color:var(--text-muted);">实收: ￥' + feeSummary.totalPaid.toFixed(2) + ' / 应收: ￥' + feeSummary.totalDue.toFixed(2) + '</div></div>'; }
-        
-        html += '<tr><td><span class="badge ' + badgeClass + '">' + escapeHtml(log.status || '已发货') + '</span></td><td><div style="font-weight:600;">' + escapeHtml(log.batch_name || '-') + '</div></td><td><span class="badge badge-country">' + escapeHtml(log.country || '日本') + '</span></td><td style="max-width:240px; white-space:normal;">' + linkedPills + '</td><td style="font-size:0.8rem;">' + dateStr + '</td><td><strong>' + feeStr + '</strong></td><td style="min-width:110px;">' + feeColHtml + '</td><td style="max-width:160px; white-space:normal; font-size:0.8rem; color:var(--text-muted);">' + escapeHtml(log.note || '-') + '</td><td style="text-align: right;"><button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem; margin-bottom:2px;" onclick="openFeeModal(\'' + log.id + '\')">💰 肾表</button><br><button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editLogisticsByIndex(' + index + ')">编辑</button> <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogisticsByIndex(' + index + ')">删除</button></td></tr>';
-        
-        let feeMobileHtml = '';
-        if (feeSummary.total > 0) { const allPaid = feeSummary.unpaid === 0; const c = allPaid ? 'var(--success)' : 'var(--danger)'; feeMobileHtml = '<div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; padding:6px 8px; border-radius:6px; border:1px solid var(--border); font-size:0.8rem;"><span>💰 肾表: <strong style="color:' + c + ';">' + feeSummary.paid + '/' + feeSummary.total + ' 人已交</strong></span><span>实收 ￥' + feeSummary.totalPaid.toFixed(2) + '</span></div>'; }
-        
-        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><div style="display:flex; align-items:center; gap:8px;"><span class="badge badge-country">' + escapeHtml(log.country || '日本') + '</span><strong style="font-size:0.9rem;">' + escapeHtml(log.batch_name || '海外包裹') + '</strong></div><span class="badge ' + badgeClass + '">' + escapeHtml(log.status || '已发货') + '</span></div><div style="display:flex; flex-direction:column; gap:6px; font-size:0.85rem;"><div>关联谷子: <div>' + linkedPills + '</div></div>' + feeMobileHtml + '<div style="display:flex; justify-content:space-between; color:var(--text-muted); font-size:0.8rem;"><span>发货: ' + (log.ship_date || '-') + '</span><span>预达: ' + (log.est_date || '-') + '</span><span>费用: <strong>' + feeStr + '</strong></span></div>' + (log.note ? '<div style="font-size:0.8rem; background:#f8fafc; padding:6px; border-radius:4px; border:1px dashed var(--border);">📝 ' + escapeHtml(log.note) + '</div>' : '') + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openFeeModal(\'' + log.id + '\')">💰 管理肾表</button><button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="editLogisticsByIndex(' + index + ')">✏️ 编辑</button><button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteLogisticsByIndex(' + index + ')">🗑️ 删除</button></div></div>';
-      });
-      tbody.innerHTML = html;
-      if (mobileContainer) mobileContainer.innerHTML = cardsHtml;
-    }
-    window.renderLogisticsList = renderLogisticsList;
-
-    function populateLogisticsItemSelector(selectedNames) {
-      selectedNames = selectedNames || [];
-      const container = document.getElementById('logisticsItemSelector');
-      if (!container) return;
-      const itemSummaryMap = new Map();
-      RAW_ITEMS.forEach(it => {
-        const name = (it.name || '未命名谷子').trim();
-        const cur = itemSummaryMap.get(name) || { name: name, count: 0, country: it.country || '日本' };
-        cur.count += (it.quantity || 1); itemSummaryMap.set(name, cur);
-      });
-      if (itemSummaryMap.size === 0) { container.innerHTML = '<span style="font-size:0.8rem; color:var(--text-muted);">排表中暂无谷子，可稍后在排表录入后再关联</span>'; return; }
-      let html = '';
-      itemSummaryMap.forEach(item => {
-        const isChecked = selectedNames.some(s => (typeof s === 'string' ? s : s.name) === item.name);
-        html += '<label class="log-item-label" style="display:flex; align-items:center; gap:8px; font-size:0.82rem; cursor:pointer;"><input type="checkbox" class="log-item-chk" value="' + escapeHtml(item.name) + '" ' + (isChecked ? 'checked' : '') + '><span>' + escapeHtml(item.name) + ' <span style="color:var(--text-muted); font-size:0.75rem;">(排表总量:' + item.count + ' | ' + escapeHtml(item.country) + ')</span></span></label>';
-      });
-      container.innerHTML = html;
-    }
-
-    function filterLogisticsItemCheckboxes() {
-      const search = (document.getElementById('logItemSearch')?.value || '').trim().toLowerCase();
-      document.querySelectorAll('.log-item-label').forEach(lbl => { lbl.style.display = lbl.innerText.toLowerCase().includes(search) ? 'flex' : 'none'; });
-    }
-    window.filterLogisticsItemCheckboxes = filterLogisticsItemCheckboxes;
-
-    function openLogisticsModal() {
-      document.getElementById('logEditId').value = '';
-      document.getElementById('logisticsForm').reset();
-      document.getElementById('logisticsModalTitle').innerText = '➕ 新增国际物流';
-      populateLogisticsItemSelector([]);
-      document.getElementById('logisticsModal').classList.add('active');
-    }
-    window.openLogisticsModal = openLogisticsModal;
-
-    function closeLogisticsModal() { document.getElementById('logisticsModal').classList.remove('active'); }
-    window.closeLogisticsModal = closeLogisticsModal;
-
-    function editLogisticsByIndex(index) {
-      const log = window.LOGISTICS_CACHE[index]; if (!log) return;
-      document.getElementById('logEditId').value = log.id;
-      document.getElementById('logBatchName').value = log.batch_name || '';
-      document.getElementById('logCountry').value = log.country || '日本';
-      document.getElementById('logStatus').value = log.status || '已发货';
-      document.getElementById('logShipDate').value = log.ship_date || '';
-      document.getElementById('logEstDate').value = log.est_date || '';
-      document.getElementById('logArrDate').value = log.arr_date || '';
-      document.getElementById('logFee').value = log.fee || '';
-      document.getElementById('logNote').value = log.note || '';
-      populateLogisticsItemSelector(log.linked_items || []);
-      document.getElementById('logisticsModalTitle').innerText = '✏️ 编辑国际物流记录';
-      document.getElementById('logisticsModal').classList.add('active');
-    }
-    window.editLogisticsByIndex = editLogisticsByIndex;
-
-    async function handleSaveLogistics(e) {
-      e.preventDefault();
-      const editId = document.getElementById('logEditId').value;
-      const batch_name = document.getElementById('logBatchName').value.trim();
-      const country = document.getElementById('logCountry').value;
-      const status = document.getElementById('logStatus').value;
-      const ship_date = document.getElementById('logShipDate').value;
-      const est_date = document.getElementById('logEstDate').value;
-      const arr_date = document.getElementById('logArrDate').value;
-      const fee = document.getElementById('logFee').value;
-      const note = document.getElementById('logNote').value.trim();
-      if (!batch_name) return showToast('请填写批次名称！');
-      const checkedBoxes = document.querySelectorAll('.log-item-chk:checked');
-      const linked_items = Array.from(checkedBoxes).map(cb => ({ name: cb.value }));
-      const recordData = { batch_name, country, status, ship_date, est_date, arr_date, fee: fee ? parseFloat(fee) : 0, note, linked_items, updated_at: new Date().toISOString() };
-      if (editId) {
-        const idx = RAW_LOGISTICS.findIndex(l => String(l.id) === String(editId));
-        if (idx !== -1) RAW_LOGISTICS[idx] = { ...RAW_LOGISTICS[idx], ...recordData };
-      } else {
-        recordData.id = 'logistics_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
-        recordData.fee_members = [];
-        recordData.created_at = new Date().toISOString();
-        RAW_LOGISTICS.unshift(recordData);
-      }
-      await saveDataToSupabase(); closeLogisticsModal(); renderLogisticsList(); showToast('国际物流记录已保存至 Supabase！');
-    }
-    window.handleSaveLogistics = handleSaveLogistics;
-
-    async function deleteLogisticsByIndex(index) {
-      const log = window.LOGISTICS_CACHE[index]; if (!log) return;
-      if (!confirm('确定删除批次「' + log.batch_name + '」的物流记录吗？')) return;
-      RAW_LOGISTICS = RAW_LOGISTICS.filter(l => String(l.id) !== String(log.id));
-      await saveDataToSupabase(); renderLogisticsList(); showToast('已删除国际物流记录！');
-    }
-    window.deleteLogisticsByIndex = deleteLogisticsByIndex;
-
-    /* --- 排发工作台逻辑 --- */
-
+    /* --- 标签页 2：排发工作台逻辑 --- */
     function switchDispatchSubTab(sub) {
       CURRENT_DISPATCH_SUBTAB = sub;
       document.getElementById('btnSubPending').classList.toggle('btn-primary', sub === 'pending');
-      document.getElementById('btnSubPending').classList.toggle('btn-secondary', sub !== 'pending');
       document.getElementById('btnSubCompleted').classList.toggle('btn-primary', sub === 'completed');
-      document.getElementById('btnSubCompleted').classList.toggle('btn-secondary', sub !== 'completed');
       renderDispatchWorkbench();
     }
     window.switchDispatchSubTab = switchDispatchSubTab;
 
-    function chunkArray(arr, chunkSize) {
+    function chunkArray(arr, chunkSize = 10) {
       const results = [];
-      for (let i = 0; i < arr.length; i += chunkSize) results.push(arr.slice(i, i + chunkSize));
+      for (let i = 0; i < arr.length; i += chunkSize) {
+        results.push(arr.slice(i, i + chunkSize));
+      }
       return results;
     }
 
     function renderDispatchWorkbench() {
       const pendingApps = RAW_APPLICATIONS.filter(a => a.status === '待处理');
       const completedApps = RAW_APPLICATIONS.filter(a => a.status === '已完成');
+
       document.getElementById('statPendingCount').innerText = pendingApps.length;
       document.getElementById('statCompletedCount').innerText = completedApps.length;
+
       const container = document.getElementById('dispatchSubContent');
       const targetList = CURRENT_DISPATCH_SUBTAB === 'pending' ? pendingApps : completedApps;
+
       window.APP_CACHE = targetList;
+
       if (targetList.length === 0) {
-        container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);">当前没有任何' + (CURRENT_DISPATCH_SUBTAB === 'pending' ? '待处理申请' : '已完成记录') + '</div>';
+        container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);">当前没有任何${CURRENT_DISPATCH_SUBTAB === 'pending' ? '待处理申请' : '已完成记录'}</div>`;
         return;
       }
+
       let html = '';
       targetList.forEach((app, appIndex) => {
         const items = app.items || [];
         const itemChunks = chunkArray(items, 10);
+
         let itemsGridHtml = '';
         itemChunks.forEach(chunk => {
-          itemsGridHtml += '<div class="items-grid-10">';
-          chunk.forEach(it => { itemsGridHtml += '<div class="grid-item-chip"><div class="name" title="' + escapeHtml(it.name) + '">' + escapeHtml(it.name) + '</div><div class="qty">x ' + (it.quantity || 1) + '</div></div>'; });
-          itemsGridHtml += '</div>';
+          itemsGridHtml += `<div class="items-grid-10">`;
+          chunk.forEach(it => {
+            itemsGridHtml += `
+              <div class="grid-item-chip">
+                <div class="name" title="${escapeHtml(it.name)}">${escapeHtml(it.name)}</div>
+                <div class="qty">x ${it.quantity || 1}</div>
+              </div>
+            `;
+          });
+          itemsGridHtml += `</div>`;
         });
-        html += '<div class="app-card"><div class="app-header"><div><strong style="font-size:1.05rem;">CN: ' + escapeHtml(app.cn) + '</strong><span style="font-size:0.8rem; color:var(--text-muted); margin-left:12px;">⏰ ' + escapeHtml(app.time || '') + '</span></div><div><span class="badge ' + (app.status === '待处理' ? 'badge-status-已申请发货' : 'badge-status-已排发') + '">' + escapeHtml(app.status) + '</span></div></div><div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:6px;">📝 备注: ' + escapeHtml(app.note || '无备注') + '</div><div><span style="font-size:0.85rem; font-weight:600;">申请发货谷子明细 (严格每 10 个一行)：</span>' + itemsGridHtml + '</div><div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">' + (app.status === '待处理' ? '<button class="btn btn-success" onclick="confirmDispatchAppByIndex(' + appIndex + ')">确认发货</button><button class="btn btn-danger" onclick="deleteAppByIndex(' + appIndex + ')">删除申请</button>' : '<button class="btn btn-danger" onclick="deleteCompletedAppByIndex(' + appIndex + ')">删除记录 (联动删除排表谷子)</button>') + '</div></div>';
+
+        html += `
+          <div class="app-card">
+            <div class="app-header">
+              <div>
+                <strong style="font-size:1.05rem;">CN: ${escapeHtml(app.cn)}</strong>
+                <span style="font-size:0.8rem; color:var(--text-muted); margin-left:12px;">⏰ ${escapeHtml(app.time || '')}</span>
+              </div>
+              <div>
+                <span class="badge ${app.status === '待处理' ? 'badge-status-已申请发货' : 'badge-status-已排发'}">${escapeHtml(app.status)}</span>
+              </div>
+            </div>
+
+            <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:6px;">
+              📝 备注: ${escapeHtml(app.note || '无备注')}
+            </div>
+
+            <div>
+              <span style="font-size:0.85rem; font-weight:600;">申请发货谷子明细 (严格每 10 个一行)：</span>
+              ${itemsGridHtml}
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
+              ${app.status === '待处理' ? `
+                <button class="btn btn-success" onclick="confirmDispatchAppByIndex(${appIndex})">确认发货</button>
+                <button class="btn btn-danger" onclick="deleteAppByIndex(${appIndex})">删除申请</button>
+              ` : `
+                <button class="btn btn-danger" onclick="deleteCompletedAppByIndex(${appIndex})">删除记录 (联动删除排表谷子)</button>
+              `}
+            </div>
+          </div>
+        `;
       });
+
       container.innerHTML = html;
     }
 
     async function confirmDispatchAppByIndex(appIndex) {
-      const app = window.APP_CACHE[appIndex]; if (!app) return;
+      const app = window.APP_CACHE[appIndex];
+      if (!app) return;
+
       app.status = '已完成';
+
       const targetItemIds = new Set((app.items || []).map(i => String(i.item_id || i.id)));
-      RAW_ITEMS.forEach(item => { if (targetItemIds.has(String(item.item_id || item.id))) item.status = '已排发'; });
-      await saveDataToSupabase(); renderDispatchWorkbench(); renderTable(); showToast('已确认发货！对应谷子在 group_data 中已标记为[已排发]');
+      RAW_ITEMS.forEach(item => {
+        const itemId = String(item.item_id || item.id);
+        if (targetItemIds.has(itemId)) {
+          item.status = '已排发';
+        }
+      });
+
+      await saveDataToSupabase();
+      renderDispatchWorkbench();
+      renderTable();
+      showToast('已确认发货！对应谷子在 group_data 中已标记为[已排发]');
     }
     window.confirmDispatchAppByIndex = confirmDispatchAppByIndex;
 
     async function deleteAppByIndex(appIndex) {
-      const app = window.APP_CACHE[appIndex]; if (!app) return;
+      const app = window.APP_CACHE[appIndex];
+      if (!app) return;
+
       if (!confirm('确定删除此申请记录吗？')) return;
+
       RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
-      await saveDataToSupabase(); renderDispatchWorkbench(); showToast('已删除申请！');
+
+      await saveDataToSupabase();
+      renderDispatchWorkbench();
+      showToast('已删除申请！');
     }
     window.deleteAppByIndex = deleteAppByIndex;
 
     async function deleteCompletedAppByIndex(appIndex) {
-      const app = window.APP_CACHE[appIndex]; if (!app) return;
+      const app = window.APP_CACHE[appIndex];
+      if (!app) return;
+
       if (!confirm('确定删除此已完成发货记录吗？此操作将【联动彻底删除 group_data 中对应已排发的谷子】！')) return;
+
       const targetItemIds = new Set((app.items || []).map(i => String(i.item_id || i.id)));
+      
       RAW_ITEMS = RAW_ITEMS.filter(item => !targetItemIds.has(String(item.item_id || item.id)));
       RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
-      await saveDataToSupabase(); renderDispatchWorkbench(); renderTable(); showToast('已删除发货记录，并联动删除 group_data 中对应谷子！');
+
+      await saveDataToSupabase();
+      renderDispatchWorkbench();
+      renderTable();
+      showToast('已删除发货记录，并联动删除 group_data 中对应谷子！');
     }
     window.deleteCompletedAppByIndex = deleteCompletedAppByIndex;
 
-    /* --- 转单记录逻辑 --- */
-
+    /* --- 标签页 3：转单记录逻辑 --- */
     function renderTransferLogs() {
       const tbody = document.getElementById('transferLogsTableBody');
       window.LOG_CACHE = RAW_LOGS;
+
       if (RAW_LOGS.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">暂无转单记录</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">暂无转单记录</td></tr>`;
         return;
       }
+
       let html = '';
       RAW_LOGS.forEach((log, logIndex) => {
-        html += '<tr><td>' + escapeHtml(log.time) + '</td><td><strong style="color:var(--danger);">' + escapeHtml(log.from_cn) + '</strong></td><td><strong style="color:var(--success);">' + escapeHtml(log.to_cn) + '</strong></td><td>' + escapeHtml(log.item_name) + '</td><td>' + (log.quantity || 1) + '</td><td><button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogByIndex(' + logIndex + ')">删除</button></td></tr>';
+        html += `
+          <tr>
+            <td>${escapeHtml(log.time)}</td>
+            <td><strong style="color:var(--danger);">${escapeHtml(log.from_cn)}</strong></td>
+            <td><strong style="color:var(--success);">${escapeHtml(log.to_cn)}</strong></td>
+            <td>${escapeHtml(log.item_name)}</td>
+            <td>${log.quantity || 1}</td>
+            <td>
+              <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogByIndex(${logIndex})">删除</button>
+            </td>
+          </tr>
+        `;
       });
+
       tbody.innerHTML = html;
     }
 
     async function deleteLogByIndex(logIndex) {
-      const log = window.LOG_CACHE[logIndex]; if (!log) return;
+      const log = window.LOG_CACHE[logIndex];
+      if (!log) return;
+
       RAW_LOGS = RAW_LOGS.filter(l => String(l.id) !== String(log.id));
-      await saveDataToSupabase(); renderTransferLogs(); showToast('已删除该条转单记录');
+      await saveDataToSupabase();
+      renderTransferLogs();
+      showToast('已删除该条转单记录');
     }
     window.deleteLogByIndex = deleteLogByIndex;
 
     async function clearAllTransferLogs() {
       if (!confirm('确定清空所有转单日志记录吗？')) return;
-      RAW_LOGS = []; await saveDataToSupabase(); renderTransferLogs(); showToast('转单日志已清空！');
+      RAW_LOGS = [];
+      await saveDataToSupabase();
+      renderTransferLogs();
+      showToast('转单日志已清空！');
     }
     window.clearAllTransferLogs = clearAllTransferLogs;
 
-    /* --- 团务设置与实用工具 --- */
+    /* --- 标签页 4：📮 匿名反馈箱逻辑 --- */
+    function renderFeedbackList() {
+      const tbody = document.getElementById('feedbackTableBody');
+      const mobileCards = document.getElementById('feedbackMobileCardsView');
+      const searchVal = (document.getElementById('fbFilterSearch')?.value || '').trim().toLowerCase();
+      const statusVal = document.getElementById('fbFilterStatus')?.value || '';
+      const categoryVal = document.getElementById('fbFilterCategory')?.value || '';
 
+      const unreadCount = RAW_FEEDBACK.filter(f => f.status === '未读').length;
+      const readCount = RAW_FEEDBACK.filter(f => f.status === '已读').length;
+      const handledCount = RAW_FEEDBACK.filter(f => f.status === '已处理').length;
+
+      document.getElementById('statFbUnread').innerText = unreadCount;
+      document.getElementById('statFbRead').innerText = readCount;
+      document.getElementById('statFbHandled').innerText = handledCount;
+      document.getElementById('statFbTotal').innerText = RAW_FEEDBACK.length;
+
+      const filtered = RAW_FEEDBACK.filter(fb => {
+        const contentMatch = (fb.content || '').toLowerCase().includes(searchVal);
+        const replyMatch = (fb.reply || '').toLowerCase().includes(searchVal);
+        const matchSearch = !searchVal || (contentMatch || replyMatch);
+
+        const matchStatus = !statusVal || fb.status === statusVal;
+        const matchCat = !categoryVal || fb.category === categoryVal;
+
+        return matchSearch && matchStatus && matchCat;
+      });
+
+      window.FEEDBACK_CACHE = filtered;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">暂无匹配的匿名反馈</td></tr>`;
+        if (mobileCards) mobileCards.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">暂无匹配的匿名反馈</div>`;
+        return;
+      }
+
+      let tableHtml = '';
+      let cardHtml = '';
+
+      filtered.forEach((fb, index) => {
+        const statusBadgeClass = `badge-fb-${fb.status || '未读'}`;
+        const shortContent = escapeHtml(fb.content || '');
+        const shortReply = fb.reply ? `💬 ${escapeHtml(fb.reply)}` : `<span style="color:#cbd5e1;font-size:0.8rem;">未回复</span>`;
+
+        tableHtml += `
+          <tr>
+            <td><span class="badge ${statusBadgeClass}">${escapeHtml(fb.status || '未读')}</span></td>
+            <td><span class="badge badge-category">${escapeHtml(fb.category || '其他')}</span></td>
+            <td style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(fb.created_at || '')}</td>
+            <td style="max-width:260px; white-space:normal; cursor:pointer;" onclick="openFeedbackModal(${index})" title="点击查看完整内容与回复">
+              ${shortContent}
+            </td>
+            <td style="max-width:200px; white-space:normal; font-size:0.85rem; color:#475569;">
+              ${shortReply}
+            </td>
+            <td style="text-align:right;">
+              <button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem;" onclick="openFeedbackModal(${index})">查看/回复</button>
+              <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteFeedbackByIndex(${index})">删除</button>
+            </td>
+          </tr>
+        `;
+
+        cardHtml += `
+          <div class="admin-card-mobile">
+            <div class="admin-card-mobile-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="badge badge-category">${escapeHtml(fb.category || '其他')}</span>
+                <span style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(fb.created_at || '')}</span>
+              </div>
+              <span class="badge ${statusBadgeClass}">${escapeHtml(fb.status || '未读')}</span>
+            </div>
+            <div style="font-size:0.9rem; color:var(--text-main); line-height:1.4; word-break:break-all;">
+              ${shortContent}
+            </div>
+            ${fb.reply ? `
+              <div style="font-size:0.85rem; color:#475569; background:#f8fafc; border-left:3px solid var(--primary); padding:6px 10px; border-radius:4px;">
+                <strong>团长回复：</strong>${escapeHtml(fb.reply)}
+              </div>
+            ` : ''}
+            <div class="admin-card-mobile-actions">
+              <button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openFeedbackModal(${index})">💬 查看/回复</button>
+              <button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteFeedbackByIndex(${index})">🗑️ 删除</button>
+            </div>
+          </div>
+        `;
+      });
+
+      tbody.innerHTML = tableHtml;
+      if (mobileCards) mobileCards.innerHTML = cardHtml;
+    }
+    window.renderFeedbackList = renderFeedbackList;
+
+    function openFeedbackModal(index) {
+      const fb = window.FEEDBACK_CACHE[index];
+      if (!fb) return;
+
+      const rawIndex = RAW_FEEDBACK.findIndex(item => item.id === fb.id);
+      document.getElementById('modalFbIndex').value = rawIndex;
+      document.getElementById('modalFbCategory').innerText = fb.category || '其他';
+      document.getElementById('modalFbTime').innerText = fb.created_at || '';
+      document.getElementById('modalFbContent').innerText = fb.content || '';
+      document.getElementById('modalFbReply').value = fb.reply || '';
+
+      document.getElementById('feedbackModal').classList.add('active');
+    }
+    window.openFeedbackModal = openFeedbackModal;
+
+    function closeFeedbackModal() {
+      document.getElementById('feedbackModal').classList.remove('active');
+    }
+    window.closeFeedbackModal = closeFeedbackModal;
+
+    async function setModalFbStatus(newStatus) {
+      const rawIndex = parseInt(document.getElementById('modalFbIndex').value);
+      if (isNaN(rawIndex) || !RAW_FEEDBACK[rawIndex]) return;
+
+      RAW_FEEDBACK[rawIndex].status = newStatus;
+      await saveDataToSupabase();
+      renderFeedbackList();
+      showToast(`已标记为 [${newStatus}]`);
+    }
+    window.setModalFbStatus = setModalFbStatus;
+
+    async function saveModalFbReply() {
+      const rawIndex = parseInt(document.getElementById('modalFbIndex').value);
+      if (isNaN(rawIndex) || !RAW_FEEDBACK[rawIndex]) return;
+
+      const replyText = document.getElementById('modalFbReply').value.trim();
+      RAW_FEEDBACK[rawIndex].reply = replyText;
+      if (RAW_FEEDBACK[rawIndex].status === '未读') {
+        RAW_FEEDBACK[rawIndex].status = '已读';
+      }
+
+      await saveDataToSupabase();
+      closeFeedbackModal();
+      renderFeedbackList();
+      showToast('回复已保存！');
+    }
+    window.saveModalFbReply = saveModalFbReply;
+
+    async function batchMarkFeedbackRead() {
+      if (RAW_FEEDBACK.length === 0) return showToast('暂无反馈记录');
+
+      let count = 0;
+      RAW_FEEDBACK.forEach(fb => {
+        if (fb.status === '未读') {
+          fb.status = '已读';
+          count++;
+        }
+      });
+
+      if (count === 0) return showToast('没有未读的反馈');
+
+      await saveDataToSupabase();
+      renderFeedbackList();
+      showToast(`已将 ${count} 条未读反馈标为已读！`);
+    }
+    window.batchMarkFeedbackRead = batchMarkFeedbackRead;
+
+    async function deleteFeedbackByIndex(index) {
+      const fb = window.FEEDBACK_CACHE[index];
+      if (!fb) return;
+
+      if (!confirm('确定删除此条匿名反馈吗？')) return;
+
+      RAW_FEEDBACK = RAW_FEEDBACK.filter(item => item.id !== fb.id);
+      await saveDataToSupabase();
+      renderFeedbackList();
+      showToast('反馈已删除！');
+    }
+    window.deleteFeedbackByIndex = deleteFeedbackByIndex;
+
+    async function clearAllFeedback() {
+      if (RAW_FEEDBACK.length === 0) return showToast('当前暂无反馈');
+      if (!confirm('确定清空所有匿名反馈记录吗？此操作不可恢复！')) return;
+
+      RAW_FEEDBACK = [];
+      await saveDataToSupabase();
+      renderFeedbackList();
+      showToast('匿名反馈已全部清空！');
+    }
+    window.clearAllFeedback = clearAllFeedback;
+
+    /* --- 标签页 5：团务设置与实用工具 --- */
     function copyMemberLink() {
-      const url = window.location.origin + '/index.html?key=' + encodeURIComponent(CURRENT_QUERY_KEY);
-      navigator.clipboard.writeText(url).then(() => showToast('团员自查链接已复制到剪贴板！')).catch(() => prompt('请手动复制链接：', url));
+      const url = `${window.location.origin}/index.html?key=${encodeURIComponent(CURRENT_QUERY_KEY)}`;
+      navigator.clipboard.writeText(url).then(() => {
+        showToast('团员自查链接已复制到剪贴板！');
+      }).catch(() => {
+        prompt('请手动复制链接：', url);
+      });
     }
     window.copyMemberLink = copyMemberLink;
 
-    function copyQueryKey() {
-      if (!CURRENT_QUERY_KEY) return showToast('当前暂无 Query Key！');
-      navigator.clipboard.writeText(CURRENT_QUERY_KEY).then(() => showToast('📋 当前 Query Key 已复制到剪贴板！')).catch(() => prompt('请手动复制 Query Key：', CURRENT_QUERY_KEY));
-    }
-    window.copyQueryKey = copyQueryKey;
-
-    function copyRlsGuide() {
-      const guideText = '【Supabase 解决团员端查不到数据 (RLS) 配置步骤】\n1. 登录 Supabase 控制台 (https://supabase.com)\n2. 进入项目 -> Database -> Tables -> leader_data\n3. 点击页面顶部的 "Policies" 标签页\n4. 点击 "New Policy" -> "Create a policy from scratch"\n5. 填写配置：\n   - Policy name: Allow anonymous read\n   - Allowed operation: SELECT\n   - Target roles: anon\n   - USING expression: true\n   - WITH CHECK expression: (留空)\n6. 点击保存，团员端即可正常查询！';
-      navigator.clipboard.writeText(guideText).then(() => showToast('📋 RLS 配置教程已复制到剪贴板！')).catch(() => prompt('请手动复制 RLS 配置教程：', guideText));
-    }
-    window.copyRlsGuide = copyRlsGuide;
-
     async function generateSampleData() {
       if (!confirm('生成演示测试数据将向当前 Query Key 写入样例，确定生成吗？')) return;
+
       RAW_ITEMS = [
-        { item_id: 'item_1', name: '五条悟 20cm 亚克力立牌', cn: '小明', price: 65, quantity: 2, country: '日本', status: '回国中', image_url: '' },
-        { item_id: 'item_2', name: '夏油杰 75mm 闪粉徽章', cn: '小明', price: 25, quantity: 3, country: '日本', status: '回国中', image_url: '' },
+        { item_id: 'item_1', name: '五条悟 20cm 亚克力立牌', cn: '小明', price: 65, quantity: 2, country: '日本', status: '可排发', image_url: '' },
+        { item_id: 'item_2', name: '夏油杰 75mm 闪粉徽章', cn: '小明', price: 25, quantity: 3, country: '闲鱼', status: '可排发', image_url: '' },
         { item_id: 'item_3', name: '伏黑惠 烫金拍立得', cn: '小红', price: 15, quantity: 5, country: '淘宝店', status: '未出荷', image_url: '' },
         { item_id: 'item_4', name: '钉崎野蔷薇 色纸', cn: '小红', price: 30, quantity: 1, country: '美国', status: '已到货', image_url: '' },
         { item_id: 'item_5', name: '宿傩 挂件', cn: '小刚', price: 40, quantity: 2, country: '韩国', status: '已排发', image_url: '' }
       ];
+
       RAW_APPLICATIONS = [
-        { id: 'app_sample_1', type: '排发申请', cn: '小红', items: [{ item_id: 'item_4', name: '钉崎野蔷薇 色纸', quantity: 1, country: '美国' }], note: '加固打包，寄顺丰到付', time: new Date().toLocaleString('zh-CN'), status: '待处理' }
+        {
+          id: 'app_sample_1',
+          type: '排发申请',
+          cn: '小明',
+          items: [
+            { item_id: 'item_1', name: '五条悟 20cm 亚克力立牌', quantity: 2, country: '日本' },
+            { item_id: 'item_2', name: '夏油杰 75mm 闪粉徽章', quantity: 3, country: '闲鱼' }
+          ],
+          note: '加固打包，寄顺丰到付',
+          time: new Date().toLocaleString('zh-CN'),
+          status: '待处理'
+        }
       ];
+
       RAW_LOGS = [
         { id: 'log_sample_1', time: new Date().toLocaleString('zh-CN'), from_cn: '路人甲', to_cn: '小明', item_name: '五条悟 20cm 亚克力立牌', quantity: 2 }
       ];
-      RAW_LOGISTICS = [
+
+      RAW_FEEDBACK = [
         {
-          id: 'logistics_sample_1', batch_name: '台湾国际 0.08/g ddl4.5', country: '台湾', status: '运输中',
-          ship_date: new Date(Date.now() - 3*86400000).toISOString().split('T')[0],
-          est_date: new Date(Date.now() + 4*86400000).toISOString().split('T')[0],
-          arr_date: '', fee: 185.50, note: '箱内含立牌与色纸',
-          linked_items: [{ name: '五条悟 20cm 亚克力立牌' }],
-          fee_members: [
-            { cn: 'yukio', amount_due: 0.584, amount_paid: 0, status: '未交', note: '' },
-            { cn: '星辞', amount_due: 0.832, amount_paid: 0.832, status: '已交', note: '' },
-            { cn: '吕阿草', amount_due: 1.16, amount_paid: 0, status: '未交', note: '' }
-          ]
+          id: 'fb_sample_1',
+          content: '希望能增加更多包装加固选项，比如飞机盒和双层气泡膜～',
+          category: '建议',
+          status: '未读',
+          created_at: new Date().toLocaleString('zh-CN'),
+          reply: ''
+        },
+        {
+          id: 'fb_sample_2',
+          content: '上次收到包裹非常结实完好，团长辛苦啦！',
+          category: '其他',
+          status: '已处理',
+          created_at: new Date().toLocaleString('zh-CN'),
+          reply: '收到支持，感谢信任！'
         }
       ];
+
       await saveDataToSupabase();
-      renderTable(); renderLogisticsList(); renderDispatchWorkbench(); renderTransferLogs();
-      showToast('🎉 样例测试数据生成成功！已存入 group_data、logistics_data 和国际肾表。');
+      renderTable();
+      renderDispatchWorkbench();
+      renderTransferLogs();
+      renderFeedbackList();
+      showToast('🎉 样例测试数据生成成功！已存入 group_data 和 image_data。');
     }
     window.generateSampleData = generateSampleData;
 
     function escapeHtml(str) {
       if (!str) return '';
-      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
     }
-
-    /* =========================================================
-       🚀 核心：三列并排多团员 & 多 Sheet 国际肾表解析模块
-       ========================================================= */
-    let CURRENT_FEE_LOGISTICS_ID = null;
-    let CURRENT_FEE_MEMBERS = [];
-
-    function openFeeModal(logId) {
-      const log = RAW_LOGISTICS.find(l => String(l.id) === String(logId));
-      if (!log) return;
-      CURRENT_FEE_LOGISTICS_ID = logId;
-      if (!Array.isArray(log.fee_members)) log.fee_members = [];
-      document.getElementById('feeModalTitle').innerText = '💰 管理「' + (log.batch_name || '海外包裹') + '」的国际肾表';
-      document.getElementById('feeModal').classList.add('active');
-      renderFeeMembers();
-    }
-    window.openFeeModal = openFeeModal;
-
-    function closeFeeModal() {
-      document.getElementById('feeModal').classList.remove('active');
-      CURRENT_FEE_LOGISTICS_ID = null;
-      CURRENT_FEE_MEMBERS = [];
-    }
-    window.closeFeeModal = closeFeeModal;
-
-    function renderFeeMembers() {
-      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
-      if (!log) return;
-      const members = log.fee_members || [];
-      const searchVal = (document.getElementById('feeFilterSearch')?.value || '').trim().toLowerCase();
-      const statusVal = document.getElementById('feeFilterStatus')?.value || '';
-      const filtered = members.filter(m => {
-        const matchSearch = !searchVal || (m.cn || '').toLowerCase().includes(searchVal);
-        const matchStatus = !statusVal || m.status === statusVal;
-        return matchSearch && matchStatus;
-      });
-      CURRENT_FEE_MEMBERS = filtered;
-
-      const total = members.length;
-      const paid = members.filter(m => m.status === '已交').length;
-      const unpaid = members.filter(m => m.status === '未交').length;
-      const free = members.filter(m => m.status === '免交').length;
-      const totalDue = members.reduce((s, m) => s + (parseFloat(m.amount_due) || 0), 0);
-      const totalPaid = members.reduce((s, m) => s + (parseFloat(m.amount_paid) || 0), 0);
-
-      const statsHtml = '<div class="fee-stat-card"><div class="num">' + total + '</div><div class="label">参与人数</div></div>' +
-        '<div class="fee-stat-card unpaid"><div class="num">' + unpaid + '</div><div class="label">未交</div></div>' +
-        '<div class="fee-stat-card paid"><div class="num">' + paid + '</div><div class="label">已交</div></div>' +
-        '<div class="fee-stat-card"><div class="num">' + free + '</div><div class="label">免交</div></div>' +
-        '<div class="fee-stat-card unpaid"><div class="num">￥' + totalDue.toFixed(2) + '</div><div class="label">应收总额</div></div>' +
-        '<div class="fee-stat-card paid"><div class="num">￥' + totalPaid.toFixed(2) + '</div><div class="label">实收总额</div></div>';
-      document.getElementById('feeStatsContainer').innerHTML = statsHtml;
-
-      const tbody = document.getElementById('feeTableBody');
-      const mobileView = document.getElementById('feeMobileCardsView');
-      if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">暂无团员缴费记录</td></tr>';
-        if (mobileView) mobileView.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted);">暂无团员缴费记录</div>';
-        return;
-      }
-      let html = '', cardsHtml = '';
-      filtered.forEach((m) => {
-        const realIdx = members.indexOf(m);
-        html += '<tr><td><input type="checkbox" class="fee-checkbox" value="' + realIdx + '"></td><td><strong>' + escapeHtml(m.cn) + '</strong></td><td>￥' + (parseFloat(m.amount_due)||0).toFixed(3) + '</td><td>￥' + (parseFloat(m.amount_paid)||0).toFixed(3) + '</td><td><span class="badge badge-fee-' + (m.status||'未交') + '" style="cursor:pointer;" onclick="toggleFeeStatus(' + realIdx + ')">' + escapeHtml(m.status||'未交') + ' 🔄</span></td><td>' + escapeHtml(m.note||'') + '</td><td><button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editFeeMember(' + realIdx + ')">编辑</button> <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteFeeMember(' + realIdx + ')">删除</button></td></tr>';
-        cardsHtml += '<div class="fee-mobile-card"><div class="fee-mobile-header"><div style="display:flex; align-items:center; gap:8px;"><input type="checkbox" class="fee-checkbox" value="' + realIdx + '"><strong>' + escapeHtml(m.cn) + '</strong></div><span class="badge badge-fee-' + (m.status||'未交') + '" style="cursor:pointer;" onclick="toggleFeeStatus(' + realIdx + ')">' + escapeHtml(m.status||'未交') + ' 🔄</span></div><div class="fee-mobile-body"><div>应交: <strong>￥' + (parseFloat(m.amount_due)||0).toFixed(3) + '</strong> | 实交: <strong>￥' + (parseFloat(m.amount_paid)||0).toFixed(3) + '</strong></div>' + (m.note ? '<div>备注: ' + escapeHtml(m.note) + '</div>' : '') + '</div><div class="admin-card-mobile-actions"><button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="editFeeMember(' + realIdx + ')">✏️ 编辑</button><button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteFeeMember(' + realIdx + ')">🗑️ 删除</button></div></div>';
-      });
-      tbody.innerHTML = html;
-      if (mobileView) mobileView.innerHTML = cardsHtml;
-    }
-    window.renderFeeMembers = renderFeeMembers;
-
-    function toggleFeeStatus(idx) {
-      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
-      if (!log || !log.fee_members[idx]) return;
-      const cur = log.fee_members[idx].status || '未交';
-      const next = cur === '未交' ? '已交' : (cur === '已交' ? '免交' : '未交');
-      log.fee_members[idx].status = next;
-      if (next === '已交') log.fee_members[idx].amount_paid = log.fee_members[idx].amount_due;
-      else if (next === '未交') log.fee_members[idx].amount_paid = 0;
-      saveDataToSupabase(); renderFeeMembers(); renderLogisticsList();
-    }
-    window.toggleFeeStatus = toggleFeeStatus;
-
-    function addFeeMember() {
-      const cn = document.getElementById('feeInputCn').value.trim();
-      const due = parseFloat(document.getElementById('feeInputDue').value) || 0;
-      const paid = parseFloat(document.getElementById('feeInputPaid').value) || 0;
-      const status = document.getElementById('feeInputStatus').value;
-      const note = document.getElementById('feeInputNote').value.trim();
-      if (!cn) return showToast('请填写圈名！');
-      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
-      if (!log) return;
-      if (!Array.isArray(log.fee_members)) log.fee_members = [];
-      log.fee_members.push({ cn, amount_due: due, amount_paid: paid, status, note });
-      document.getElementById('feeInputCn').value = '';
-      document.getElementById('feeInputDue').value = '';
-      document.getElementById('feeInputPaid').value = '0';
-      document.getElementById('feeInputNote').value = '';
-      saveDataToSupabase(); renderFeeMembers(); renderLogisticsList(); showToast('已添加团员缴费记录！');
-    }
-    window.addFeeMember = addFeeMember;
-
-    function editFeeMember(idx) {
-      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
-      if (!log || !log.fee_members[idx]) return;
-      const m = log.fee_members[idx];
-      const newDue = prompt('修改应交金额（当前：￥' + (m.amount_due||0) + '）：', m.amount_due || 0);
-      if (newDue === null) return;
-      const newPaid = prompt('修改实交金额（当前：￥' + (m.amount_paid||0) + '）：', m.amount_paid || 0);
-      if (newPaid === null) return;
-      const newNote = prompt('修改备注（当前：' + (m.note||'') + '）：', m.note || '');
-      if (newNote === null) return;
-      m.amount_due = parseFloat(newDue) || 0;
-      m.amount_paid = parseFloat(newPaid) || 0;
-      m.note = newNote;
-      saveDataToSupabase(); renderFeeMembers(); renderLogisticsList(); showToast('已更新！');
-    }
-    window.editFeeMember = editFeeMember;
-
-    function deleteFeeMember(idx) {
-      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
-      if (!log || !log.fee_members[idx]) return;
-      if (!confirm('确定删除 ' + log.fee_members[idx].cn + ' 的缴费记录吗？')) return;
-      log.fee_members.splice(idx, 1);
-      saveDataToSupabase(); renderFeeMembers(); renderLogisticsList(); showToast('已删除！');
-    }
-    window.deleteFeeMember = deleteFeeMember;
-
-    function toggleFeeSelectAll(master) { document.querySelectorAll('.fee-checkbox').forEach(cb => cb.checked = master.checked); }
-    window.toggleFeeSelectAll = toggleFeeSelectAll;
-
-    function getSelectedFeeMembers() {
-      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
-      if (!log) return [];
-      const selected = [];
-      document.querySelectorAll('.fee-checkbox:checked').forEach(cb => {
-        const idx = parseInt(cb.value);
-        if (log.fee_members[idx]) selected.push({ member: log.fee_members[idx], index: idx });
-      });
-      return selected;
-    }
-
-    function batchFeeMark(status) {
-      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
-      if (!log) return;
-      const selected = getSelectedFeeMembers();
-      if (selected.length === 0) return showToast('请先勾选要标记的团员！');
-      selected.forEach(s => {
-        s.member.status = status;
-        if (status === '已交') s.member.amount_paid = s.member.amount_due;
-        else if (status === '未交') s.member.amount_paid = 0;
-      });
-      saveDataToSupabase(); renderFeeMembers(); renderLogisticsList();
-      showToast('已批量标记 ' + selected.length + ' 人为「' + status + '」');
-    }
-    window.batchFeeMark = batchFeeMark;
-
-    function batchFeeDelete() {
-      const log = RAW_LOGISTICS.find(l => String(l.id) === String(CURRENT_FEE_LOGISTICS_ID));
-      if (!log) return;
-      const selected = getSelectedFeeMembers();
-      if (selected.length === 0) return showToast('请先勾选要删除的团员！');
-      if (!confirm('确定删除选中的 ' + selected.length + ' 条缴费记录吗？')) return;
-      const indices = selected.map(s => s.index).sort((a,b) => b-a);
-      indices.forEach(idx => log.fee_members.splice(idx, 1));
-      saveDataToSupabase(); renderFeeMembers(); renderLogisticsList(); showToast('已批量删除！');
-    }
-    window.batchFeeDelete = batchFeeDelete;
-
-    // 通用三列矩阵提取算法（用于 Excel 和 粘贴文本）
-    function extractTripletMembersFromRows(rows, startRowIdx, defaultStatus) {
-      const members = [];
-      const seenCn = new Set();
-      const invalidWords = new Set(['cn', '圈名', '昵称', '姓名', '重量', '金额', '总计', '合计', '总数', '总额', 'null', 'undefined']);
-
-      for (let r = startRowIdx; r < rows.length; r++) {
-        const row = rows[r];
-        if (!row || !Array.isArray(row) || row.length === 0) continue;
-
-        // 每次跳 3 列提取 [CN, 重量, 金额]
-        for (let c = 0; c < row.length; c += 3) {
-          const cnRaw = row[c];
-          const amountRaw = row[c + 2]; // 严格取第 3 列为应交金额 (金额)
-
-          if (cnRaw === undefined || cnRaw === null) continue;
-          const cn = String(cnRaw).trim();
-
-          // 过滤无效 CN、表头词汇、空值
-          if (!cn || invalidWords.has(cn.toLowerCase())) continue;
-
-          // 解析金额，过滤非数字与无效行
-          const amount = parseFloat(amountRaw);
-          if (isNaN(amount) || amount === null) continue;
-
-          // 批次内同 CN 简单去重
-          if (!seenCn.has(cn)) {
-            seenCn.add(cn);
-            members.push({
-              cn: cn,
-              amount_due: amount,
-              amount_paid: defaultStatus === '已交' ? amount : 0,
-              status: defaultStatus || '未交',
-              note: ''
-            });
-          }
-        }
-      }
-      return members;
-    }
-
-    // 1. 处理 Excel 文件导入（支持多 Sheet、每 Sheet 独立建批次、三列并排）
-    function handleFeeExcelImport(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const defaultStatus = document.getElementById('feeImportDefaultStatus')?.value || '未交';
-      const reader = new FileReader();
-
-      reader.onload = async function(evt) {
-        try {
-          const data = new Uint8Array(evt.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          let totalImportedBatches = 0;
-          let totalImportedMembers = 0;
-
-          // 遍历 Excel 中所有 Sheet
-          workbook.SheetNames.forEach(sheetName => {
-            const sheet = workbook.Sheets[sheetName];
-            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-            if (!rows || rows.length < 2) return;
-
-            // 第 1 行：提取批次名称（如空则用 sheet 名字）
-            let batchName = '';
-            if (rows[0] && rows[0].length > 0) {
-              batchName = String(rows[0][0] || '').trim();
-            }
-            if (!batchName) batchName = sheetName.trim();
-
-            // 智能定位数据开始行（第 4 行，即下标为 3）
-            let dataStartIdx = 3;
-            for (let i = 0; i < Math.min(5, rows.length); i++) {
-              const rowStr = (rows[i] || []).join(' ').toLowerCase();
-              if (rowStr.includes('cn') && (rowStr.includes('金额') || rowStr.includes('重量'))) {
-                dataStartIdx = i + 1;
-                break;
-              }
-            }
-
-            // 解析当前 Sheet 中的三列并排数据
-            const sheetMembers = extractTripletMembersFromRows(rows, dataStartIdx, defaultStatus);
-            if (sheetMembers.length === 0) return;
-
-            // 查找或新建物流批次
-            let targetLog = RAW_LOGISTICS.find(l => (l.batch_name || '').trim() === batchName);
-            if (!targetLog) {
-              targetLog = {
-                id: 'logistics_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
-                batch_name: batchName,
-                country: batchName.includes('台湾') ? '台湾' : (batchName.includes('日本') || batchName.includes('日泡') ? '日本' : '日本'),
-                status: '运输中',
-                ship_date: new Date().toISOString().split('T')[0],
-                est_date: '',
-                arr_date: '',
-                fee: 0,
-                note: '通过 Excel 自动导入建立',
-                linked_items: [],
-                fee_members: [],
-                created_at: new Date().toISOString()
-              };
-              RAW_LOGISTICS.unshift(targetLog);
-            }
-
-            if (!Array.isArray(targetLog.fee_members)) targetLog.fee_members = [];
-
-            // 增量合并团员数据（同 CN 自动去重）
-            const existingCnSet = new Set(targetLog.fee_members.map(m => m.cn));
-            sheetMembers.forEach(m => {
-              if (!existingCnSet.has(m.cn)) {
-                targetLog.fee_members.push(m);
-                existingCnSet.add(m.cn);
-                totalImportedMembers++;
-              }
-            });
-
-            totalImportedBatches++;
-          });
-
-          if (totalImportedMembers === 0) {
-            return showToast('未从 Excel 中解析到有效数据，请检查表格是否包含 CN 与 金额！');
-          }
-
-          await saveDataToSupabase();
-          renderLogisticsList();
-          if (CURRENT_FEE_LOGISTICS_ID) renderFeeMembers();
-          showToast(`🎉 成功解析 ${totalImportedBatches} 个批次，共导入 ${totalImportedMembers} 条团员肾表数据！`);
-          e.target.value = '';
-        } catch (err) {
-          console.error(err);
-          showToast('Excel 文件解析失败，请检查文件格式！');
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    }
-    window.handleFeeExcelImport = handleFeeExcelImport;
-
-    // 2. 处理粘贴表格文本导入
-    function openFeePasteModal() {
-      const selectEl = document.getElementById('feePasteBatchSelect');
-      selectEl.innerHTML = '';
-
-      // 选项 1：自动根据粘贴文本第 1 行识别
-      const autoOpt = document.createElement('option');
-      autoOpt.value = '__AUTO__';
-      autoOpt.innerText = '✨ [自动识别] 从粘贴文本第 1 行读取批次名称';
-      selectEl.appendChild(autoOpt);
-
-      // 如果当前正打开某个批次的肾表，优先默认选中
-      RAW_LOGISTICS.forEach(log => {
-        const opt = document.createElement('option');
-        opt.value = log.id;
-        opt.innerText = `📦 导入到现有批次：${log.batch_name}`;
-        if (CURRENT_FEE_LOGISTICS_ID && String(log.id) === String(CURRENT_FEE_LOGISTICS_ID)) {
-          opt.selected = true;
-        }
-        selectEl.appendChild(opt);
-      });
-
-      document.getElementById('feePasteInput').value = '';
-      document.getElementById('feePasteModal').classList.add('active');
-    }
-    window.openFeePasteModal = openFeePasteModal;
-
-    function closeFeePasteModal() {
-      document.getElementById('feePasteModal').classList.remove('active');
-    }
-    window.closeFeePasteModal = closeFeePasteModal;
-
-    async function submitFeePasteImport() {
-      const rawText = document.getElementById('feePasteInput').value;
-      if (!rawText || !rawText.trim()) return showToast('请先粘贴文本内容！');
-
-      const defaultStatus = document.getElementById('feePasteDefaultStatus')?.value || '未交';
-      const selectedBatchId = document.getElementById('feePasteBatchSelect')?.value;
-
-      const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-      if (lines.length === 0) return showToast('粘贴内容为空！');
-
-      // 将粘贴文本转为二维数组
-      const rows = lines.map(l => l.split('\t').map(c => c.trim()));
-
-      // 提取批次名称（如果选择自动识别）
-      let batchName = '';
-      let dataStartIdx = 0;
-
-      // 如果第 1 行没有连续的制表符或只有 1 列，则判定第 1 行为批次名称
-      if (rows[0].length <= 2 && !rows[0][0].toLowerCase().includes('cn')) {
-        batchName = rows[0][0];
-        dataStartIdx = 1;
-      }
-
-      // 寻找表头行跳过
-      for (let i = dataStartIdx; i < Math.min(4, rows.length); i++) {
-        const rowStr = rows[i].join(' ').toLowerCase();
-        if (rowStr.includes('cn') || rowStr.includes('重量') || rowStr.includes('金额')) {
-          dataStartIdx = i + 1;
-          break;
-        }
-      }
-
-      // 解析三列并排团员数据
-      const parsedMembers = extractTripletMembersFromRows(rows, dataStartIdx, defaultStatus);
-      if (parsedMembers.length === 0) return showToast('解析失败，未提取到有效的 [CN + 金额] 数据！');
-
-      // 确定目标批次
-      let targetLog = null;
-      if (selectedBatchId && selectedBatchId !== '__AUTO__') {
-        targetLog = RAW_LOGISTICS.find(l => String(l.id) === String(selectedBatchId));
-      } else {
-        if (!batchName) batchName = '海外通贩批次_' + new Date().toLocaleDateString();
-        targetLog = RAW_LOGISTICS.find(l => (l.batch_name || '').trim() === batchName.trim());
-        if (!targetLog) {
-          targetLog = {
-            id: 'logistics_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
-            batch_name: batchName,
-            country: '日本',
-            status: '运输中',
-            ship_date: new Date().toISOString().split('T')[0],
-            est_date: '',
-            arr_date: '',
-            fee: 0,
-            note: '粘贴自动建批次',
-            linked_items: [],
-            fee_members: [],
-            created_at: new Date().toISOString()
-          };
-          RAW_LOGISTICS.unshift(targetLog);
-        }
-      }
-
-      if (!targetLog) return showToast('未指定有效的物流批次！');
-      if (!Array.isArray(targetLog.fee_members)) targetLog.fee_members = [];
-
-      // 增量合并
-      let addedCount = 0;
-      const existingCnSet = new Set(targetLog.fee_members.map(m => m.cn));
-      parsedMembers.forEach(m => {
-        if (!existingCnSet.has(m.cn)) {
-          targetLog.fee_members.push(m);
-          existingCnSet.add(m.cn);
-          addedCount++;
-        }
-      });
-
-      await saveDataToSupabase();
-      closeFeePasteModal();
-      renderLogisticsList();
-      if (CURRENT_FEE_LOGISTICS_ID) renderFeeMembers();
-      showToast(`🎉 成功解析并导入 ${addedCount} 条团员数据至「${targetLog.batch_name}」！`);
-    }
-    window.submitFeePasteImport = submitFeePasteImport;
-
   </script>
 </body>
 </html>
-```
