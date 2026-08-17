@@ -108,7 +108,7 @@
       color: var(--text-muted);
     }
 
-    input[type="text"], textarea {
+    input[type="text"], select, textarea {
       width: 100%;
       padding: 10px 14px;
       border: 1px solid var(--border);
@@ -116,9 +116,10 @@
       font-size: 0.95rem;
       outline: none;
       transition: border-color 0.2s, box-shadow 0.2s;
+      background: #ffffff;
     }
 
-    input[type="text"]:focus, textarea:focus {
+    input[type="text"]:focus, select:focus, textarea:focus {
       border-color: var(--primary);
       box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
     }
@@ -229,7 +230,7 @@
       background-color: #f8fafc;
     }
 
-    /* 手机端卡片列表 (方案 A) */
+    /* 手机端卡片列表 */
     .mobile-cards-view {
       display: none;
     }
@@ -535,9 +536,37 @@
         </table>
       </div>
 
-      <!-- 手机端卡片列表视图 (方案 A) -->
+      <!-- 手机端卡片列表视图 -->
       <div class="mobile-cards-view" id="mobileCardsView">
         <!-- 动态渲染数据 -->
+      </div>
+    </div>
+
+    <!-- 📮 匿名反馈箱卡片 (页面最底部) -->
+    <div class="card" style="margin-top: 24px; border-left: 4px solid var(--primary);">
+      <div class="card-title">📮 匿名意见与问题反馈箱</div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+        对本团有任何建议、吐槽、问题反馈或投诉？欢迎在此提交（<strong>完全匿名</strong>，无需输入CN，不记录任何个人身份信息）。
+      </p>
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div class="form-group">
+          <label for="feedbackCategory">反馈分类</label>
+          <select id="feedbackCategory">
+            <option value="建议">💡 建议</option>
+            <option value="问题反馈">⚠️ 问题反馈</option>
+            <option value="投诉">🚨 投诉</option>
+            <option value="其他">💬 其他</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="feedbackContent">反馈详情内容 *</label>
+          <textarea id="feedbackContent" rows="4" placeholder="请详细描述您的想法、建议或遇到的问题..."></textarea>
+        </div>
+        <div>
+          <button class="btn btn-primary" id="btnSubmitFeedback" onclick="submitFeedback()" style="width: 100%; padding: 12px;">
+            ✉️ 匿名提交反馈
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -572,18 +601,15 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    // Supabase 配置（使用 supabaseClient 名字避开全局变量冲突）
     const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
     const SUPABASE_ANON_KEY = SUPABASE_KEY;
 
     const supabaseClient = (window.supabase || supabase).createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // 全局缓存
     window.ITEM_CACHE = [];
     window.CURRENT_PENDING_APPLY_ITEMS = [];
 
-    // URL 参数自动填充与事件绑定
     window.addEventListener('DOMContentLoaded', () => {
       const urlParams = new URLSearchParams(window.location.search);
       const key = urlParams.get('key');
@@ -599,7 +625,6 @@
       document.getElementById('btnApplyAllDispatchable').addEventListener('click', prepareApplyAll);
     });
 
-    // Toast 提示
     function showToast(msg) {
       const toast = document.getElementById('toast');
       toast.innerText = msg;
@@ -607,7 +632,6 @@
       setTimeout(() => toast.classList.remove('show'), 3000);
     }
 
-    // 从 Supabase 读取 leader_data 数据
     async function fetchLeaderData(queryKey) {
       if (!queryKey) {
         showToast('请先输入查询密钥！');
@@ -626,7 +650,7 @@
         }
 
         if (!data || data.length === 0) {
-          showToast('未找到数据。请检查密钥是否正确。如果确认无误，可能是后台权限未开放，请联系团长。');
+          showToast('未找到该密钥对应的团务数据，请核对密钥！');
           return null;
         }
 
@@ -645,6 +669,7 @@
         if (!imgData || typeof imgData !== 'object') imgData = {};
         if (!Array.isArray(imgData.applications)) imgData.applications = [];
         if (!Array.isArray(imgData.transfer_logs)) imgData.transfer_logs = [];
+        if (!Array.isArray(imgData.feedback)) imgData.feedback = [];
 
         return { recordId: record.id, queryKey: record.query_key, groupData, imgData };
       } catch (err) {
@@ -654,7 +679,6 @@
       }
     }
 
-    // 功能 1：查询我的排谷
     async function handleQueryAll() {
       const queryKey = document.getElementById('queryKeyInput').value.trim();
       const cn = document.getElementById('cnInput').value.trim();
@@ -667,7 +691,6 @@
 
       const allItems = res.groupData;
 
-      // 恪守规则：只看该 CN，彻底隐藏 status === "已排发" 的谷子
       const myItems = allItems.filter(item => {
         const matchCn = String(item.cn || '').trim().toLowerCase() === cn.toLowerCase();
         const notShipped = item.status !== '已排发';
@@ -677,7 +700,6 @@
       renderResults(myItems, `CN「${cn}」名下的排谷记录`, false);
     }
 
-    // 功能 2：查看可排发谷子
     async function handleQueryDispatchable() {
       const queryKey = document.getElementById('queryKeyInput').value.trim();
       const cn = document.getElementById('cnInput').value.trim();
@@ -700,7 +722,6 @@
       renderResults(dispatchableItems, `CN「${cn}」的可排发谷子`, true);
     }
 
-    // 渲染结果表格及手机卡片
     function renderResults(items, title, isDispatchMode) {
       window.ITEM_CACHE = items;
 
@@ -736,13 +757,8 @@
       }
 
       if (items.length === 0) {
-        const emptyHtml = `
-          <div class="empty-state">
-            <div>未查询到符合条件的谷子数据</div>
-            <div style="font-size:0.8rem; color:#94a3b8; margin-top:6px; font-weight:normal;">如果您确认密钥正确，请联系团长检查后台数据是否已录入</div>
-          </div>`;
-        tbody.innerHTML = `<tr><td colspan="7">${emptyHtml}</td></tr>`;
-        mobileCardsView.innerHTML = emptyHtml;
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">未查询到符合条件的谷子数据</td></tr>`;
+        mobileCardsView.innerHTML = `<div class="empty-state">未查询到符合条件的谷子数据</div>`;
         return;
       }
 
@@ -760,7 +776,6 @@
 
         const countryVal = item.country || item.region || '未设定';
 
-        // 桌面表格 HTML
         tableHtml += `
           <tr>
             <td>${imgTag}</td>
@@ -779,7 +794,6 @@
           </tr>
         `;
 
-        // 手机卡片 HTML
         cardsHtml += `
           <div class="item-card-mobile">
             <div class="item-card-mobile-top">
@@ -910,6 +924,61 @@
         showToast('网络异常，提交失败');
       }
     }
+
+    // ==================== 📮 匿名反馈提交功能 ====================
+    async function submitFeedback() {
+      const queryKey = document.getElementById('queryKeyInput').value.trim();
+      const category = document.getElementById('feedbackCategory').value;
+      const content = document.getElementById('feedbackContent').value.trim();
+
+      if (!queryKey) {
+        return showToast('请先在页面顶部输入查询密钥 (Query Key)！');
+      }
+      if (!content) {
+        return showToast('请输入反馈内容！');
+      }
+
+      const res = await fetchLeaderData(queryKey);
+      if (!res) return;
+
+      const imgData = res.imgData;
+      if (!Array.isArray(imgData.feedback)) {
+        imgData.feedback = [];
+      }
+
+      const newFeedback = {
+        id: 'fb_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        content: content,
+        category: category,
+        status: '未读',
+        created_at: new Date().toLocaleString('zh-CN'),
+        reply: ''
+      };
+
+      imgData.feedback.unshift(newFeedback);
+
+      try {
+        const { error } = await supabaseClient
+          .from('leader_data')
+          .update({
+            group_data: res.groupData,
+            image_data: imgData
+          })
+          .eq('query_key', queryKey);
+
+        if (error) {
+          console.error('Feedback submit error:', error);
+          return showToast('提交反馈失败: ' + error.message);
+        }
+
+        showToast('✅ 反馈已提交，感谢您的建议！');
+        document.getElementById('feedbackContent').value = '';
+      } catch (err) {
+        console.error('Feedback exception:', err);
+        showToast('网络异常，提交失败');
+      }
+    }
+    window.submitFeedback = submitFeedback;
 
     function escapeHtml(str) {
       if (!str) return '';
