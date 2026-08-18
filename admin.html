@@ -280,6 +280,59 @@
     .badge-fb-已处理 { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
     .badge-category { background-color: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
 
+    /* ==================== 表格分页栏样式 ==================== */
+    .pagination-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .pagination-info {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .pagination-buttons {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .page-btn {
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: var(--text-main);
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .page-btn:hover:not(:disabled) {
+      background: var(--bg);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .page-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
+    }
+
+    .page-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
     /* Modal Overlay */
     .modal-overlay {
       position: fixed;
@@ -618,9 +671,10 @@
           </div>
         </div>
 
+        <!-- 过滤器 (已配置 500ms 防抖) -->
         <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
-          <input type="text" id="filterSearch" placeholder="搜索谷子名称/CN..." style="max-width: 240px;" oninput="renderTable()">
-          <select id="filterCountry" style="max-width: 160px;" onchange="renderTable()">
+          <input type="text" id="filterSearch" placeholder="搜索谷子名称/CN..." style="max-width: 240px;" oninput="onSearchInput()">
+          <select id="filterCountry" style="max-width: 160px;" onchange="onFilterChange()">
             <option value="">全部地区 (country)</option>
             <option value="日本">日本</option>
             <option value="闲鱼">闲鱼</option>
@@ -631,7 +685,7 @@
             <option value="泰国">泰国</option>
             <option value="台湾">台湾</option>
           </select>
-          <select id="filterStatus" style="max-width: 160px;" onchange="renderTable()">
+          <select id="filterStatus" style="max-width: 160px;" onchange="onFilterChange()">
             <option value="">全部状态</option>
             <option value="未出荷">未出荷</option>
             <option value="已下单未到货">已下单未到货</option>
@@ -644,6 +698,7 @@
           </select>
         </div>
 
+        <!-- 桌面端表格视图 -->
         <div class="table-container desktop-table-view">
           <table>
             <thead>
@@ -663,7 +718,11 @@
           </table>
         </div>
 
+        <!-- 手机端卡片列表视图 -->
         <div class="mobile-cards-view" id="adminMobileCardsView"></div>
+
+        <!-- 表格底部独立分页栏 -->
+        <div id="tablePagination" class="pagination-container"></div>
       </div>
     </div>
 
@@ -823,7 +882,7 @@
         </div>
       </div>
       <div class="form-group" style="margin-bottom: 16px;">
-        <label for="modalFbReply">团长处理/回复备注 (团员自查或内部记录)</label>
+        <label for="modalFbReply">团长处理/回复备注 (记录说明)</label>
         <textarea id="modalFbReply" rows="3" placeholder="填写对此条反馈的处理说明或答复..."></textarea>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -894,6 +953,11 @@
     window.APP_CACHE = [];
     window.LOG_CACHE = [];
     window.FEEDBACK_CACHE = [];
+
+    // 分页与防抖全局状态
+    let CURRENT_PAGE = 1;
+    const PAGE_SIZE = 20;
+    let searchDebounceTimer = null;
 
     window.addEventListener('DOMContentLoaded', () => {
       const savedKey = localStorage.getItem('ADMIN_QUERY_KEY');
@@ -1034,6 +1098,7 @@
           showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)`);
         }
 
+        CURRENT_PAGE = 1;
         renderTable();
         renderDispatchWorkbench();
         renderTransferLogs();
@@ -1091,13 +1156,38 @@
       }
     }
 
-    /* --- 标签页 1：排表管理逻辑 --- */
+    /* --- 标签页 1：排表管理逻辑（含 500ms 防抖、每页20条分页、图片懒加载） --- */
+    function onSearchInput() {
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        CURRENT_PAGE = 1;
+        renderTable();
+      }, 500);
+    }
+    window.onSearchInput = onSearchInput;
+
+    function onFilterChange() {
+      CURRENT_PAGE = 1;
+      renderTable();
+    }
+    window.onFilterChange = onFilterChange;
+
+    function changePage(page) {
+      CURRENT_PAGE = page;
+      renderTable();
+      const masterCheck = document.getElementById('selectAllCheckbox');
+      if (masterCheck) masterCheck.checked = false;
+    }
+    window.changePage = changePage;
+
     function renderTable() {
       const tbody = document.getElementById('itemsTableBody');
       const mobileCardsView = document.getElementById('adminMobileCardsView');
-      const searchVal = document.getElementById('filterSearch').value.trim().toLowerCase();
-      const countryVal = document.getElementById('filterCountry').value;
-      const statusVal = document.getElementById('filterStatus').value;
+      const paginationContainer = document.getElementById('tablePagination');
+
+      const searchVal = (document.getElementById('filterSearch')?.value || '').trim().toLowerCase();
+      const countryVal = document.getElementById('filterCountry')?.value || '';
+      const statusVal = document.getElementById('filterStatus')?.value || '';
 
       const filtered = RAW_ITEMS.filter(item => {
         const nameMatch = (item.name || '').toLowerCase().includes(searchVal);
@@ -1110,23 +1200,33 @@
         return matchSearch && matchCountry && matchStatus;
       });
 
-      window.ITEM_CACHE = filtered;
+      const totalItems = filtered.length;
+      const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
 
-      if (filtered.length === 0) {
+      if (CURRENT_PAGE > totalPages) CURRENT_PAGE = totalPages;
+      if (CURRENT_PAGE < 1) CURRENT_PAGE = 1;
+
+      const startIndex = (CURRENT_PAGE - 1) * PAGE_SIZE;
+      const pageItems = filtered.slice(startIndex, startIndex + PAGE_SIZE);
+
+      window.ITEM_CACHE = pageItems;
+
+      if (totalItems === 0) {
         tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</td></tr>`;
         if (mobileCardsView) mobileCardsView.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</div>`;
+        if (paginationContainer) paginationContainer.innerHTML = '';
         return;
       }
 
       let html = '';
       let cardsHtml = '';
-      filtered.forEach((item, index) => {
+      pageItems.forEach((item, index) => {
         const imgTag = item.image_url 
-          ? `<img src="${escapeHtml(item.image_url)}" class="img-preview" alt="谷子">`
+          ? `<img src="${escapeHtml(item.image_url)}" class="img-preview" alt="谷子" loading="lazy">`
           : `<span style="color:#cbd5e1;font-size:0.75rem;">无图</span>`;
 
         const mobileImgTag = item.image_url
-          ? `<img src="${escapeHtml(item.image_url)}" class="admin-card-mobile-img" alt="谷子">`
+          ? `<img src="${escapeHtml(item.image_url)}" class="admin-card-mobile-img" alt="谷子" loading="lazy">`
           : `<div class="admin-card-mobile-noimg">无图</div>`;
 
         const countryStr = item.country || item.region || '日本';
@@ -1178,6 +1278,40 @@
 
       tbody.innerHTML = html;
       if (mobileCardsView) mobileCardsView.innerHTML = cardsHtml;
+
+      renderPaginationBar(totalItems, totalPages);
+    }
+
+    function renderPaginationBar(totalItems, totalPages) {
+      const container = document.getElementById('tablePagination');
+      if (!container) return;
+
+      if (totalPages <= 1) {
+        container.innerHTML = `<div class="pagination-info">共 ${totalItems} 条谷子数据（每页 20 条）</div>`;
+        return;
+      }
+
+      let btnHtml = '';
+      btnHtml += `<button class="page-btn" onclick="changePage(${CURRENT_PAGE - 1})" ${CURRENT_PAGE === 1 ? 'disabled' : ''}>&lt; 上一页</button>`;
+
+      for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= CURRENT_PAGE - 2 && i <= CURRENT_PAGE + 2)) {
+          btnHtml += `<button class="page-btn ${i === CURRENT_PAGE ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
+        } else if (i === CURRENT_PAGE - 3 || i === CURRENT_PAGE + 3) {
+          btnHtml += `<span style="padding:0 4px; color:var(--text-muted);">...</span>`;
+        }
+      }
+
+      btnHtml += `<button class="page-btn" onclick="changePage(${CURRENT_PAGE + 1})" ${CURRENT_PAGE === totalPages ? 'disabled' : ''}>下一页 &gt;</button>`;
+
+      container.innerHTML = `
+        <div class="pagination-info">
+          共 <strong>${totalItems}</strong> 条数据，第 <strong>${CURRENT_PAGE}</strong> / <strong>${totalPages}</strong> 页
+        </div>
+        <div class="pagination-buttons">
+          ${btnHtml}
+        </div>
+      `;
     }
 
     async function saveItemForm() {
@@ -1238,29 +1372,64 @@
     }
     window.clearForm = clearForm;
 
+    // 单条转单（支持部分数量转单）
     async function transferSingleByIndex(index) {
       const item = window.ITEM_CACHE[index];
       if (!item) return;
 
-      const newCn = prompt(`将谷子「${item.name}」从原 CN [${item.cn}] 转单给哪位新 CN？`);
-      if (!newCn || !newCn.trim()) return;
+      const currentQty = parseInt(item.quantity) || 1;
+      const oldCn = item.cn || '未命名';
 
-      const oldCn = item.cn;
-      item.cn = newCn.trim();
+      const newCn = prompt(`将谷子「${item.name}」从原 CN [${oldCn}] 转单给哪位新 CN？`);
+      if (newCn === null) return;
+      const trimmedCn = newCn.trim();
+      if (!trimmedCn) {
+        showToast('⚠️ 新 CN 不能为空！');
+        return;
+      }
+
+      const qtyInput = prompt(`请输入转单数量：\n（团员 [${oldCn}] 当前持有 ${currentQty} 个）`, currentQty);
+      if (qtyInput === null) return;
+
+      const transferQty = parseInt(qtyInput.trim());
+
+      if (isNaN(transferQty) || transferQty <= 0) {
+        alert('⚠️ 转单数量必须是大于 0 的有效整数！');
+        return;
+      }
+      if (transferQty > currentQty) {
+        alert(`⚠️ 转单数量不能超过当前持有数量！（当前仅持有 ${currentQty} 个）`);
+        return;
+      }
+
+      if (transferQty === currentQty) {
+        item.cn = trimmedCn;
+      } else {
+        item.quantity = currentQty - transferQty;
+        const newItem = {
+          ...item,
+          item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+          cn: trimmedCn,
+          quantity: transferQty,
+          created_at: new Date().toISOString()
+        };
+        RAW_ITEMS.unshift(newItem);
+      }
 
       RAW_LOGS.unshift({
-        id: 'log_' + Date.now(),
+        id: 'log_' + Date.now() + '_' + Math.floor(Math.random() * 100),
         time: new Date().toLocaleString('zh-CN'),
         from_cn: oldCn,
-        to_cn: item.cn,
+        to_cn: trimmedCn,
         item_name: item.name,
-        quantity: item.quantity || 1
+        quantity: transferQty
       });
 
       await saveDataToSupabase();
       renderTable();
       renderTransferLogs();
-      showToast('转单成功！');
+
+      showToast(`🎉 成功将 ${transferQty} 个「${item.name}」转给 [${trimmedCn}]！`);
     }
     window.transferSingleByIndex = transferSingleByIndex;
 
