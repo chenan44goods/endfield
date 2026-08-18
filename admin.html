@@ -280,7 +280,7 @@
     .badge-fb-已处理 { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
     .badge-category { background-color: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
 
-    /* ==================== 表格分页栏样式 ==================== */
+    /* 分页栏样式 */
     .pagination-container {
       display: flex;
       justify-content: space-between;
@@ -488,59 +488,6 @@
       flex-wrap: wrap;
     }
 
-    /* 网格 10 排版样式 */
-    .items-grid-10 {
-      display: grid;
-      grid-template-columns: repeat(10, 1fr);
-      gap: 6px;
-      margin-top: 8px;
-      margin-bottom: 8px;
-    }
-
-    @media (max-width: 900px) {
-      .items-grid-10 {
-        grid-template-columns: repeat(5, 1fr);
-      }
-    }
-
-    .grid-item-chip {
-      background: #f8fafc;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 6px;
-      font-size: 0.75rem;
-      text-align: center;
-    }
-
-    .grid-item-chip .name {
-      font-weight: 600;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .grid-item-chip .qty {
-      color: var(--primary);
-      font-weight: 700;
-    }
-
-    .app-card {
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 12px;
-      background: #ffffff;
-    }
-
-    .app-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-      padding-bottom: 8px;
-      border-bottom: 1px dashed var(--border);
-    }
-
     .img-preview {
       width: 36px;
       height: 36px;
@@ -631,7 +578,35 @@
                 <option value="未付款">未付款</option>
               </select>
             </div>
+
+            <!-- 💡 新增：谷子图片上传与粘贴URL区域（支持即时预览） -->
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label>谷子图片</label>
+              <div style="display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+                <!-- 方式1：粘贴图片URL -->
+                <div style="flex: 1; min-width: 200px;">
+                  <input type="text" id="inputImageUrl" placeholder="粘贴图片链接（如 https://...）" style="margin-bottom: 6px;" oninput="handleImageUrlInput(this.value)">
+                  <div style="font-size: 0.8rem; color: var(--text-muted);">支持直接粘贴网络图片链接</div>
+                </div>
+
+                <!-- 方式2：本地上传 -->
+                <div style="flex: 1; min-width: 200px;">
+                  <label class="btn btn-secondary" style="cursor: pointer; margin: 0; width: 100%; justify-content: center;">
+                    📁 选择本地图片上传
+                    <input type="file" id="inputImageFile" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+                  </label>
+                  <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;" id="uploadStatusText">自动上传到 Supabase 图床</div>
+                </div>
+
+                <!-- 图片预览框 -->
+                <div id="imagePreviewBox" style="width: 80px; height: 80px; border: 1px dashed var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #f8fafc; overflow: hidden; position: relative; flex-shrink: 0;">
+                  <span id="imagePreviewText" style="font-size: 0.75rem; color: #94a3b8;">无图预览</span>
+                  <img id="imagePreviewImg" style="width: 100%; height: 100%; object-fit: cover; border-radius: 6px; display: none;" alt="预览">
+                </div>
+              </div>
+            </div>
           </div>
+
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <button type="submit" class="btn btn-primary">保存谷子到 group_data</button>
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -958,6 +933,7 @@
     let CURRENT_PAGE = 1;
     const PAGE_SIZE = 20;
     let searchDebounceTimer = null;
+    let IS_IMAGE_UPLOADING = false;
 
     window.addEventListener('DOMContentLoaded', () => {
       const savedKey = localStorage.getItem('ADMIN_QUERY_KEY');
@@ -1156,7 +1132,7 @@
       }
     }
 
-    /* --- 标签页 1：排表管理逻辑（含 500ms 防抖、每页20条分页、图片懒加载） --- */
+    /* --- 标签页 1：排表管理逻辑（含图片上传、500ms防抖、分页、懒加载） --- */
     function onSearchInput() {
       clearTimeout(searchDebounceTimer);
       searchDebounceTimer = setTimeout(() => {
@@ -1179,6 +1155,94 @@
       if (masterCheck) masterCheck.checked = false;
     }
     window.changePage = changePage;
+
+    // 图片URL输入即时预览
+    function handleImageUrlInput(val) {
+      updateImagePreview(val.trim());
+    }
+    window.handleImageUrlInput = handleImageUrlInput;
+
+    // 更新预览框
+    function updateImagePreview(url) {
+      const imgEl = document.getElementById('imagePreviewImg');
+      const textEl = document.getElementById('imagePreviewText');
+      if (url) {
+        imgEl.src = url;
+        imgEl.style.display = 'block';
+        textEl.style.display = 'none';
+      } else {
+        imgEl.src = '';
+        imgEl.style.display = 'none';
+        textEl.style.display = 'block';
+      }
+    }
+    window.updateImagePreview = updateImagePreview;
+
+    // 本地图片选择并上传至 Supabase Storage
+    async function handleImageUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      if (!file.type.startsWith('image/')) {
+        showToast('请选择有效的图片文件！');
+        e.target.value = '';
+        return;
+      }
+
+      // 本地即时预览
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        updateImagePreview(evt.target.result);
+      };
+      reader.readAsDataURL(file);
+
+      const statusText = document.getElementById('uploadStatusText');
+      if (statusText) statusText.innerText = '⏳ 正在上传图片至 Supabase...';
+      IS_IMAGE_UPLOADING = true;
+
+      try {
+        const ext = file.name.split('.').pop() || 'png';
+        const folder = CURRENT_QUERY_KEY || 'default';
+        const filePath = `${folder}/${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
+
+        const { data, error } = await supabaseClient
+          .storage
+          .from('goods-images')
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: true
+          });
+
+        if (error) {
+          console.error('Upload error:', error);
+          showToast('图片上传失败: ' + error.message);
+          if (statusText) statusText.innerText = '❌ 上传失败，请检查配置或改用链接';
+          IS_IMAGE_UPLOADING = false;
+          return;
+        }
+
+        const { data: publicUrlData } = supabaseClient
+          .storage
+          .from('goods-images')
+          .getPublicUrl(filePath);
+
+        const finalUrl = publicUrlData ? publicUrlData.publicUrl : '';
+        if (finalUrl) {
+          document.getElementById('inputImageUrl').value = finalUrl;
+          updateImagePreview(finalUrl);
+          showToast('🎉 图片上传成功！');
+          if (statusText) statusText.innerText = '✅ 上传成功';
+        }
+      } catch (err) {
+        console.error('Upload exception:', err);
+        showToast('网络异常，图片上传失败');
+        if (statusText) statusText.innerText = '❌ 上传异常，请重试';
+      } finally {
+        IS_IMAGE_UPLOADING = false;
+        e.target.value = '';
+      }
+    }
+    window.handleImageUpload = handleImageUpload;
 
     function renderTable() {
       const tbody = document.getElementById('itemsTableBody');
@@ -1315,6 +1379,10 @@
     }
 
     async function saveItemForm() {
+      if (IS_IMAGE_UPLOADING) {
+        return showToast('图片正在上传中，请稍等上传完成后再保存！');
+      }
+
       const editId = document.getElementById('editItemId').value;
       const name = document.getElementById('inputName').value.trim();
       const cn = document.getElementById('inputCn').value.trim();
@@ -1322,19 +1390,20 @@
       const quantity = parseInt(document.getElementById('inputQuantity').value) || 1;
       const country = document.getElementById('inputCountry').value;
       const status = document.getElementById('inputStatus').value;
+      const imageUrl = (document.getElementById('inputImageUrl')?.value || '').trim();
 
       if (!name || !cn) return showToast('请填写谷子名称和 CN！');
 
       if (editId) {
         const idx = RAW_ITEMS.findIndex(i => String(i.item_id || i.id) === String(editId));
         if (idx !== -1) {
-          RAW_ITEMS[idx] = { ...RAW_ITEMS[idx], name, cn, price, quantity, country, status };
+          RAW_ITEMS[idx] = { ...RAW_ITEMS[idx], name, cn, price, quantity, country, status, image_url: imageUrl };
         }
       } else {
         const newItem = {
           item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random()*1000),
           name, cn, price, quantity, country, status,
-          image_url: ''
+          image_url: imageUrl
         };
         RAW_ITEMS.unshift(newItem);
       }
@@ -1357,6 +1426,9 @@
       document.getElementById('inputQuantity').value = item.quantity || 1;
       document.getElementById('inputCountry').value = item.country || item.region || '日本';
       document.getElementById('inputStatus').value = item.status || '未出荷';
+      
+      document.getElementById('inputImageUrl').value = item.image_url || '';
+      updateImagePreview(item.image_url || '');
 
       document.getElementById('formTitle').innerText = '✏️ 修改谷子信息';
       document.getElementById('btnClearForm').style.display = 'inline-block';
@@ -1367,6 +1439,14 @@
     function clearForm() {
       document.getElementById('editItemId').value = '';
       document.getElementById('itemForm').reset();
+      document.getElementById('inputImageUrl').value = '';
+      document.getElementById('inputImageFile').value = '';
+      updateImagePreview('');
+      
+      const statusText = document.getElementById('uploadStatusText');
+      if (statusText) statusText.innerText = '自动上传到 Supabase 图床';
+      
+      IS_IMAGE_UPLOADING = false;
       document.getElementById('formTitle').innerText = '📝 录入/编辑谷子';
       document.getElementById('btnClearForm').style.display = 'none';
     }
@@ -1803,7 +1883,7 @@
     }
     window.deleteCompletedAppByIndex = deleteCompletedAppByIndex;
 
-    /* --- 标签页 3：转单记录逻辑 --- */
+    /* --- 标签页 3：转单日志 --- */
     function renderTransferLogs() {
       const tbody = document.getElementById('transferLogsTableBody');
       window.LOG_CACHE = RAW_LOGS;
@@ -2096,6 +2176,7 @@
       ];
 
       await saveDataToSupabase();
+      CURRENT_PAGE = 1;
       renderTable();
       renderDispatchWorkbench();
       renderTransferLogs();
