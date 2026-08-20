@@ -4,7 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>👑 团长后台管理系统 - 谷圈团务系统</title>
+  <!-- Supabase CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- SheetJS (用于 Excel 批量导入) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -21,29 +23,185 @@
       --purple: #8b5cf6;
       --radius: 12px;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-    body { background-color: var(--bg); color: var(--text-main); line-height: 1.5; padding: 16px; min-height: 100vh; }
-    .container { max-width: 1320px; margin: 0 auto; }
-    header { background: var(--card-bg); border-radius: var(--radius); padding: 16px 24px; margin-bottom: 20px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 12px; }
-    .header-title { display: flex; align-items: center; gap: 12px; }
-    .header-title h1 { font-size: 1.4rem; font-weight: 700; }
-    .key-selector { display: flex; align-items: center; gap: 8px; }
-    .key-selector input { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; width: 180px; }
-    .user-info { display: flex; align-items: center; gap: 12px; font-size: 0.88rem; }
-    .nav-tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid var(--border); padding-bottom: 0; overflow-x: auto; white-space: nowrap; }
-    .tab-btn { padding: 10px 20px; background: transparent; border: none; border-bottom: 3px solid transparent; font-size: 0.95rem; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.2s; }
-    .tab-btn:hover { color: var(--primary); }
-    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); background: var(--card-bg); border-top-left-radius: 8px; border-top-right-radius: 8px; }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-    .card { background: var(--card-bg); border-radius: var(--radius); border: 1px solid var(--border); padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    .card-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 16px; }
-    .form-group { display: flex; flex-direction: column; gap: 6px; }
-    .form-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
-    input[type="text"], input[type="number"], select, textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; outline: none; background: #ffffff; }
-    input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15); }
-    .btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      line-height: 1.5;
+      padding: 16px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1320px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 16px 24px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-title h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+
+    .key-selector {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .key-selector input {
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.9rem;
+      width: 180px;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.88rem;
+    }
+
+    /* Tabs */
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 0;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .tab-btn {
+      padding: 10px 20px;
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab-btn:hover {
+      color: var(--primary);
+    }
+
+    .tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+      background: var(--card-bg);
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    /* Form controls */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    input[type="text"], input[type="number"], select, textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.9rem;
+      outline: none;
+      background: #ffffff;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
     .btn-primary { background-color: var(--primary); color: white; }
     .btn-primary:hover { background-color: var(--primary-hover); }
     .btn-success { background-color: var(--success); color: white; }
@@ -53,15 +211,66 @@
     .btn-danger { background-color: var(--danger); color: white; }
     .btn-danger:hover { background-color: #dc2626; }
     .btn-purple { background-color: var(--purple); color: white; }
-    .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
-    .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 12px; }
-    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88rem; min-width: 850px; }
-    th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; }
-    th { background-color: #f8fafc; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+    .btn-purple:hover { background-color: #7c3aed; }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Table */
+    .table-container {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin-bottom: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.88rem;
+      min-width: 900px;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    th {
+      background-color: #f8fafc;
+      color: var(--text-muted);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
     tr:hover { background-color: #f8fafc; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
-    .badge-batch { background-color: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe; }
-    .badge-country { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .badge-batch {
+      background-color: #ede9fe;
+      color: #6d28d9;
+      border: 1px solid #ddd6fe;
+    }
+
+    .badge-country {
+      background-color: #f1f5f9;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+    }
+
     .badge-status-未出荷 { background-color: #fee2e2; color: #991b1b; }
     .badge-status-已下单未到货 { background-color: #ffedd5; color: #9a3412; }
     .badge-status-回国中 { background-color: #fef3c7; color: #92400e; }
@@ -70,45 +279,236 @@
     .badge-status-已申请发货 { background-color: #f3e8ff; color: #6b21a8; }
     .badge-status-已排发 { background-color: #e2e8f0; color: #475569; }
     .badge-status-未付款 { background-color: #fecdd3; color: #881337; }
-    .badge-fb-未读 { background-color: #fee2e2; color: #991b1b; }
-    .badge-fb-已读 { background-color: #e0f2fe; color: #0369a1; }
-    .badge-fb-已处理 { background-color: #d1fae5; color: #065f46; }
-    .badge-category { background-color: #f3e8ff; color: #6b21a8; }
-    .pagination-container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
-    .pagination-info { font-size: 0.85rem; color: var(--text-muted); }
-    .pagination-buttons { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-    .page-btn { padding: 5px 10px; border: 1px solid var(--border); background: #ffffff; color: var(--text-main); border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
-    .page-btn.active { background: var(--primary); border-color: var(--primary); color: #ffffff; }
-    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.7); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
-    .modal-overlay.active { opacity: 1; pointer-events: auto; }
-    .modal { background: white; border-radius: var(--radius); width: 90%; max-width: 520px; padding: 24px; }
-    .toast { position: fixed; bottom: 24px; right: 24px; background: #0f172a; color: white; padding: 12px 20px; border-radius: 8px; font-size: 0.9rem; z-index: 3000; opacity: 0; transform: translateY(10px); transition: opacity 0.3s; pointer-events: none; }
-    .toast.show { opacity: 1; transform: translateY(0); }
-    .mobile-cards-view { display: none; }
-    @media (max-width: 768px) {
-      header { flex-direction: column; align-items: stretch; }
-      .desktop-table-view { display: none !important; }
-      .mobile-cards-view { display: flex; flex-direction: column; gap: 12px; }
+
+    .badge-fb-未读 { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .badge-fb-已读 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .badge-fb-已处理 { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+    .badge-category { background-color: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
+
+    /* 分页栏样式 */
+    .pagination-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
     }
-    .admin-card-mobile { background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-    .admin-card-mobile-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 6px; border-bottom: 1px dashed var(--border); }
-    .admin-card-mobile-body { display: flex; gap: 12px; align-items: center; }
-    .admin-card-mobile-img { width: 50px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
-    .admin-card-mobile-noimg { width: 50px; height: 50px; background: #f1f5f9; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 0.75rem; }
-    .admin-card-mobile-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-    .admin-card-mobile-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; border-top: 1px dashed var(--border); }
-    .items-grid-10 { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; margin: 8px 0; }
-    @media (max-width: 900px) { .items-grid-10 { grid-template-columns: repeat(5, 1fr); } }
-    .grid-item-chip { background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 6px; font-size: 0.75rem; text-align: center; }
-    .app-card { border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; background: #ffffff; }
-    .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dashed var(--border); }
-    .img-preview { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
+
+    .pagination-info {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .pagination-buttons {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .page-btn {
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: var(--text-main);
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .page-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
+    }
+
+    /* Modal Overlay */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(15, 23, 42, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 2000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal {
+      background: white;
+      border-radius: var(--radius);
+      width: 90%;
+      max-width: 520px;
+      padding: 24px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #0f172a;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      z-index: 3000;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.3s, transform 0.3s;
+      pointer-events: none;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* 手机端卡片列表 */
+    .mobile-cards-view {
+      display: none;
+    }
+
+    @media (max-width: 768px) {
+      header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .desktop-table-view {
+        display: none !important;
+      }
+      .mobile-cards-view {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    }
+
+    .admin-card-mobile {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .admin-card-mobile-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed var(--border);
+    }
+
+    .admin-card-mobile-body {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .admin-card-mobile-img {
+      width: 50px;
+      height: 50px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    .admin-card-mobile-noimg {
+      width: 50px;
+      height: 50px;
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #94a3b8;
+      font-size: 0.75rem;
+    }
+
+    .admin-card-mobile-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .admin-card-mobile-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed var(--border);
+    }
+
+    .items-grid-10 {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 6px;
+      margin: 8px 0;
+    }
+
+    @media (max-width: 900px) {
+      .items-grid-10 {
+        grid-template-columns: repeat(5, 1fr);
+      }
+    }
+
+    .grid-item-chip {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px;
+      font-size: 0.75rem;
+      text-align: center;
+    }
+
+    .app-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      background: #ffffff;
+    }
+
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      border-bottom: 1px dashed var(--border);
+    }
+
+    .img-preview {
+      width: 36px;
+      height: 36px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
   </style>
 </head>
 <body>
   <div class="container">
+    <!-- Header -->
     <header>
-      <div class="header-title"><h1>👑 团长后台管理系统</h1></div>
+      <div class="header-title">
+        <h1>👑 团长后台管理系统</h1>
+      </div>
       <div class="key-selector">
         <label for="adminQueryKey" style="font-size: 0.88rem; font-weight: 600;">当前 Query Key:</label>
         <input type="text" id="adminQueryKey" value="4goods" placeholder="请输入 Query Key">
@@ -121,6 +521,7 @@
       </div>
     </header>
 
+    <!-- Nav Tabs -->
     <div class="nav-tabs">
       <button class="tab-btn active" onclick="switchTab('tabItems')">📊 排表管理 (group_data)</button>
       <button class="tab-btn" onclick="switchTab('tabDispatch')">🚀 排发工作台 (applications)</button>
@@ -147,8 +548,9 @@
               <label for="inputCn">认领 CN (圈名) *</label>
               <input type="text" id="inputCn" required placeholder="如：小明">
             </div>
+            <!-- 所属批次字段 -->
             <div class="form-group">
-              <label for="inputBatch">所属批次 (batch_name)</label>
+              <label for="inputBatch">所属批次</label>
               <input type="text" id="inputBatch" list="batchPresets" placeholder="如：台湾711 / 日本场贩" value="默认批次">
               <datalist id="batchPresets">
                 <option value="默认批次">
@@ -191,13 +593,13 @@
               </select>
             </div>
 
-            <!-- 图片上传 -->
+            <!-- 图片上传区域 -->
             <div class="form-group" style="grid-column: 1 / -1;">
               <label>谷子图片</label>
               <div style="display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 200px;">
                   <input type="text" id="inputImageUrl" placeholder="粘贴图片链接（如 https://...）" style="margin-bottom: 6px;" oninput="handleImageUrlInput(this.value)">
-                  <div style="font-size: 0.8rem; color: var(--text-muted);">支持直接粘贴图片网络链接</div>
+                  <div style="font-size: 0.8rem; color: var(--text-muted);">支持直接粘贴网络图片链接</div>
                 </div>
                 <div style="flex: 1; min-width: 200px;">
                   <label class="btn btn-secondary" style="cursor: pointer; margin: 0; width: 100%; justify-content: center;">
@@ -244,22 +646,37 @@
           </div>
         </div>
 
-        <!-- 过滤器 -->
+        <!-- 过滤器：搜索 + 批次筛选 + 地区筛选 + 状态筛选 -->
         <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
           <input type="text" id="filterSearch" placeholder="搜索谷子名称/CN/批次..." style="max-width: 200px;" oninput="onSearchInput()">
           <select id="filterBatch" style="max-width: 150px;" onchange="onFilterChange()">
             <option value="">全部批次</option>
           </select>
           <select id="filterCountry" style="max-width: 140px;" onchange="onFilterChange()">
-            <option value="">全部地区</option>
-            <option value="日本">日本</option><option value="台湾">台湾</option><option value="闲鱼">闲鱼</option><option value="淘宝店">淘宝店</option><option value="美国">美国</option>
+            <option value="">全部地区 (country)</option>
+            <option value="日本">日本</option>
+            <option value="台湾">台湾</option>
+            <option value="闲鱼">闲鱼</option>
+            <option value="淘宝店">淘宝店</option>
+            <option value="美国">美国</option>
+            <option value="韩国">韩国</option>
+            <option value="印尼">印尼</option>
+            <option value="泰国">泰国</option>
           </select>
           <select id="filterStatus" style="max-width: 140px;" onchange="onFilterChange()">
             <option value="">全部状态</option>
-            <option value="未出荷">未出荷</option><option value="已下单未到货">已下单未到货</option><option value="回国中">回国中</option><option value="已到货">已到货</option><option value="可排发">可排发</option><option value="已申请发货">已申请发货</option><option value="已排发">已排发</option><option value="未付款">未付款</option>
+            <option value="未出荷">未出荷</option>
+            <option value="已下单未到货">已下单未到货</option>
+            <option value="回国中">回国中</option>
+            <option value="已到货">已到货</option>
+            <option value="可排发">可排发</option>
+            <option value="已申请发货">已申请发货</option>
+            <option value="已排发">已排发</option>
+            <option value="未付款">未付款</option>
           </select>
         </div>
 
+        <!-- 桌面端表格视图 -->
         <div class="table-container desktop-table-view">
           <table>
             <thead>
@@ -271,7 +688,7 @@
                 <th>所属批次</th>
                 <th>单价 (元)</th>
                 <th>数量</th>
-                <th>地区</th>
+                <th>地区 (country)</th>
                 <th>状态</th>
                 <th>操作</th>
               </tr>
@@ -280,6 +697,7 @@
           </table>
         </div>
 
+        <!-- 手机端卡片列表视图 -->
         <div class="mobile-cards-view" id="adminMobileCardsView"></div>
         <div id="tablePagination" class="pagination-container"></div>
       </div>
@@ -400,7 +818,7 @@
     </div>
   </div>
 
-  <!-- Auth 登录 Modal Overlay -->
+  <!-- Auth 登录 Modal -->
   <div class="modal-overlay active" id="authOverlay">
     <div class="modal">
       <h2 style="font-size: 1.3rem; margin-bottom: 16px; text-align: center;">🔐 团长后台 Supabase 登录</h2>
@@ -567,13 +985,22 @@
       } catch (err) { showToast('保存异常'); return false; }
     }
 
+    // 动态提取批次列表并填充下拉与筛选框
     function updateBatchDropdownOptions() {
-      const batchSet = new Set(['默认批次', '台湾711', '日本场贩']);
-      RAW_ITEMS.forEach(i => { if (i.batch_name) batchSet.add(i.batch_name.trim()); });
+      const batchSet = new Set(['默认批次', '台湾711', '日本场贩', '泰国场贩']);
+      RAW_ITEMS.forEach(i => {
+        if (i.batch_name && i.batch_name.trim()) {
+          batchSet.add(i.batch_name.trim());
+        }
+      });
+      
       const dl = document.getElementById('batchPresets');
       const filterSel = document.getElementById('filterBatch');
-      const curFilter = filterSel.value;
-      if (dl) dl.innerHTML = Array.from(batchSet).map(b => `<option value="${escapeHtml(b)}">`).join('');
+      const curFilter = filterSel ? filterSel.value : '';
+
+      if (dl) {
+        dl.innerHTML = Array.from(batchSet).map(b => `<option value="${escapeHtml(b)}">`).join('');
+      }
       if (filterSel) {
         filterSel.innerHTML = '<option value="">全部批次</option>' + Array.from(batchSet).map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
         filterSel.value = curFilter;
@@ -646,9 +1073,12 @@
         const cnMatch = (item.cn || '').toLowerCase().includes(searchVal);
         const batchMatchText = (item.batch_name || '').toLowerCase().includes(searchVal);
         const matchSearch = nameMatch || cnMatch || batchMatchText;
+        
+        // 批次、地区、状态多维组合筛选
         const matchBatch = !batchVal || (item.batch_name || '默认批次') === batchVal;
         const matchCountry = !countryVal || (item.country || '日本') === countryVal;
         const matchStatus = !statusVal || item.status === statusVal;
+
         return matchSearch && matchBatch && matchCountry && matchStatus;
       });
 
