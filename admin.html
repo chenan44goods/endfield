@@ -4,9 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>👑 团长后台管理系统 - 谷圈团务系统</title>
-  <!-- Supabase CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- SheetJS (用于 Excel 批量导入) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -23,185 +21,29 @@
       --purple: #8b5cf6;
       --radius: 12px;
     }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    }
-
-    body {
-      background-color: var(--bg);
-      color: var(--text-main);
-      line-height: 1.5;
-      padding: 16px;
-      min-height: 100vh;
-    }
-
-    .container {
-      max-width: 1280px;
-      margin: 0 auto;
-    }
-
-    header {
-      background: var(--card-bg);
-      border-radius: var(--radius);
-      padding: 16px 24px;
-      margin-bottom: 20px;
-      border: 1px solid var(--border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    .header-title {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .header-title h1 {
-      font-size: 1.4rem;
-      font-weight: 700;
-    }
-
-    .key-selector {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .key-selector input {
-      padding: 6px 12px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      font-size: 0.9rem;
-      width: 180px;
-    }
-
-    .user-info {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 0.88rem;
-    }
-
-    /* Tabs */
-    .nav-tabs {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 20px;
-      border-bottom: 2px solid var(--border);
-      padding-bottom: 0;
-      overflow-x: auto;
-      white-space: nowrap;
-    }
-
-    .tab-btn {
-      padding: 10px 20px;
-      background: transparent;
-      border: none;
-      border-bottom: 3px solid transparent;
-      font-size: 0.95rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .tab-btn:hover {
-      color: var(--primary);
-    }
-
-    .tab-btn.active {
-      color: var(--primary);
-      border-bottom-color: var(--primary);
-      background: var(--card-bg);
-      border-top-left-radius: 8px;
-      border-top-right-radius: 8px;
-    }
-
-    .tab-content {
-      display: none;
-    }
-
-    .tab-content.active {
-      display: block;
-    }
-
-    /* Cards */
-    .card {
-      background: var(--card-bg);
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      padding: 20px;
-      margin-bottom: 20px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-
-    .card-title {
-      font-size: 1.1rem;
-      font-weight: 600;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    /* Form controls */
-    .form-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .form-group label {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--text-muted);
-    }
-
-    input[type="text"], input[type="number"], select, textarea {
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      font-size: 0.9rem;
-      outline: none;
-      background: #ffffff;
-    }
-
-    input:focus, select:focus, textarea:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
-    }
-
-    .btn {
-      padding: 8px 16px;
-      border: none;
-      border-radius: 6px;
-      font-size: 0.88rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background-color 0.2s;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    body { background-color: var(--bg); color: var(--text-main); line-height: 1.5; padding: 16px; min-height: 100vh; }
+    .container { max-width: 1320px; margin: 0 auto; }
+    header { background: var(--card-bg); border-radius: var(--radius); padding: 16px 24px; margin-bottom: 20px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 12px; }
+    .header-title { display: flex; align-items: center; gap: 12px; }
+    .header-title h1 { font-size: 1.4rem; font-weight: 700; }
+    .key-selector { display: flex; align-items: center; gap: 8px; }
+    .key-selector input { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; width: 180px; }
+    .user-info { display: flex; align-items: center; gap: 12px; font-size: 0.88rem; }
+    .nav-tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid var(--border); padding-bottom: 0; overflow-x: auto; white-space: nowrap; }
+    .tab-btn { padding: 10px 20px; background: transparent; border: none; border-bottom: 3px solid transparent; font-size: 0.95rem; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.2s; }
+    .tab-btn:hover { color: var(--primary); }
+    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); background: var(--card-bg); border-top-left-radius: 8px; border-top-right-radius: 8px; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .card { background: var(--card-bg); border-radius: var(--radius); border: 1px solid var(--border); padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .card-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
+    input[type="text"], input[type="number"], select, textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; outline: none; background: #ffffff; }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15); }
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s; display: inline-flex; align-items: center; gap: 6px; }
     .btn-primary { background-color: var(--primary); color: white; }
     .btn-primary:hover { background-color: var(--primary-hover); }
     .btn-success { background-color: var(--success); color: white; }
@@ -211,60 +53,15 @@
     .btn-danger { background-color: var(--danger); color: white; }
     .btn-danger:hover { background-color: #dc2626; }
     .btn-purple { background-color: var(--purple); color: white; }
-    .btn-purple:hover { background-color: #7c3aed; }
-
-    .btn-group {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    /* Table */
-    .table-container {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      margin-bottom: 12px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      text-align: left;
-      font-size: 0.88rem;
-      min-width: 800px;
-    }
-
-    th, td {
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--border);
-      vertical-align: middle;
-      white-space: nowrap;
-    }
-
-    th {
-      background-color: #f8fafc;
-      color: var(--text-muted);
-      font-weight: 600;
-      white-space: nowrap;
-    }
-
+    .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88rem; min-width: 850px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; }
+    th { background-color: #f8fafc; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
     tr:hover { background-color: #f8fafc; }
-
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 9999px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      white-space: nowrap;
-    }
-
-    .badge-country {
-      background-color: #f1f5f9;
-      color: #475569;
-      border: 1px solid #cbd5e1;
-    }
-
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+    .badge-batch { background-color: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe; }
+    .badge-country { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
     .badge-status-未出荷 { background-color: #fee2e2; color: #991b1b; }
     .badge-status-已下单未到货 { background-color: #ffedd5; color: #9a3412; }
     .badge-status-回国中 { background-color: #fef3c7; color: #92400e; }
@@ -273,240 +70,48 @@
     .badge-status-已申请发货 { background-color: #f3e8ff; color: #6b21a8; }
     .badge-status-已排发 { background-color: #e2e8f0; color: #475569; }
     .badge-status-未付款 { background-color: #fecdd3; color: #881337; }
-
-    /* 反馈标签状态 */
-    .badge-fb-未读 { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-    .badge-fb-已读 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
-    .badge-fb-已处理 { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
-    .badge-category { background-color: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
-
-    /* 分页栏样式 */
-    .pagination-container {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 16px;
-      padding-top: 12px;
-      border-top: 1px solid var(--border);
-    }
-
-    .pagination-info {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-    }
-
-    .pagination-buttons {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    .page-btn {
-      padding: 5px 10px;
-      border: 1px solid var(--border);
-      background: #ffffff;
-      color: var(--text-main);
-      border-radius: 6px;
-      font-size: 0.82rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-
-    .page-btn:hover:not(:disabled) {
-      background: var(--bg);
-      border-color: var(--primary);
-      color: var(--primary);
-    }
-
-    .page-btn.active {
-      background: var(--primary);
-      border-color: var(--primary);
-      color: #ffffff;
-    }
-
-    .page-btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-
-    /* Modal Overlay */
-    .modal-overlay {
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(15, 23, 42, 0.7);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 2000;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s;
-    }
-
-    .modal-overlay.active {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .modal {
-      background: white;
-      border-radius: var(--radius);
-      width: 90%;
-      max-width: 520px;
-      padding: 24px;
-      box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);
-    }
-
-    .toast {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      background: #0f172a;
-      color: white;
-      padding: 12px 20px;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      z-index: 3000;
-      opacity: 0;
-      transform: translateY(10px);
-      transition: opacity 0.3s, transform 0.3s;
-      pointer-events: none;
-    }
-
-    .toast.show {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    /* 手机端卡片列表 */
-    .mobile-cards-view {
-      display: none;
-    }
-
+    .badge-fb-未读 { background-color: #fee2e2; color: #991b1b; }
+    .badge-fb-已读 { background-color: #e0f2fe; color: #0369a1; }
+    .badge-fb-已处理 { background-color: #d1fae5; color: #065f46; }
+    .badge-category { background-color: #f3e8ff; color: #6b21a8; }
+    .pagination-container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .pagination-info { font-size: 0.85rem; color: var(--text-muted); }
+    .pagination-buttons { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .page-btn { padding: 5px 10px; border: 1px solid var(--border); background: #ffffff; color: var(--text-main); border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+    .page-btn.active { background: var(--primary); border-color: var(--primary); color: #ffffff; }
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.7); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .modal-overlay.active { opacity: 1; pointer-events: auto; }
+    .modal { background: white; border-radius: var(--radius); width: 90%; max-width: 520px; padding: 24px; }
+    .toast { position: fixed; bottom: 24px; right: 24px; background: #0f172a; color: white; padding: 12px 20px; border-radius: 8px; font-size: 0.9rem; z-index: 3000; opacity: 0; transform: translateY(10px); transition: opacity 0.3s; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .mobile-cards-view { display: none; }
     @media (max-width: 768px) {
-      header {
-        flex-direction: column;
-        align-items: stretch;
-      }
-      .desktop-table-view {
-        display: none !important;
-      }
-      .mobile-cards-view {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-      .app-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 6px;
-      }
+      header { flex-direction: column; align-items: stretch; }
+      .desktop-table-view { display: none !important; }
+      .mobile-cards-view { display: flex; flex-direction: column; gap: 12px; }
     }
-
-    .admin-card-mobile {
-      background: #ffffff;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    }
-
-    .admin-card-mobile-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-bottom: 6px;
-      border-bottom: 1px dashed var(--border);
-    }
-
-    .admin-card-mobile-body {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-
-    .admin-card-mobile-img {
-      width: 50px;
-      height: 50px;
-      object-fit: cover;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-
-    .admin-card-mobile-noimg {
-      width: 50px;
-      height: 50px;
-      background: #f1f5f9;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #94a3b8;
-      font-size: 0.75rem;
-      flex-shrink: 0;
-    }
-
-    .admin-card-mobile-info {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .admin-card-mobile-title {
-      font-weight: 700;
-      font-size: 0.95rem;
-      color: var(--text-main);
-      word-break: break-all;
-    }
-
-    .admin-card-mobile-meta {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      flex-wrap: wrap;
-    }
-
-    .admin-card-mobile-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      padding-top: 6px;
-      border-top: 1px dashed var(--border);
-      flex-wrap: wrap;
-    }
-
-    .img-preview {
-      width: 36px;
-      height: 36px;
-      object-fit: cover;
-      border-radius: 4px;
-      border: 1px solid var(--border);
-    }
+    .admin-card-mobile { background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .admin-card-mobile-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 6px; border-bottom: 1px dashed var(--border); }
+    .admin-card-mobile-body { display: flex; gap: 12px; align-items: center; }
+    .admin-card-mobile-img { width: 50px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
+    .admin-card-mobile-noimg { width: 50px; height: 50px; background: #f1f5f9; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 0.75rem; }
+    .admin-card-mobile-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .admin-card-mobile-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; border-top: 1px dashed var(--border); }
+    .items-grid-10 { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; margin: 8px 0; }
+    @media (max-width: 900px) { .items-grid-10 { grid-template-columns: repeat(5, 1fr); } }
+    .grid-item-chip { background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 6px; font-size: 0.75rem; text-align: center; }
+    .app-card { border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; background: #ffffff; }
+    .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dashed var(--border); }
+    .img-preview { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
   </style>
 </head>
 <body>
   <div class="container">
-    <!-- Header -->
     <header>
-      <div class="header-title">
-        <h1>👑 团长后台管理系统</h1>
-      </div>
+      <div class="header-title"><h1>👑 团长后台管理系统</h1></div>
       <div class="key-selector">
         <label for="adminQueryKey" style="font-size: 0.88rem; font-weight: 600;">当前 Query Key:</label>
-        <input type="text" id="adminQueryKey" value="demo_key" placeholder="请输入 Query Key">
+        <input type="text" id="adminQueryKey" value="4goods" placeholder="请输入 Query Key">
         <button class="btn btn-primary" onclick="loadDataByQueryKey()">切换并加载数据</button>
       </div>
       <div class="user-info">
@@ -516,7 +121,6 @@
       </div>
     </header>
 
-    <!-- Nav Tabs -->
     <div class="nav-tabs">
       <button class="tab-btn active" onclick="switchTab('tabItems')">📊 排表管理 (group_data)</button>
       <button class="tab-btn" onclick="switchTab('tabDispatch')">🚀 排发工作台 (applications)</button>
@@ -527,7 +131,6 @@
 
     <!-- 标签页 1：排表管理 -->
     <div class="tab-content active" id="tabItems">
-      <!-- 录入与编辑表单 -->
       <div class="card">
         <div class="card-title">
           <span id="formTitle">📝 录入/编辑谷子</span>
@@ -538,11 +141,20 @@
           <div class="form-grid">
             <div class="form-group">
               <label for="inputName">谷子名称 *</label>
-              <input type="text" id="inputName" required placeholder="如：五条悟亚克力立牌">
+              <input type="text" id="inputName" required placeholder="如：五条悟立牌">
             </div>
             <div class="form-group">
               <label for="inputCn">认领 CN (圈名) *</label>
               <input type="text" id="inputCn" required placeholder="如：小明">
+            </div>
+            <div class="form-group">
+              <label for="inputBatch">所属批次 (batch_name)</label>
+              <input type="text" id="inputBatch" list="batchPresets" placeholder="如：台湾711 / 日本场贩" value="默认批次">
+              <datalist id="batchPresets">
+                <option value="默认批次">
+                <option value="台湾711">
+                <option value="日本场贩">
+              </datalist>
             </div>
             <div class="form-group">
               <label for="inputPrice">单价 (元)</label>
@@ -556,13 +168,13 @@
               <label for="inputCountry">地区 (country)</label>
               <select id="inputCountry">
                 <option value="日本">日本</option>
+                <option value="台湾">台湾</option>
                 <option value="闲鱼">闲鱼</option>
                 <option value="淘宝店">淘宝店</option>
                 <option value="美国">美国</option>
                 <option value="韩国">韩国</option>
                 <option value="印尼">印尼</option>
                 <option value="泰国">泰国</option>
-                <option value="台湾">台湾</option>
               </select>
             </div>
             <div class="form-group">
@@ -579,17 +191,14 @@
               </select>
             </div>
 
-            <!-- 💡 新增：谷子图片上传与粘贴URL区域（支持即时预览） -->
+            <!-- 图片上传 -->
             <div class="form-group" style="grid-column: 1 / -1;">
               <label>谷子图片</label>
               <div style="display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;">
-                <!-- 方式1：粘贴图片URL -->
                 <div style="flex: 1; min-width: 200px;">
                   <input type="text" id="inputImageUrl" placeholder="粘贴图片链接（如 https://...）" style="margin-bottom: 6px;" oninput="handleImageUrlInput(this.value)">
-                  <div style="font-size: 0.8rem; color: var(--text-muted);">支持直接粘贴网络图片链接</div>
+                  <div style="font-size: 0.8rem; color: var(--text-muted);">支持直接粘贴图片网络链接</div>
                 </div>
-
-                <!-- 方式2：本地上传 -->
                 <div style="flex: 1; min-width: 200px;">
                   <label class="btn btn-secondary" style="cursor: pointer; margin: 0; width: 100%; justify-content: center;">
                     📁 选择本地图片上传
@@ -597,8 +206,6 @@
                   </label>
                   <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;" id="uploadStatusText">自动上传到 Supabase 图床</div>
                 </div>
-
-                <!-- 图片预览框 -->
                 <div id="imagePreviewBox" style="width: 80px; height: 80px; border: 1px dashed var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #f8fafc; overflow: hidden; position: relative; flex-shrink: 0;">
                   <span id="imagePreviewText" style="font-size: 0.75rem; color: #94a3b8;">无图预览</span>
                   <img id="imagePreviewImg" style="width: 100%; height: 100%; object-fit: cover; border-radius: 6px; display: none;" alt="预览">
@@ -610,24 +217,15 @@
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <button type="submit" class="btn btn-primary">保存谷子到 group_data</button>
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-              <span style="font-size: 0.85rem; color: var(--text-muted);">批量导入默认地区:</span>
-              <select id="excelDefaultCountry" style="width: 100px; padding: 4px 8px;">
-                <option value="日本">日本</option>
-                <option value="闲鱼">闲鱼</option>
-                <option value="淘宝店">淘宝店</option>
-                <option value="美国">美国</option>
-                <option value="韩国">韩国</option>
-                <option value="印尼">印尼</option>
-                <option value="泰国">泰国</option>
-                <option value="台湾">台湾</option>
+              <span style="font-size: 0.85rem; color: var(--text-muted);">导入默认地区:</span>
+              <select id="excelDefaultCountry" style="width: 90px; padding: 4px 8px;">
+                <option value="日本">日本</option><option value="台湾">台湾</option><option value="闲鱼">闲鱼</option>
               </select>
               <label class="btn btn-success" style="cursor: pointer; margin: 0;">
-                📁 导入 Excel 文件
+                📁 导入 Excel
                 <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleExcelImport(event)">
               </label>
-              <button type="button" class="btn btn-secondary" onclick="openPasteModal()">
-                📋 粘贴表格文本
-              </button>
+              <button type="button" class="btn btn-secondary" onclick="openPasteModal()">📋 粘贴表格文本</button>
             </div>
           </div>
         </form>
@@ -646,34 +244,22 @@
           </div>
         </div>
 
-        <!-- 过滤器 (已配置 500ms 防抖) -->
+        <!-- 过滤器 -->
         <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
-          <input type="text" id="filterSearch" placeholder="搜索谷子名称/CN..." style="max-width: 240px;" oninput="onSearchInput()">
-          <select id="filterCountry" style="max-width: 160px;" onchange="onFilterChange()">
-            <option value="">全部地区 (country)</option>
-            <option value="日本">日本</option>
-            <option value="闲鱼">闲鱼</option>
-            <option value="淘宝店">淘宝店</option>
-            <option value="美国">美国</option>
-            <option value="韩国">韩国</option>
-            <option value="印尼">印尼</option>
-            <option value="泰国">泰国</option>
-            <option value="台湾">台湾</option>
+          <input type="text" id="filterSearch" placeholder="搜索谷子名称/CN/批次..." style="max-width: 200px;" oninput="onSearchInput()">
+          <select id="filterBatch" style="max-width: 150px;" onchange="onFilterChange()">
+            <option value="">全部批次</option>
           </select>
-          <select id="filterStatus" style="max-width: 160px;" onchange="onFilterChange()">
+          <select id="filterCountry" style="max-width: 140px;" onchange="onFilterChange()">
+            <option value="">全部地区</option>
+            <option value="日本">日本</option><option value="台湾">台湾</option><option value="闲鱼">闲鱼</option><option value="淘宝店">淘宝店</option><option value="美国">美国</option>
+          </select>
+          <select id="filterStatus" style="max-width: 140px;" onchange="onFilterChange()">
             <option value="">全部状态</option>
-            <option value="未出荷">未出荷</option>
-            <option value="已下单未到货">已下单未到货</option>
-            <option value="回国中">回国中</option>
-            <option value="已到货">已到货</option>
-            <option value="可排发">可排发</option>
-            <option value="已申请发货">已申请发货</option>
-            <option value="已排发">已排发</option>
-            <option value="未付款">未付款</option>
+            <option value="未出荷">未出荷</option><option value="已下单未到货">已下单未到货</option><option value="回国中">回国中</option><option value="已到货">已到货</option><option value="可排发">可排发</option><option value="已申请发货">已申请发货</option><option value="已排发">已排发</option><option value="未付款">未付款</option>
           </select>
         </div>
 
-        <!-- 桌面端表格视图 -->
         <div class="table-container desktop-table-view">
           <table>
             <thead>
@@ -682,9 +268,10 @@
                 <th>图片</th>
                 <th>谷子名称</th>
                 <th>认领 CN</th>
+                <th>所属批次</th>
                 <th>单价 (元)</th>
                 <th>数量</th>
-                <th>地区 (country)</th>
+                <th>地区</th>
                 <th>状态</th>
                 <th>操作</th>
               </tr>
@@ -693,10 +280,7 @@
           </table>
         </div>
 
-        <!-- 手机端卡片列表视图 -->
         <div class="mobile-cards-view" id="adminMobileCardsView"></div>
-
-        <!-- 表格底部独立分页栏 -->
         <div id="tablePagination" class="pagination-container"></div>
       </div>
     </div>
@@ -714,12 +298,10 @@
             <div style="font-size: 1.8rem; font-weight: 700; color: var(--success);" id="statCompletedCount">0</div>
           </div>
         </div>
-
         <div class="btn-group" style="margin-bottom: 16px;">
           <button class="btn btn-primary" id="btnSubPending" onclick="switchDispatchSubTab('pending')">待处理申请列表</button>
           <button class="btn btn-secondary" id="btnSubCompleted" onclick="switchDispatchSubTab('completed')">已完成记录列表</button>
         </div>
-
         <div id="dispatchSubContent"></div>
       </div>
     </div>
@@ -734,14 +316,7 @@
         <div class="table-container">
           <table>
             <thead>
-              <tr>
-                <th>时间</th>
-                <th>原 CN</th>
-                <th>转给新 CN</th>
-                <th>谷子名称</th>
-                <th>数量</th>
-                <th>操作</th>
-              </tr>
+              <tr><th>时间</th><th>原 CN</th><th>转给新 CN</th><th>谷子名称</th><th>数量</th><th>操作</th></tr>
             </thead>
             <tbody id="transferLogsTableBody"></tbody>
           </table>
@@ -759,8 +334,6 @@
             <button class="btn btn-danger" onclick="clearAllFeedback()">清空所有反馈</button>
           </div>
         </div>
-
-        <!-- 统计面板 -->
         <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
           <div style="flex: 1; min-width: 120px; background: #fee2e2; border-radius: 8px; padding: 12px; text-align: center;">
             <div style="font-size: 0.8rem; color: #991b1b;">未读反馈</div>
@@ -779,43 +352,14 @@
             <div style="font-size: 1.5rem; font-weight: 700; color: var(--text-main);" id="statFbTotal">0</div>
           </div>
         </div>
-
-        <!-- 筛选与搜索 -->
-        <div style="display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;">
-          <input type="text" id="fbFilterSearch" placeholder="搜索反馈内容 / 回复..." style="max-width: 220px;" oninput="renderFeedbackList()">
-          <select id="fbFilterStatus" style="max-width: 140px;" onchange="renderFeedbackList()">
-            <option value="">全部状态</option>
-            <option value="未读">未读</option>
-            <option value="已读">已读</option>
-            <option value="已处理">已处理</option>
-          </select>
-          <select id="fbFilterCategory" style="max-width: 140px;" onchange="renderFeedbackList()">
-            <option value="">全部分类</option>
-            <option value="建议">💡 建议</option>
-            <option value="问题反馈">⚠️ 问题反馈</option>
-            <option value="投诉">🚨 投诉</option>
-            <option value="其他">💬 其他</option>
-          </select>
-        </div>
-
-        <!-- 桌面表格视图 -->
         <div class="table-container desktop-table-view">
           <table>
             <thead>
-              <tr>
-                <th>状态</th>
-                <th>分类</th>
-                <th>提交时间</th>
-                <th>反馈内容 (点击展开)</th>
-                <th>团长回复</th>
-                <th style="text-align: right;">操作</th>
-              </tr>
+              <tr><th>状态</th><th>分类</th><th>提交时间</th><th>反馈内容</th><th>团长回复</th><th style="text-align: right;">操作</th></tr>
             </thead>
             <tbody id="feedbackTableBody"></tbody>
           </table>
         </div>
-
-        <!-- 手机端卡片视图 -->
         <div class="mobile-cards-view" id="feedbackMobileCardsView"></div>
       </div>
     </div>
@@ -829,17 +373,12 @@
             <label style="font-size: 0.88rem; font-weight: 600; display: block; margin-bottom: 6px;">发送给团员的自查链接：</label>
             <button class="btn btn-primary" onclick="copyMemberLink()">📋 复制团员自查专属链接</button>
           </div>
-          <hr style="border: none; border-top: 1px solid var(--border);">
-          <div>
-            <label style="font-size: 0.88rem; font-weight: 600; display: block; margin-bottom: 6px;">生成演示测试数据 (写入当前 Query Key 的 group_data 和 image_data)：</label>
-            <button class="btn btn-success" onclick="generateSampleData()">🎉 一键生成演示谷子、排发申请及匿名反馈</button>
-          </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 反馈回复/详情弹窗 -->
+  <!-- 反馈回复弹窗 -->
   <div class="modal-overlay" id="feedbackModal">
     <div class="modal">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -848,23 +387,14 @@
       </div>
       <input type="hidden" id="modalFbIndex">
       <div style="margin-bottom: 12px;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-          <span class="badge badge-category" id="modalFbCategory">分类</span>
-          <span style="font-size: 0.8rem; color: var(--text-muted);" id="modalFbTime">时间</span>
-        </div>
-        <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 0.9rem; max-height: 180px; overflow-y: auto; line-height: 1.5; word-break: break-all;" id="modalFbContent">
-          反馈内容
-        </div>
+        <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 0.9rem; line-height: 1.5;" id="modalFbContent"></div>
       </div>
       <div class="form-group" style="margin-bottom: 16px;">
-        <label for="modalFbReply">团长处理/回复备注 (记录说明)</label>
-        <textarea id="modalFbReply" rows="3" placeholder="填写对此条反馈的处理说明或答复..."></textarea>
+        <label for="modalFbReply">团长处理/回复备注</label>
+        <textarea id="modalFbReply" rows="3" placeholder="填写对此条反馈的处理答复..."></textarea>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div class="btn-group">
-          <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 0.8rem;" onclick="setModalFbStatus('已读')">标为已读</button>
-          <button class="btn btn-success" style="padding: 6px 10px; font-size: 0.8rem;" onclick="setModalFbStatus('已处理')">标为已处理</button>
-        </div>
+        <button class="btn btn-success" onclick="setModalFbStatus('已处理')">标为已处理</button>
         <button class="btn btn-primary" onclick="saveModalFbReply()">保存回复</button>
       </div>
     </div>
@@ -888,17 +418,14 @@
     </div>
   </div>
 
-  <!-- 粘贴表格文本导入 Modal Overlay -->
+  <!-- 粘贴表格文本导入 Modal -->
   <div class="modal-overlay" id="pasteModal">
     <div class="modal" style="max-width: 650px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <h3 style="font-size: 1.1rem; font-weight: 700;">📋 粘贴 Excel / WPS 表格文本导入</h3>
         <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closePasteModal()">✕</button>
       </div>
-      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">
-        提示：从 Excel / WPS 表格中复制包含【种类/谷名、单价、团员 CN 及数量】的内容，直接粘贴在下方框中解析导入：
-      </p>
-      <textarea id="pasteInputText" rows="10" placeholder="直接粘贴 Excel 表格复制内容（含制表符 \t 分隔）..." style="font-family: monospace; font-size: 0.82rem; margin-bottom: 12px; resize: vertical;"></textarea>
+      <textarea id="pasteInputText" rows="10" placeholder="直接粘贴 Excel 表格复制内容（含制表符 \t 分隔）..." style="font-family: monospace; font-size: 0.82rem; margin-bottom: 12px;"></textarea>
       <div style="display: flex; justify-content: flex-end; gap: 8px;">
         <button class="btn btn-secondary" onclick="closePasteModal()">取消</button>
         <button class="btn btn-primary" onclick="submitPasteImport()">解析并导入 group_data</button>
@@ -906,18 +433,15 @@
     </div>
   </div>
 
-  <!-- Toast -->
   <div class="toast" id="toast"></div>
 
   <script>
     const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
-    const SUPABASE_ANON_KEY = SUPABASE_KEY;
-
     const supabaseClient = (window.supabase || supabase).createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let CURRENT_RECORD_ID = null;
-    let CURRENT_QUERY_KEY = 'demo_key';
+    let CURRENT_QUERY_KEY = '4goods';
     let RAW_ITEMS = [];
     let RAW_APPLICATIONS = [];
     let RAW_LOGS = [];
@@ -929,7 +453,6 @@
     window.LOG_CACHE = [];
     window.FEEDBACK_CACHE = [];
 
-    // 分页与防抖全局状态
     let CURRENT_PAGE = 1;
     const PAGE_SIZE = 20;
     let searchDebounceTimer = null;
@@ -952,32 +475,17 @@
     }
 
     async function login() {
-      const emailEl = document.getElementById('email') || document.getElementById('loginEmail');
-      const passwordEl = document.getElementById('password') || document.getElementById('loginPassword');
-      const email = emailEl ? emailEl.value.trim() : '';
-      const password = passwordEl ? passwordEl.value.trim() : '';
-
-      if (!email || !password) {
-        alert('请填写邮箱和密码！');
-        return;
-      }
-
+      const email = (document.getElementById('email')?.value || '').trim();
+      const password = (document.getElementById('password')?.value || '').trim();
+      if (!email || !password) return alert('请填写邮箱和密码！');
       try {
         const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-        if (error) {
-          alert('登录失败: ' + error.message);
-          return;
-        }
-
+        if (error) return alert('登录失败: ' + error.message);
         showToast('🎉 登录成功！');
         document.getElementById('authOverlay').classList.remove('active');
-        if (document.getElementById('userEmailSpan')) {
-          document.getElementById('userEmailSpan').innerText = `已登录: ${data.user.email}`;
-        }
+        document.getElementById('userEmailSpan').innerText = `已登录: ${data.user.email}`;
         loadDataByQueryKey();
-      } catch (err) {
-        alert('登录失败，请检查网络或配置: ' + err.message);
-      }
+      } catch (err) { alert('登录失败: ' + err.message); }
     }
     window.login = login;
 
@@ -990,17 +498,13 @@
           loadDataByQueryKey();
         } else {
           document.getElementById('authOverlay').classList.add('active');
-          document.getElementById('userEmailSpan').innerText = `未登录`;
         }
-      } catch (e) {
-        document.getElementById('authOverlay').classList.add('active');
-      }
+      } catch (e) { document.getElementById('authOverlay').classList.add('active'); }
     }
 
     async function handleSignOut() {
       await supabaseClient.auth.signOut();
       document.getElementById('authOverlay').classList.add('active');
-      document.getElementById('userEmailSpan').innerText = `未登录`;
       showToast('已退出登录');
     }
     window.handleSignOut = handleSignOut;
@@ -1008,13 +512,9 @@
     function switchTab(tabId) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-
-      if (event && event.currentTarget) {
-        event.currentTarget.classList.add('active');
-      }
+      if (event && event.currentTarget) event.currentTarget.classList.add('active');
       const targetEl = document.getElementById(tabId);
       if (targetEl) targetEl.classList.add('active');
-
       if (tabId === 'tabItems') renderTable();
       if (tabId === 'tabDispatch') renderDispatchWorkbench();
       if (tabId === 'tabLogs') renderTransferLogs();
@@ -1025,275 +525,154 @@
     async function loadDataByQueryKey() {
       const keyInput = document.getElementById('adminQueryKey').value.trim();
       if (!keyInput) return showToast('请输入 Query Key！');
-
       CURRENT_QUERY_KEY = keyInput;
       localStorage.setItem('ADMIN_QUERY_KEY', CURRENT_QUERY_KEY);
-
       try {
-        const { data, error } = await supabaseClient
-          .from('leader_data')
-          .select('*')
-          .eq('query_key', CURRENT_QUERY_KEY);
-
-        if (error) {
-          showToast('读取 leader_data 失败: ' + error.message);
-          return;
-        }
-
+        const { data, error } = await supabaseClient.from('leader_data').select('*').eq('query_key', CURRENT_QUERY_KEY);
+        if (error) return showToast('读取失败: ' + error.message);
         if (!data || data.length === 0) {
-          CURRENT_RECORD_ID = null;
-          RAW_ITEMS = [];
-          RAW_APPLICATIONS = [];
-          RAW_LOGS = [];
-          RAW_FEEDBACK = [];
-          renderTable();
-          renderDispatchWorkbench();
-          renderTransferLogs();
-          renderFeedbackList();
-          alert('该密钥暂无数据，请联系团长初始化！');
-          return;
-        } else {
-          const rec = data[0];
-          CURRENT_RECORD_ID = rec.id;
-
-          let gData = rec.group_data;
-          if (typeof gData === 'string') {
-            try { gData = JSON.parse(gData); } catch (e) { gData = []; }
-          }
-          RAW_ITEMS = Array.isArray(gData) ? gData : [];
-
-          let iData = rec.image_data;
-          if (typeof iData === 'string') {
-            try { iData = JSON.parse(iData); } catch (e) { iData = {}; }
-          }
-          if (!iData || typeof iData !== 'object') iData = {};
-          RAW_APPLICATIONS = Array.isArray(iData.applications) ? iData.applications : [];
-          RAW_LOGS = Array.isArray(iData.transfer_logs) ? iData.transfer_logs : [];
-          RAW_FEEDBACK = Array.isArray(iData.feedback) ? iData.feedback : [];
-
-          showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)`);
+          CURRENT_RECORD_ID = null; RAW_ITEMS = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = [];
+          renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList();
+          alert('该密钥暂无数据！'); return;
         }
-
+        const rec = data[0];
+        CURRENT_RECORD_ID = rec.id;
+        let gData = rec.group_data;
+        if (typeof gData === 'string') { try { gData = JSON.parse(gData); } catch (e) { gData = []; } }
+        RAW_ITEMS = Array.isArray(gData) ? gData : [];
+        let iData = rec.image_data;
+        if (typeof iData === 'string') { try { iData = JSON.parse(iData); } catch (e) { iData = {}; } }
+        if (!iData || typeof iData !== 'object') iData = {};
+        RAW_APPLICATIONS = Array.isArray(iData.applications) ? iData.applications : [];
+        RAW_LOGS = Array.isArray(iData.transfer_logs) ? iData.transfer_logs : [];
+        RAW_FEEDBACK = Array.isArray(iData.feedback) ? iData.feedback : [];
+        showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)`);
         CURRENT_PAGE = 1;
-        renderTable();
-        renderDispatchWorkbench();
-        renderTransferLogs();
-        renderFeedbackList();
-      } catch (err) {
-        showToast('数据加载网络异常');
-      }
+        updateBatchDropdownOptions();
+        renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList();
+      } catch (err) { showToast('数据加载网络异常'); }
     }
     window.loadDataByQueryKey = loadDataByQueryKey;
 
     async function saveDataToSupabase() {
       if (!CURRENT_QUERY_KEY) return showToast('未指定 Query Key');
-
       try {
-        const { data: existing, error: queryErr } = await supabaseClient
-          .from('leader_data')
-          .select('id')
-          .eq('query_key', CURRENT_QUERY_KEY);
-
-        if (queryErr) {
-          showToast('查询密钥记录失败: ' + queryErr.message);
-          return false;
-        }
-
         const payload = {
           group_data: RAW_ITEMS,
-          image_data: {
-            applications: RAW_APPLICATIONS,
-            transfer_logs: RAW_LOGS,
-            feedback: RAW_FEEDBACK
-          }
+          image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK }
         };
+        const { error } = await supabaseClient.from('leader_data').update(payload).eq('id', CURRENT_RECORD_ID);
+        if (error) { showToast('保存失败: ' + error.message); return false; }
+        return true;
+      } catch (err) { showToast('保存异常'); return false; }
+    }
 
-        if (existing && existing.length > 0) {
-          const recId = existing[0].id;
-          CURRENT_RECORD_ID = recId;
-
-          const { error: updateErr } = await supabaseClient
-            .from('leader_data')
-            .update(payload)
-            .eq('id', recId);
-
-          if (updateErr) {
-            showToast('保存到 Supabase 失败: ' + updateErr.message);
-            return false;
-          }
-          return true;
-        } else {
-          alert('该密钥暂无数据，请联系团长初始化！');
-          return false;
-        }
-      } catch (err) {
-        showToast('保存失败，网络或系统异常');
-        return false;
+    function updateBatchDropdownOptions() {
+      const batchSet = new Set(['默认批次', '台湾711', '日本场贩']);
+      RAW_ITEMS.forEach(i => { if (i.batch_name) batchSet.add(i.batch_name.trim()); });
+      const dl = document.getElementById('batchPresets');
+      const filterSel = document.getElementById('filterBatch');
+      const curFilter = filterSel.value;
+      if (dl) dl.innerHTML = Array.from(batchSet).map(b => `<option value="${escapeHtml(b)}">`).join('');
+      if (filterSel) {
+        filterSel.innerHTML = '<option value="">全部批次</option>' + Array.from(batchSet).map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
+        filterSel.value = curFilter;
       }
     }
 
-    /* --- 标签页 1：排表管理逻辑（含图片上传、500ms防抖、分页、懒加载） --- */
     function onSearchInput() {
       clearTimeout(searchDebounceTimer);
-      searchDebounceTimer = setTimeout(() => {
-        CURRENT_PAGE = 1;
-        renderTable();
-      }, 500);
+      searchDebounceTimer = setTimeout(() => { CURRENT_PAGE = 1; renderTable(); }, 500);
     }
     window.onSearchInput = onSearchInput;
 
-    function onFilterChange() {
-      CURRENT_PAGE = 1;
-      renderTable();
-    }
+    function onFilterChange() { CURRENT_PAGE = 1; renderTable(); }
     window.onFilterChange = onFilterChange;
 
     function changePage(page) {
       CURRENT_PAGE = page;
       renderTable();
-      const masterCheck = document.getElementById('selectAllCheckbox');
-      if (masterCheck) masterCheck.checked = false;
+      const mc = document.getElementById('selectAllCheckbox');
+      if (mc) mc.checked = false;
     }
     window.changePage = changePage;
 
-    // 图片URL输入即时预览
-    function handleImageUrlInput(val) {
-      updateImagePreview(val.trim());
-    }
+    function handleImageUrlInput(val) { updateImagePreview(val.trim()); }
     window.handleImageUrlInput = handleImageUrlInput;
 
-    // 更新预览框
     function updateImagePreview(url) {
-      const imgEl = document.getElementById('imagePreviewImg');
-      const textEl = document.getElementById('imagePreviewText');
-      if (url) {
-        imgEl.src = url;
-        imgEl.style.display = 'block';
-        textEl.style.display = 'none';
-      } else {
-        imgEl.src = '';
-        imgEl.style.display = 'none';
-        textEl.style.display = 'block';
-      }
+      const img = document.getElementById('imagePreviewImg');
+      const txt = document.getElementById('imagePreviewText');
+      if (url) { img.src = url; img.style.display = 'block'; txt.style.display = 'none'; }
+      else { img.src = ''; img.style.display = 'none'; txt.style.display = 'block'; }
     }
-    window.updateImagePreview = updateImagePreview;
 
-    // 本地图片选择并上传至 Supabase Storage
     async function handleImageUpload(e) {
       const file = e.target.files[0];
       if (!file) return;
-
-      if (!file.type.startsWith('image/')) {
-        showToast('请选择有效的图片文件！');
-        e.target.value = '';
-        return;
-      }
-
-      // 本地即时预览
       const reader = new FileReader();
-      reader.onload = function(evt) {
-        updateImagePreview(evt.target.result);
-      };
+      reader.onload = evt => updateImagePreview(evt.target.result);
       reader.readAsDataURL(file);
-
-      const statusText = document.getElementById('uploadStatusText');
-      if (statusText) statusText.innerText = '⏳ 正在上传图片至 Supabase...';
+      document.getElementById('uploadStatusText').innerText = '⏳ 上传中...';
       IS_IMAGE_UPLOADING = true;
-
       try {
         const ext = file.name.split('.').pop() || 'png';
-        const folder = CURRENT_QUERY_KEY || 'default';
-        const filePath = `${folder}/${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
-
-        const { data, error } = await supabaseClient
-          .storage
-          .from('goods-images')
-          .upload(filePath, file, {
-            cacheControl: '3600',
-            upsert: true
-          });
-
-        if (error) {
-          console.error('Upload error:', error);
-          showToast('图片上传失败: ' + error.message);
-          if (statusText) statusText.innerText = '❌ 上传失败，请检查配置或改用链接';
-          IS_IMAGE_UPLOADING = false;
-          return;
-        }
-
-        const { data: publicUrlData } = supabaseClient
-          .storage
-          .from('goods-images')
-          .getPublicUrl(filePath);
-
-        const finalUrl = publicUrlData ? publicUrlData.publicUrl : '';
-        if (finalUrl) {
-          document.getElementById('inputImageUrl').value = finalUrl;
-          updateImagePreview(finalUrl);
-          showToast('🎉 图片上传成功！');
-          if (statusText) statusText.innerText = '✅ 上传成功';
+        const filePath = `${CURRENT_QUERY_KEY}/${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
+        const { error } = await supabaseClient.storage.from('goods-images').upload(filePath, file, { cacheControl: '3600', upsert: true });
+        if (error) throw error;
+        const { data: pubData } = supabaseClient.storage.from('goods-images').getPublicUrl(filePath);
+        if (pubData && pubData.publicUrl) {
+          document.getElementById('inputImageUrl').value = pubData.publicUrl;
+          updateImagePreview(pubData.publicUrl);
+          document.getElementById('uploadStatusText').innerText = '✅ 上传成功';
         }
       } catch (err) {
-        console.error('Upload exception:', err);
-        showToast('网络异常，图片上传失败');
-        if (statusText) statusText.innerText = '❌ 上传异常，请重试';
-      } finally {
-        IS_IMAGE_UPLOADING = false;
-        e.target.value = '';
-      }
+        showToast('图片上传失败: ' + err.message);
+        document.getElementById('uploadStatusText').innerText = '❌ 上传失败';
+      } finally { IS_IMAGE_UPLOADING = false; e.target.value = ''; }
     }
     window.handleImageUpload = handleImageUpload;
 
     function renderTable() {
       const tbody = document.getElementById('itemsTableBody');
-      const mobileCardsView = document.getElementById('adminMobileCardsView');
-      const paginationContainer = document.getElementById('tablePagination');
-
+      const mobileView = document.getElementById('adminMobileCardsView');
       const searchVal = (document.getElementById('filterSearch')?.value || '').trim().toLowerCase();
+      const batchVal = document.getElementById('filterBatch')?.value || '';
       const countryVal = document.getElementById('filterCountry')?.value || '';
       const statusVal = document.getElementById('filterStatus')?.value || '';
 
       const filtered = RAW_ITEMS.filter(item => {
         const nameMatch = (item.name || '').toLowerCase().includes(searchVal);
         const cnMatch = (item.cn || '').toLowerCase().includes(searchVal);
-        const matchSearch = nameMatch || cnMatch;
-
-        const matchCountry = !countryVal || (item.country || item.region) === countryVal;
+        const batchMatchText = (item.batch_name || '').toLowerCase().includes(searchVal);
+        const matchSearch = nameMatch || cnMatch || batchMatchText;
+        const matchBatch = !batchVal || (item.batch_name || '默认批次') === batchVal;
+        const matchCountry = !countryVal || (item.country || '日本') === countryVal;
         const matchStatus = !statusVal || item.status === statusVal;
-
-        return matchSearch && matchCountry && matchStatus;
+        return matchSearch && matchBatch && matchCountry && matchStatus;
       });
 
       const totalItems = filtered.length;
       const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
-
       if (CURRENT_PAGE > totalPages) CURRENT_PAGE = totalPages;
       if (CURRENT_PAGE < 1) CURRENT_PAGE = 1;
 
-      const startIndex = (CURRENT_PAGE - 1) * PAGE_SIZE;
-      const pageItems = filtered.slice(startIndex, startIndex + PAGE_SIZE);
-
+      const pageItems = filtered.slice((CURRENT_PAGE - 1) * PAGE_SIZE, CURRENT_PAGE * PAGE_SIZE);
       window.ITEM_CACHE = pageItems;
 
       if (totalItems === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</td></tr>`;
-        if (mobileCardsView) mobileCardsView.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</div>`;
-        if (paginationContainer) paginationContainer.innerHTML = '';
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</td></tr>`;
+        if (mobileView) mobileView.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配数据</div>`;
+        document.getElementById('tablePagination').innerHTML = '';
         return;
       }
 
-      let html = '';
-      let cardsHtml = '';
+      let html = '', cardsHtml = '';
       pageItems.forEach((item, index) => {
-        const imgTag = item.image_url 
-          ? `<img src="${escapeHtml(item.image_url)}" class="img-preview" alt="谷子" loading="lazy">`
-          : `<span style="color:#cbd5e1;font-size:0.75rem;">无图</span>`;
-
-        const mobileImgTag = item.image_url
-          ? `<img src="${escapeHtml(item.image_url)}" class="admin-card-mobile-img" alt="谷子" loading="lazy">`
-          : `<div class="admin-card-mobile-noimg">无图</div>`;
-
-        const countryStr = item.country || item.region || '日本';
+        const imgTag = item.image_url ? `<img src="${escapeHtml(item.image_url)}" class="img-preview" alt="谷子" loading="lazy">` : `<span style="color:#cbd5e1;font-size:0.75rem;">无图</span>`;
+        const mobileImgTag = item.image_url ? `<img src="${escapeHtml(item.image_url)}" class="admin-card-mobile-img" alt="谷子" loading="lazy">` : `<div class="admin-card-mobile-noimg">无图</div>`;
+        const batchStr = item.batch_name || '默认批次';
+        const countryStr = item.country || '日本';
 
         html += `
           <tr>
@@ -1301,6 +680,7 @@
             <td>${imgTag}</td>
             <td style="font-weight:600;">${escapeHtml(item.name)}</td>
             <td><strong>${escapeHtml(item.cn)}</strong></td>
+            <td><span class="badge badge-batch">${escapeHtml(batchStr)}</span></td>
             <td>￥${Number(item.price || 0).toFixed(2)}</td>
             <td>${item.quantity || 1}</td>
             <td><span class="badge badge-country">${escapeHtml(countryStr)}</span></td>
@@ -1315,8 +695,9 @@
         cardsHtml += `
           <div class="admin-card-mobile">
             <div class="admin-card-mobile-header">
-              <div style="display:flex; align-items:center; gap:8px;">
+              <div style="display:flex; align-items:center; gap:6px;">
                 <input type="checkbox" class="item-checkbox" value="${index}">
+                <span class="badge badge-batch">${escapeHtml(batchStr)}</span>
                 <span class="badge badge-country">${escapeHtml(countryStr)}</span>
               </div>
               <span class="badge badge-status-${item.status || '未出荷'}">${escapeHtml(item.status || '未出荷')}</span>
@@ -1324,10 +705,10 @@
             <div class="admin-card-mobile-body">
               ${mobileImgTag}
               <div class="admin-card-mobile-info">
-                <div class="admin-card-mobile-title">${escapeHtml(item.name || '未命名')}</div>
-                <div class="admin-card-mobile-meta">
-                  <span>CN: <strong>${escapeHtml(item.cn || '无')}</strong></span>
-                  <span>￥${Number(item.price || 0).toFixed(2)}</span>
+                <div style="font-weight:700;">${escapeHtml(item.name)}</div>
+                <div style="font-size:0.85rem; color:var(--text-muted);">
+                  <span>CN: <strong>${escapeHtml(item.cn)}</strong></span> |
+                  <span>￥${Number(item.price || 0).toFixed(2)}</span> |
                   <span>x${item.quantity || 1}</span>
                 </div>
               </div>
@@ -1341,23 +722,15 @@
       });
 
       tbody.innerHTML = html;
-      if (mobileCardsView) mobileCardsView.innerHTML = cardsHtml;
-
+      if (mobileView) mobileView.innerHTML = cardsHtml;
       renderPaginationBar(totalItems, totalPages);
     }
 
     function renderPaginationBar(totalItems, totalPages) {
       const container = document.getElementById('tablePagination');
       if (!container) return;
-
-      if (totalPages <= 1) {
-        container.innerHTML = `<div class="pagination-info">共 ${totalItems} 条谷子数据（每页 20 条）</div>`;
-        return;
-      }
-
-      let btnHtml = '';
-      btnHtml += `<button class="page-btn" onclick="changePage(${CURRENT_PAGE - 1})" ${CURRENT_PAGE === 1 ? 'disabled' : ''}>&lt; 上一页</button>`;
-
+      if (totalPages <= 1) { container.innerHTML = `<div class="pagination-info">共 ${totalItems} 条数据</div>`; return; }
+      let btnHtml = `<button class="page-btn" onclick="changePage(${CURRENT_PAGE - 1})" ${CURRENT_PAGE === 1 ? 'disabled' : ''}>&lt; 上一页</button>`;
       for (let i = 1; i <= totalPages; i++) {
         if (i === 1 || i === totalPages || (i >= CURRENT_PAGE - 2 && i <= CURRENT_PAGE + 2)) {
           btnHtml += `<button class="page-btn ${i === CURRENT_PAGE ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
@@ -1365,27 +738,16 @@
           btnHtml += `<span style="padding:0 4px; color:var(--text-muted);">...</span>`;
         }
       }
-
       btnHtml += `<button class="page-btn" onclick="changePage(${CURRENT_PAGE + 1})" ${CURRENT_PAGE === totalPages ? 'disabled' : ''}>下一页 &gt;</button>`;
-
-      container.innerHTML = `
-        <div class="pagination-info">
-          共 <strong>${totalItems}</strong> 条数据，第 <strong>${CURRENT_PAGE}</strong> / <strong>${totalPages}</strong> 页
-        </div>
-        <div class="pagination-buttons">
-          ${btnHtml}
-        </div>
-      `;
+      container.innerHTML = `<div class="pagination-info">共 <strong>${totalItems}</strong> 条，第 <strong>${CURRENT_PAGE}</strong> / <strong>${totalPages}</strong> 页</div><div class="pagination-buttons">${btnHtml}</div>`;
     }
 
     async function saveItemForm() {
-      if (IS_IMAGE_UPLOADING) {
-        return showToast('图片正在上传中，请稍等上传完成后再保存！');
-      }
-
+      if (IS_IMAGE_UPLOADING) return showToast('图片正在上传中，请稍候保存！');
       const editId = document.getElementById('editItemId').value;
       const name = document.getElementById('inputName').value.trim();
       const cn = document.getElementById('inputCn').value.trim();
+      const batch_name = document.getElementById('inputBatch').value.trim() || '默认批次';
       const price = parseFloat(document.getElementById('inputPrice').value) || 0;
       const quantity = parseInt(document.getElementById('inputQuantity').value) || 1;
       const country = document.getElementById('inputCountry').value;
@@ -1396,20 +758,18 @@
 
       if (editId) {
         const idx = RAW_ITEMS.findIndex(i => String(i.item_id || i.id) === String(editId));
-        if (idx !== -1) {
-          RAW_ITEMS[idx] = { ...RAW_ITEMS[idx], name, cn, price, quantity, country, status, image_url: imageUrl };
-        }
+        if (idx !== -1) RAW_ITEMS[idx] = { ...RAW_ITEMS[idx], name, cn, batch_name, price, quantity, country, status, image_url: imageUrl };
       } else {
-        const newItem = {
+        RAW_ITEMS.unshift({
           item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random()*1000),
-          name, cn, price, quantity, country, status,
-          image_url: imageUrl
-        };
-        RAW_ITEMS.unshift(newItem);
+          name, cn, batch_name, price, quantity, country, status, image_url: imageUrl,
+          created_at: new Date().toISOString()
+        });
       }
 
       await saveDataToSupabase();
       clearForm();
+      updateBatchDropdownOptions();
       renderTable();
       showToast('已保存至 group_data！');
     }
@@ -1418,18 +778,16 @@
     function editItemByIndex(index) {
       const item = window.ITEM_CACHE[index];
       if (!item) return;
-
       document.getElementById('editItemId').value = item.item_id || item.id;
       document.getElementById('inputName').value = item.name || '';
       document.getElementById('inputCn').value = item.cn || '';
+      document.getElementById('inputBatch').value = item.batch_name || '默认批次';
       document.getElementById('inputPrice').value = item.price || 0;
       document.getElementById('inputQuantity').value = item.quantity || 1;
-      document.getElementById('inputCountry').value = item.country || item.region || '日本';
+      document.getElementById('inputCountry').value = item.country || '日本';
       document.getElementById('inputStatus').value = item.status || '未出荷';
-      
       document.getElementById('inputImageUrl').value = item.image_url || '';
       updateImagePreview(item.image_url || '');
-
       document.getElementById('formTitle').innerText = '✏️ 修改谷子信息';
       document.getElementById('btnClearForm').style.display = 'inline-block';
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1439,90 +797,64 @@
     function clearForm() {
       document.getElementById('editItemId').value = '';
       document.getElementById('itemForm').reset();
+      document.getElementById('inputBatch').value = '默认批次';
       document.getElementById('inputImageUrl').value = '';
-      document.getElementById('inputImageFile').value = '';
       updateImagePreview('');
-      
-      const statusText = document.getElementById('uploadStatusText');
-      if (statusText) statusText.innerText = '自动上传到 Supabase 图床';
-      
+      document.getElementById('uploadStatusText').innerText = '自动上传到 Supabase 图床';
       IS_IMAGE_UPLOADING = false;
       document.getElementById('formTitle').innerText = '📝 录入/编辑谷子';
       document.getElementById('btnClearForm').style.display = 'none';
     }
     window.clearForm = clearForm;
 
-    // 单条转单（支持部分数量转单）
     async function transferSingleByIndex(index) {
       const item = window.ITEM_CACHE[index];
       if (!item) return;
-
       const currentQty = parseInt(item.quantity) || 1;
       const oldCn = item.cn || '未命名';
-
       const newCn = prompt(`将谷子「${item.name}」从原 CN [${oldCn}] 转单给哪位新 CN？`);
-      if (newCn === null) return;
-      const trimmedCn = newCn.trim();
-      if (!trimmedCn) {
-        showToast('⚠️ 新 CN 不能为空！');
-        return;
-      }
-
-      const qtyInput = prompt(`请输入转单数量：\n（团员 [${oldCn}] 当前持有 ${currentQty} 个）`, currentQty);
-      if (qtyInput === null) return;
-
+      if (!newCn || !newCn.trim()) return;
+      const qtyInput = prompt(`请输入转单数量：（当前持有 ${currentQty} 个）`, currentQty);
+      if (!qtyInput) return;
       const transferQty = parseInt(qtyInput.trim());
-
-      if (isNaN(transferQty) || transferQty <= 0) {
-        alert('⚠️ 转单数量必须是大于 0 的有效整数！');
-        return;
-      }
-      if (transferQty > currentQty) {
-        alert(`⚠️ 转单数量不能超过当前持有数量！（当前仅持有 ${currentQty} 个）`);
-        return;
-      }
+      if (isNaN(transferQty) || transferQty <= 0 || transferQty > currentQty) return alert('转单数量不合法！');
 
       if (transferQty === currentQty) {
-        item.cn = trimmedCn;
+        item.cn = newCn.trim();
       } else {
         item.quantity = currentQty - transferQty;
-        const newItem = {
+        RAW_ITEMS.unshift({
           ...item,
           item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-          cn: trimmedCn,
+          cn: newCn.trim(),
           quantity: transferQty,
           created_at: new Date().toISOString()
-        };
-        RAW_ITEMS.unshift(newItem);
+        });
       }
 
       RAW_LOGS.unshift({
-        id: 'log_' + Date.now() + '_' + Math.floor(Math.random() * 100),
+        id: 'log_' + Date.now(),
         time: new Date().toLocaleString('zh-CN'),
         from_cn: oldCn,
-        to_cn: trimmedCn,
+        to_cn: newCn.trim(),
         item_name: item.name,
         quantity: transferQty
       });
 
       await saveDataToSupabase();
-      renderTable();
-      renderTransferLogs();
-
-      showToast(`🎉 成功将 ${transferQty} 个「${item.name}」转给 [${trimmedCn}]！`);
+      renderTable(); renderTransferLogs();
+      showToast('转单成功！');
     }
     window.transferSingleByIndex = transferSingleByIndex;
 
     function toggleSelectAll(master) {
-      const checkboxes = document.querySelectorAll('.item-checkbox');
-      checkboxes.forEach(cb => cb.checked = master.checked);
+      document.querySelectorAll('.item-checkbox').forEach(cb => cb.checked = master.checked);
     }
     window.toggleSelectAll = toggleSelectAll;
 
     function getSelectedCacheItems() {
-      const checkboxes = document.querySelectorAll('.item-checkbox:checked');
       const selected = [];
-      checkboxes.forEach(cb => {
+      document.querySelectorAll('.item-checkbox:checked').forEach(cb => {
         const idx = parseInt(cb.value);
         if (window.ITEM_CACHE[idx]) selected.push(window.ITEM_CACHE[idx]);
       });
@@ -1531,85 +863,54 @@
 
     async function batchTransferModal() {
       const selected = getSelectedCacheItems();
-      if (selected.length === 0) return showToast('请先勾选要转单的谷子！');
-
+      if (selected.length === 0) return showToast('请先勾选谷子！');
       const newCn = prompt(`共选中 ${selected.length} 件谷子，请输入转入的新 CN：`);
       if (!newCn || !newCn.trim()) return;
-
       selected.forEach(item => {
-        const oldCn = item.cn;
-        item.cn = newCn.trim();
-        RAW_LOGS.unshift({
-          id: 'log_' + Date.now() + '_' + Math.floor(Math.random()*100),
-          time: new Date().toLocaleString('zh-CN'),
-          from_cn: oldCn,
-          to_cn: item.cn,
-          item_name: item.name,
-          quantity: item.quantity || 1
-        });
+        const oldCn = item.cn; item.cn = newCn.trim();
+        RAW_LOGS.unshift({ id: 'log_' + Date.now() + '_' + Math.floor(Math.random()*100), time: new Date().toLocaleString('zh-CN'), from_cn: oldCn, to_cn: item.cn, item_name: item.name, quantity: item.quantity || 1 });
       });
-
-      await saveDataToSupabase();
-      renderTable();
-      renderTransferLogs();
-      showToast(`已成功将 ${selected.length} 件谷子转单给 CN [${newCn.trim()}]`);
+      await saveDataToSupabase(); renderTable(); renderTransferLogs(); showToast('批量转单成功！');
     }
     window.batchTransferModal = batchTransferModal;
 
     async function batchChangeStatusModal() {
       const selected = getSelectedCacheItems();
-      if (selected.length === 0) return showToast('请先勾选要修改的谷子！');
-
+      if (selected.length === 0) return showToast('请先勾选谷子！');
       const status = prompt('请输入新状态（未出荷/已下单未到货/回国中/已到货/可排发/已申请发货/已排发/未付款）：');
       if (!status || !status.trim()) return;
-
       selected.forEach(i => i.status = status.trim());
-      await saveDataToSupabase();
-      renderTable();
-      showToast('状态更新成功！');
+      await saveDataToSupabase(); renderTable(); showToast('状态更新成功！');
     }
     window.batchChangeStatusModal = batchChangeStatusModal;
 
     async function batchChangeCountryModal() {
       const selected = getSelectedCacheItems();
-      if (selected.length === 0) return showToast('请先勾选要修改的谷子！');
-
-      const country = prompt('请输入新地区 country（日本 / 闲鱼 / 淘宝店 / 美国 / 韩国 / 印尼 / 泰国 / 台湾）：');
+      if (selected.length === 0) return showToast('请先勾选谷子！');
+      const country = prompt('请输入新地区 country：');
       if (!country || !country.trim()) return;
-
       selected.forEach(i => i.country = country.trim());
-      await saveDataToSupabase();
-      renderTable();
-      showToast('地区更新成功！');
+      await saveDataToSupabase(); renderTable(); showToast('地区更新成功！');
     }
     window.batchChangeCountryModal = batchChangeCountryModal;
 
     async function batchSetImgModal() {
       const selected = getSelectedCacheItems();
-      if (selected.length === 0) return showToast('请先勾选要补图的谷子！');
-
+      if (selected.length === 0) return showToast('请先勾选谷子！');
       const url = prompt('请输入图片 URL 链接：');
       if (!url) return;
-
       selected.forEach(i => i.image_url = url.trim());
-      await saveDataToSupabase();
-      renderTable();
-      showToast('批量补图成功！');
+      await saveDataToSupabase(); renderTable(); showToast('批量补图成功！');
     }
     window.batchSetImgModal = batchSetImgModal;
 
     async function batchDeleteItems() {
       const selected = getSelectedCacheItems();
-      if (selected.length === 0) return showToast('请先勾选要删除的谷子！');
-
-      if (!confirm(`确定彻底删除选中的 ${selected.length} 件谷子吗？此操作不可恢复！`)) return;
-
+      if (selected.length === 0) return showToast('请先勾选谷子！');
+      if (!confirm(`确定彻底删除选中的 ${selected.length} 件谷子吗？`)) return;
       const deleteIds = new Set(selected.map(i => String(i.item_id || i.id)));
       RAW_ITEMS = RAW_ITEMS.filter(i => !deleteIds.has(String(i.item_id || i.id)));
-
-      await saveDataToSupabase();
-      renderTable();
-      showToast('已从 group_data 中删除选中谷子！');
+      await saveDataToSupabase(); updateBatchDropdownOptions(); renderTable(); showToast('已彻底删除选中谷子！');
     }
     window.batchDeleteItems = batchDeleteItems;
 
@@ -1617,17 +918,13 @@
       if (!raw) return [];
       const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
       if (lines.length < 5) return [];
-
       const itemNames = lines[1].split('\t').slice(1);
       const prices = lines[2].split('\t').slice(1).map(p => parseFloat(p) || 0);
-
       const items = [];
-
       for (let i = 4; i < lines.length; i++) {
         const cells = lines[i].split('\t');
         const cn = cells[1]?.trim();
         if (!cn || cn === "昵称/总数" || cn === "CN" || cn === "昵称") continue;
-
         itemNames.forEach((name, idx) => {
           if (!name || !name.trim()) return;
           const qty = parseFloat(cells[idx + 2]);
@@ -1635,6 +932,7 @@
             items.push({
               item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
               name: name.trim(),
+              batch_name: '默认批次',
               country: batchCountry || '日本',
               price: prices[idx] || 0,
               quantity: qty,
@@ -1646,102 +944,76 @@
           }
         });
       }
-
       return items;
     }
-    window.parseMatrixImportText = parseMatrixImportText;
 
     function handleExcelImport(e) {
       const file = e.target.files[0];
       if (!file) return;
-
       const defaultCountry = document.getElementById('excelDefaultCountry').value || '日本';
       const reader = new FileReader();
-
-      reader.onload = async function(evt) {
+      reader.onload = async evt => {
         try {
           const data = new Uint8Array(evt.target.result);
           const workbook = XLSX.read(data, { type: 'array' });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-
           const csvText = XLSX.utils.sheet_to_csv(firstSheet, { FS: '\t' });
           let parsedItems = parseMatrixImportText(csvText, defaultCountry);
-
           if (parsedItems.length === 0) {
             const jsonRows = XLSX.utils.sheet_to_json(firstSheet);
-            if (jsonRows && jsonRows.length > 0) {
-              jsonRows.forEach(row => {
-                const name = row['谷子名称'] || row['名称'] || row['谷子'] || row['品名'];
-                const cn = row['认领CN'] || row['CN'] || row['姓名'] || row['圈名'];
-                if (name && cn) {
-                  parsedItems.push({
-                    item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-                    name: String(name).trim(),
-                    cn: String(cn).trim(),
-                    price: parseFloat(row['单价'] || row['价格'] || 0) || 0,
-                    quantity: parseInt(row['数量'] || 1) || 1,
-                    country: String(row['地区'] || row['country'] || defaultCountry).trim(),
-                    status: String(row['状态'] || '未出荷').trim(),
-                    image_url: row['图片'] || '',
-                    created_at: new Date().toISOString()
-                  });
-                }
-              });
-            }
+            jsonRows.forEach(row => {
+              const name = row['谷子名称'] || row['名称'] || row['谷子'];
+              const cn = row['认领CN'] || row['CN'] || row['姓名'];
+              if (name && cn) {
+                parsedItems.push({
+                  item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+                  name: String(name).trim(),
+                  cn: String(cn).trim(),
+                  batch_name: String(row['批次'] || row['所属批次'] || '默认批次').trim(),
+                  price: parseFloat(row['单价'] || row['价格'] || 0) || 0,
+                  quantity: parseInt(row['数量'] || 1) || 1,
+                  country: String(row['地区'] || defaultCountry).trim(),
+                  status: String(row['状态'] || '未出荷').trim(),
+                  image_url: row['图片'] || '',
+                  created_at: new Date().toISOString()
+                });
+              }
+            });
           }
-
-          if (parsedItems.length === 0) {
-            return showToast('Excel 表中未读取到有效谷子排单数据！请确认文件格式。');
-          }
-
+          if (parsedItems.length === 0) return showToast('未读取到有效谷子排单数据！');
           RAW_ITEMS.push(...parsedItems);
           await saveDataToSupabase();
+          updateBatchDropdownOptions();
           renderTable();
-          showToast(`🎉 成功导入 ${parsedItems.length} 条谷子记录到 group_data！`);
+          showToast(`🎉 成功导入 ${parsedItems.length} 条谷子记录！`);
           e.target.value = '';
-        } catch (err) {
-          console.error(err);
-          showToast('Excel 解析失败，请确认文件格式！');
-        }
+        } catch (err) { showToast('Excel 解析失败！'); }
       };
-
       reader.readAsArrayBuffer(file);
     }
     window.handleExcelImport = handleExcelImport;
 
-    function openPasteModal() {
-      document.getElementById('pasteInputText').value = '';
-      document.getElementById('pasteModal').classList.add('active');
-    }
+    function openPasteModal() { document.getElementById('pasteInputText').value = ''; document.getElementById('pasteModal').classList.add('active'); }
     window.openPasteModal = openPasteModal;
-
-    function closePasteModal() {
-      document.getElementById('pasteModal').classList.remove('active');
-    }
+    function closePasteModal() { document.getElementById('pasteModal').classList.remove('active'); }
     window.closePasteModal = closePasteModal;
 
     async function submitPasteImport() {
       const rawText = document.getElementById('pasteInputText').value;
-      if (!rawText || !rawText.trim()) {
-        return showToast('请先粘贴文本内容！');
-      }
-
+      if (!rawText || !rawText.trim()) return showToast('请先粘贴文本内容！');
       const defaultCountry = document.getElementById('excelDefaultCountry').value || '日本';
       const parsedItems = parseMatrixImportText(rawText, defaultCountry);
-
-      if (parsedItems.length === 0) {
-        return showToast('解析失败，未提取到有效排单数据！请检查粘贴内容格式。');
-      }
-
+      if (parsedItems.length === 0) return showToast('解析失败，请检查格式！');
       RAW_ITEMS.push(...parsedItems);
       await saveDataToSupabase();
+      updateBatchDropdownOptions();
       renderTable();
       closePasteModal();
-      showToast(`🎉 成功解析并导入 ${parsedItems.length} 条谷子记录到 group_data！`);
+      showToast(`🎉 成功导入 ${parsedItems.length} 条记录！`);
     }
     window.submitPasteImport = submitPasteImport;
 
-    /* --- 标签页 2：排发工作台逻辑 --- */
+    /* --- 标签页 2：排发工作台 --- */
     function switchDispatchSubTab(sub) {
       CURRENT_DISPATCH_SUBTAB = sub;
       document.getElementById('btnSubPending').classList.toggle('btn-primary', sub === 'pending');
@@ -1752,44 +1024,31 @@
 
     function chunkArray(arr, chunkSize = 10) {
       const results = [];
-      for (let i = 0; i < arr.length; i += chunkSize) {
-        results.push(arr.slice(i, i + chunkSize));
-      }
+      for (let i = 0; i < arr.length; i += chunkSize) results.push(arr.slice(i, i + chunkSize));
       return results;
     }
 
     function renderDispatchWorkbench() {
       const pendingApps = RAW_APPLICATIONS.filter(a => a.status === '待处理');
       const completedApps = RAW_APPLICATIONS.filter(a => a.status === '已完成');
-
       document.getElementById('statPendingCount').innerText = pendingApps.length;
       document.getElementById('statCompletedCount').innerText = completedApps.length;
-
       const container = document.getElementById('dispatchSubContent');
       const targetList = CURRENT_DISPATCH_SUBTAB === 'pending' ? pendingApps : completedApps;
-
       window.APP_CACHE = targetList;
-
       if (targetList.length === 0) {
-        container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);">当前没有任何${CURRENT_DISPATCH_SUBTAB === 'pending' ? '待处理申请' : '已完成记录'}</div>`;
+        container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);">暂无记录</div>`;
         return;
       }
-
       let html = '';
       targetList.forEach((app, appIndex) => {
         const items = app.items || [];
         const itemChunks = chunkArray(items, 10);
-
         let itemsGridHtml = '';
         itemChunks.forEach(chunk => {
           itemsGridHtml += `<div class="items-grid-10">`;
           chunk.forEach(it => {
-            itemsGridHtml += `
-              <div class="grid-item-chip">
-                <div class="name" title="${escapeHtml(it.name)}">${escapeHtml(it.name)}</div>
-                <div class="qty">x ${it.quantity || 1}</div>
-              </div>
-            `;
+            itemsGridHtml += `<div class="grid-item-chip"><div style="font-weight:600;">${escapeHtml(it.name)}</div><div style="color:var(--primary); font-weight:700;">x ${it.quantity || 1}</div></div>`;
           });
           itemsGridHtml += `</div>`;
         });
@@ -1797,89 +1056,50 @@
         html += `
           <div class="app-card">
             <div class="app-header">
-              <div>
-                <strong style="font-size:1.05rem;">CN: ${escapeHtml(app.cn)}</strong>
-                <span style="font-size:0.8rem; color:var(--text-muted); margin-left:12px;">⏰ ${escapeHtml(app.time || '')}</span>
-              </div>
-              <div>
-                <span class="badge ${app.status === '待处理' ? 'badge-status-已申请发货' : 'badge-status-已排发'}">${escapeHtml(app.status)}</span>
-              </div>
+              <div><strong>CN: ${escapeHtml(app.cn)}</strong><span style="font-size:0.8rem; color:var(--text-muted); margin-left:12px;">⏰ ${escapeHtml(app.time || '')}</span></div>
+              <span class="badge ${app.status === '待处理' ? 'badge-status-已申请发货' : 'badge-status-已排发'}">${escapeHtml(app.status)}</span>
             </div>
-
-            <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:6px;">
-              📝 备注: ${escapeHtml(app.note || '无备注')}
-            </div>
-
-            <div>
-              <span style="font-size:0.85rem; font-weight:600;">申请发货谷子明细 (严格每 10 个一行)：</span>
-              ${itemsGridHtml}
-            </div>
-
+            <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:6px;">📝 备注: ${escapeHtml(app.note || '无')}</div>
+            <div>${itemsGridHtml}</div>
             <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
               ${app.status === '待处理' ? `
                 <button class="btn btn-success" onclick="confirmDispatchAppByIndex(${appIndex})">确认发货</button>
                 <button class="btn btn-danger" onclick="deleteAppByIndex(${appIndex})">删除申请</button>
               ` : `
-                <button class="btn btn-danger" onclick="deleteCompletedAppByIndex(${appIndex})">删除记录 (联动删除排表谷子)</button>
+                <button class="btn btn-danger" onclick="deleteCompletedAppByIndex(${appIndex})">删除记录 (联动删除谷子)</button>
               `}
             </div>
           </div>
         `;
       });
-
       container.innerHTML = html;
     }
 
     async function confirmDispatchAppByIndex(appIndex) {
       const app = window.APP_CACHE[appIndex];
       if (!app) return;
-
       app.status = '已完成';
-
       const targetItemIds = new Set((app.items || []).map(i => String(i.item_id || i.id)));
-      RAW_ITEMS.forEach(item => {
-        const itemId = String(item.item_id || item.id);
-        if (targetItemIds.has(itemId)) {
-          item.status = '已排发';
-        }
-      });
-
-      await saveDataToSupabase();
-      renderDispatchWorkbench();
-      renderTable();
-      showToast('已确认发货！对应谷子在 group_data 中已标记为[已排发]');
+      RAW_ITEMS.forEach(item => { if (targetItemIds.has(String(item.item_id || item.id))) item.status = '已排发'; });
+      await saveDataToSupabase(); renderDispatchWorkbench(); renderTable(); showToast('已确认发货！');
     }
     window.confirmDispatchAppByIndex = confirmDispatchAppByIndex;
 
     async function deleteAppByIndex(appIndex) {
       const app = window.APP_CACHE[appIndex];
-      if (!app) return;
-
-      if (!confirm('确定删除此申请记录吗？')) return;
-
+      if (!app || !confirm('确定删除此申请记录吗？')) return;
       RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
-
-      await saveDataToSupabase();
-      renderDispatchWorkbench();
-      showToast('已删除申请！');
+      await saveDataToSupabase(); renderDispatchWorkbench(); showToast('已删除申请！');
     }
     window.deleteAppByIndex = deleteAppByIndex;
 
     async function deleteCompletedAppByIndex(appIndex) {
       const app = window.APP_CACHE[appIndex];
-      if (!app) return;
-
-      if (!confirm('确定删除此已完成发货记录吗？此操作将【联动彻底删除 group_data 中对应已排发的谷子】！')) return;
-
+      if (!app || !confirm('确定删除此发货记录吗？将联动删除排表中对应谷子！')) return;
       const targetItemIds = new Set((app.items || []).map(i => String(i.item_id || i.id)));
-      
       RAW_ITEMS = RAW_ITEMS.filter(item => !targetItemIds.has(String(item.item_id || item.id)));
       RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
-
-      await saveDataToSupabase();
-      renderDispatchWorkbench();
-      renderTable();
-      showToast('已删除发货记录，并联动删除 group_data 中对应谷子！');
+      await saveDataToSupabase(); updateBatchDropdownOptions(); renderDispatchWorkbench(); renderTable(); showToast('已彻底删除！');
     }
     window.deleteCompletedAppByIndex = deleteCompletedAppByIndex;
 
@@ -1887,138 +1107,81 @@
     function renderTransferLogs() {
       const tbody = document.getElementById('transferLogsTableBody');
       window.LOG_CACHE = RAW_LOGS;
-
-      if (RAW_LOGS.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">暂无转单记录</td></tr>`;
-        return;
-      }
-
-      let html = '';
-      RAW_LOGS.forEach((log, logIndex) => {
-        html += `
-          <tr>
-            <td>${escapeHtml(log.time)}</td>
-            <td><strong style="color:var(--danger);">${escapeHtml(log.from_cn)}</strong></td>
-            <td><strong style="color:var(--success);">${escapeHtml(log.to_cn)}</strong></td>
-            <td>${escapeHtml(log.item_name)}</td>
-            <td>${log.quantity || 1}</td>
-            <td>
-              <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogByIndex(${logIndex})">删除</button>
-            </td>
-          </tr>
-        `;
-      });
-
-      tbody.innerHTML = html;
+      if (RAW_LOGS.length === 0) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">暂无转单记录</td></tr>`; return; }
+      tbody.innerHTML = RAW_LOGS.map((log, index) => `
+        <tr>
+          <td>${escapeHtml(log.time)}</td>
+          <td><strong style="color:var(--danger);">${escapeHtml(log.from_cn)}</strong></td>
+          <td><strong style="color:var(--success);">${escapeHtml(log.to_cn)}</strong></td>
+          <td>${escapeHtml(log.item_name)}</td>
+          <td>${log.quantity || 1}</td>
+          <td><button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogByIndex(${index})">删除</button></td>
+        </tr>
+      `).join('');
     }
 
     async function deleteLogByIndex(logIndex) {
       const log = window.LOG_CACHE[logIndex];
       if (!log) return;
-
       RAW_LOGS = RAW_LOGS.filter(l => String(l.id) !== String(log.id));
-      await saveDataToSupabase();
-      renderTransferLogs();
-      showToast('已删除该条转单记录');
+      await saveDataToSupabase(); renderTransferLogs(); showToast('已删除记录');
     }
     window.deleteLogByIndex = deleteLogByIndex;
 
     async function clearAllTransferLogs() {
       if (!confirm('确定清空所有转单日志记录吗？')) return;
-      RAW_LOGS = [];
-      await saveDataToSupabase();
-      renderTransferLogs();
-      showToast('转单日志已清空！');
+      RAW_LOGS = []; await saveDataToSupabase(); renderTransferLogs(); showToast('转单日志已清空！');
     }
     window.clearAllTransferLogs = clearAllTransferLogs;
 
-    /* --- 标签页 4：📮 匿名反馈箱逻辑 --- */
+    /* --- 标签页 4：匿名反馈箱 --- */
     function renderFeedbackList() {
       const tbody = document.getElementById('feedbackTableBody');
       const mobileCards = document.getElementById('feedbackMobileCardsView');
-      const searchVal = (document.getElementById('fbFilterSearch')?.value || '').trim().toLowerCase();
-      const statusVal = document.getElementById('fbFilterStatus')?.value || '';
-      const categoryVal = document.getElementById('fbFilterCategory')?.value || '';
-
       const unreadCount = RAW_FEEDBACK.filter(f => f.status === '未读').length;
       const readCount = RAW_FEEDBACK.filter(f => f.status === '已读').length;
       const handledCount = RAW_FEEDBACK.filter(f => f.status === '已处理').length;
-
       document.getElementById('statFbUnread').innerText = unreadCount;
       document.getElementById('statFbRead').innerText = readCount;
       document.getElementById('statFbHandled').innerText = handledCount;
       document.getElementById('statFbTotal').innerText = RAW_FEEDBACK.length;
+      window.FEEDBACK_CACHE = RAW_FEEDBACK;
 
-      const filtered = RAW_FEEDBACK.filter(fb => {
-        const contentMatch = (fb.content || '').toLowerCase().includes(searchVal);
-        const replyMatch = (fb.reply || '').toLowerCase().includes(searchVal);
-        const matchSearch = !searchVal || (contentMatch || replyMatch);
-
-        const matchStatus = !statusVal || fb.status === statusVal;
-        const matchCat = !categoryVal || fb.category === categoryVal;
-
-        return matchSearch && matchStatus && matchCat;
-      });
-
-      window.FEEDBACK_CACHE = filtered;
-
-      if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">暂无匹配的匿名反馈</td></tr>`;
-        if (mobileCards) mobileCards.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">暂无匹配的匿名反馈</div>`;
+      if (RAW_FEEDBACK.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">暂无反馈</td></tr>`;
+        if (mobileCards) mobileCards.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">暂无反馈</div>`;
         return;
       }
 
-      let tableHtml = '';
-      let cardHtml = '';
-
-      filtered.forEach((fb, index) => {
-        const statusBadgeClass = `badge-fb-${fb.status || '未读'}`;
-        const shortContent = escapeHtml(fb.content || '');
-        const shortReply = fb.reply ? `💬 ${escapeHtml(fb.reply)}` : `<span style="color:#cbd5e1;font-size:0.8rem;">未回复</span>`;
-
+      let tableHtml = '', cardHtml = '';
+      RAW_FEEDBACK.forEach((fb, index) => {
         tableHtml += `
           <tr>
-            <td><span class="badge ${statusBadgeClass}">${escapeHtml(fb.status || '未读')}</span></td>
+            <td><span class="badge badge-fb-${fb.status || '未读'}">${escapeHtml(fb.status || '未读')}</span></td>
             <td><span class="badge badge-category">${escapeHtml(fb.category || '其他')}</span></td>
             <td style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(fb.created_at || '')}</td>
-            <td style="max-width:260px; white-space:normal; cursor:pointer;" onclick="openFeedbackModal(${index})" title="点击查看完整内容与回复">
-              ${shortContent}
-            </td>
-            <td style="max-width:200px; white-space:normal; font-size:0.85rem; color:#475569;">
-              ${shortReply}
-            </td>
+            <td style="max-width:260px; white-space:normal;">${escapeHtml(fb.content || '')}</td>
+            <td style="max-width:200px; white-space:normal; font-size:0.85rem; color:#475569;">${fb.reply ? `💬 ${escapeHtml(fb.reply)}` : '未回复'}</td>
             <td style="text-align:right;">
               <button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem;" onclick="openFeedbackModal(${index})">查看/回复</button>
               <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteFeedbackByIndex(${index})">删除</button>
             </td>
           </tr>
         `;
-
         cardHtml += `
           <div class="admin-card-mobile">
             <div class="admin-card-mobile-header">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span class="badge badge-category">${escapeHtml(fb.category || '其他')}</span>
-                <span style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(fb.created_at || '')}</span>
-              </div>
-              <span class="badge ${statusBadgeClass}">${escapeHtml(fb.status || '未读')}</span>
+              <span class="badge badge-category">${escapeHtml(fb.category || '其他')}</span>
+              <span class="badge badge-fb-${fb.status || '未读'}">${escapeHtml(fb.status || '未读')}</span>
             </div>
-            <div style="font-size:0.9rem; color:var(--text-main); line-height:1.4; word-break:break-all;">
-              ${shortContent}
-            </div>
-            ${fb.reply ? `
-              <div style="font-size:0.85rem; color:#475569; background:#f8fafc; border-left:3px solid var(--primary); padding:6px 10px; border-radius:4px;">
-                <strong>团长回复：</strong>${escapeHtml(fb.reply)}
-              </div>
-            ` : ''}
+            <div style="font-size:0.9rem;">${escapeHtml(fb.content || '')}</div>
             <div class="admin-card-mobile-actions">
-              <button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openFeedbackModal(${index})">💬 查看/回复</button>
+              <button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openFeedbackModal(${index})">💬 回复</button>
               <button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteFeedbackByIndex(${index})">🗑️ 删除</button>
             </div>
           </div>
         `;
       });
-
       tbody.innerHTML = tableHtml;
       if (mobileCards) mobileCards.innerHTML = cardHtml;
     }
@@ -2027,172 +1190,68 @@
     function openFeedbackModal(index) {
       const fb = window.FEEDBACK_CACHE[index];
       if (!fb) return;
-
-      const rawIndex = RAW_FEEDBACK.findIndex(item => item.id === fb.id);
-      document.getElementById('modalFbIndex').value = rawIndex;
-      document.getElementById('modalFbCategory').innerText = fb.category || '其他';
-      document.getElementById('modalFbTime').innerText = fb.created_at || '';
+      document.getElementById('modalFbIndex').value = index;
       document.getElementById('modalFbContent').innerText = fb.content || '';
       document.getElementById('modalFbReply').value = fb.reply || '';
-
       document.getElementById('feedbackModal').classList.add('active');
     }
     window.openFeedbackModal = openFeedbackModal;
 
-    function closeFeedbackModal() {
-      document.getElementById('feedbackModal').classList.remove('active');
-    }
+    function closeFeedbackModal() { document.getElementById('feedbackModal').classList.remove('active'); }
     window.closeFeedbackModal = closeFeedbackModal;
 
     async function setModalFbStatus(newStatus) {
-      const rawIndex = parseInt(document.getElementById('modalFbIndex').value);
-      if (isNaN(rawIndex) || !RAW_FEEDBACK[rawIndex]) return;
-
-      RAW_FEEDBACK[rawIndex].status = newStatus;
-      await saveDataToSupabase();
-      renderFeedbackList();
-      showToast(`已标记为 [${newStatus}]`);
+      const idx = parseInt(document.getElementById('modalFbIndex').value);
+      if (RAW_FEEDBACK[idx]) {
+        RAW_FEEDBACK[idx].status = newStatus;
+        await saveDataToSupabase();
+        renderFeedbackList();
+        showToast(`已标记为 [${newStatus}]`);
+      }
     }
     window.setModalFbStatus = setModalFbStatus;
 
     async function saveModalFbReply() {
-      const rawIndex = parseInt(document.getElementById('modalFbIndex').value);
-      if (isNaN(rawIndex) || !RAW_FEEDBACK[rawIndex]) return;
-
-      const replyText = document.getElementById('modalFbReply').value.trim();
-      RAW_FEEDBACK[rawIndex].reply = replyText;
-      if (RAW_FEEDBACK[rawIndex].status === '未读') {
-        RAW_FEEDBACK[rawIndex].status = '已读';
+      const idx = parseInt(document.getElementById('modalFbIndex').value);
+      if (RAW_FEEDBACK[idx]) {
+        RAW_FEEDBACK[idx].reply = document.getElementById('modalFbReply').value.trim();
+        if (RAW_FEEDBACK[idx].status === '未读') RAW_FEEDBACK[idx].status = '已读';
+        await saveDataToSupabase();
+        closeFeedbackModal();
+        renderFeedbackList();
+        showToast('回复已保存！');
       }
-
-      await saveDataToSupabase();
-      closeFeedbackModal();
-      renderFeedbackList();
-      showToast('回复已保存！');
     }
     window.saveModalFbReply = saveModalFbReply;
 
     async function batchMarkFeedbackRead() {
-      if (RAW_FEEDBACK.length === 0) return showToast('暂无反馈记录');
-
-      let count = 0;
-      RAW_FEEDBACK.forEach(fb => {
-        if (fb.status === '未读') {
-          fb.status = '已读';
-          count++;
-        }
-      });
-
-      if (count === 0) return showToast('没有未读的反馈');
-
-      await saveDataToSupabase();
-      renderFeedbackList();
-      showToast(`已将 ${count} 条未读反馈标为已读！`);
+      RAW_FEEDBACK.forEach(fb => { if (fb.status === '未读') fb.status = '已读'; });
+      await saveDataToSupabase(); renderFeedbackList(); showToast('已全部标为已读！');
     }
     window.batchMarkFeedbackRead = batchMarkFeedbackRead;
 
     async function deleteFeedbackByIndex(index) {
-      const fb = window.FEEDBACK_CACHE[index];
-      if (!fb) return;
-
       if (!confirm('确定删除此条匿名反馈吗？')) return;
-
-      RAW_FEEDBACK = RAW_FEEDBACK.filter(item => item.id !== fb.id);
-      await saveDataToSupabase();
-      renderFeedbackList();
-      showToast('反馈已删除！');
+      RAW_FEEDBACK.splice(index, 1);
+      await saveDataToSupabase(); renderFeedbackList(); showToast('已删除！');
     }
     window.deleteFeedbackByIndex = deleteFeedbackByIndex;
 
     async function clearAllFeedback() {
-      if (RAW_FEEDBACK.length === 0) return showToast('当前暂无反馈');
-      if (!confirm('确定清空所有匿名反馈记录吗？此操作不可恢复！')) return;
-
-      RAW_FEEDBACK = [];
-      await saveDataToSupabase();
-      renderFeedbackList();
-      showToast('匿名反馈已全部清空！');
+      if (!confirm('确定清空所有匿名反馈吗？不可恢复！')) return;
+      RAW_FEEDBACK = []; await saveDataToSupabase(); renderFeedbackList(); showToast('已清空！');
     }
     window.clearAllFeedback = clearAllFeedback;
 
-    /* --- 标签页 5：团务设置与实用工具 --- */
     function copyMemberLink() {
       const url = `${window.location.origin}/index.html?key=${encodeURIComponent(CURRENT_QUERY_KEY)}`;
-      navigator.clipboard.writeText(url).then(() => {
-        showToast('团员自查链接已复制到剪贴板！');
-      }).catch(() => {
-        prompt('请手动复制链接：', url);
-      });
+      navigator.clipboard.writeText(url).then(() => showToast('自查链接已复制！')).catch(() => prompt('请手动复制链接：', url));
     }
     window.copyMemberLink = copyMemberLink;
 
-    async function generateSampleData() {
-      if (!confirm('生成演示测试数据将向当前 Query Key 写入样例，确定生成吗？')) return;
-
-      RAW_ITEMS = [
-        { item_id: 'item_1', name: '五条悟 20cm 亚克力立牌', cn: '小明', price: 65, quantity: 2, country: '日本', status: '可排发', image_url: '' },
-        { item_id: 'item_2', name: '夏油杰 75mm 闪粉徽章', cn: '小明', price: 25, quantity: 3, country: '闲鱼', status: '可排发', image_url: '' },
-        { item_id: 'item_3', name: '伏黑惠 烫金拍立得', cn: '小红', price: 15, quantity: 5, country: '淘宝店', status: '未出荷', image_url: '' },
-        { item_id: 'item_4', name: '钉崎野蔷薇 色纸', cn: '小红', price: 30, quantity: 1, country: '美国', status: '已到货', image_url: '' },
-        { item_id: 'item_5', name: '宿傩 挂件', cn: '小刚', price: 40, quantity: 2, country: '韩国', status: '已排发', image_url: '' }
-      ];
-
-      RAW_APPLICATIONS = [
-        {
-          id: 'app_sample_1',
-          type: '排发申请',
-          cn: '小明',
-          items: [
-            { item_id: 'item_1', name: '五条悟 20cm 亚克力立牌', quantity: 2, country: '日本' },
-            { item_id: 'item_2', name: '夏油杰 75mm 闪粉徽章', quantity: 3, country: '闲鱼' }
-          ],
-          note: '加固打包，寄顺丰到付',
-          time: new Date().toLocaleString('zh-CN'),
-          status: '待处理'
-        }
-      ];
-
-      RAW_LOGS = [
-        { id: 'log_sample_1', time: new Date().toLocaleString('zh-CN'), from_cn: '路人甲', to_cn: '小明', item_name: '五条悟 20cm 亚克力立牌', quantity: 2 }
-      ];
-
-      RAW_FEEDBACK = [
-        {
-          id: 'fb_sample_1',
-          content: '希望能增加更多包装加固选项，比如飞机盒和双层气泡膜～',
-          category: '建议',
-          status: '未读',
-          created_at: new Date().toLocaleString('zh-CN'),
-          reply: ''
-        },
-        {
-          id: 'fb_sample_2',
-          content: '上次收到包裹非常结实完好，团长辛苦啦！',
-          category: '其他',
-          status: '已处理',
-          created_at: new Date().toLocaleString('zh-CN'),
-          reply: '收到支持，感谢信任！'
-        }
-      ];
-
-      await saveDataToSupabase();
-      CURRENT_PAGE = 1;
-      renderTable();
-      renderDispatchWorkbench();
-      renderTransferLogs();
-      renderFeedbackList();
-      showToast('🎉 样例测试数据生成成功！已存入 group_data 和 image_data。');
-    }
-    window.generateSampleData = generateSampleData;
-
     function escapeHtml(str) {
       if (!str) return '';
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
   </script>
 </body>
