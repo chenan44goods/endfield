@@ -279,11 +279,12 @@
     .badge-status-已申请发货 { background-color: #f3e8ff; color: #6b21a8; }
     .badge-status-已排发 { background-color: #e2e8f0; color: #475569; }
     .badge-status-未付款 { background-color: #fecdd3; color: #881337; }
+    .badge-status-custom { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
 
-    .badge-fb-未读 { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-    .badge-fb-已读 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
-    .badge-fb-已处理 { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
-    .badge-category { background-color: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
+    .badge-fb-未读 { background-color: #fee2e2; color: #991b1b; }
+    .badge-fb-已读 { background-color: #e0f2fe; color: #0369a1; }
+    .badge-fb-已处理 { background-color: #d1fae5; color: #065f46; }
+    .badge-category { background-color: #f3e8ff; color: #6b21a8; }
 
     /* 分页栏样式 */
     .pagination-container {
@@ -430,7 +431,6 @@
       width: 50px;
       height: 50px;
       background: #f1f5f9;
-      border: 1px solid var(--border);
       border-radius: 6px;
       display: flex;
       align-items: center;
@@ -504,7 +504,6 @@
 </head>
 <body>
   <div class="container">
-    <!-- Header -->
     <header>
       <div class="header-title">
         <h1>👑 团长后台管理系统</h1>
@@ -521,7 +520,6 @@
       </div>
     </header>
 
-    <!-- Nav Tabs -->
     <div class="nav-tabs">
       <button class="tab-btn active" onclick="switchTab('tabItems')">📊 排表管理 (group_data)</button>
       <button class="tab-btn" onclick="switchTab('tabDispatch')">🚀 排发工作台 (applications)</button>
@@ -548,7 +546,7 @@
               <label for="inputCn">认领 CN (圈名) *</label>
               <input type="text" id="inputCn" required placeholder="如：小明">
             </div>
-            <!-- 所属批次字段 -->
+            <!-- 【新增】所属批次（带下拉建议与手动输入） -->
             <div class="form-group">
               <label for="inputBatch">所属批次</label>
               <input type="text" id="inputBatch" list="batchPresets" placeholder="如：台湾711 / 日本场贩" value="默认批次">
@@ -556,6 +554,7 @@
                 <option value="默认批次">
                 <option value="台湾711">
                 <option value="日本场贩">
+                <option value="泰国场贩">
               </datalist>
             </div>
             <div class="form-group">
@@ -566,6 +565,7 @@
               <label for="inputQuantity">数量</label>
               <input type="number" id="inputQuantity" value="1" min="1">
             </div>
+            <!-- 【严格保留】地区 (country) 下拉框 -->
             <div class="form-group">
               <label for="inputCountry">地区 (country)</label>
               <select id="inputCountry">
@@ -579,18 +579,20 @@
                 <option value="泰国">泰国</option>
               </select>
             </div>
+            <!-- 【升级】状态字段：改用 input+datalist 支持自定义输入 -->
             <div class="form-group">
-              <label for="inputStatus">状态 (8种预设)</label>
-              <select id="inputStatus">
-                <option value="未出荷">未出荷</option>
-                <option value="已下单未到货">已下单未到货</option>
-                <option value="回国中">回国中</option>
-                <option value="已到货">已到货</option>
-                <option value="可排发">可排发</option>
-                <option value="已申请发货">已申请发货</option>
-                <option value="已排发">已排发</option>
-                <option value="未付款">未付款</option>
-              </select>
+              <label for="inputStatus">状态 (选择预设或输入)</label>
+              <input type="text" id="inputStatus" list="statusPresets" placeholder="选择或输入状态" value="未出荷">
+              <datalist id="statusPresets">
+                <option value="未出荷">
+                <option value="已下单未到货">
+                <option value="回国中">
+                <option value="已到货">
+                <option value="可排发">
+                <option value="已申请发货">
+                <option value="已排发">
+                <option value="未付款">
+              </datalist>
             </div>
 
             <!-- 图片上传区域 -->
@@ -637,8 +639,10 @@
       <div class="card">
         <div class="card-title">
           <span>📦 谷子排表明细 (group_data)</span>
+          <!-- 批量操作栏（新增批量改批次，完整保留批量改状态、改地区、补图、删除） -->
           <div class="btn-group">
             <button class="btn btn-secondary" onclick="batchTransferModal()">批量转单</button>
+            <button class="btn btn-purple" onclick="batchChangeBatchModal()">批量改批次</button>
             <button class="btn btn-secondary" onclick="batchChangeStatusModal()">批量改状态</button>
             <button class="btn btn-secondary" onclick="batchChangeCountryModal()">批量改地区</button>
             <button class="btn btn-secondary" onclick="batchSetImgModal()">批量补图</button>
@@ -646,12 +650,16 @@
           </div>
         </div>
 
-        <!-- 过滤器：搜索 + 批次筛选 + 地区筛选 + 状态筛选 -->
-        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
-          <input type="text" id="filterSearch" placeholder="搜索谷子名称/CN/批次..." style="max-width: 200px;" oninput="onSearchInput()">
-          <select id="filterBatch" style="max-width: 150px;" onchange="onFilterChange()">
+        <!-- 过滤器栏：搜索 + 批次筛选 + 【保留】地区筛选 + 状态筛选 -->
+        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
+          <input type="text" id="filterSearch" placeholder="搜索名称/CN/批次..." style="max-width: 180px;" oninput="onSearchInput()">
+          
+          <!-- 批次筛选下拉框 -->
+          <select id="filterBatch" style="max-width: 140px;" onchange="onFilterChange()">
             <option value="">全部批次</option>
           </select>
+          
+          <!-- 【严格保留】地区 (country) 下拉筛选 -->
           <select id="filterCountry" style="max-width: 140px;" onchange="onFilterChange()">
             <option value="">全部地区 (country)</option>
             <option value="日本">日本</option>
@@ -663,17 +671,20 @@
             <option value="印尼">印尼</option>
             <option value="泰国">泰国</option>
           </select>
-          <select id="filterStatus" style="max-width: 140px;" onchange="onFilterChange()">
+          
+          <!-- 状态筛选（支持选择预设或输入自定义状态） -->
+          <input type="text" id="filterStatus" list="filterStatusPresets" placeholder="全部状态" style="max-width: 130px;" oninput="onFilterChange()">
+          <datalist id="filterStatusPresets">
             <option value="">全部状态</option>
-            <option value="未出荷">未出荷</option>
-            <option value="已下单未到货">已下单未到货</option>
-            <option value="回国中">回国中</option>
-            <option value="已到货">已到货</option>
-            <option value="可排发">可排发</option>
-            <option value="已申请发货">已申请发货</option>
-            <option value="已排发">已排发</option>
-            <option value="未付款">未付款</option>
-          </select>
+            <option value="未出荷">
+            <option value="已下单未到货">
+            <option value="回国中">
+            <option value="已到货">
+            <option value="可排发">
+            <option value="已申请发货">
+            <option value="已排发">
+            <option value="未付款">
+          </datalist>
         </div>
 
         <!-- 桌面端表格视图 -->
@@ -1060,13 +1071,27 @@
     }
     window.handleImageUpload = handleImageUpload;
 
+    function getStatusBadgeClass(status) {
+      const map = {
+        '未出荷': 'badge-status-未出荷',
+        '已下单未到货': 'badge-status-已下单未到货',
+        '回国中': 'badge-status-回国中',
+        '已到货': 'badge-status-已到货',
+        '可排发': 'badge-status-可排发',
+        '已申请发货': 'badge-status-已申请发货',
+        '已排发': 'badge-status-已排发',
+        '未付款': 'badge-status-未付款'
+      };
+      return map[status] || 'badge-status-custom';
+    }
+
     function renderTable() {
       const tbody = document.getElementById('itemsTableBody');
       const mobileView = document.getElementById('adminMobileCardsView');
       const searchVal = (document.getElementById('filterSearch')?.value || '').trim().toLowerCase();
-      const batchVal = document.getElementById('filterBatch')?.value || '';
-      const countryVal = document.getElementById('filterCountry')?.value || '';
-      const statusVal = document.getElementById('filterStatus')?.value || '';
+      const batchVal = (document.getElementById('filterBatch')?.value || '').trim();
+      const countryVal = (document.getElementById('filterCountry')?.value || '').trim();
+      const statusVal = (document.getElementById('filterStatus')?.value || '').trim().toLowerCase();
 
       const filtered = RAW_ITEMS.filter(item => {
         const nameMatch = (item.name || '').toLowerCase().includes(searchVal);
@@ -1074,10 +1099,11 @@
         const batchMatchText = (item.batch_name || '').toLowerCase().includes(searchVal);
         const matchSearch = nameMatch || cnMatch || batchMatchText;
         
-        // 批次、地区、状态多维组合筛选
+        // 批次、地区(country)、状态多维筛选（100%保留地区筛选）
         const matchBatch = !batchVal || (item.batch_name || '默认批次') === batchVal;
         const matchCountry = !countryVal || (item.country || '日本') === countryVal;
-        const matchStatus = !statusVal || item.status === statusVal;
+        const itemStatus = (item.status || '未出荷').toLowerCase();
+        const matchStatus = !statusVal || itemStatus.includes(statusVal);
 
         return matchSearch && matchBatch && matchCountry && matchStatus;
       });
@@ -1103,6 +1129,8 @@
         const mobileImgTag = item.image_url ? `<img src="${escapeHtml(item.image_url)}" class="admin-card-mobile-img" alt="谷子" loading="lazy">` : `<div class="admin-card-mobile-noimg">无图</div>`;
         const batchStr = item.batch_name || '默认批次';
         const countryStr = item.country || '日本';
+        const statusStr = item.status || '未出荷';
+        const statusBadgeClass = getStatusBadgeClass(statusStr);
 
         html += `
           <tr>
@@ -1114,7 +1142,7 @@
             <td>￥${Number(item.price || 0).toFixed(2)}</td>
             <td>${item.quantity || 1}</td>
             <td><span class="badge badge-country">${escapeHtml(countryStr)}</span></td>
-            <td><span class="badge badge-status-${item.status || '未出荷'}">${escapeHtml(item.status || '未出荷')}</span></td>
+            <td><span class="badge ${statusBadgeClass}">${escapeHtml(statusStr)}</span></td>
             <td>
               <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editItemByIndex(${index})">编辑</button>
               <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="transferSingleByIndex(${index})">转单</button>
@@ -1130,7 +1158,7 @@
                 <span class="badge badge-batch">${escapeHtml(batchStr)}</span>
                 <span class="badge badge-country">${escapeHtml(countryStr)}</span>
               </div>
-              <span class="badge badge-status-${item.status || '未出荷'}">${escapeHtml(item.status || '未出荷')}</span>
+              <span class="badge ${statusBadgeClass}">${escapeHtml(statusStr)}</span>
             </div>
             <div class="admin-card-mobile-body">
               ${mobileImgTag}
@@ -1181,7 +1209,7 @@
       const price = parseFloat(document.getElementById('inputPrice').value) || 0;
       const quantity = parseInt(document.getElementById('inputQuantity').value) || 1;
       const country = document.getElementById('inputCountry').value;
-      const status = document.getElementById('inputStatus').value;
+      const status = document.getElementById('inputStatus').value.trim() || '未出荷';
       const imageUrl = (document.getElementById('inputImageUrl')?.value || '').trim();
 
       if (!name || !cn) return showToast('请填写谷子名称和 CN！');
@@ -1228,6 +1256,8 @@
       document.getElementById('editItemId').value = '';
       document.getElementById('itemForm').reset();
       document.getElementById('inputBatch').value = '默认批次';
+      document.getElementById('inputCountry').value = '日本';
+      document.getElementById('inputStatus').value = '未出荷';
       document.getElementById('inputImageUrl').value = '';
       updateImagePreview('');
       document.getElementById('uploadStatusText').innerText = '自动上传到 Supabase 图床';
@@ -1304,10 +1334,24 @@
     }
     window.batchTransferModal = batchTransferModal;
 
+    // 【新增】批量改批次
+    async function batchChangeBatchModal() {
+      const selected = getSelectedCacheItems();
+      if (selected.length === 0) return showToast('请先勾选谷子！');
+      const batch = prompt('请输入新批次名称：', '默认批次');
+      if (!batch || !batch.trim()) return;
+      selected.forEach(i => i.batch_name = batch.trim());
+      await saveDataToSupabase();
+      updateBatchDropdownOptions();
+      renderTable();
+      showToast(`已将选中的 ${selected.length} 件谷子修改为批次 [${batch.trim()}]！`);
+    }
+    window.batchChangeBatchModal = batchChangeBatchModal;
+
     async function batchChangeStatusModal() {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选谷子！');
-      const status = prompt('请输入新状态（未出荷/已下单未到货/回国中/已到货/可排发/已申请发货/已排发/未付款）：');
+      const status = prompt('请输入新状态（如：未出荷/已下单未到货/回国中/已到货/可排发/已申请发货/已排发/未付款 或自定义状态）：', '未出荷');
       if (!status || !status.trim()) return;
       selected.forEach(i => i.status = status.trim());
       await saveDataToSupabase(); renderTable(); showToast('状态更新成功！');
@@ -1317,7 +1361,7 @@
     async function batchChangeCountryModal() {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选谷子！');
-      const country = prompt('请输入新地区 country：');
+      const country = prompt('请输入新地区 country（如：日本 / 台湾 / 闲鱼 / 淘宝店 / 美国 / 韩国 / 泰国）：', '日本');
       if (!country || !country.trim()) return;
       selected.forEach(i => i.country = country.trim());
       await saveDataToSupabase(); renderTable(); showToast('地区更新成功！');
@@ -1337,7 +1381,7 @@
     async function batchDeleteItems() {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选谷子！');
-      if (!confirm(`确定彻底删除选中的 ${selected.length} 件谷子吗？`)) return;
+      if (!confirm(`确定彻底删除选中的 ${selected.length} 件谷子吗？此操作不可恢复！`)) return;
       const deleteIds = new Set(selected.map(i => String(i.item_id || i.id)));
       RAW_ITEMS = RAW_ITEMS.filter(i => !deleteIds.has(String(i.item_id || i.id)));
       await saveDataToSupabase(); updateBatchDropdownOptions(); renderTable(); showToast('已彻底删除选中谷子！');
