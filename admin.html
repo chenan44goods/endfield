@@ -501,6 +501,7 @@
       border: 1px solid var(--border);
     }
   </style>
+<base target="_blank">
 </head>
 <body>
   <div class="container">
@@ -579,20 +580,18 @@
                 <option value="泰国">泰国</option>
               </select>
             </div>
-            <!-- 【升级】状态字段：改用 input+datalist 支持自定义输入 -->
             <div class="form-group">
-              <label for="inputStatus">状态 (选择预设或输入)</label>
-              <input type="text" id="inputStatus" list="statusPresets" placeholder="选择或输入状态" value="未出荷">
-              <datalist id="statusPresets">
-                <option value="未出荷">
-                <option value="已下单未到货">
-                <option value="回国中">
-                <option value="已到货">
-                <option value="可排发">
-                <option value="已申请发货">
-                <option value="已排发">
-                <option value="未付款">
-              </datalist>
+              <label for="inputStatus">状态</label>
+              <select id="inputStatus">
+                <option value="未出荷">未出荷</option>
+                <option value="已下单未到货">已下单未到货</option>
+                <option value="回国中">回国中</option>
+                <option value="已到货">已到货</option>
+                <option value="可排发">可排发</option>
+                <option value="已申请发货">已申请发货</option>
+                <option value="已排发">已排发</option>
+                <option value="未付款">未付款</option>
+              </select>
             </div>
 
             <!-- 图片上传区域 -->
@@ -672,19 +671,17 @@
             <option value="泰国">泰国</option>
           </select>
           
-          <!-- 状态筛选（支持选择预设或输入自定义状态） -->
-          <input type="text" id="filterStatus" list="filterStatusPresets" placeholder="全部状态" style="max-width: 130px;" oninput="onFilterChange()">
-          <datalist id="filterStatusPresets">
+          <select id="filterStatus" style="max-width: 140px;" onchange="onFilterChange()">
             <option value="">全部状态</option>
-            <option value="未出荷">
-            <option value="已下单未到货">
-            <option value="回国中">
-            <option value="已到货">
-            <option value="可排发">
-            <option value="已申请发货">
-            <option value="已排发">
-            <option value="未付款">
-          </datalist>
+            <option value="未出荷">未出荷</option>
+            <option value="已下单未到货">已下单未到货</option>
+            <option value="回国中">回国中</option>
+            <option value="已到货">已到货</option>
+            <option value="可排发">可排发</option>
+            <option value="已申请发货">已申请发货</option>
+            <option value="已排发">已排发</option>
+            <option value="未付款">未付款</option>
+          </select>
         </div>
 
         <!-- 桌面端表格视图 -->
@@ -1091,7 +1088,7 @@
       const searchVal = (document.getElementById('filterSearch')?.value || '').trim().toLowerCase();
       const batchVal = (document.getElementById('filterBatch')?.value || '').trim();
       const countryVal = (document.getElementById('filterCountry')?.value || '').trim();
-      const statusVal = (document.getElementById('filterStatus')?.value || '').trim().toLowerCase();
+      const statusVal = (document.getElementById('filterStatus')?.value || '').trim();
 
       const filtered = RAW_ITEMS.filter(item => {
         const nameMatch = (item.name || '').toLowerCase().includes(searchVal);
@@ -1102,8 +1099,7 @@
         // 批次、地区(country)、状态多维筛选（100%保留地区筛选）
         const matchBatch = !batchVal || (item.batch_name || '默认批次') === batchVal;
         const matchCountry = !countryVal || (item.country || '日本') === countryVal;
-        const itemStatus = (item.status || '未出荷').toLowerCase();
-        const matchStatus = !statusVal || itemStatus.includes(statusVal);
+        const matchStatus = !statusVal || (item.status || '未出荷') === statusVal;
 
         return matchSearch && matchBatch && matchCountry && matchStatus;
       });
@@ -1391,17 +1387,38 @@
     function parseMatrixImportText(raw, batchCountry) {
       if (!raw) return [];
       const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
-      if (lines.length < 5) return [];
-      const itemNames = lines[1].split('\t').slice(1);
-      const prices = lines[2].split('\t').slice(1).map(p => parseFloat(p) || 0);
+
+      // 智能识别表格格式：自动找"种类"行、"单价"行、"总金额"表头行
+      let nameRowIdx = -1;
+      let priceRowIdx = -1;
+      let dataStartIdx = -1;
+
+      for (let i = 0; i < lines.length; i++) {
+        const cells = lines[i].split('\t');
+        const firstCell = cells[0]?.trim();
+        if (firstCell === '种类') nameRowIdx = i;
+        else if (firstCell === '单价') priceRowIdx = i;
+        else if (firstCell === '总金额') dataStartIdx = i + 1;
+      }
+
+      // 如果没识别到，回退到旧格式
+      if (nameRowIdx === -1) nameRowIdx = 1;
+      if (priceRowIdx === -1) priceRowIdx = 2;
+      if (dataStartIdx === -1) dataStartIdx = 4;
+
+      const itemNames = lines[nameRowIdx].split('\t').slice(1);
+      const prices = lines[priceRowIdx].split('\t').slice(1).map(p => parseFloat(p) || 0);
       const items = [];
-      for (let i = 4; i < lines.length; i++) {
+
+      for (let i = dataStartIdx; i < lines.length; i++) {
         const cells = lines[i].split('\t');
         const cn = cells[1]?.trim();
         if (!cn || cn === "昵称/总数" || cn === "CN" || cn === "昵称") continue;
         itemNames.forEach((name, idx) => {
           if (!name || !name.trim()) return;
-          const qty = parseFloat(cells[idx + 2]);
+          const qtyStr = cells[idx + 2];
+          if (!qtyStr || qtyStr.trim() === '') return;
+          const qty = parseFloat(qtyStr.trim());
           if (qty > 0) {
             items.push({
               item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
