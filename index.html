@@ -192,14 +192,21 @@
       border: 1px solid #cbd5e1;
     }
 
-    .badge-status-未出荷 { background-color: #fee2e2; color: #991b1b; }
-    .badge-status-已下单未到货 { background-color: #ffedd5; color: #9a3412; }
-    .badge-status-回国中 { background-color: #fef3c7; color: #92400e; }
-    .badge-status-已到货 { background-color: #e0f2fe; color: #075985; }
-    .badge-status-可排发 { background-color: #d1fae5; color: #065f46; }
-    .badge-status-已申请发货 { background-color: #f3e8ff; color: #6b21a8; }
-    .badge-status-已排发 { background-color: #e2e8f0; color: #475569; }
-    .badge-status-未付款 { background-color: #fecdd3; color: #881337; }
+    /* ==================== 🎨 7 大专业流转状态颜色体系 ==================== */
+    .badge-status-未出荷 { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; } /* 浅灰：预售等待 */
+    .badge-status-已下单 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; } /* 天蓝：采购完成 */
+    .badge-status-国际运输中 { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; } /* 暖橙：跨国运输 */
+    .badge-status-可排发 { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 700; } /* 翠绿：可排发 */
+    .badge-status-待发货 { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; } /* 紫色：已申请/打包中 */
+    .badge-status-已排发 { background-color: #e2e8f0; color: #64748b; border: 1px solid #cbd5e1; } /* 中灰：已发货结束 */
+    .badge-status-未付款 { background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; } /* 警示红 */
+
+    /* 老状态兼容样式（防止历史数据失效） */
+    .badge-status-已下单未到货 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .badge-status-回国中 { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+    .badge-status-已到货 { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 700; }
+    .badge-status-已申请发货 { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; }
+    .badge-status-custom { background-color: #f8fafc; color: #334155; border: 1px solid #cbd5e1; }
 
     .table-container {
       overflow-x: auto;
@@ -610,6 +617,22 @@
     window.ITEM_CACHE = [];
     window.CURRENT_PENDING_APPLY_ITEMS = [];
 
+    // 状态样式智能解析（支持 7 大新状态与老状态平滑映射）
+    function getStatusBadgeClass(status) {
+      const s = (status || '').trim();
+      const validStatuses = ['未出荷', '已下单', '国际运输中', '可排发', '待发货', '已排发', '未付款'];
+      if (validStatuses.includes(s)) {
+        return `badge-status-${s}`;
+      }
+      const legacyMap = {
+        '已下单未到货': 'badge-status-已下单',
+        '回国中': 'badge-status-国际运输中',
+        '已到货': 'badge-status-可排发',
+        '已申请发货': 'badge-status-待发货'
+      };
+      return legacyMap[s] || 'badge-status-custom';
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
       const urlParams = new URLSearchParams(window.location.search);
       const key = urlParams.get('key');
@@ -679,6 +702,7 @@
       }
     }
 
+    // 功能 1：查询我的排谷
     async function handleQueryAll() {
       const queryKey = document.getElementById('queryKeyInput').value.trim();
       const cn = document.getElementById('cnInput').value.trim();
@@ -691,15 +715,17 @@
 
       const allItems = res.groupData;
 
+      // 规则：只看该 CN，彻底隐藏 status === "已排发" 的历史谷子
       const myItems = allItems.filter(item => {
         const matchCn = String(item.cn || '').trim().toLowerCase() === cn.toLowerCase();
-        const notShipped = item.status !== '已排发';
+        const notShipped = (item.status || '').trim() !== '已排发';
         return matchCn && notShipped;
       });
 
       renderResults(myItems, `CN「${cn}」名下的排谷记录`, false);
     }
 
+    // 功能 2：查看可排发谷子
     async function handleQueryDispatchable() {
       const queryKey = document.getElementById('queryKeyInput').value.trim();
       const cn = document.getElementById('cnInput').value.trim();
@@ -713,15 +739,17 @@
 
       const allItems = res.groupData;
 
+      // 规则：只展示 status === '可排发' 的谷子
       const dispatchableItems = allItems.filter(item => {
         const matchCn = String(item.cn || '').trim().toLowerCase() === cn.toLowerCase();
-        const isDispatchable = item.status === '可排发';
+        const isDispatchable = (item.status || '').trim() === '可排发';
         return matchCn && isDispatchable;
       });
 
       renderResults(dispatchableItems, `CN「${cn}」的可排发谷子`, true);
     }
 
+    // 渲染结果表格及手机卡片
     function renderResults(items, title, isDispatchMode) {
       window.ITEM_CACHE = items;
 
@@ -767,15 +795,18 @@
 
       items.forEach((item, index) => {
         const imgTag = item.image_url 
-          ? `<img src="${escapeHtml(item.image_url)}" class="img-preview" alt="谷子">`
+          ? `<img src="${escapeHtml(item.image_url)}" class="img-preview" alt="谷子" loading="lazy">`
           : `<span style="color:#cbd5e1;font-size:0.8rem;">无图</span>`;
 
-        const mobileImgTag = item.image_url
-          ? `<img src="${escapeHtml(item.image_url)}" class="item-card-mobile-img" alt="谷子">`
+        const mobileImgTag = item.image_url 
+          ? `<img src="${escapeHtml(item.image_url)}" class="item-card-mobile-img" alt="谷子" loading="lazy">`
           : `<div class="item-card-mobile-noimg">无图</div>`;
 
         const countryVal = item.country || item.region || '未设定';
+        const statusVal = item.status || '未出荷';
+        const badgeClass = getStatusBadgeClass(statusVal);
 
+        // 桌面表格 HTML
         tableHtml += `
           <tr>
             <td>${imgTag}</td>
@@ -783,7 +814,7 @@
             <td><span class="badge badge-country">${escapeHtml(countryVal)}</span></td>
             <td>￥${Number(item.price || 0).toFixed(2)}</td>
             <td>${item.quantity || 1}</td>
-            <td><span class="badge badge-status-${item.status}">${escapeHtml(item.status || '未到货')}</span></td>
+            <td><span class="badge ${badgeClass}">${escapeHtml(statusVal)}</span></td>
             ${isDispatchMode ? `
               <td>
                 <button class="btn btn-success" style="padding: 4px 10px; font-size:0.8rem;" onclick="openApplyModalByIndex(${index})">
@@ -794,6 +825,7 @@
           </tr>
         `;
 
+        // 手机卡片 HTML
         cardsHtml += `
           <div class="item-card-mobile">
             <div class="item-card-mobile-top">
@@ -806,7 +838,7 @@
                 <div class="item-card-mobile-sub-row">
                   <span class="item-card-mobile-price">￥${Number(item.price || 0).toFixed(2)}</span>
                   <span class="item-card-mobile-qty">x${item.quantity || 1}</span>
-                  <span class="badge badge-status-${item.status}">${escapeHtml(item.status || '未到货')}</span>
+                  <span class="badge ${badgeClass}">${escapeHtml(statusVal)}</span>
                 </div>
               </div>
             </div>
@@ -860,6 +892,7 @@
       document.getElementById('applyModal').classList.remove('active');
     }
 
+    // ==================== 🚀 提交排发申请（自动将状态变更为【待发货】） ====================
     async function submitApply() {
       const queryKey = document.getElementById('queryKeyInput').value.trim();
       const cn = document.getElementById('cnInput').value.trim();
@@ -877,15 +910,16 @@
       const imgData = res.imgData;
       const targetItemIds = new Set(window.CURRENT_PENDING_APPLY_ITEMS.map(i => String(i.item_id || i.id)));
 
+      // 💡 核心升级：将提交申请的谷子状态改为【待发货】
       groupData.forEach(item => {
         const itemId = String(item.item_id || item.id);
         if (targetItemIds.has(itemId)) {
-          item.status = '已申请发货';
+          item.status = '待发货';
         }
       });
 
       const newApp = {
-        id: 'app_' + Date.now() + '_' + Math.floor(Math.random()*1000),
+        id: 'app_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
         type: '排发申请',
         cn: cn,
         items: window.CURRENT_PENDING_APPLY_ITEMS.map(i => ({
@@ -916,7 +950,7 @@
           return showToast('提交申请失败: ' + error.message);
         }
 
-        showToast('🎉 排发申请提交成功！请等待团长处理。');
+        showToast('🎉 排发申请提交成功！谷子已标记为【待发货】，请等待团长打包寄出。');
         closeModal();
         handleQueryDispatchable();
       } catch (err) {
@@ -925,7 +959,7 @@
       }
     }
 
-    // ==================== 📮 匿名反馈提交功能 ====================
+    // 匿名反馈提交功能
     async function submitFeedback() {
       const queryKey = document.getElementById('queryKeyInput').value.trim();
       const category = document.getElementById('feedbackCategory').value;
