@@ -252,7 +252,7 @@
 
     .badge {
       display: inline-block;
-      padding: 2px 8px;
+      padding: 3px 9px;
       border-radius: 9999px;
       font-size: 0.75rem;
       font-weight: 600;
@@ -271,15 +271,21 @@
       border: 1px solid #cbd5e1;
     }
 
-    .badge-status-未出荷 { background-color: #fee2e2; color: #991b1b; }
-    .badge-status-已下单未到货 { background-color: #ffedd5; color: #9a3412; }
-    .badge-status-回国中 { background-color: #fef3c7; color: #92400e; }
-    .badge-status-已到货 { background-color: #e0f2fe; color: #075985; }
-    .badge-status-可排发 { background-color: #d1fae5; color: #065f46; }
-    .badge-status-已申请发货 { background-color: #f3e8ff; color: #6b21a8; }
-    .badge-status-已排发 { background-color: #e2e8f0; color: #475569; }
-    .badge-status-未付款 { background-color: #fecdd3; color: #881337; }
-    .badge-status-custom { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+    /* ==================== 🎨 7 大专业流转状态新颜色体系 ==================== */
+    .badge-status-未出荷 { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; } /* 浅灰：安静等待 */
+    .badge-status-已下单 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; } /* 天蓝：采购完成 */
+    .badge-status-国际运输中 { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; } /* 暖橙黄：途中 */
+    .badge-status-可排发 { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 700; } /* 翠绿：可排发 */
+    .badge-status-待发货 { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; } /* 紫色：打包准备中 */
+    .badge-status-已排发 { background-color: #e2e8f0; color: #64748b; border: 1px solid #cbd5e1; } /* 中灰：流程结束 */
+    .badge-status-未付款 { background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; } /* 警示红 */
+
+    /* 老状态兼容颜色 */
+    .badge-status-已下单未到货 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .badge-status-回国中 { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+    .badge-status-已到货 { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 700; }
+    .badge-status-已申请发货 { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; }
+    .badge-status-custom { background-color: #f8fafc; color: #334155; border: 1px solid #cbd5e1; }
 
     .badge-fb-未读 { background-color: #fee2e2; color: #991b1b; }
     .badge-fb-已读 { background-color: #e0f2fe; color: #0369a1; }
@@ -551,10 +557,7 @@
               <label for="inputBatch">所属批次</label>
               <input type="text" id="inputBatch" list="batchPresets" placeholder="如：台湾711 / 日本场贩" value="默认批次">
               <datalist id="batchPresets">
-                <option value="默认批次">
-                <option value="台湾711">
-                <option value="日本场贩">
-                <option value="泰国场贩">
+                <!-- 动态自动填充 -->
               </datalist>
             </div>
             <div class="form-group">
@@ -569,14 +572,7 @@
             <div class="form-group">
               <label for="inputCountry">地区 (country)</label>
               <select id="inputCountry">
-                <option value="日本">日本</option>
-                <option value="台湾">台湾</option>
-                <option value="印尼">印尼</option>
-                <option value="泰国">泰国</option>
-                <option value="闲鱼">闲鱼</option>
-                <option value="淘宝店">淘宝店</option>
-                <option value="美国">美国</option>
-                <option value="韩国">韩国</option>
+                <!-- 动态自动填充 -->
               </select>
             </div>
             <!-- 状态字段 -->
@@ -584,14 +580,7 @@
               <label for="inputStatus">状态 (选择预设或输入)</label>
               <input type="text" id="inputStatus" list="statusPresets" placeholder="选择或输入状态" value="未出荷">
               <datalist id="statusPresets">
-                <option value="未出荷">
-                <option value="已下单未到货">
-                <option value="回国中">
-                <option value="已到货">
-                <option value="可排发">
-                <option value="已申请发货">
-                <option value="已排发">
-                <option value="未付款">
+                <!-- 动态从 STATUS_OPTIONS 生成 -->
               </datalist>
             </div>
 
@@ -623,7 +612,7 @@
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <span style="font-size: 0.85rem; color: var(--text-muted);">导入默认地区:</span>
               <select id="excelDefaultCountry" style="width: 90px; padding: 4px 8px;">
-                <option value="日本">日本</option><option value="印尼">印尼</option><option value="台湾">台湾</option><option value="泰国">泰国</option><option value="闲鱼">闲鱼</option>
+                <option value="日本">日本</option><option value="台湾">台湾</option><option value="印尼">印尼</option><option value="泰国">泰国</option><option value="闲鱼">闲鱼</option>
               </select>
               <label class="btn btn-success" style="cursor: pointer; margin: 0;">
                 📁 导入 Excel
@@ -639,11 +628,12 @@
       <div class="card">
         <div class="card-title">
           <span>📦 谷子排表明细 (group_data)</span>
+          <!-- 批量操作栏（批量改状态、改批次、改地区全部升级为下拉弹窗） -->
           <div class="btn-group">
             <button class="btn btn-secondary" onclick="batchTransferModal()">批量转单</button>
-            <button class="btn btn-purple" onclick="batchChangeBatchModal()">批量改批次</button>
-            <button class="btn btn-secondary" onclick="batchChangeStatusModal()">批量改状态</button>
-            <button class="btn btn-secondary" onclick="batchChangeCountryModal()">批量改地区</button>
+            <button class="btn btn-purple" onclick="openBatchSelectModal('batch')">批量改批次</button>
+            <button class="btn btn-secondary" onclick="openBatchSelectModal('status')">批量改状态</button>
+            <button class="btn btn-secondary" onclick="openBatchSelectModal('country')">批量改地区</button>
             <button class="btn btn-secondary" onclick="batchSetImgModal()">批量补图</button>
             <button class="btn btn-danger" onclick="batchDeleteItems()">批量彻底删除</button>
           </div>
@@ -658,28 +648,12 @@
           </select>
           
           <select id="filterCountry" style="max-width: 140px;" onchange="onFilterChange()">
-            <option value="">全部地区 (country)</option>
-            <option value="日本">日本</option>
-            <option value="台湾">台湾</option>
-            <option value="印尼">印尼</option>
-            <option value="泰国">泰国</option>
-            <option value="闲鱼">闲鱼</option>
-            <option value="淘宝店">淘宝店</option>
-            <option value="美国">美国</option>
-            <option value="韩国">韩国</option>
+            <!-- 动态生成 -->
           </select>
           
-          <input type="text" id="filterStatus" list="filterStatusPresets" placeholder="全部状态" style="max-width: 130px;" oninput="onFilterChange()">
+          <input type="text" id="filterStatus" list="filterStatusPresets" placeholder="全部状态" style="max-width: 140px;" oninput="onFilterChange()">
           <datalist id="filterStatusPresets">
-            <option value="">全部状态</option>
-            <option value="未出荷">
-            <option value="已下单未到货">
-            <option value="回国中">
-            <option value="已到货">
-            <option value="可排发">
-            <option value="已申请发货">
-            <option value="已排发">
-            <option value="未付款">
+            <!-- 动态从 STATUS_OPTIONS 生成 -->
           </datalist>
         </div>
 
@@ -803,6 +777,34 @@
     </div>
   </div>
 
+  <!-- 🌟 【新增】通用批量修改下拉选择弹窗（状态 / 地区 / 批次） -->
+  <div class="modal-overlay" id="batchSelectModal">
+    <div class="modal" style="max-width: 440px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <h3 id="batchModalTitle" style="font-size: 1.15rem; font-weight: 700;">批量修改</h3>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeBatchSelectModal()">✕</button>
+      </div>
+      <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 14px;" id="batchModalDesc">
+        已选中 0 件谷子
+      </p>
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label id="batchModalSelectLabel">请选择：</label>
+        <select id="batchModalSelect" style="padding: 10px 12px; font-size: 0.95rem;" onchange="handleBatchModalSelectChange()">
+          <!-- 动态填入选项 -->
+        </select>
+      </div>
+      <!-- 当选择"新建批次"时展开的输入框 -->
+      <div class="form-group" id="batchModalCustomInputGroup" style="display: none; margin-bottom: 14px;">
+        <label>输入新批次名称：</label>
+        <input type="text" id="batchModalCustomInput" placeholder="输入自定义新批次名称...">
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px;">
+        <button class="btn btn-secondary" onclick="closeBatchSelectModal()">取消</button>
+        <button class="btn btn-primary" id="btnConfirmBatchModal" onclick="confirmBatchSelectAction()">确认修改</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 反馈回复弹窗 -->
   <div class="modal-overlay" id="feedbackModal">
     <div class="modal">
@@ -864,6 +866,21 @@
   <div class="toast" id="toast"></div>
 
   <script>
+    // ==========================================
+    // 🌟 全局统一配置中心（状态与地区）
+    // ==========================================
+    const STATUS_OPTIONS = [
+      { value: '未出荷', label: '未出荷 (预售商品)', colorClass: 'badge-status-未出荷' },
+      { value: '已下单', label: '已下单 (采购完成)', colorClass: 'badge-status-已下单' },
+      { value: '国际运输中', label: '国际运输中 (跨国途中)', colorClass: 'badge-status-国际运输中' },
+      { value: '可排发', label: '可排发 (已到国内/清点完毕)', colorClass: 'badge-status-可排发' },
+      { value: '待发货', label: '待发货 (团员已申请/打包中)', colorClass: 'badge-status-待发货' },
+      { value: '已排发', label: '已排发 (已发货寄出)', colorClass: 'badge-status-已排发' },
+      { value: '未付款', label: '未付款 (待交谷子费)', colorClass: 'badge-status-未付款' }
+    ];
+
+    const COUNTRY_OPTIONS = ['日本', '台湾', '印尼', '泰国', '美国', '韩国', '闲鱼', '淘宝店', '其它'];
+
     const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
     const supabaseClient = (window.supabase || supabase).createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -885,8 +902,10 @@
     const PAGE_SIZE = 20;
     let searchDebounceTimer = null;
     let IS_IMAGE_UPLOADING = false;
+    let CURRENT_BATCH_ACTION_TYPE = null; // 'status' | 'country' | 'batch'
 
     window.addEventListener('DOMContentLoaded', () => {
+      initGlobalOptions();
       const savedKey = localStorage.getItem('ADMIN_QUERY_KEY');
       if (savedKey) {
         CURRENT_QUERY_KEY = savedKey;
@@ -894,6 +913,33 @@
       }
       checkAuthStatus();
     });
+
+    // 动态初始化全页面的选项
+    function initGlobalOptions() {
+      // 1. 渲染录入表单的状态 datalist
+      const statusPresets = document.getElementById('statusPresets');
+      if (statusPresets) {
+        statusPresets.innerHTML = STATUS_OPTIONS.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
+      }
+
+      // 2. 渲染筛选器的状态 datalist
+      const filterStatusPresets = document.getElementById('filterStatusPresets');
+      if (filterStatusPresets) {
+        filterStatusPresets.innerHTML = '<option value="">全部状态</option>' + STATUS_OPTIONS.map(opt => `<option value="${opt.value}">`).join('');
+      }
+
+      // 3. 渲染录入表单的地区 select
+      const inputCountry = document.getElementById('inputCountry');
+      if (inputCountry) {
+        inputCountry.innerHTML = COUNTRY_OPTIONS.map(c => `<option value="${c}">${c}</option>`).join('');
+      }
+
+      // 4. 渲染筛选器的地区 select
+      const filterCountry = document.getElementById('filterCountry');
+      if (filterCountry) {
+        filterCountry.innerHTML = '<option value="">全部地区 (country)</option>' + COUNTRY_OPTIONS.map(c => `<option value="${c}">${c}</option>`).join('');
+      }
+    }
 
     function showToast(msg) {
       const toast = document.getElementById('toast');
@@ -1069,18 +1115,19 @@
     }
     window.handleImageUpload = handleImageUpload;
 
+    // 状态样式映射（含老状态兼容）
     function getStatusBadgeClass(status) {
-      const map = {
-        '未出荷': 'badge-status-未出荷',
-        '已下单未到货': 'badge-status-已下单未到货',
-        '回国中': 'badge-status-回国中',
-        '已到货': 'badge-status-已到货',
-        '可排发': 'badge-status-可排发',
-        '已申请发货': 'badge-status-已申请发货',
-        '已排发': 'badge-status-已排发',
-        '未付款': 'badge-status-未付款'
+      const s = (status || '').trim();
+      if (STATUS_OPTIONS.some(opt => opt.value === s)) {
+        return `badge-status-${s}`;
+      }
+      const legacyMap = {
+        '已下单未到货': 'badge-status-已下单',
+        '回国中': 'badge-status-国际运输中',
+        '已到货': 'badge-status-可排发',
+        '已申请发货': 'badge-status-待发货'
       };
-      return map[status] || 'badge-status-custom';
+      return legacyMap[s] || 'badge-status-custom';
     }
 
     function renderTable() {
@@ -1264,6 +1311,7 @@
     }
     window.clearForm = clearForm;
 
+    // 单条转单（支持部分数量转单）
     async function transferSingleByIndex(index) {
       const item = window.ITEM_CACHE[index];
       if (!item) return;
@@ -1331,38 +1379,97 @@
     }
     window.batchTransferModal = batchTransferModal;
 
-    async function batchChangeBatchModal() {
+    // ==========================================
+    // 🌟 【全新】通用批量修改模态框系统 (状态/地区/批次)
+    // ==========================================
+    function openBatchSelectModal(actionType) {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选谷子！');
-      const batch = prompt('请输入新批次名称：', '默认批次');
-      if (!batch || !batch.trim()) return;
-      selected.forEach(i => i.batch_name = batch.trim());
+
+      CURRENT_BATCH_ACTION_TYPE = actionType;
+      const modal = document.getElementById('batchSelectModal');
+      const titleEl = document.getElementById('batchModalTitle');
+      const descEl = document.getElementById('batchModalDesc');
+      const selectLabelEl = document.getElementById('batchModalSelectLabel');
+      const selectEl = document.getElementById('batchModalSelect');
+      const customGroup = document.getElementById('batchModalCustomInputGroup');
+      const customInput = document.getElementById('batchModalCustomInput');
+
+      descEl.innerText = `已选中 ${selected.length} 件谷子`;
+      customGroup.style.display = 'none';
+      customInput.value = '';
+
+      if (actionType === 'status') {
+        titleEl.innerText = '⚙️ 批量修改状态';
+        selectLabelEl.innerText = '请选择新状态：';
+        selectEl.innerHTML = STATUS_OPTIONS.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
+      } else if (actionType === 'country') {
+        titleEl.innerText = '🌍 批量修改地区';
+        selectLabelEl.innerText = '请选择新地区 (country)：';
+        selectEl.innerHTML = COUNTRY_OPTIONS.map(c => `<option value="${c}">${c}</option>`).join('');
+      } else if (actionType === 'batch') {
+        titleEl.innerText = '📦 批量修改所属批次';
+        selectLabelEl.innerText = '请选择或新建批次：';
+        const batchSet = new Set(['默认批次', '台湾711', '日本场贩', '泰国场贩']);
+        RAW_ITEMS.forEach(i => { if (i.batch_name) batchSet.add(i.batch_name.trim()); });
+        
+        let batchHtml = Array.from(batchSet).map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
+        batchHtml += `<option value="__NEW__">➕ 新建批次...</option>`;
+        selectEl.innerHTML = batchHtml;
+      }
+
+      modal.classList.add('active');
+    }
+    window.openBatchSelectModal = openBatchSelectModal;
+
+    function closeBatchSelectModal() {
+      const modal = document.getElementById('batchSelectModal');
+      if (modal) modal.classList.remove('active');
+      CURRENT_BATCH_ACTION_TYPE = null;
+    }
+    window.closeBatchSelectModal = closeBatchSelectModal;
+
+    function handleBatchModalSelectChange() {
+      const selectEl = document.getElementById('batchModalSelect');
+      const customGroup = document.getElementById('batchModalCustomInputGroup');
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && selectEl.value === '__NEW__') {
+        customGroup.style.display = 'block';
+        document.getElementById('batchModalCustomInput').focus();
+      } else {
+        customGroup.style.display = 'none';
+      }
+    }
+    window.handleBatchModalSelectChange = handleBatchModalSelectChange;
+
+    async function confirmBatchSelectAction() {
+      const selected = getSelectedCacheItems();
+      if (selected.length === 0) return showToast('未勾选任何谷子！');
+
+      const selectEl = document.getElementById('batchModalSelect');
+      let targetValue = selectEl.value;
+
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__NEW__') {
+        targetValue = document.getElementById('batchModalCustomInput').value.trim();
+        if (!targetValue) return alert('请输入新批次名称！');
+      }
+
+      if (CURRENT_BATCH_ACTION_TYPE === 'status') {
+        selected.forEach(i => i.status = targetValue);
+        showToast(`已成功将选中的 ${selected.length} 件谷子状态修改为 [${targetValue}]！`);
+      } else if (CURRENT_BATCH_ACTION_TYPE === 'country') {
+        selected.forEach(i => i.country = targetValue);
+        showToast(`已成功将选中的 ${selected.length} 件谷子地区修改为 [${targetValue}]！`);
+      } else if (CURRENT_BATCH_ACTION_TYPE === 'batch') {
+        selected.forEach(i => i.batch_name = targetValue);
+        showToast(`已成功将选中的 ${selected.length} 件谷子批次修改为 [${targetValue}]！`);
+      }
+
       await saveDataToSupabase();
       updateBatchDropdownOptions();
+      closeBatchSelectModal();
       renderTable();
-      showToast(`已将选中的 ${selected.length} 件谷子修改为批次 [${batch.trim()}]！`);
     }
-    window.batchChangeBatchModal = batchChangeBatchModal;
-
-    async function batchChangeStatusModal() {
-      const selected = getSelectedCacheItems();
-      if (selected.length === 0) return showToast('请先勾选谷子！');
-      const status = prompt('请输入新状态（如：未出荷/已下单未到货/回国中/已到货/可排发/已申请发货/已排发/未付款 或自定义状态）：', '未出荷');
-      if (!status || !status.trim()) return;
-      selected.forEach(i => i.status = status.trim());
-      await saveDataToSupabase(); renderTable(); showToast('状态更新成功！');
-    }
-    window.batchChangeStatusModal = batchChangeStatusModal;
-
-    async function batchChangeCountryModal() {
-      const selected = getSelectedCacheItems();
-      if (selected.length === 0) return showToast('请先勾选谷子！');
-      const country = prompt('请输入新地区 country（如：日本 / 台湾 / 印尼 / 泰国 / 闲鱼 / 淘宝店 / 美国 / 韩国）：', '日本');
-      if (!country || !country.trim()) return;
-      selected.forEach(i => i.country = country.trim());
-      await saveDataToSupabase(); renderTable(); showToast('地区更新成功！');
-    }
-    window.batchChangeCountryModal = batchChangeCountryModal;
+    window.confirmBatchSelectAction = confirmBatchSelectAction;
 
     async function batchSetImgModal() {
       const selected = getSelectedCacheItems();
@@ -1384,7 +1491,7 @@
     }
     window.batchDeleteItems = batchDeleteItems;
 
-    // 🚀 核心：动态智能矩阵表格解析算法（已彻底修复 cnColIdx 变量名报错与错位问题）
+    // 🚀 核心：动态智能矩阵表格解析算法（已彻底修复 cnColIdx 变量名与格式对齐）
     function parseMatrixImportText(raw, batchCountry) {
       if (!raw) return [];
       const lines = raw.split(/\r?\n/).map(l => l.replace(/\r/g, '')).filter(l => l.trim().length > 0);
@@ -1395,7 +1502,6 @@
       let headerLineIdx = -1;
       let detectedCountry = batchCountry || '日本';
 
-      // 1. 自动从前 3 行提取国家地区（如：【印尼koi拼盘】-> 印尼）
       for (let i = 0; i < Math.min(3, lines.length); i++) {
         const lineText = lines[i];
         if (lineText.includes('印尼')) detectedCountry = '印尼';
@@ -1406,7 +1512,6 @@
         else if (lineText.includes('美国')) detectedCountry = '美国';
       }
 
-      // 2. 动态扫描定位：种类行、单价行、团员表头行
       for (let i = 0; i < lines.length; i++) {
         const cells = lines[i].split('\t').map(c => c.trim());
         if (kindLineIdx === -1 && cells.some(c => c === '种类' || c === '品名' || c === '名称' || c === '谷子名称')) {
@@ -1420,12 +1525,10 @@
         }
       }
 
-      // 容错兜底
       if (kindLineIdx === -1) kindLineIdx = 1;
       if (priceLineIdx === -1) priceLineIdx = kindLineIdx + 1;
       if (headerLineIdx === -1) headerLineIdx = Math.max(kindLineIdx, priceLineIdx) + 1;
 
-      // 3. 提取种类名称及其绝对列索引
       const kindCells = lines[kindLineIdx].split('\t');
       let kindAnchorCol = kindCells.findIndex(c => c.trim() === '种类' || c.trim() === '品名' || c.trim() === '名称' || c.trim() === '谷子名称');
       if (kindAnchorCol === -1) kindAnchorCol = 0;
@@ -1444,7 +1547,6 @@
 
       if (itemColumns.length === 0) return [];
 
-      // 4. 提取单价并绑定到对应列
       if (priceLineIdx < lines.length) {
         const priceCells = lines[priceLineIdx].split('\t');
         itemColumns.forEach(item => {
@@ -1453,7 +1555,6 @@
         });
       }
 
-      // 5. 动态定位团员 CN 所在的列索引
       const headerCells = lines[headerLineIdx].split('\t');
       let cnColIdx = headerCells.findIndex(c => c.includes('昵称') || c.includes('CN') || c.includes('圈名'));
       if (cnColIdx === -1) cnColIdx = 1;
@@ -1461,7 +1562,6 @@
       const items = [];
       const dataStartIdx = headerLineIdx + 1;
 
-      // 6. 逐行读取团员与数量
       for (let i = dataStartIdx; i < lines.length; i++) {
         const cells = lines[i].split('\t');
         if (cells.length <= cnColIdx) continue;
@@ -1605,7 +1705,7 @@
           <div class="app-card">
             <div class="app-header">
               <div><strong>CN: ${escapeHtml(app.cn)}</strong><span style="font-size:0.8rem; color:var(--text-muted); margin-left:12px;">⏰ ${escapeHtml(app.time || '')}</span></div>
-              <span class="badge ${app.status === '待处理' ? 'badge-status-已申请发货' : 'badge-status-已排发'}">${escapeHtml(app.status)}</span>
+              <span class="badge ${app.status === '待处理' ? 'badge-status-待发货' : 'badge-status-已排发'}">${escapeHtml(app.status)}</span>
             </div>
             <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:6px;">📝 备注: ${escapeHtml(app.note || '无')}</div>
             <div>${itemsGridHtml}</div>
