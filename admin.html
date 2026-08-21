@@ -501,7 +501,6 @@
       border: 1px solid var(--border);
     }
   </style>
-<base target="_blank">
 </head>
 <body>
   <div class="container">
@@ -547,7 +546,7 @@
               <label for="inputCn">认领 CN (圈名) *</label>
               <input type="text" id="inputCn" required placeholder="如：小明">
             </div>
-            <!-- 【新增】所属批次（带下拉建议与手动输入） -->
+            <!-- 所属批次字段 -->
             <div class="form-group">
               <label for="inputBatch">所属批次</label>
               <input type="text" id="inputBatch" list="batchPresets" placeholder="如：台湾711 / 日本场贩" value="默认批次">
@@ -566,32 +565,34 @@
               <label for="inputQuantity">数量</label>
               <input type="number" id="inputQuantity" value="1" min="1">
             </div>
-            <!-- 【严格保留】地区 (country) 下拉框 -->
+            <!-- 地区 (country) 下拉框 -->
             <div class="form-group">
               <label for="inputCountry">地区 (country)</label>
               <select id="inputCountry">
                 <option value="日本">日本</option>
                 <option value="台湾">台湾</option>
+                <option value="印尼">印尼</option>
+                <option value="泰国">泰国</option>
                 <option value="闲鱼">闲鱼</option>
                 <option value="淘宝店">淘宝店</option>
                 <option value="美国">美国</option>
                 <option value="韩国">韩国</option>
-                <option value="印尼">印尼</option>
-                <option value="泰国">泰国</option>
               </select>
             </div>
+            <!-- 状态字段 -->
             <div class="form-group">
-              <label for="inputStatus">状态</label>
-              <select id="inputStatus">
-                <option value="未出荷">未出荷</option>
-                <option value="已下单未到货">已下单未到货</option>
-                <option value="回国中">回国中</option>
-                <option value="已到货">已到货</option>
-                <option value="可排发">可排发</option>
-                <option value="已申请发货">已申请发货</option>
-                <option value="已排发">已排发</option>
-                <option value="未付款">未付款</option>
-              </select>
+              <label for="inputStatus">状态 (选择预设或输入)</label>
+              <input type="text" id="inputStatus" list="statusPresets" placeholder="选择或输入状态" value="未出荷">
+              <datalist id="statusPresets">
+                <option value="未出荷">
+                <option value="已下单未到货">
+                <option value="回国中">
+                <option value="已到货">
+                <option value="可排发">
+                <option value="已申请发货">
+                <option value="已排发">
+                <option value="未付款">
+              </datalist>
             </div>
 
             <!-- 图片上传区域 -->
@@ -622,7 +623,7 @@
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <span style="font-size: 0.85rem; color: var(--text-muted);">导入默认地区:</span>
               <select id="excelDefaultCountry" style="width: 90px; padding: 4px 8px;">
-                <option value="日本">日本</option><option value="台湾">台湾</option><option value="闲鱼">闲鱼</option>
+                <option value="日本">日本</option><option value="印尼">印尼</option><option value="台湾">台湾</option><option value="泰国">泰国</option><option value="闲鱼">闲鱼</option>
               </select>
               <label class="btn btn-success" style="cursor: pointer; margin: 0;">
                 📁 导入 Excel
@@ -638,7 +639,6 @@
       <div class="card">
         <div class="card-title">
           <span>📦 谷子排表明细 (group_data)</span>
-          <!-- 批量操作栏（新增批量改批次，完整保留批量改状态、改地区、补图、删除） -->
           <div class="btn-group">
             <button class="btn btn-secondary" onclick="batchTransferModal()">批量转单</button>
             <button class="btn btn-purple" onclick="batchChangeBatchModal()">批量改批次</button>
@@ -649,39 +649,38 @@
           </div>
         </div>
 
-        <!-- 过滤器栏：搜索 + 批次筛选 + 【保留】地区筛选 + 状态筛选 -->
+        <!-- 过滤器栏 -->
         <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
           <input type="text" id="filterSearch" placeholder="搜索名称/CN/批次..." style="max-width: 180px;" oninput="onSearchInput()">
           
-          <!-- 批次筛选下拉框 -->
           <select id="filterBatch" style="max-width: 140px;" onchange="onFilterChange()">
             <option value="">全部批次</option>
           </select>
           
-          <!-- 【严格保留】地区 (country) 下拉筛选 -->
           <select id="filterCountry" style="max-width: 140px;" onchange="onFilterChange()">
             <option value="">全部地区 (country)</option>
             <option value="日本">日本</option>
             <option value="台湾">台湾</option>
+            <option value="印尼">印尼</option>
+            <option value="泰国">泰国</option>
             <option value="闲鱼">闲鱼</option>
             <option value="淘宝店">淘宝店</option>
             <option value="美国">美国</option>
             <option value="韩国">韩国</option>
-            <option value="印尼">印尼</option>
-            <option value="泰国">泰国</option>
           </select>
           
-          <select id="filterStatus" style="max-width: 140px;" onchange="onFilterChange()">
+          <input type="text" id="filterStatus" list="filterStatusPresets" placeholder="全部状态" style="max-width: 130px;" oninput="onFilterChange()">
+          <datalist id="filterStatusPresets">
             <option value="">全部状态</option>
-            <option value="未出荷">未出荷</option>
-            <option value="已下单未到货">已下单未到货</option>
-            <option value="回国中">回国中</option>
-            <option value="已到货">已到货</option>
-            <option value="可排发">可排发</option>
-            <option value="已申请发货">已申请发货</option>
-            <option value="已排发">已排发</option>
-            <option value="未付款">未付款</option>
-          </select>
+            <option value="未出荷">
+            <option value="已下单未到货">
+            <option value="回国中">
+            <option value="已到货">
+            <option value="可排发">
+            <option value="已申请发货">
+            <option value="已排发">
+            <option value="未付款">
+          </datalist>
         </div>
 
         <!-- 桌面端表格视图 -->
@@ -851,6 +850,9 @@
         <h3 style="font-size: 1.1rem; font-weight: 700;">📋 粘贴 Excel / WPS 表格文本导入</h3>
         <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closePasteModal()">✕</button>
       </div>
+      <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:6px;">
+        💡 支持直接粘贴任意拼盘汇总表（自动识别种类、单价、团员、地区，并精准对齐每列数量）
+      </p>
       <textarea id="pasteInputText" rows="10" placeholder="直接粘贴 Excel 表格复制内容（含制表符 \t 分隔）..." style="font-family: monospace; font-size: 0.82rem; margin-bottom: 12px;"></textarea>
       <div style="display: flex; justify-content: flex-end; gap: 8px;">
         <button class="btn btn-secondary" onclick="closePasteModal()">取消</button>
@@ -993,7 +995,6 @@
       } catch (err) { showToast('保存异常'); return false; }
     }
 
-    // 动态提取批次列表并填充下拉与筛选框
     function updateBatchDropdownOptions() {
       const batchSet = new Set(['默认批次', '台湾711', '日本场贩', '泰国场贩']);
       RAW_ITEMS.forEach(i => {
@@ -1088,7 +1089,7 @@
       const searchVal = (document.getElementById('filterSearch')?.value || '').trim().toLowerCase();
       const batchVal = (document.getElementById('filterBatch')?.value || '').trim();
       const countryVal = (document.getElementById('filterCountry')?.value || '').trim();
-      const statusVal = (document.getElementById('filterStatus')?.value || '').trim();
+      const statusVal = (document.getElementById('filterStatus')?.value || '').trim().toLowerCase();
 
       const filtered = RAW_ITEMS.filter(item => {
         const nameMatch = (item.name || '').toLowerCase().includes(searchVal);
@@ -1096,10 +1097,11 @@
         const batchMatchText = (item.batch_name || '').toLowerCase().includes(searchVal);
         const matchSearch = nameMatch || cnMatch || batchMatchText;
         
-        // 批次、地区(country)、状态多维筛选（100%保留地区筛选）
+        // 批次、地区(country)、状态多维筛选
         const matchBatch = !batchVal || (item.batch_name || '默认批次') === batchVal;
         const matchCountry = !countryVal || (item.country || '日本') === countryVal;
-        const matchStatus = !statusVal || (item.status || '未出荷') === statusVal;
+        const itemStatus = (item.status || '未出荷').toLowerCase();
+        const matchStatus = !statusVal || itemStatus.includes(statusVal);
 
         return matchSearch && matchBatch && matchCountry && matchStatus;
       });
@@ -1263,6 +1265,7 @@
     }
     window.clearForm = clearForm;
 
+    // 单条转单（支持部分数量转单）
     async function transferSingleByIndex(index) {
       const item = window.ITEM_CACHE[index];
       if (!item) return;
@@ -1330,7 +1333,7 @@
     }
     window.batchTransferModal = batchTransferModal;
 
-    // 【新增】批量改批次
+    // 批量改批次
     async function batchChangeBatchModal() {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选谷子！');
@@ -1357,7 +1360,7 @@
     async function batchChangeCountryModal() {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选谷子！');
-      const country = prompt('请输入新地区 country（如：日本 / 台湾 / 闲鱼 / 淘宝店 / 美国 / 韩国 / 泰国）：', '日本');
+      const country = prompt('请输入新地区 country（如：日本 / 台湾 / 印尼 / 泰国 / 闲鱼 / 淘宝店 / 美国 / 韩国）：', '日本');
       if (!country || !country.trim()) return;
       selected.forEach(i => i.country = country.trim());
       await saveDataToSupabase(); renderTable(); showToast('地区更新成功！');
@@ -1377,55 +1380,111 @@
     async function batchDeleteItems() {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选谷子！');
-      if (!confirm(`确定彻底删除选中的 ${selected.length} 件谷子吗？此操作不可恢复！`)) return;
+      if (!confirm(`确定彻底删除选中的 ${selected.length} 件谷子吗？`)) return;
       const deleteIds = new Set(selected.map(i => String(i.item_id || i.id)));
       RAW_ITEMS = RAW_ITEMS.filter(i => !deleteIds.has(String(i.item_id || i.id)));
       await saveDataToSupabase(); updateBatchDropdownOptions(); renderTable(); showToast('已彻底删除选中谷子！');
     }
     window.batchDeleteItems = batchDeleteItems;
 
+    // 🚀 核心：动态智能矩阵表格解析算法（完美支持印尼KOI等多表头/分类行/空制表符）
     function parseMatrixImportText(raw, batchCountry) {
       if (!raw) return [];
-      const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
+      const lines = raw.split(/\r?\n/).map(l => l.replace(/\r/g, '')).filter(l => l.trim().length > 0);
+      if (lines.length < 3) return [];
 
-      // 智能识别表格格式：自动找"种类"行、"单价"行、"总金额"表头行
-      let nameRowIdx = -1;
-      let priceRowIdx = -1;
-      let dataStartIdx = -1;
+      let kindLineIdx = -1;
+      let priceLineIdx = -1;
+      let headerLineIdx = -1;
+      let detectedCountry = batchCountry || '日本';
 
-      for (let i = 0; i < lines.length; i++) {
-        const cells = lines[i].split('\t');
-        const firstCell = cells[0]?.trim();
-        if (firstCell === '种类') nameRowIdx = i;
-        else if (firstCell === '单价') priceRowIdx = i;
-        else if (firstCell === '总金额') dataStartIdx = i + 1;
+      // 1. 自动从前 3 行提取国家地区（如：【印尼koi拼盘】-> 印尼）
+      for (let i = 0; i < Math.min(3, lines.length); i++) {
+        const lineText = lines[i];
+        if (lineText.includes('印尼')) detectedCountry = '印尼';
+        else if (lineText.includes('台湾')) detectedCountry = '台湾';
+        else if (lineText.includes('日本')) detectedCountry = '日本';
+        else if (lineText.includes('泰国') || lineText.includes('泰')) detectedCountry = '泰国';
+        else if (lineText.includes('韩国')) detectedCountry = '韩国';
+        else if (lineText.includes('美国')) detectedCountry = '美国';
       }
 
-      // 如果没识别到，回退到旧格式
-      if (nameRowIdx === -1) nameRowIdx = 1;
-      if (priceRowIdx === -1) priceRowIdx = 2;
-      if (dataStartIdx === -1) dataStartIdx = 4;
+      // 2. 动态扫描定位：种类行、单价行、团员表头行
+      for (let i = 0; i < lines.length; i++) {
+        const cells = lines[i].split('\t').map(c => c.trim());
+        if (kindLineIdx === -1 && cells.some(c => c === '种类' || c === '品名' || c === '名称' || c === '谷子名称')) {
+          kindLineIdx = i;
+        }
+        if (priceLineIdx === -1 && cells.some(c => c === '单价' || c === '价格')) {
+          priceLineIdx = i;
+        }
+        if (headerLineIdx === -1 && cells.some(c => c.includes('昵称') || c.includes('CN') || c.includes('圈名') || c === '总金额')) {
+          headerLineIdx = i;
+        }
+      }
 
-      const itemNames = lines[nameRowIdx].split('\t').slice(1);
-      const prices = lines[priceRowIdx].split('\t').slice(1).map(p => parseFloat(p) || 0);
+      // 容错兜底
+      if (kindLineIdx === -1) kindLineIdx = 1;
+      if (priceLineIdx === -1) priceLineIdx = kindLineIdx + 1;
+      if (headerLineIdx === -1) headerLineIdx = Math.max(kindLineIdx, priceLineIdx) + 1;
+
+      // 3. 提取种类名称及其绝对列索引
+      const kindCells = lines[kindLineIdx].split('\t');
+      let kindAnchorCol = kindCells.findIndex(c => c.trim() === '种类' || c.trim() === '品名' || c.trim() === '名称' || c.trim() === '谷子名称');
+      if (kindAnchorCol === -1) kindAnchorCol = 0;
+
+      const itemColumns = [];
+      for (let c = kindAnchorCol + 1; c < kindCells.length; c++) {
+        const name = kindCells[c]?.trim();
+        if (name) {
+          itemColumns.push({
+            name: name,
+            colIdx: c,
+            price: 0
+          });
+        }
+      }
+
+      if (itemColumns.length === 0) return [];
+
+      // 4. 提取单价并绑定到对应列
+      if (priceLineIdx < lines.length) {
+        const priceCells = lines[priceLineIdx].split('\t');
+        itemColumns.forEach(item => {
+          const p = parseFloat(priceCells[item.colIdx]);
+          item.price = !isNaN(p) ? p : 0;
+        });
+      }
+
+      // 5. 动态定位团员 CN 所在的列索引
+      const headerCells = lines[headerLineIdx].split('\t');
+      let cnColIdx = headerCells.findIndex(c => c.includes('昵称') || c.includes('CN') || c.includes('圈名'));
+      if (cnColIdx === -1) cnColIdx = 1;
+
       const items = [];
+      const dataStartIdx = headerLineIdx + 1;
 
+      // 6. 逐行读取团员与数量
       for (let i = dataStartIdx; i < lines.length; i++) {
         const cells = lines[i].split('\t');
-        const cn = cells[1]?.trim();
-        if (!cn || cn === "昵称/总数" || cn === "CN" || cn === "昵称") continue;
-        itemNames.forEach((name, idx) => {
-          if (!name || !name.trim()) return;
-          const qtyStr = cells[idx + 2];
-          if (!qtyStr || qtyStr.trim() === '') return;
-          const qty = parseFloat(qtyStr.trim());
-          if (qty > 0) {
+        if (cells.length <= cnColIdx) continue;
+
+        const cn = cells[cnIdx]?.trim();
+        if (!cn || cn === "昵称/总数" || cn === "CN" || cn === "昵称" || cn === "总数" || cn.includes("昵称/总数") || cn === "总计" || cn === "合计") {
+          continue;
+        }
+
+        itemColumns.forEach(itemCol => {
+          const qtyStr = cells[itemCol.colIdx]?.trim();
+          const qty = parseFloat(qtyStr);
+
+          if (!isNaN(qty) && qty > 0) {
             items.push({
-              item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-              name: name.trim(),
+              item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + Math.floor(Math.random() * 1000),
+              name: itemCol.name,
               batch_name: '默认批次',
-              country: batchCountry || '日本',
-              price: prices[idx] || 0,
+              country: detectedCountry,
+              price: itemCol.price,
               quantity: qty,
               cn: cn,
               status: "未出荷",
@@ -1435,6 +1494,7 @@
           }
         });
       }
+
       return items;
     }
 
@@ -1742,7 +1802,12 @@
 
     function escapeHtml(str) {
       if (!str) return '';
-      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
     }
   </script>
 </body>
