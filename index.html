@@ -894,6 +894,7 @@
 
     // ==================== 🚀 提交排发申请（自动将状态变更为【待发货】） ====================
     async function submitApply() {
+      if (window.__APPLY_SUBMITTING) return showToast('正在提交，请勿重复点击！');
       const queryKey = document.getElementById('queryKeyInput').value.trim();
       const cn = document.getElementById('cnInput').value.trim();
       const note = document.getElementById('applyNoteInput').value.trim();
@@ -903,40 +904,42 @@
         return showToast('未选择要排发的谷子！');
       }
 
-      const res = await fetchLeaderData(queryKey);
-      if (!res) return;
-
-      const groupData = res.groupData;
-      const imgData = res.imgData;
-      const targetItemIds = new Set(window.CURRENT_PENDING_APPLY_ITEMS.map(i => String(i.item_id || i.id)));
-
-      // 💡 核心升级：将提交申请的谷子状态改为【待发货】
-      groupData.forEach(item => {
-        const itemId = String(item.item_id || item.id);
-        if (targetItemIds.has(itemId)) {
-          item.status = '待发货';
-        }
-      });
-
-      const newApp = {
-        id: 'app_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-        type: '排发申请',
-        cn: cn,
-        items: window.CURRENT_PENDING_APPLY_ITEMS.map(i => ({
-          item_id: i.item_id || i.id,
-          name: i.name,
-          quantity: i.quantity || 1,
-          country: i.country || '日本'
-        })),
-        note: note,
-        time: new Date().toLocaleString('zh-CN'),
-        status: '待处理'
-      };
-
-      if (!Array.isArray(imgData.applications)) imgData.applications = [];
-      imgData.applications.unshift(newApp);
-
+      window.__APPLY_SUBMITTING = true;
+      let res = null;
       try {
+        res = await fetchLeaderData(queryKey);
+        if (!res) return;
+
+        const groupData = res.groupData;
+        const imgData = res.imgData;
+        const targetItemIds = new Set(window.CURRENT_PENDING_APPLY_ITEMS.map(i => String(i.item_id || i.id)));
+
+        // 💡 核心升级：将提交申请的谷子状态改为【待发货】
+        groupData.forEach(item => {
+          const itemId = String(item.item_id || item.id);
+          if (targetItemIds.has(itemId)) {
+            item.status = '待发货';
+          }
+        });
+
+        const newApp = {
+          id: 'app_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+          type: '排发申请',
+          cn: cn,
+          items: window.CURRENT_PENDING_APPLY_ITEMS.map(i => ({
+            item_id: i.item_id || i.id,
+            name: i.name,
+            quantity: i.quantity || 1,
+            country: i.country || '日本'
+          })),
+          note: note,
+          time: new Date().toLocaleString('zh-CN'),
+          status: '待处理'
+        };
+
+        if (!Array.isArray(imgData.applications)) imgData.applications = [];
+        imgData.applications.unshift(newApp);
+
         const { error } = await supabaseClient
           .from('leader_data')
           .update({
@@ -956,11 +959,14 @@
       } catch (err) {
         console.error('Update exception:', err);
         showToast('网络异常，提交失败');
+      } finally {
+        window.__APPLY_SUBMITTING = false;
       }
     }
 
     // 匿名反馈提交功能
     async function submitFeedback() {
+      if (window.__FEEDBACK_SUBMITTING) return showToast('正在提交，请勿重复点击！');
       const queryKey = document.getElementById('queryKeyInput').value.trim();
       const category = document.getElementById('feedbackCategory').value;
       const content = document.getElementById('feedbackContent').value.trim();
@@ -972,26 +978,27 @@
         return showToast('请输入反馈内容！');
       }
 
-      const res = await fetchLeaderData(queryKey);
-      if (!res) return;
-
-      const imgData = res.imgData;
-      if (!Array.isArray(imgData.feedback)) {
-        imgData.feedback = [];
-      }
-
-      const newFeedback = {
-        id: 'fb_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-        content: content,
-        category: category,
-        status: '未读',
-        created_at: new Date().toLocaleString('zh-CN'),
-        reply: ''
-      };
-
-      imgData.feedback.unshift(newFeedback);
-
+      window.__FEEDBACK_SUBMITTING = true;
       try {
+        const res = await fetchLeaderData(queryKey);
+        if (!res) return;
+
+        const imgData = res.imgData;
+        if (!Array.isArray(imgData.feedback)) {
+          imgData.feedback = [];
+        }
+
+        const newFeedback = {
+          id: 'fb_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+          content: content,
+          category: category,
+          status: '未读',
+          created_at: new Date().toLocaleString('zh-CN'),
+          reply: ''
+        };
+
+        imgData.feedback.unshift(newFeedback);
+
         const { error } = await supabaseClient
           .from('leader_data')
           .update({
@@ -1010,6 +1017,8 @@
       } catch (err) {
         console.error('Feedback exception:', err);
         showToast('网络异常，提交失败');
+      } finally {
+        window.__FEEDBACK_SUBMITTING = false;
       }
     }
     window.submitFeedback = submitFeedback;

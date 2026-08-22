@@ -855,7 +855,11 @@
       <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:6px;">
         💡 支持直接粘贴任意拼盘汇总表（自动识别种类、单价、团员、地区，并精准对齐每列数量）
       </p>
-      <textarea id="pasteInputText" rows="10" placeholder="直接粘贴 Excel 表格复制内容（含制表符 \t 分隔）..." style="font-family: monospace; font-size: 0.82rem; margin-bottom: 12px;"></textarea>
+            <div style="margin-bottom: 12px;">
+        <label style="font-size:0.82rem; color:var(--text-muted); font-weight:600;">所属分类 / 批次（可选，团员自查可按此筛分）</label>
+        <input type="text" id="pasteBatchName" list="batchPresets" placeholder="如：印尼koi8.23拼盘 / 台湾711 / 日本场贩" style="width:100%; margin-top:6px;">
+      </div>
+<textarea id="pasteInputText" rows="10" placeholder="直接粘贴 Excel 表格复制内容（含制表符 \t 分隔）..." style="font-family: monospace; font-size: 0.82rem; margin-bottom: 12px;"></textarea>
       <div style="display: flex; justify-content: flex-end; gap: 8px;">
         <button class="btn btn-secondary" onclick="closePasteModal()">取消</button>
         <button class="btn btn-primary" onclick="submitPasteImport()">解析并导入 group_data</button>
@@ -1415,6 +1419,8 @@
         
         let batchHtml = Array.from(batchSet).map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
         batchHtml += `<option value="__NEW__">➕ 新建批次...</option>`;
+        batchHtml += `<option value="__DELETE_BATCH__">❌ 删除某批次（批量移除该批次）</option>`;
+        batchHtml += `<option value="__PRUNE_EMPTY__">🧹 清理空批次（移除没有谷子的批次）</option>`;
         selectEl.innerHTML = batchHtml;
       }
 
@@ -1451,6 +1457,35 @@
       if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__NEW__') {
         targetValue = document.getElementById('batchModalCustomInput').value.trim();
         if (!targetValue) return alert('请输入新批次名称！');
+      }
+
+      // 删除某批次：把该批次所有谷子的 batch_name 设回默认批次
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__DELETE_BATCH__') {
+        const pick = prompt('请输入要删除的批次名称（该批次所有谷子将变为"默认批次"）：');
+        if (!pick || !pick.trim()) return;
+        const delName = pick.trim();
+        let cnt = 0;
+        selected.forEach(i => { if (String(i.batch_name||'').trim() === delName) { i.batch_name = '默认批次'; cnt++; } });
+        if (cnt === 0) {
+          const allCnt = RAW_ITEMS.filter(i => String(i.batch_name||'').trim() === delName).length;
+          if (allCnt === 0) return alert('没有谷子属于该批次，未做修改。');
+          RAW_ITEMS.forEach(i => { if (String(i.batch_name||'').trim() === delName) i.batch_name = '默认批次'; });
+          cnt = allCnt;
+        }
+        await saveDataToSupabase();
+        updateBatchDropdownOptions();
+        renderTable();
+        showToast(`已将批次 [${delName}] 的 ${cnt} 件谷子改为"默认批次"！`);
+        return;
+      }
+
+      // 清理空批次：把没有任何谷子使用的批次名从下拉移除（通过过滤 RAW_ITEMS 实现，实际是确保下拉只含在用批次）
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__PRUNE_EMPTY__') {
+        await saveDataToSupabase();
+        updateBatchDropdownOptions();
+        renderTable();
+        showToast('已清理空批次！');
+        return;
       }
 
       if (CURRENT_BATCH_ACTION_TYPE === 'status') {
@@ -1492,7 +1527,7 @@
     window.batchDeleteItems = batchDeleteItems;
 
     // 🚀 核心：动态智能矩阵表格解析算法（已彻底修复 cnColIdx 变量名与格式对齐）
-    function parseMatrixImportText(raw, batchCountry) {
+    function parseMatrixImportText(raw, batchCountry, batchName) {
       if (!raw) return [];
       const lines = raw.split(/\r?\n/).map(l => l.replace(/\r/g, '')).filter(l => l.trim().length > 0);
       if (lines.length < 3) return [];
@@ -1579,7 +1614,7 @@
             items.push({
               item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + Math.floor(Math.random() * 1000),
               name: itemCol.name,
-              batch_name: '默认批次',
+              batch_name: (batchName && batchName.trim()) ? batchName.trim() : '默认批次',
               country: detectedCountry,
               price: itemCol.price,
               quantity: qty,
@@ -1606,7 +1641,8 @@
           const workbook = XLSX.read(data, { type: 'array' });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
           const csvText = XLSX.utils.sheet_to_csv(firstSheet, { FS: '\t' });
-          let parsedItems = parseMatrixImportText(csvText, defaultCountry);
+          const batchName = (document.getElementById('pasteBatchName')?.value || '').trim();
+          let parsedItems = parseMatrixImportText(csvText, defaultCountry, batchName);
           if (parsedItems.length === 0) {
             const jsonRows = XLSX.utils.sheet_to_json(firstSheet);
             jsonRows.forEach(row => {
@@ -1641,7 +1677,14 @@
     }
     window.handleExcelImport = handleExcelImport;
 
-    function openPasteModal() { document.getElementById('pasteInputText').value = ''; document.getElementById('pasteModal').classList.add('active'); }
+    function openPasteModal() {
+      document.getElementById('pasteInputText').value = '';
+      // 记住上次导入用的批次，避免每次重复输入
+      const lastBatch = localStorage.getItem('LAST_IMPORT_BATCH') || '';
+      const bInput = document.getElementById('pasteBatchName');
+      if (bInput && lastBatch) bInput.value = lastBatch;
+      document.getElementById('pasteModal').classList.add('active');
+    }
     window.openPasteModal = openPasteModal;
     function closePasteModal() { document.getElementById('pasteModal').classList.remove('active'); }
     window.closePasteModal = closePasteModal;
@@ -1650,7 +1693,9 @@
       const rawText = document.getElementById('pasteInputText').value;
       if (!rawText || !rawText.trim()) return showToast('请先粘贴文本内容！');
       const defaultCountry = document.getElementById('excelDefaultCountry').value || '日本';
-      const parsedItems = parseMatrixImportText(rawText, defaultCountry);
+      const batchName = (document.getElementById('pasteBatchName')?.value || '').trim();
+      if (batchName) localStorage.setItem('LAST_IMPORT_BATCH', batchName);
+      const parsedItems = parseMatrixImportText(rawText, defaultCountry, batchName);
       if (parsedItems.length === 0) return showToast('解析失败，请检查格式！');
       RAW_ITEMS.push(...parsedItems);
       await saveDataToSupabase();
