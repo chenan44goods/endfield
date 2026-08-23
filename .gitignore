@@ -4,3 +4,4 @@
 # 本地演示页与演示素材（终末地官方素材，不入公开仓库）
 deepblue_demo.html
 images/
+.wrangler/
