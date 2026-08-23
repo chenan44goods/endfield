@@ -1,7 +1,8 @@
-# 临时草稿目录（Codex 工作副本，不入库）
+﻿# 临时草稿目录（Codex 工作副本，不入库）
 .codex_bot_edit/
 
-# 本地演示页与演示素材（终末地官方素材，不入公开仓库）
+# 本地演示页（演示源文件，不入公开仓库）
 deepblue_demo.html
-images/
+
+# 本地构建缓存
 .wrangler/

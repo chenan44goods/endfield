@@ -3,1052 +3,1217 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>团员排谷自查页 - 谷圈团务系统</title>
-  <!-- Supabase CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <title>山团大观园 · 谷团自助查询</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --primary: #6366f1;
-      --primary-hover: #4f46e5;
-      --bg: #f8fafc;
-      --card-bg: #ffffff;
-      --text-main: #0f172a;
-      --text-muted: #64748b;
-      --border: #e2e8f0;
-      --success: #10b981;
-      --warning: #f59e0b;
-      --danger: #ef4444;
-      --radius: 12px;
+      --ink: #16181c;
+      --ink-soft: #3a3d42;
+      --muted: #7b7e83;
+      --line: rgba(255,255,255,0.85);
+      --paper: #e9e230;
+      --paper-2: #f2efd8;
+      --navy: #2b2f36;
+      --navy-2: #1f232a;
+      --navy-ink: #2e333b;
+      --accent: #1c1e22;
+      --accent-soft: #3a3d42;
+      --warn: #222;
+      --serif: "Playfair Display", "Noto Serif SC", serif;
+      --serif-cn: "Noto Serif SC", "Songti SC", serif;
+      --sans: "Inter", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { height: 100%; }
 
     body {
-      background-color: var(--bg);
-      color: var(--text-main);
-      line-height: 1.5;
-      padding: 16px;
-      min-height: 100vh;
+      font-family: var(--sans);
+      color: var(--ink);
+      background: #e9e230;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
     }
 
-    .container {
-      max-width: 960px;
-      margin: 0 auto;
-    }
-
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    header h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: var(--text-main);
-    }
-
-    header a {
-      color: var(--primary);
-      text-decoration: none;
-      font-size: 0.9rem;
-      font-weight: 600;
-      padding: 6px 12px;
-      border-radius: 6px;
-      background-color: #eef2ff;
-      transition: background-color 0.2s;
-    }
-
-    header a:hover {
-      background-color: #e0e7ff;
-    }
-
-    .card {
-      background: var(--card-bg);
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      padding: 20px;
-      margin-bottom: 20px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-    }
-
-    .card-title {
-      font-size: 1.1rem;
-      font-weight: 600;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .search-box {
+    /* 网格纸背景 */
+    .page {
+      position: relative;
+      height: 100vh;
+      width: 100vw;
+      background:
+        radial-gradient(120% 90% at 82% 6%, rgba(255,255,255,0.35), transparent 52%),
+        linear-gradient(180deg, #e5dd2a 0%, #ece82a 42%, #f5f4ec 78%, #fdfdfb 100%),
+        linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px),
+        linear-gradient(rgba(255,255,255,0.22) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.22) 1px, transparent 1px);
+      background-size: auto, auto, 72px 72px, 72px 72px, 18px 18px, 18px 18px;
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-      margin-bottom: 16px;
+      grid-template-columns: 1fr 1fr;
+      overflow: hidden;
     }
 
-    .form-group {
+    .page::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(90% 90% at 80% 4%, rgba(255,255,255,0.5), transparent 55%),
+        radial-gradient(120% 90% at 12% 96%, rgba(255,255,255,0.28), transparent 60%),
+        repeating-linear-gradient(0deg, rgba(255,255,255,0.06) 0 1px, transparent 1px 4px);
+    }
+
+    .page::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      box-shadow: inset 0 0 120px rgba(120,116,20,0.10);
+    }
+    .page::after {
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.35), transparent 8%, transparent 92%, rgba(255,255,255,0.35)),
+        repeating-linear-gradient(0deg, transparent 0 40px, rgba(255,255,255,0.25) 40px 41px);
+    }
+
+    /* 大字母水印 */
+    .watermark {
+      position: absolute;
+      font-family: var(--serif);
+      font-weight: 700;
+      color: rgba(40,44,50,0.045);
+      font-size: 46vh;
+      line-height: 1;
+      user-select: none;
+      pointer-events: none;
+      z-index: 0;
+      letter-spacing: -0.04em;
+    }
+    .watermark-e { top: -8vh; right: 8vw; }
+    .watermark-a { bottom: -14vh; right: 34vw; font-size: 34vh; }
+
+    /* 左侧：品牌 + 进入控制台 */
+    .left {
+      position: relative;
+      z-index: 2;
+      padding: 9vh 6vw;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      justify-content: center;
+      gap: 4.5vh;
     }
 
-    .form-group label {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--text-muted);
-    }
-
-    input[type="text"], select, textarea {
-      width: 100%;
-      padding: 10px 14px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-size: 0.95rem;
-      outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
-      background: #ffffff;
-    }
-
-    input[type="text"]:focus, select:focus, textarea:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-    }
-
-    .btn-group {
+    .eyebrow {
       display: flex;
+      align-items: center;
       gap: 12px;
-      flex-wrap: wrap;
+      font-size: 11px;
+      letter-spacing: 0.32em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .eyebrow::before {
+      content: "";
+      width: 40px;
+      height: 1px;
+      background: var(--ink-soft);
     }
 
-    .btn {
-      padding: 10px 18px;
-      border: none;
-      border-radius: 8px;
-      font-size: 0.95rem;
+    .brand-titles { position: relative; }
+    .brand-title {
+      font-family: var(--serif);
       font-weight: 600;
+      font-size: clamp(48px, 7vw, 104px);
+      line-height: 0.96;
+      letter-spacing: 0.02em;
+      color: var(--ink);
+      font-kerning: normal;
+    }
+    .brand-title.sub {
+      font-family: var(--serif);
+      color: transparent;
+      -webkit-text-stroke: 1.1px var(--ink-soft);
+      font-weight: 400;
+      font-style: italic;
+      letter-spacing: 0.05em;
+    }
+    /* editorial 副标题小字 + 细线 */
+    .brand-sub {
+      margin-top: 20px;
+      padding-top: 14px;
+      border-top: 1px solid var(--ink-soft);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 11px;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+    }
+    .brand-sub .no { color: var(--accent); font-weight: 600; }
+    .filter-bar {
+      position: absolute;
+      left: -14px;
+      top: -8px;
+      bottom: -8px;
+      width: 2.5px;
+      background: var(--accent);
+      box-shadow: 0 0 18px rgba(122,138,90,0.55);
+    }
+
+    /* 进入控制台按钮 + 光带 */
+    .console-btn {
+      position: relative;
+      width: 208px;
+      padding: 20px 30px;
+      background: var(--navy-2);
+      color: #e9edf6;
+      border: none;
+      border-radius: 2px;
+      font-family: var(--serif-cn);
+      font-size: 18px;
+      letter-spacing: 0.18em;
       cursor: pointer;
-      transition: background-color 0.2s, transform 0.1s;
+      overflow: hidden;
+      text-align: left;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      box-shadow: 0 22px 45px -18px rgba(15,25,49,0.55);
+    }
+    .console-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 28px 55px -18px rgba(15,25,49,0.6);
+    }
+    .console-btn .label {
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      gap: 6px;
-    }
-
-    .btn:active {
-      transform: scale(0.98);
-    }
-
-    .btn-primary {
-      background-color: var(--primary);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      background-color: var(--primary-hover);
-    }
-
-    .btn-success {
-      background-color: var(--success);
-      color: white;
-    }
-
-    .btn-success:hover {
-      background-color: #059669;
-    }
-
-    .btn-secondary {
-      background-color: #f1f5f9;
-      color: var(--text-main);
-      border: 1px solid var(--border);
-    }
-
-    .btn-secondary:hover {
-      background-color: #e2e8f0;
-    }
-
-    .badge {
-      display: inline-block;
-      padding: 3px 8px;
-      border-radius: 9999px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-align: center;
-      white-space: nowrap;
-    }
-
-    .badge-country {
-      background-color: #f1f5f9;
-      color: #475569;
-      border: 1px solid #cbd5e1;
-    }
-
-    /* ==================== 🎨 7 大专业流转状态颜色体系 ==================== */
-    .badge-status-未出荷 { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; } /* 浅灰：预售等待 */
-    .badge-status-已下单 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; } /* 天蓝：采购完成 */
-    .badge-status-国际运输中 { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; } /* 暖橙：跨国运输 */
-    .badge-status-可排发 { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 700; } /* 翠绿：可排发 */
-    .badge-status-待发货 { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; } /* 紫色：已申请/打包中 */
-    .badge-status-已排发 { background-color: #e2e8f0; color: #64748b; border: 1px solid #cbd5e1; } /* 中灰：已发货结束 */
-    .badge-status-未付款 { background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; } /* 警示红 */
-
-    /* 老状态兼容样式（防止历史数据失效） */
-    .badge-status-已下单未到货 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
-    .badge-status-回国中 { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
-    .badge-status-已到货 { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 700; }
-    .badge-status-已申请发货 { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; }
-    .badge-status-custom { background-color: #f8fafc; color: #334155; border: 1px solid #cbd5e1; }
-
-    .table-container {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      text-align: left;
-      font-size: 0.9rem;
-      min-width: 650px;
-    }
-
-    th, td {
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--border);
-      white-space: nowrap;
-    }
-
-    th {
-      background-color: #f8fafc;
-      color: var(--text-muted);
-      font-weight: 600;
-    }
-
-    tr:hover {
-      background-color: #f8fafc;
-    }
-
-    /* 手机端卡片列表 */
-    .mobile-cards-view {
-      display: none;
-    }
-
-    @media (max-width: 768px) {
-      .desktop-table-view {
-        display: none !important;
-      }
-      .mobile-cards-view {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-    }
-
-    .item-card-mobile {
-      background: #ffffff;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px;
-      display: flex;
-      flex-direction: column;
       gap: 10px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      z-index: 2;
+      position: relative;
     }
-
-    .item-card-mobile-top {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-
-    .item-card-mobile-img {
-      width: 52px;
-      height: 52px;
-      object-fit: cover;
-      border-radius: 8px;
-      border: 1px solid var(--border);
+    .console-btn .label::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 10px rgba(122,138,90,0.9);
       flex-shrink: 0;
     }
-
-    .item-card-mobile-noimg {
-      width: 52px;
-      height: 52px;
-      background: #f1f5f9;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #94a3b8;
-      font-size: 0.75rem;
-      flex-shrink: 0;
-    }
-
-    .item-card-mobile-info {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .item-card-mobile-title-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 8px;
-    }
-
-    .item-card-mobile-name {
-      font-weight: 700;
-      font-size: 0.95rem;
-      color: var(--text-main);
-      white-space: normal;
-      word-break: break-all;
-      line-height: 1.35;
-    }
-
-    .item-card-mobile-sub-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 0.88rem;
-      flex-wrap: wrap;
-    }
-
-    .item-card-mobile-price {
-      color: #ef4444;
-      font-weight: 700;
-      font-size: 0.95rem;
-    }
-
-    .item-card-mobile-qty {
-      color: var(--text-muted);
-      font-weight: 600;
-      font-size: 0.85rem;
-      background: #f1f5f9;
-      padding: 2px 8px;
-      border-radius: 4px;
-    }
-
-    .item-card-mobile-action {
-      margin-top: 4px;
-      padding-top: 8px;
-      border-top: 1px dashed var(--border);
-      display: flex;
-      justify-content: flex-end;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 40px 20px;
-      color: var(--text-muted);
-      font-size: 0.95rem;
-    }
-
-    /* Modal Styles */
-    .modal-overlay {
-      position: fixed;
-      top: 0;
+    /* 上下移动的光带 */
+    .console-btn .scan {
+      position: absolute;
       left: 0;
       right: 0;
-      bottom: 0;
-      background: rgba(15, 23, 42, 0.5);
+      height: 46%;
+      top: -60%;
+      background: linear-gradient(180deg, transparent, rgba(159,174,127,0.3), transparent);
+      animation: scanY 2.6s cubic-bezier(0.45,0,0.2,1) infinite;
+      pointer-events: none;
+    }
+    @keyframes scanY {
+      0%   { top: -60%; }
+      45%  { top: 108%; }
+      55%  { top: 108%; }
+      100% { top: -60%; }
+    }
+
+    .console-caption {
+      margin-top: 14px;
+      font-size: 11px;
+      letter-spacing: 0.22em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    /* 右侧：功能入口 */
+    .right {
+      position: relative;
+      z-index: 2;
+      padding: 12vh 4vw 8vh 2vw;
       display: flex;
+      flex-direction: column;
       justify-content: center;
+      gap: 5vh;
+    }
+
+    .entry {
+      display: flex;
       align-items: center;
-      z-index: 1000;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s ease;
+      gap: 26px;
+      cursor: pointer;
+      padding: 10px 0;
+      position: relative;
+      opacity: 0.9;
+      transition: opacity 0.25s, transform 0.25s;
     }
+    .entry:hover { opacity: 1; transform: translateX(6px); }
 
-    .modal-overlay.active {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .modal {
-      background: white;
-      border-radius: var(--radius);
-      width: 90%;
-      max-width: 500px;
-      padding: 24px;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-      transform: translateY(10px);
-      transition: transform 0.2s ease;
-    }
-
-    .modal-overlay.active .modal {
-      transform: translateY(0);
-    }
-
-    .modal-header {
-      font-size: 1.2rem;
+    .entry-icon {
+      width: 72px;
+      height: 68px;
+      clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+      background: linear-gradient(150deg, #f2f4f5 0%, #d8dcdf 100%);
+      box-shadow:
+        inset 2px 2px 0 rgba(255,255,255,0.9),
+        inset -2px -2px 0 rgba(30,33,38,0.18),
+        0 10px 22px -10px rgba(20,22,26,0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--serif);
+      font-size: 24px;
       font-weight: 700;
-      margin-bottom: 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      color: var(--ink);
+      position: relative;
+      flex-shrink: 0;
+      transition: transform 0.3s, filter 0.3s, background 0.3s, color 0.3s;
+    }
+    /* 右上角小角标 */
+    .entry-icon::after {
+      content: "";
+      position: absolute;
+      top: 5px; right: 5px;
+      width: 8px; height: 8px;
+      background: var(--accent);
+      box-shadow: 0 0 8px rgba(122,138,90,0.8);
+      clip-path: polygon(0 0, 100% 0, 100% 100%);
+    }
+    .entry:hover .entry-icon {
+      background: linear-gradient(150deg, #2b2f36 0%, #1f232a 100%);
+      color: #eef0f2;
+      transform: translateY(-2px);
+    }
+    .entry:hover .entry-icon::after {
+      background: #cfd83a;
+      box-shadow: 0 0 10px rgba(207,216,58,0.9);
     }
 
-    .modal-body {
-      margin-bottom: 20px;
+    .entry-meta { display: flex; flex-direction: column; gap: 6px; }
+    .entry-sub {
+      font-size: 11px;
+      letter-spacing: 0.24em;
+      color: var(--muted);
+      text-transform: uppercase;
     }
-
-    .modal-footer {
-      display: flex;
-      justify-content: flex-end;
-      gap: 12px;
+    .entry-name {
+      font-family: var(--serif-cn);
+      font-size: 26px;
+      font-weight: 600;
+      color: var(--ink);
+      letter-spacing: 0.02em;
     }
-
-    .item-summary-box {
-      background: #f8fafc;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 16px;
-      max-height: 180px;
-      overflow-y: auto;
+    .entry-line {
+      position: absolute;
+      left: -20px;
+      right: 0;
+      bottom: 0;
+      height: 1px;
+      background: var(--line);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.4s ease;
     }
+    .entry:hover .entry-line { transform: scaleX(1); background: var(--ink-soft); }
 
-    .summary-item-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 6px 0;
-      border-bottom: 1px dashed var(--border);
-      font-size: 0.88rem;
+
+
+    /* 工程线稿中继器（信号塔） */
+    .relay {
+      position: absolute;
+      right: 4vw;
+      top: 42%;
+      transform: translateY(-50%);
+      width: 30vw;
+      max-width: 360px;
+      height: auto;
+      z-index: 0;
+      opacity: 0.82;
+      pointer-events: none;
+      color: var(--ink-soft);
     }
-
-    .summary-item-row:last-child {
-      border-bottom: none;
+    /* 圆形底衬：嵌在等高线圆圈中心 */
+    .relay::before {
+      content: "";
+      position: absolute;
+      inset: 50% auto auto 50%;
+      transform: translate(-50%, -50%);
+      width: 116%;
+      aspect-ratio: 1 / 1;
+      border-radius: 50%;
+      border: 1px solid rgba(74,79,87,0.18);
+      background: radial-gradient(circle, rgba(255,255,255,0.32), rgba(233,235,238,0.18) 60%, transparent 72%);
+      box-shadow: 0 0 60px rgba(122,138,90,0.12);
     }
+    .relay svg { width: 100%; height: 100%; overflow: visible; }
+    .relay img {
+      width: 100%;
+      height: auto;
+      display: block;
+      position: relative;
+      z-index: 1;
+    }
+    .relay .stroke { stroke: currentColor; stroke-width: 1; fill: none; }
+    .relay .stroke2 { stroke: currentColor; stroke-width: 1.6; fill: none; }
+    .relay .fill { fill: rgba(74,79,87,0.05); }
+    .relay .dot { fill: currentColor; }
+    .relay .accent { stroke: rgba(122,138,90,0.7); }
 
-    /* Toast Notification */
-    .toast {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      background: #0f172a;
-      color: white;
-      padding: 12px 20px;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
-      z-index: 2000;
-      opacity: 0;
-      transform: translateY(10px);
-      transition: opacity 0.3s, transform 0.3s;
+    /* 等高线地形纹理（终末地特征） */
+    .topo {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      opacity: 0.5;
       pointer-events: none;
     }
+    .topo svg { width: 100%; height: 100%; }
+    .topo line { stroke: rgba(255,255,255,0.4); stroke-width: 1; }
+    .topo path { fill: none; stroke-width: 1; }
 
-    .toast.show {
-      opacity: 1;
-      transform: translateY(0);
+    /* 右侧背景节点连线网络 */
+    .network {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      opacity: 0.55;
+    }
+    .network svg { width: 100%; height: 100%; }
+    .net-line { stroke: rgba(255,255,255,0.5); stroke-width: 1; }
+    .net-node {
+      fill: var(--paper);
+      stroke: var(--ink-soft);
+      stroke-width: 1.2;
+    }
+    .net-node.core { fill: var(--navy-2); stroke: var(--navy-2); }
+    .net-node.core.accent { fill: var(--accent); stroke: var(--accent); }
+
+    /* 右侧背景扫描线（上下移动） */
+    .bg-scan {
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: linear-gradient(180deg, transparent, var(--accent), transparent);
+      box-shadow: 0 0 26px rgba(122,138,90,0.65);
+      z-index: 1;
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    .bg-scan.horizontal {
+      width: auto;
+      height: 1px;
+      left: 0;
+      right: 0;
+      top: 50%;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      animation: scanX 3.4s ease-in-out infinite;
+    }
+    @keyframes scanX {
+      0%   { opacity: 0; transform: translateY(-30vh); }
+      40%  { opacity: 0.85; }
+      60%  { opacity: 0.85; }
+      100% { opacity: 0; transform: translateY(30vh); }
+    }
+    .bg-scan.vertical {
+      left: auto;
+      right: 10%;
+      animation: scanYv 3.4s ease-in-out infinite;
+    }
+    @keyframes scanYv {
+      0%   { top: -10%; opacity: 0; }
+      30%  { top: 30%; opacity: 0.9; }
+      50%  { top: 55%; opacity: 0.9; }
+      100% { top: 110%; opacity: 0; }
     }
 
-    .stat-bar {
+    /* 自助查询面板（点入口后滑出） */
+    .query-panel {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      grid-template-columns: minmax(360px, 30%) 1fr;
+      background: url('images/panel_bg.png') center / cover no-repeat;
+      transform: translateX(100%);
+      transition: transform 0.55s cubic-bezier(0.76,0,0.18,1);
+    }
+    .query-panel.open { transform: translateX(0); }
+
+    .qp-left {
+      padding: 9vh 36px;
+      border-right: 1px solid rgba(255,255,255,0.5);
+      background: rgba(255,255,255,0.86);
+      backdrop-filter: blur(6px);
       display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .qp-back {
+      position: absolute;
+      top: 34px;
+      left: 40px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      cursor: pointer;
+      text-transform: uppercase;
+    }
+    .qp-back:hover { color: var(--ink); }
+    .qp-title {
+      font-family: var(--serif-cn);
+      font-size: 40px;
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: 0.02em;
+      margin-top: 6vh;
+    }
+    .qp-sub {
+      font-size: 11px;
+      letter-spacing: 0.26em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 34px;
+    }
+    .field {
+      margin-bottom: 24px;
+    }
+    .field label {
+      display: block;
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .field input {
+      width: 100%;
+      border: none;
+      border-bottom: 1px solid var(--ink-soft);
+      background: transparent;
+      padding: 10px 2px;
+      font-size: 16px;
+      color: var(--ink);
+      outline: none;
+      font-family: var(--sans);
+    }
+    .field input::placeholder { color: #aab2c0; }
+    .field input:focus { border-color: var(--navy-ink); }
+    .panel-btn {
+      margin-top: 10px;
+      width: 100%;
+      padding: 18px;
+      background: var(--navy-2);
+      color: #eef0f2;
+      border: none;
+      font-family: var(--serif-cn);
+      font-size: 16px;
+      letter-spacing: 0.16em;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: background 0.25s;
+    }
+    .panel-btn:hover { background: var(--navy); }
+    .panel-btn .scan {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(159,174,127,0.25), transparent);
+      animation: scanXbtn 2s linear infinite;
+    }
+    @keyframes scanXbtn {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .panel-btn span { position: relative; z-index: 2; }
+
+    .qp-right {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 6vh 3vw;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+
+    /* ============ 终末地工业 HUD 装饰元素 ============ */
+    .hud {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+      font-family: var(--sans);
+    }
+    /* 四角全息框 */
+    .hud-corner {
+      position: absolute;
+      width: 44px;
+      height: 44px;
+      opacity: 0.55;
+    }
+    .hud-corner::before, .hud-corner::after {
+      content: "";
+      position: absolute;
+      background: rgba(122,138,90,0.7);
+    }
+    .hud-corner::before { width: 100%; height: 1.5px; }
+    .hud-corner::after  { width: 1.5px; height: 100%; }
+    .hud-corner.tl { top: 20px; left: 20px; }
+    .hud-corner.tr { top: 20px; right: 20px; transform: scaleX(-1); }
+    .hud-corner.bl { bottom: 20px; left: 20px; transform: scaleY(-1); }
+    .hud-corner.br { bottom: 20px; right: 20px; transform: scale(-1); }
+
+    /* 坐标刻度标尺 */
+    .hud-rule {
+      position: absolute;
+      opacity: 0.45;
+      color: var(--ink-soft);
+      font-size: 9px;
+      letter-spacing: 0.14em;
+    }
+    .hud-rule.top { top: 28px; left: 78px; right: 78px; height: 7px;
+      background: repeating-linear-gradient(90deg, var(--ink-soft) 0 1px, transparent 1px 11px);
+    }
+    .hud-rule.left { left: 30px; top: 80px; bottom: 80px; width: 7px;
+      background: repeating-linear-gradient(180deg, var(--ink-soft) 0 1px, transparent 1px 11px);
+    }
+    .hud-rule.top::after { content: "0  10  20  30  40  50  60  70  80  90"; position: absolute; top: 9px; left: 0; }
+    .hud-rule.left::after { content: "0\A10\A20\A30\A40\A50\A60\A70"; position: absolute; left: 9px; top: -6px; white-space: pre; }
+
+    /* 右上角小型 HUD 信息面板 */
+    .hud-panel {
+      position: absolute;
+      top: 30px;
+      right: 90px;
+      width: 150px;
+      padding: 12px 14px;
+      border-left: 2px solid rgba(122,138,90,0.6);
+      background: rgba(31,35,42,0.05);
+      backdrop-filter: blur(2px);
+      color: var(--ink-soft);
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      line-height: 1.8;
+    }
+    .hud-panel .row { display: flex; justify-content: space-between; }
+    .hud-panel .row .k { color: var(--muted); }
+    .hud-panel .row .v { color: var(--ink); font-weight: 600; }
+    .hud-panel .bar { margin-top: 8px; height: 3px; background: rgba(74,79,87,0.18); position: relative; }
+    .hud-panel .bar::after {
+      content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 62%;
+      background: rgba(122,138,90,0.7);
+      animation: barPulse 3s ease-in-out infinite;
+    }
+    @keyframes barPulse { 0%,100% { width: 56%; } 50% { width: 74%; } }
+
+    /* 左下角状态指示灯标签 */
+    .hud-status {
+      position: absolute;
+      left: 90px;
+      bottom: 30px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+    }
+    .hud-status .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 12px rgba(122,138,90,0.9);
+      animation: dotPulse 2s ease-in-out infinite;
+    }
+    .hud-status .dot.warn { background: var(--warn); box-shadow: 0 0 12px rgba(184,135,74,0.9); animation-delay: 0.4s; }
+    @keyframes dotPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* 底部中央的仪器基线 */
+    .hud-baseline {
+      position: absolute;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%);
+      width: 220px;
+      height: 10px;
+      opacity: 0.4;
+      background:
+        linear-gradient(90deg, transparent, var(--ink-soft) 18%, var(--ink-soft) 82%, transparent) center/100% 1px no-repeat,
+        repeating-linear-gradient(90deg, var(--ink-soft) 0 1px, transparent 1px 14px) center/100% 40% no-repeat;
+    }
+
+
+    /* 底部说明文字 */
+    .hud-note {
+      position: fixed;
+      left: 50%;
+      bottom: 34px;
+      transform: translateX(-50%);
+      z-index: 9;
+      text-align: center;
+      line-height: 1.9;
+      padding: 10px 28px;
+      background: rgba(31,35,42,0.05);
+      backdrop-filter: blur(2px);
+      border-top: 1px solid rgba(122,138,90,0.4);
+      color: var(--ink-soft);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+    .hud-note .sep { color: var(--accent); margin: 0 10px; }
+    .hud-note .contact { color: var(--ink); font-weight: 600; }
+
+    /* 查询结果数据卡 */
+    .result-item {
+      display: flex;
+      align-items: center;
       gap: 16px;
-      margin-bottom: 16px;
-      font-size: 0.88rem;
-      color: var(--text-muted);
-      background-color: #f1f5f9;
-      padding: 8px 14px;
-      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      background: rgba(250,250,250,0.94);
+      border: 1px solid rgba(22,24,28,0.10);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+      backdrop-filter: blur(3px);
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
     }
-
-    .stat-bar span strong {
-      color: var(--text-main);
+    .result-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.28);
+      border-color: rgba(22,24,28,0.18);
     }
-
-    .img-preview {
-      width: 40px;
-      height: 40px;
+    .result-item .r-img {
+      width: 112px;
+      height: 112px;
+      border-radius: 12px;
       object-fit: cover;
-      border-radius: 4px;
-      border: 1px solid var(--border);
+      flex-shrink: 0;
+      border: 1px solid rgba(22,24,28,0.08);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      cursor: zoom-in;
+      background: #eceef0;
+    }
+    .result-item .r-img-empty {
+      width: 112px;
+      height: 112px;
+      border-radius: 12px;
+      flex-shrink: 0;
+      background: rgba(22,24,28,0.05);
+      border: 1px dashed rgba(22,24,28,0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .result-item .r-info { flex: 1; min-width: 0; }
+    .result-item .r-name { font-weight: 700; font-size: 15px; color: var(--ink); }
+    .result-item .r-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .result-item .r-price { font-weight: 700; font-size: 15px; color: #b0651a; white-space: nowrap; }
+    .result-item .r-badge {
+      font-size: 11px; padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+      letter-spacing: 0.04em; font-weight: 600; border: 1px solid transparent;
+      background: rgba(28,32,38,0.9); color: #fff;
+    }
+    .r-badge.st-未出荷    { background:#eef1f4; color:#52606d; }
+    .r-badge.st-已下单    { background:#dceffb; color:#0369a1; }
+    .r-badge.st-国际运输中 { background:#fdecc8; color:#b45309; }
+    .r-badge.st-可排发    { background:#d6f5df; color:#15803d; font-weight:700; }
+    .r-badge.st-待发货    { background:#efe2fb; color:#7e22ce; }
+    .r-badge.st-已排发    { background:#e3e7ec; color:#64748b; }
+    .r-badge.st-未付款    { background:#fbdcdc; color:#991b1b; }
+    .r-badge.st-custom   { background:rgba(28,32,38,0.9); color:#fff; }
+    .result-empty { text-align:center; padding:30px; color:var(--muted); font-size:13px; background:rgba(255,255,255,0.6); border-radius:8px; }
+
+    @media (max-width: 900px) {
+      .hud-rule.left, .hud-panel, .hud-baseline { display: none; }
+      .hud-note { white-space: normal; width: 90%; font-size: 11px; padding: 8px 16px; bottom: 20px; }
+    }
+
+    @media (max-width: 900px) {
+      .page { grid-template-columns: 1fr; }
+      .right { padding: 6vh 6vw; }
+      .query-panel { grid-template-columns: 1fr; overflow-y: auto; }
+      .qp-left { justify-content: flex-start; padding: 7vh 6vw 3vh; }
+      .qp-right { display: flex; min-height: 55vh; padding: 2vh 6vw 8vh; overflow: visible; }
+      .brand-title { font-size: 54px; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>📦 团员排谷自查页</h1>
-      <a href="admin.html">团长后台入口 &rarr;</a>
-    </header>
+  <!-- 终末地工业 HUD 装饰层 -->
+  <div class="hud">
+    <div class="hud-corner tl"></div>
+    <div class="hud-corner tr"></div>
+    <div class="hud-corner bl"></div>
+    <div class="hud-corner br"></div>
+    <div class="hud-rule top"></div>
+    <div class="hud-rule left"></div>
+    <div class="hud-panel">
+      <div class="row"><span class="k">SYS</span><span class="v">ONLINE</span></div>
+      <div class="row"><span class="k">TEMP</span><span class="v">23.4°C</span></div>
+      <div class="row"><span class="k">LINK</span><span class="v">4 / 4</span></div>
+      <div class="bar"></div>
+    </div>
+    <div class="hud-status"><span class="dot"></span>GRID · STABLE</div>
+    <div class="hud-status" style="left:90px; bottom:56px;"><span class="dot warn"></span>CARGO · SYNC</div>
+    <div class="hud-baseline"></div>
+    <div class="hud-note">
+      此系统为 <span class="contact">山团团进大观园谷团</span> 专用
+      <span class="sep">/</span>
+      若有问题请联系负责人：<span class="contact">辰安</span>
+      <span class="sep">·</span>
+      <span class="contact">3153199243</span>
+    </div>
+  </div>
 
-    <!-- 顶部输入区域 -->
-    <div class="card">
-      <div class="card-title">🔍 团员查询</div>
-      <div class="search-box">
-        <div class="form-group">
-          <label for="queryKeyInput">查询密钥 (Query Key)</label>
-          <input type="text" id="queryKeyInput" placeholder="请输入团长提供的查询密钥">
-        </div>
-        <div class="form-group">
-          <label for="cnInput">团员 CN (圈名/称呼)</label>
-          <input type="text" id="cnInput" placeholder="请输入您的 CN">
-        </div>
+  <div class="page">
+    <!-- 背景水印 -->
+    <div class="watermark watermark-e">E</div>
+    <div class="watermark watermark-a">A</div>
+
+    <!-- 左侧品牌区 -->
+    <div class="left">
+      <div class="eyebrow">山团大观园 · 管理端</div>
+      <div class="brand-titles">
+        <div class="filter-bar"></div>
+        <div class="brand-title">Admin</div>
+        <div class="brand-title sub">Console</div>
+        <div class="brand-sub"><span class="no">№</span> SHAN TUAN · GRAND GARDEN</div>
       </div>
-      <div class="btn-group">
-        <button class="btn btn-primary" id="btnQueryMyItems">查询我的排谷</button>
-        <button class="btn btn-success" id="btnQueryDispatchable">查看可排发谷子</button>
+
+      <div>
+        <button class="console-btn" id="consoleBtn" onclick="enterConsole()">
+          <span class="scan"></span>
+          <span class="label">进入控制台</span>
+        </button>
+        <div class="console-caption">N / CONSOLE · ADMIN</div>
       </div>
     </div>
 
-    <!-- 结果展示区域 -->
-    <div class="card" id="resultCard" style="display: none;">
-      <div class="card-title" id="resultTitle">
-        <span>📋 查询结果</span>
+    <!-- 右侧功能入口 + 网络背景 -->
+    <div class="right">
+      <div class="topo" id="topo"></div>
+      <div class="network" id="network"></div>
+      <div class="bg-scan vertical"></div>
+      <div class="bg-scan horizontal"></div>
+
+      <div class="entry" onclick="openPanel('query')">
+        <div class="entry-icon">Q</div>
+        <div class="entry-meta">
+          <div class="entry-sub">AS / INQUIRY</div>
+          <div class="entry-name">自助查询</div>
+        </div>
+        <div class="entry-line"></div>
       </div>
 
-      <div class="stat-bar" id="statBar">
-        <span>共找到 <strong id="statCount">0</strong> 种谷子</span>
-        <span>总件数: <strong id="statQty">0</strong></span>
-        <span>预计总额: ￥<strong id="statPrice">0.00</strong></span>
+      <div class="entry" onclick="openPanel('fee')">
+        <div class="entry-icon">￥</div>
+        <div class="entry-meta">
+          <div class="entry-sub">AS / PAYMENT</div>
+          <div class="entry-name">交肾核算</div>
+        </div>
+        <div class="entry-line"></div>
       </div>
 
-      <!-- 批量排发操作栏（仅在查看可排发谷子时出现） -->
-      <div id="batchActionBox" style="display: none; margin-bottom: 16px;">
-        <button class="btn btn-success" id="btnApplyAllDispatchable">一键申请全部可排发谷子</button>
+      <div class="entry" onclick="openPanel('dispatch')">
+        <div class="entry-icon">▣</div>
+        <div class="entry-meta">
+          <div class="entry-sub">AS / SHIPPING</div>
+          <div class="entry-name">排发调度</div>
+        </div>
+        <div class="entry-line"></div>
       </div>
 
-      <!-- 桌面端表格视图 -->
-      <div class="table-container desktop-table-view">
-        <table>
-          <thead>
-            <tr>
-              <th>图片</th>
-              <th>谷子名称</th>
-              <th>地区</th>
-              <th>单价 (元)</th>
-              <th>数量</th>
-              <th>状态</th>
-              <th id="actionTh" style="display: none;">操作</th>
-            </tr>
-          </thead>
-          <tbody id="resultTableBody">
-            <!-- 动态渲染数据 -->
-          </tbody>
-        </table>
+      <div class="entry" onclick="openPanel('feedback')">
+        <div class="entry-icon">✉</div>
+        <div class="entry-meta">
+          <div class="entry-sub">AS / FEEDBACK</div>
+          <div class="entry-name">匿名反馈</div>
+        </div>
+        <div class="entry-line"></div>
       </div>
 
-      <!-- 手机端卡片列表视图 -->
-      <div class="mobile-cards-view" id="mobileCardsView">
-        <!-- 动态渲染数据 -->
+      <!-- 终末地 Logo（项目图片素材） -->
+      <div class="relay" aria-hidden="true">
+        <img src="images/endfield_logo_v2.png" alt="终末地">
       </div>
     </div>
+  </div>
 
-    <!-- 📮 匿名反馈箱卡片 (页面最底部) -->
-    <div class="card" style="margin-top: 24px; border-left: 4px solid var(--primary);">
-      <div class="card-title">📮 匿名意见与问题反馈箱</div>
-      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
-        对本团有任何建议、吐槽、问题反馈或投诉？欢迎在此提交（<strong>完全匿名</strong>，无需输入CN，不记录任何个人身份信息）。
-      </p>
-      <div style="display: flex; flex-direction: column; gap: 12px;">
-        <div class="form-group">
-          <label for="feedbackCategory">反馈分类</label>
-          <select id="feedbackCategory">
-            <option value="建议">💡 建议</option>
-            <option value="问题反馈">⚠️ 问题反馈</option>
-            <option value="投诉">🚨 投诉</option>
-            <option value="其他">💬 其他</option>
-          </select>
+  <!-- 自助查询面板 -->
+  <div class="query-panel" id="queryPanel">
+    <div class="qp-left">
+      <span class="qp-back" onclick="closePanel()">← 返回</span>
+      <div>
+        <div class="qp-sub">AS / INQUIRY · QUERY</div>
+        <div class="qp-title" id="panelTitle">自助查询</div>
+
+        <div class="field" style="margin-top: 34px;">
+          <label>Query Key · 查询密钥</label>
+          <input id="panelKey" placeholder="输入团长提供的密钥">
         </div>
-        <div class="form-group">
-          <label for="feedbackContent">反馈详情内容 *</label>
-          <textarea id="feedbackContent" rows="4" placeholder="请详细描述您的想法、建议或遇到的问题..."></textarea>
+        <div class="field">
+          <label>CN · 圈名</label>
+          <input id="panelCn" placeholder="输入你的 CN / 圈名">
         </div>
-        <div>
-          <button class="btn btn-primary" id="btnSubmitFeedback" onclick="submitFeedback()" style="width: 100%; padding: 12px;">
-            ✉️ 匿名提交反馈
+        <!-- 反馈表单字段（默认隐藏） -->
+        <div id="fbFields" style="display:none;">
+          <div class="field" style="margin-top: 34px;">
+            <label>反馈分类</label>
+            <select id="fbCategory" style="width:100%; border:none; border-bottom:1px solid var(--ink-soft); background:transparent; padding:10px 2px; font-size:16px; color:var(--ink); outline:none; font-family:var(--sans);">
+              <option value="建议">💡 建议</option>
+              <option value="问题反馈">⚠️ 问题反馈</option>
+              <option value="投诉">🚨 投诉</option>
+              <option value="其他">💬 其他</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>反馈详情 *</label>
+            <textarea id="fbContent" rows="4" placeholder="请描述您的想法、建议或遇到的问题..." style="width:100%; border:none; border-bottom:1px solid var(--ink-soft); background:transparent; padding:10px 2px; font-size:16px; color:var(--ink); outline:none; font-family:var(--sans); resize:vertical;"></textarea>
+          </div>
+          <button class="panel-btn" id="fbSubmitBtn" onclick="submitFeedback()">
+            <span class="scan"></span>
+            <span>SUBMIT FEEDBACK</span>
           </button>
         </div>
+
+        <button class="panel-btn" id="queryBtn" onclick="panelAction()">
+          <span class="scan"></span>
+          <span>PROCEED SEARCH</span>
+        </button>
+      </div>
+    </div>
+    <div class="qp-right">
+      <!-- 查询结果悬浮在背景图上 -->
+      <div id="queryResultOverlay" style="display:none; width:min(820px, 88%);">
+        <!-- 顶部筛选栏：右上角谷子名称筛选 -->
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:14px;">
+          <span id="resultStat" style="font-size:13px; color:#fff; font-weight:600; letter-spacing:0.06em; text-shadow:0 1px 6px rgba(0,0,0,0.35);"></span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:11px; letter-spacing:0.12em; color:#fff; opacity:0.9; text-shadow:0 1px 6px rgba(0,0,0,0.35);">BATCH · 分类筛选</span>
+            <select id="batchFilter" onchange="filterByBatch()" style="padding:8px 14px; border-radius:8px; border:1px solid rgba(22,24,28,0.12); background:rgba(250,250,250,0.95); color:var(--ink); font-size:13px; font-family:var(--sans); outline:none; min-width:170px;">
+              <option value="">全部分类</option>
+            </select>
+          </div>
+        </div>
+        <div id="resultList" style="max-height:64vh; overflow-y:auto;"></div>
       </div>
     </div>
   </div>
 
-  <!-- 申请排发弹窗 -->
-  <div class="modal-overlay" id="applyModal">
-    <div class="modal">
-      <div class="modal-header">
-        <span>📮 申请排发确认</span>
-        <button class="btn btn-secondary" style="padding: 4px 8px;" id="btnCloseModal">✕</button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 12px;">
-          即将为您提交以下谷子的排发申请：
-        </p>
-        <div class="item-summary-box" id="modalItemsSummary">
-          <!-- 拟排发谷子列表 -->
-        </div>
-        <div class="form-group">
-          <label for="applyNoteInput">备注说明（可选，如收货地址/联系电话/特殊打包要求）</label>
-          <textarea id="applyNoteInput" rows="3" placeholder="填写真实姓名、收货地址、联系电话等..."></textarea>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="btnCancelApply">取消</button>
-        <button class="btn btn-primary" id="btnConfirmApply">确认提交申请</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Toast 消息提示 -->
   <div class="toast" id="toast"></div>
 
   <script>
+    // 生成终末地式等高线地形背景
+    (function buildTopo(){
+      const c = document.getElementById('topo');
+      if (!c) return;
+      const w = 800, h = 700, cx = w*0.62, cy = h*0.42;
+      let svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="xMidYMid slice">';
+      // 多层闭合等高线
+      const rings = [
+        {r:70, c:'rgba(255,255,255,0.85)'},
+        {r:120, c:'rgba(255,255,255,0.7)'},
+        {r:175, c:'rgba(255,255,255,0.6)'},
+        {r:230, c:'rgba(245,244,220,0.55)'},
+        {r:290, c:'rgba(255,255,255,0.45)'},
+        {r:360, c:'rgba(245,244,220,0.35)'},
+        {r:430, c:'rgba(255,255,255,0.3)'}
+      ];
+      rings.forEach((ring, i) => {
+        const wob = 8 + Math.sin(i*1.3)*6;
+        let d = '';
+        for (let a=0; a<=360; a+=6){
+          const rad = a*Math.PI/180;
+          const rr = ring.r + Math.sin(rad*3 + i)*wob*0.4 + Math.cos(rad*5 + i*2)*3;
+          const x = cx + Math.cos(rad)*rr;
+          const y = cy + Math.sin(rad)*rr*0.82;
+          d += (a===0?'M':' L') + x.toFixed(1) + ' ' + y.toFixed(1);
+        }
+        d += ' Z';
+        svg += '<path d="'+d+'" stroke="'+ring.c+'" fill="none"/>';
+      });
+      // 几条放射状线
+      for (let i=0;i<10;i++){
+        const a = i/10*360*Math.PI/180;
+        svg += '<line x1="'+cx+'" y1="'+cy+'" x2="'+(cx+Math.cos(a)*430)+'" y2="'+(cy+Math.sin(a)*430*0.82)+'"/>';
+      }
+      svg += '</svg>';
+      c.innerHTML = svg;
+    })();
+
+    // 生成右侧节点连线网络背景
+    (function buildNetwork(){
+      const c = document.getElementById('network');
+      const w = 900, h = 700;
+      const nodes = [
+        {x:120,y:150,c:1},{x:340,y:90},{x:560,y:140,c:1},{x:780,y:120},
+        {x:200,y:320,c:1},{x:470,y:300},{x:720,y:280,c:1},
+        {x:120,y:500},{x:420,y:470,c:1},{x:660,y:520},{x:810,y:460},
+        {x:300,y:630,c:1},{x:560,y:640}
+      ];
+      const links = [[0,1],[1,2],[2,3],[1,5],[5,6],[0,4],[4,7],[4,5],[5,8],[8,9],[9,10],[7,11],[11,12],[8,12]];
+      let svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="xMidYMid slice">';
+      links.forEach(([a,b])=>{
+        svg += '<line class="net-line" x1="'+nodes[a].x+'" y1="'+nodes[a].y+'" x2="'+nodes[b].x+'" y2="'+nodes[b].y+'"/>';
+      });
+      nodes.forEach((n,i)=>{
+        const core = n.c ? ' core' : '';
+        svg += '<circle class="net-node'+core+'" cx="'+n.x+'" cy="'+n.y+'" r="'+(n.c?4:3)+'"/>';
+      });
+      svg += '</svg>';
+      c.innerHTML = svg;
+    })();
+
+    const toast = document.getElementById('toast');
+    let toastTimer = null;
     const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
-    const SUPABASE_ANON_KEY = SUPABASE_KEY;
-
-    const supabaseClient = (window.supabase || supabase).createClient(SUPABASE_URL, SUPABASE_KEY);
-
-    window.ITEM_CACHE = [];
-    window.CURRENT_PENDING_APPLY_ITEMS = [];
-
-    // 状态样式智能解析（支持 7 大新状态与老状态平滑映射）
-
-    // —— 囤货 / 3 个月到期 ——
-    function _fmtDate(d){ var y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0'); return y+'-'+m+'-'+dd; }
-    function todayISO(){ return _fmtDate(new Date()); }
-    function addMonthsStr(dateStr, months){ if(!dateStr) return ''; var p=String(dateStr).split('-').map(Number); if(p.length<3) return dateStr; var dt=new Date(p[0], (p[1]||1)-1, p[2]||1); dt.setMonth(dt.getMonth()+months); return _fmtDate(dt); }
-    function isArrivedStatus(s){ s=String(s||'').trim(); return s==='可排发'||s==='已到货'||s==='到货'; }
-    function ensureStockDate(item, prevStatus){ if(isArrivedStatus(item.status)){ var prev=String(prevStatus||'').trim(); if(!isArrivedStatus(prev) || !item.stock_date){ item.stock_date=todayISO(); item.stock_expiry=addMonthsStr(item.stock_date,3); } } }
-    function stockDateInfo(item){ var sd=item.stock_date; if(!sd) return null; return { start:sd, expiry: item.stock_expiry || addMonthsStr(sd,3) }; }
-
-    function stockLineHtml(item){
-      var info=stockDateInfo(item); if(!info) return '';
-      var exp=info.expiry, today=todayISO(), cls='', tag='';
-      if(exp < today){ cls='background:#fee2e2;color:#991b1b;'; tag='已到期'; }
-      else { var days=Math.round((new Date(exp)-new Date(today))/86400000); if(days<=30){ cls='background:#fef3c7;color:#b45309;'; tag='即将到期'; } else { cls='background:#dcfce7;color:#15803d;'; tag='囤货中'; } }
-      return '<div style="margin-top:4px;"><span style="display:inline-block;padding:1px 6px;border-radius:6px;'+cls+'font-weight:600;font-size:0.75rem;">'+tag+' 囤货至 '+exp+'</span><div style="color:#64748b;font-size:0.7rem;margin-top:1px;">囤货自 '+info.start+'</div></div>';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rbmhsZmhkcWJzdWtza2R4cXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI1NDEsImV4cCI6MjEwMjA0ODU0MX0.9eoLga8ACXUx66A0SVPZtv1So0bD4YYa5eYP9gFCD_Y';
+    // 直接用原生 fetch 调 Supabase REST API，不依赖外部 CDN 脚本
+    async function fetchLeaderData(key){
+      const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer '+SUPABASE_ANON };
+      const res = await fetch(SUPABASE_URL + '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key) + '&select=*', { headers: h });
+      if (!res.ok) { throw new Error('HTTP ' + res.status); }
+      return await res.json();
     }
 
-    function getStatusBadgeClass(status) {
-      const s = (status || '').trim();
-      const validStatuses = ['未出荷', '已下单', '国际运输中', '可排发', '待发货', '已排发', '未付款'];
-      if (validStatuses.includes(s)) {
-        return `badge-status-${s}`;
-      }
-      const legacyMap = {
-        '已下单未到货': 'badge-status-已下单',
-        '回国中': 'badge-status-国际运输中',
-        '已到货': 'badge-status-可排发',
-        '已申请发货': 'badge-status-待发货'
-      };
-      return legacyMap[s] || 'badge-status-custom';
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const key = urlParams.get('key');
-      const cn = urlParams.get('cn');
-      if (key) document.getElementById('queryKeyInput').value = key;
-      if (cn) document.getElementById('cnInput').value = cn;
-
-      document.getElementById('btnQueryMyItems').addEventListener('click', handleQueryAll);
-      document.getElementById('btnQueryDispatchable').addEventListener('click', handleQueryDispatchable);
-      document.getElementById('btnCloseModal').addEventListener('click', closeModal);
-      document.getElementById('btnCancelApply').addEventListener('click', closeModal);
-      document.getElementById('btnConfirmApply').addEventListener('click', submitApply);
-      document.getElementById('btnApplyAllDispatchable').addEventListener('click', prepareApplyAll);
-    });
-
-    function showToast(msg) {
-      const toast = document.getElementById('toast');
-      toast.innerText = msg;
-      toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 3000);
-    }
-
-    async function fetchLeaderData(queryKey) {
-      if (!queryKey) {
-        showToast('请先输入查询密钥！');
-        return null;
-      }
+    async function doQuery(mode){
+      mode = mode || 'query';
+      const key = (document.getElementById('panelKey').value || '').trim();
+      const cn = (document.getElementById('panelCn').value || '').trim();
+      const resBox = document.getElementById('queryResultOverlay');
+      const list = document.getElementById('resultList');
+      const stat = document.getElementById('resultStat');
+      if (!key) return showToast('请输入查询密钥');
+      if (!cn) return showToast('请输入您的 CN');
       try {
-        const { data, error } = await supabaseClient
-          .from('leader_data')
-          .select('*')
-          .eq('query_key', queryKey.trim());
-
-        if (error) {
-          console.error('Supabase fetch error:', error);
-          showToast('查询数据失败: ' + error.message);
-          return null;
+        const data = await fetchLeaderData(key);
+        if (!data || !data.length) return showToast('未找到该密钥数据');
+        const gd = data[0].group_data || [];
+        const arr = Array.isArray(gd) ? gd : (typeof gd==='string' ? JSON.parse(gd) : []);
+        const lower = cn.toLowerCase();
+        let items;
+        if (mode === 'fee') {
+          // 交肾核算：该 CN 未付款/未交
+          items = arr.filter(it => {
+            const c = String(it.cn||'').trim().toLowerCase();
+            const s = String(it.status||'').trim();
+            return c === lower && (s === '未付款' || s === '未交');
+          });
+        } else if (mode === 'dispatch') {
+          // 排发调度：该 CN 可排发
+          items = arr.filter(it => {
+            const c = String(it.cn||'').trim().toLowerCase();
+            const s = String(it.status||'').trim();
+            return c === lower && s === '可排发';
+          });
+        } else {
+          // 自助查询：该 CN 非已排发
+          items = arr.filter(it => {
+            const c = String(it.cn||'').trim().toLowerCase();
+            const s = String(it.status||'').trim();
+            return c === lower && s !== '已排发';
+          });
         }
-
-        if (!data || data.length === 0) {
-          showToast('未找到该密钥对应的团务数据，请核对密钥！');
-          return null;
+        resBox.style.display = 'block';
+        // 保存完整结果供名称筛选复用
+        window.CURRENT_ITEMS = items;
+        // 生成分类（batch_name）下拉选项
+        const batchSel = document.getElementById('batchFilter');
+        if (batchSel) {
+          const bats = [...new Set(items.map(i=>String(i.batch_name||'默认批次').trim()))];
+          batchSel.innerHTML = '<option value="">全部分类</option>' + bats.map(b=>'<option value="'+escapeHtml(b)+'">'+escapeHtml(b)+'</option>').join('');
+          batchSel.value = '';
         }
-
-        const record = data[0];
-
-        let groupData = record.group_data;
-        if (typeof groupData === 'string') {
-          try { groupData = JSON.parse(groupData); } catch (e) { groupData = []; }
+        const totalQty = items.reduce((a,i)=>a+(Number(i.quantity)||1),0);
+        const totalAmt = items.reduce((a,i)=>a+(Number(i.quantity)||1)*(Number(i.price)||0),0);
+        if (mode === 'fee') {
+          stat.innerText = '未交 ' + items.length + ' 条，应交 ￥' + totalAmt.toFixed(2);
+        } else if (mode === 'dispatch') {
+          stat.innerText = '可排发 ' + items.length + ' 条，总件 ' + totalQty;
+        } else {
+          stat.innerText = '共 ' + items.length + ' 条，总件 ' + totalQty;
         }
-        if (!Array.isArray(groupData)) groupData = [];
-
-        let imgData = record.image_data;
-        if (typeof imgData === 'string') {
-          try { imgData = JSON.parse(imgData); } catch (e) { imgData = {}; }
+        if (!items.length) {
+          const emptyText = mode==='fee' ? '没有待交款项，感谢配合' : (mode==='dispatch' ? '暂无待排发的谷子' : '未找到该 CN 的谷子记录');
+          list.innerHTML = '<div class="result-empty">' + emptyText + '</div>';
+          return;
         }
-        if (!imgData || typeof imgData !== 'object') imgData = {};
-        if (!Array.isArray(imgData.applications)) imgData.applications = [];
-        if (!Array.isArray(imgData.transfer_logs)) imgData.transfer_logs = [];
-        if (!Array.isArray(imgData.feedback)) imgData.feedback = [];
-
-        return { recordId: record.id, queryKey: record.query_key, groupData, imgData };
-      } catch (err) {
-        console.error('Fetch exception:', err);
-        showToast('网络开小差了，请稍后重试');
-        return null;
-      }
+        filterByBatch();
+      } catch(e){ showToast('查询异常: '+e.message); }
     }
 
-    // 功能 1：查询我的排谷
-    async function handleQueryAll() {
-      const queryKey = document.getElementById('queryKeyInput').value.trim();
-      const cn = document.getElementById('cnInput').value.trim();
-
-      if (!queryKey) return showToast('请输入查询密钥！');
-      if (!cn) return showToast('请输入您的 CN！');
-
-      const res = await fetchLeaderData(queryKey);
-      if (!res) return;
-
-      const allItems = res.groupData;
-
-      // 规则：只看该 CN，彻底隐藏 status === "已排发" 的历史谷子
-      const myItems = allItems.filter(item => {
-        const matchCn = String(item.cn || '').trim().toLowerCase() === cn.toLowerCase();
-        const notShipped = (item.status || '').trim() !== '已排发';
-        return matchCn && notShipped;
-      });
-
-      renderResults(myItems, `CN「${cn}」名下的排谷记录`, false);
-    }
-
-    // 功能 2：查看可排发谷子
-    async function handleQueryDispatchable() {
-      const queryKey = document.getElementById('queryKeyInput').value.trim();
-      const cn = document.getElementById('cnInput').value.trim();
-
-      if (!queryKey || !cn) {
-        return showToast('查看可排发谷子必须同时输入查询密钥和 CN！');
-      }
-
-      const res = await fetchLeaderData(queryKey);
-      if (!res) return;
-
-      const allItems = res.groupData;
-
-      // 规则：只展示 status === '可排发' 的谷子
-      const dispatchableItems = allItems.filter(item => {
-        const matchCn = String(item.cn || '').trim().toLowerCase() === cn.toLowerCase();
-        const isDispatchable = (item.status || '').trim() === '可排发';
-        return matchCn && isDispatchable;
-      });
-
-      renderResults(dispatchableItems, `CN「${cn}」的可排发谷子`, true);
-    }
-
-    // 渲染结果表格及手机卡片
-    function renderResults(items, title, isDispatchMode) {
-      window.ITEM_CACHE = items;
-
-      const resultCard = document.getElementById('resultCard');
-      const resultTitle = document.getElementById('resultTitle');
-      const tbody = document.getElementById('resultTableBody');
-      const mobileCardsView = document.getElementById('mobileCardsView');
-      const actionTh = document.getElementById('actionTh');
-      const batchActionBox = document.getElementById('batchActionBox');
-
-      resultTitle.innerHTML = `<span>📋 ${title}</span>`;
-      resultCard.style.display = 'block';
-
-      let totalQty = 0;
-      let totalPrice = 0;
-      items.forEach(i => {
-        const q = Number(i.quantity) || 1;
-        const p = Number(i.price) || 0;
-        totalQty += q;
-        totalPrice += p * q;
-      });
-
-      document.getElementById('statCount').innerText = items.length;
-      document.getElementById('statQty').innerText = totalQty;
-      document.getElementById('statPrice').innerText = totalPrice.toFixed(2);
-
-      if (isDispatchMode) {
-        actionTh.style.display = 'table-cell';
-        batchActionBox.style.display = items.length > 0 ? 'block' : 'none';
+    // 按分类（batch_name）筛选（只显示选定的分类）
+    function filterByBatch(){
+      const sel = document.getElementById('batchFilter');
+      const batch = sel ? sel.value : '';
+      const items = window.CURRENT_ITEMS || [];
+      const filter = batch ? items.filter(i=>String(i.batch_name||'默认批次').trim() === batch) : items;
+      const list = document.getElementById('resultList');
+      const stat = document.getElementById('resultStat');
+      const totalQty = filter.reduce((a,i)=>a+(Number(i.quantity)||1),0);
+      const totalAmt = filter.reduce((a,i)=>a+(Number(i.quantity)||1)*(Number(i.price)||0),0);
+      if (currentPanel === 'fee') {
+        if (stat) stat.innerText = '未交 ' + filter.length + ' 条，应交 ￥' + totalAmt.toFixed(2);
+      } else if (currentPanel === 'dispatch') {
+        if (stat) stat.innerText = '可排发 ' + filter.length + ' 条，总件 ' + totalQty;
       } else {
-        actionTh.style.display = 'none';
-        batchActionBox.style.display = 'none';
+        if (stat) stat.innerText = '共 ' + filter.length + ' 条，总件 ' + totalQty;
       }
-
-      if (items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">未查询到符合条件的谷子数据</td></tr>`;
-        mobileCardsView.innerHTML = `<div class="empty-state">未查询到符合条件的谷子数据</div>`;
+      if (!filter.length) {
+        if (list) list.innerHTML = '<div class="result-empty">该谷子暂无符合条件的数据</div>';
         return;
       }
-
-      let tableHtml = '';
-      let cardsHtml = '';
-
-      items.forEach((item, index) => {
-        const imgTag = item.image_url 
-          ? `<img src="${escapeHtml(item.image_url)}" class="img-preview" alt="谷子" loading="lazy">`
-          : `<span style="color:#cbd5e1;font-size:0.8rem;">无图</span>`;
-
-        const mobileImgTag = item.image_url 
-          ? `<img src="${escapeHtml(item.image_url)}" class="item-card-mobile-img" alt="谷子" loading="lazy">`
-          : `<div class="item-card-mobile-noimg">无图</div>`;
-
-        const countryVal = item.country || item.region || '未设定';
-        const statusVal = item.status || '未出荷';
-        const badgeClass = getStatusBadgeClass(statusVal);
-
-        // 桌面表格 HTML
-        tableHtml += `
-          <tr>
-            <td>${imgTag}</td>
-            <td style="font-weight: 600;">${escapeHtml(item.name || '未命名')}</td>
-            <td><span class="badge badge-country">${escapeHtml(countryVal)}</span></td>
-            <td>￥${Number(item.price || 0).toFixed(2)}</td>
-            <td>${item.quantity || 1}</td>
-            <td><span class="badge ${badgeClass}">${escapeHtml(statusVal)}</span>${stockLineHtml(item)}</td>
-            ${isDispatchMode ? `
-              <td>
-                <button class="btn btn-success" style="padding: 4px 10px; font-size:0.8rem;" onclick="openApplyModalByIndex(${index})">
-                  申请排发
-                </button>
-              </td>
-            ` : ''}
-          </tr>
-        `;
-
-        // 手机卡片 HTML
-        cardsHtml += `
-          <div class="item-card-mobile">
-            <div class="item-card-mobile-top">
-              ${mobileImgTag}
-              <div class="item-card-mobile-info">
-                <div class="item-card-mobile-title-row">
-                  <span class="item-card-mobile-name">${escapeHtml(item.name || '未命名')}</span>
-                  <span class="badge badge-country">${escapeHtml(countryVal)}</span>
-                </div>
-                <div class="item-card-mobile-sub-row">
-                  <span class="item-card-mobile-price">￥${Number(item.price || 0).toFixed(2)}</span>
-                  <span class="item-card-mobile-qty">x${item.quantity || 1}</span>
-                  <span class="badge ${badgeClass}">${escapeHtml(statusVal)}</span>
-                </div>
-                ${stockLineHtml(item)}
-              </div>
-            </div>
-            ${isDispatchMode ? `
-              <div class="item-card-mobile-action">
-                <button class="btn btn-success" style="padding: 6px 14px; font-size:0.85rem; width:100%; justify-content:center;" onclick="openApplyModalByIndex(${index})">
-                  📮 申请排发
-                </button>
-              </div>
-            ` : ''}
-          </div>
-        `;
-      });
-
-      tbody.innerHTML = tableHtml;
-      mobileCardsView.innerHTML = cardsHtml;
+      if (list) list.innerHTML = filter.map(it=>{
+        const q=Number(it.quantity)||1, pr=Number(it.price)||0;
+        const showStatus = currentPanel !== 'fee';
+        const imgUrl = it.image_url ? String(it.image_url).trim() : '';
+        const imgHtml = imgUrl ? '<img class="r-img" src="'+escapeHtml(imgUrl)+'" alt="谷子" loading="lazy" onclick="openImg(this.src)">' : '<div class="r-img-empty">无图</div>';
+        return '<div class="result-item">'+imgHtml+
+          '<div class="r-info"><div class="r-name">'+escapeHtml(it.name||'未命名')+'</div>'+
+          '<div class="r-meta">'+(it.country||'日本')+' ×'+q+'</div></div>'+
+          '<div style="display:flex; align-items:center; gap:12px;">'+
+          '<span class="r-price">￥'+(pr*q).toFixed(2)+'</span>'+
+          (showStatus ? '<span class="r-badge '+getStatusBadgeClass(it.status)+'">'+escapeHtml(it.status||'未出荷')+'</span>' : '')+
+          '</div></div>';
+      }).join('');
     }
 
-    window.openApplyModalByIndex = function(index) {
-      const item = window.ITEM_CACHE[index];
-      if (!item) return showToast('获取谷子信息失败');
-      window.CURRENT_PENDING_APPLY_ITEMS = [item];
-      openModal();
+    function escapeHtml(str){ return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    function getStatusBadgeClass(status){
+      const s = String(status||'').trim();
+      const known = ['未出荷','已下单','国际运输中','可排发','待发货','已排发','未付款'];
+      if (known.indexOf(s) !== -1) return 'st-'+s;
+      const legacy = {
+        '已下单未到货':'st-已下单',
+        '回国中':'st-国际运输中',
+        '已到货':'st-可排发',
+        '已申请发货':'st-待发货',
+        '未交':'st-未付款'
+      };
+      return legacy[s] || 'st-custom';
+    }
+
+    function openImg(src){
+      const m = document.createElement('div');
+      m.style.cssText = 'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
+      const im = document.createElement('img');
+      im.src = src;
+      im.style.cssText = 'max-width:92vw;max-height:92vh;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.6);';
+      m.appendChild(im);
+      m.onclick = () => document.body.removeChild(m);
+      document.body.appendChild(m);
+    }
+
+    function showToast(msg){
+      toast.innerText = msg;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(()=>toast.classList.remove('show'), 2600);
+    }
+
+    const PANEL_TITLES = {
+      query: '自助查询',
+      fee: '交肾核算',
+      dispatch: '排发调度',
+      feedback: '匿名反馈'
+    };
+    const PANEL_ACTIONS = {
+      query: () => doQuery('query'),
+      fee: () => doQuery('fee'),
+      dispatch: () => doQuery('dispatch')
     };
 
-    function prepareApplyAll() {
-      if (!window.ITEM_CACHE || window.ITEM_CACHE.length === 0) {
-        return showToast('没有可排发的谷子');
-      }
-      window.CURRENT_PENDING_APPLY_ITEMS = [...window.ITEM_CACHE];
-      openModal();
+    let currentPanel = 'query';
+    function openPanel(type){
+      // 切换面板时先隐藏并清空遗留的查询结果，避免数据表卡住
+      const overlay = document.getElementById('queryResultOverlay');
+      if (overlay) { overlay.style.display = 'none'; }
+      const rList = document.getElementById('resultList');
+      if (rList) { rList.innerHTML = ''; }
+      const rStat = document.getElementById('resultStat');
+      if (rStat) { rStat.innerText = ''; }
+
+      currentPanel = type;
+      document.getElementById('panelTitle').innerText = PANEL_TITLES[type] || '自助查询';
+      const q = document.getElementById('panelKey');
+      const cn = document.getElementById('panelCn');
+      const qBtn = document.getElementById('queryBtn');
+      const fb = document.getElementById('fbFields');
+      const isQuery = type === 'query';
+      const isFeedback = type === 'feedback';
+      // 自助查询/交肾核算/排发调度 需要 密钥+CN；匿名反馈仅需要查询密钥（用于定位写入的数据行），不需要 CN
+      const needKey = (type === 'query' || type === 'fee' || type === 'dispatch' || type === 'feedback');
+      const needCn = (type === 'query' || type === 'fee' || type === 'dispatch');
+      if (q) q.parentElement.style.display = needKey ? 'block' : 'none';
+      if (cn) cn.parentElement.style.display = needCn ? 'block' : 'none';
+      if (qBtn) qBtn.style.display = needCn ? 'block' : 'none';
+      if (fb) fb.style.display = isFeedback ? 'block' : 'none';
+      document.getElementById('queryPanel').classList.add('open');
     }
-
-    function openModal() {
-      const summaryBox = document.getElementById('modalItemsSummary');
-      let html = '';
-      window.CURRENT_PENDING_APPLY_ITEMS.forEach(item => {
-        html += `
-          <div class="summary-item-row">
-            <span><strong>${escapeHtml(item.name)}</strong> (${escapeHtml(item.country || '日本')})</span>
-            <span>x ${item.quantity || 1}</span>
-          </div>
-        `;
-      });
-      summaryBox.innerHTML = html;
-      document.getElementById('applyNoteInput').value = '';
-      document.getElementById('applyModal').classList.add('active');
-    }
-
-    function closeModal() {
-      document.getElementById('applyModal').classList.remove('active');
-    }
-
-    // ==================== 🚀 提交排发申请（自动将状态变更为【待发货】） ====================
-    async function submitApply() {
-      if (window.__APPLY_SUBMITTING) return showToast('正在提交，请勿重复点击！');
-      const queryKey = document.getElementById('queryKeyInput').value.trim();
-      const cn = document.getElementById('cnInput').value.trim();
-      const note = document.getElementById('applyNoteInput').value.trim();
-
-      if (!queryKey || !cn) return showToast('参数缺失，请重新查询！');
-      if (!window.CURRENT_PENDING_APPLY_ITEMS || window.CURRENT_PENDING_APPLY_ITEMS.length === 0) {
-        return showToast('未选择要排发的谷子！');
-      }
-
-      window.__APPLY_SUBMITTING = true;
-      let res = null;
-      try {
-        res = await fetchLeaderData(queryKey);
-        if (!res) return;
-
-        const groupData = res.groupData;
-        const imgData = res.imgData;
-        const targetItemIds = new Set(window.CURRENT_PENDING_APPLY_ITEMS.map(i => String(i.item_id || i.id)));
-
-        // 💡 核心升级：将提交申请的谷子状态改为【待发货】
-        groupData.forEach(item => {
-          const itemId = String(item.item_id || item.id);
-          if (targetItemIds.has(itemId)) {
-            item.status = '待发货';
-          }
-        });
-
-        const newApp = {
-          id: 'app_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-          type: '排发申请',
-          cn: cn,
-          items: window.CURRENT_PENDING_APPLY_ITEMS.map(i => ({
-            item_id: i.item_id || i.id,
-            name: i.name,
-            quantity: i.quantity || 1,
-            country: i.country || '日本'
-          })),
-          note: note,
-          time: new Date().toLocaleString('zh-CN'),
-          status: '待处理'
-        };
-
-        if (!Array.isArray(imgData.applications)) imgData.applications = [];
-        imgData.applications.unshift(newApp);
-
-        const { error } = await supabaseClient
-          .from('leader_data')
-          .update({
-            group_data: groupData,
-            image_data: imgData
-          })
-          .eq('query_key', queryKey);
-
-        if (error) {
-          console.error('Update error:', error);
-          return showToast('提交申请失败: ' + error.message);
-        }
-
-        showToast('🎉 排发申请提交成功！谷子已标记为【待发货】，请等待团长打包寄出。');
-        closeModal();
-        handleQueryDispatchable();
-      } catch (err) {
-        console.error('Update exception:', err);
-        showToast('网络异常，提交失败');
-      } finally {
-        window.__APPLY_SUBMITTING = false;
-      }
-    }
-
-    // 匿名反馈提交功能
-    async function submitFeedback() {
+    async function submitFeedback(){
       if (window.__FEEDBACK_SUBMITTING) return showToast('正在提交，请勿重复点击！');
-      const queryKey = document.getElementById('queryKeyInput').value.trim();
-      const category = document.getElementById('feedbackCategory').value;
-      const content = document.getElementById('feedbackContent').value.trim();
-
-      if (!queryKey) {
-        return showToast('请先在页面顶部输入查询密钥 (Query Key)！');
-      }
-      if (!content) {
-        return showToast('请输入反馈内容！');
-      }
-
+      const key = (document.getElementById('panelKey').value || '').trim();
+      const category = document.getElementById('fbCategory').value;
+      const content = (document.getElementById('fbContent').value || '').trim();
+      if (!key) return showToast('请输入查询密钥');
+      if (!content) return showToast('请填写反馈内容');
       window.__FEEDBACK_SUBMITTING = true;
       try {
-        const res = await fetchLeaderData(queryKey);
-        if (!res) return;
-
-        const imgData = res.imgData;
-        if (!Array.isArray(imgData.feedback)) {
-          imgData.feedback = [];
-        }
-
-        const newFeedback = {
+        const data = await fetchLeaderData(key);
+        if (!data || !data.length) return showToast('未找到该密钥数据');
+        const row = data[0];
+        let imgData = row.image_data;
+        if (typeof imgData === 'string') { try { imgData = JSON.parse(imgData); } catch(e){ imgData = {}; } }
+        if (!imgData || typeof imgData !== 'object') imgData = {};
+        if (!Array.isArray(imgData.feedback)) imgData.feedback = [];
+        imgData.feedback.unshift({
           id: 'fb_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
           content: content,
           category: category,
           status: '未读',
           created_at: new Date().toLocaleString('zh-CN'),
           reply: ''
-        };
-
-        imgData.feedback.unshift(newFeedback);
-
-        const { error } = await supabaseClient
-          .from('leader_data')
-          .update({
-            group_data: res.groupData,
-            image_data: imgData
-          })
-          .eq('query_key', queryKey);
-
-        if (error) {
-          console.error('Feedback submit error:', error);
-          return showToast('提交反馈失败: ' + error.message);
-        }
-
+        });
+        const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
+        const res = await fetch(SUPABASE_URL + '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key), { method: 'PATCH', headers: h, body: JSON.stringify({ image_data: imgData }) });
+        if (!res.ok) { throw new Error('HTTP ' + res.status); }
         showToast('✅ 反馈已提交，感谢您的建议！');
-        document.getElementById('feedbackContent').value = '';
-      } catch (err) {
-        console.error('Feedback exception:', err);
-        showToast('网络异常，提交失败');
+        document.getElementById('fbContent').value = '';
+      } catch(e){
+        showToast('提交失败: ' + e.message);
       } finally {
         window.__FEEDBACK_SUBMITTING = false;
       }
     }
-    window.submitFeedback = submitFeedback;
-
-    function escapeHtml(str) {
-      if (!str) return '';
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+    function closePanel(){
+      const overlay = document.getElementById('queryResultOverlay');
+      if (overlay) overlay.style.display = 'none';
+      const rList = document.getElementById('resultList');
+      if (rList) rList.innerHTML = '';
+      document.getElementById('queryPanel').classList.remove('open');
+    }
+    function panelAction(){
+      const fn = PANEL_ACTIONS[currentPanel];
+      if (fn) fn();
+    }
+    function enterConsole(){
+      window.location.href = 'admin.html';
     }
   </script>
 </body>
