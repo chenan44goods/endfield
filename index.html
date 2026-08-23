@@ -750,8 +750,9 @@
     }
 
     @media (max-width: 900px) {
-      body { overflow-y: auto; overflow-x: hidden; }
-      .page { height: auto; min-height: 100vh; overflow: visible; grid-template-columns: 1fr; }
+      html, body { height: auto !important; overflow-y: auto; overflow-x: hidden; }
+      body { min-height: 100vh; min-height: 100dvh; }
+      .page { height: auto !important; min-height: 100vh; min-height: 100dvh; overflow: visible; grid-template-columns: 1fr; }
       .right { padding: 6vh 6vw; justify-content: flex-start; }
       .query-panel { display: block; overflow-y: auto; }
       .qp-left { justify-content: flex-start; min-height: 0; padding: 5vh 6vw 2vh; }
