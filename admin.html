@@ -1046,22 +1046,24 @@
     }
 
     function updateBatchDropdownOptions() {
+      const removed = getRemovedBatchOptions();
       const batchSet = new Set(['默认批次']);
       RAW_ITEMS.forEach(i => {
         if (i.batch_name && i.batch_name.trim()) {
           batchSet.add(i.batch_name.trim());
         }
       });
-      
+      const list = Array.from(batchSet).filter(b => b === '默认批次' || removed.indexOf(b) === -1);
+
       const dl = document.getElementById('batchPresets');
       const filterSel = document.getElementById('filterBatch');
       const curFilter = filterSel ? filterSel.value : '';
 
       if (dl) {
-        dl.innerHTML = Array.from(batchSet).map(b => `<option value="${escapeHtml(b)}">`).join('');
+        dl.innerHTML = list.map(b => '<option value="' + escapeHtml(b) + '">').join('');
       }
       if (filterSel) {
-        filterSel.innerHTML = '<option value="">全部批次</option>' + Array.from(batchSet).map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
+        filterSel.innerHTML = '<option value="">全部批次</option>' + list.map(b => '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>').join('');
         filterSel.value = curFilter;
       }
     }
@@ -1388,10 +1390,23 @@
     let BATCH_DELETE_CANDIDATES = [];
     let BATCH_DELETE_MODE = false;
 
+    function getRemovedBatchOptions() {
+      try { return JSON.parse(localStorage.getItem('ADMIN_REMOVED_BATCH_OPTIONS') || '[]') || []; } catch(e){ return []; }
+    }
+    function setRemovedBatchOptions(list) {
+      localStorage.setItem('ADMIN_REMOVED_BATCH_OPTIONS', JSON.stringify(list));
+    }
+    function addRemovedBatchOption(name) {
+      const list = getRemovedBatchOptions();
+      if (name && list.indexOf(name) === -1) list.push(name);
+      setRemovedBatchOptions(list);
+    }
+
     function buildBatchList() {
+      const removed = getRemovedBatchOptions();
       const set = new Set(['默认批次']);
       RAW_ITEMS.forEach(function(i){ if (i.batch_name && i.batch_name.trim()) set.add(i.batch_name.trim()); });
-      return Array.from(set);
+      return Array.from(set).filter(function(b){ return b === '默认批次' || removed.indexOf(b) === -1; });
     }
 
     function populateBatchModalSelect() {
@@ -1401,8 +1416,9 @@
       const batchSet = buildBatchList();
       let batchHtml = Array.from(batchSet).map(function(b){ return '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>'; }).join('');
       batchHtml += '<option value="__NEW__">➕ 新建批次...</option>';
-      batchHtml += '<option value="__DELETE_BATCH__">❌ 删除某批次（批量移除该批次）</option>';
-      batchHtml += '<option value="__PRUNE_EMPTY__">🧹 清理空批次（移除没有谷子的批次）</option>';
+      batchHtml += '<option value="__DELETE_BATCH__">❌ 删除某个批次选项（仅从下拉移除，不改谷子）</option>';
+      batchHtml += '<option value="__RESTORE_OPTIONS__">🔄 恢复已移除的批次选项</option>';
+      batchHtml += '<option value="__PRUNE_EMPTY__">🧹 清理空批次（仅隐藏没有谷子的批次）</option>';
       selectEl.innerHTML = batchHtml;
     }
 
@@ -1412,11 +1428,11 @@
       BATCH_DELETE_CANDIDATES = buildBatchList();
       const removable = BATCH_DELETE_CANDIDATES.filter(function(b){ return b !== '默认批次'; });
       if (removable.length === 0) {
-        alert('当前没有可删除的批次（除默认批次外没有其它批次）。');
+        alert('当前没有可移除的批次选项（除默认批次外没有其它批次）。');
         populateBatchModalSelect();
         return;
       }
-      labelEl.innerText = '请选择要删除的批次（该批次谷子将移到默认批次）：';
+      labelEl.innerText = '请选择要从下拉列表移除的批次（不会改动你的谷子）：';
       let html = '<option value="__BACK__">↙ 返回</option>';
       html += removable.map(function(b){ return '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>'; }).join('');
       selectEl.innerHTML = html;
@@ -1508,15 +1524,24 @@
       if (CURRENT_BATCH_ACTION_TYPE === 'batch' && BATCH_DELETE_MODE) {
         const delName = targetValue;
         if (!delName || delName === '__BACK__') return;
-        const affected = RAW_ITEMS.filter(function(i){ return String(i.batch_name||'').trim() === delName; });
-        if (affected.length === 0) { alert('该批次没有谷子。'); leaveBatchDeleteMode(); return; }
-        if (!confirm('确定删除批次 [' + delName + '] 吗？该批次的 ' + affected.length + ' 件谷子将移到"默认批次"。')) return;
-        RAW_ITEMS.forEach(function(i){ if (String(i.batch_name||'').trim() === delName) i.batch_name = '默认批次'; });
-        await saveDataToSupabase();
+        if (!confirm('确定从下拉列表移除批次 [' + delName + '] 吗？你的谷子数据不会被改动。')) return;
+        addRemovedBatchOption(delName);
         updateBatchDropdownOptions();
         renderTable();
         leaveBatchDeleteMode();
-        showToast('已删除批次 [' + delName + ']，' + affected.length + ' 件谷子已移到"默认批次"！');
+        showToast('已从下拉列表移除批次 [' + delName + ']，谷子数据未改动。');
+        return;
+      }
+
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__RESTORE_OPTIONS__') {
+        const rem = getRemovedBatchOptions();
+        if (rem.length === 0) { alert('当前没有已移除的批次选项。'); return; }
+        if (!confirm('确定恢复所有已移除的批次选项吗？')) return;
+        setRemovedBatchOptions([]);
+        updateBatchDropdownOptions();
+        renderTable();
+        closeBatchSelectModal();
+        showToast('已恢复所有批次选项。');
         return;
       }
 
@@ -1542,7 +1567,7 @@
         selected.forEach(function(i){ i.country = targetValue; });
         showToast('已成功将选中的 ' + selected.length + ' 件谷子地区修改为 [' + targetValue + ']！');
       } else if (CURRENT_BATCH_ACTION_TYPE === 'batch') {
-        if (targetValue === '__DELETE_BATCH__' || targetValue === '__PRUNE_EMPTY__' || targetValue === '__NEW__') return;
+        if (targetValue === '__DELETE_BATCH__' || targetValue === '__PRUNE_EMPTY__' || targetValue === '__NEW__' || targetValue === '__RESTORE_OPTIONS__') return;
         selected.forEach(function(i){ i.batch_name = targetValue; });
         showToast('已成功将选中的 ' + selected.length + ' 件谷子批次修改为 [' + targetValue + ']！');
       }
