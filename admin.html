@@ -1046,7 +1046,7 @@
     }
 
     function updateBatchDropdownOptions() {
-      const batchSet = new Set(['默认批次', '台湾711', '日本场贩', '泰国场贩']);
+      const batchSet = new Set(['默认批次']);
       RAW_ITEMS.forEach(i => {
         if (i.batch_name && i.batch_name.trim()) {
           batchSet.add(i.batch_name.trim());
@@ -1384,11 +1384,57 @@
     window.batchTransferModal = batchTransferModal;
 
     // ==========================================
+
+    let BATCH_DELETE_CANDIDATES = [];
+    let BATCH_DELETE_MODE = false;
+
+    function buildBatchList() {
+      const set = new Set(['默认批次']);
+      RAW_ITEMS.forEach(function(i){ if (i.batch_name && i.batch_name.trim()) set.add(i.batch_name.trim()); });
+      return Array.from(set);
+    }
+
+    function populateBatchModalSelect() {
+      const selectEl = document.getElementById('batchModalSelect');
+      const labelEl = document.getElementById('batchModalSelectLabel');
+      labelEl.innerText = '请选择或新建批次：';
+      const batchSet = buildBatchList();
+      let batchHtml = Array.from(batchSet).map(function(b){ return '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>'; }).join('');
+      batchHtml += '<option value="__NEW__">➕ 新建批次...</option>';
+      batchHtml += '<option value="__DELETE_BATCH__">❌ 删除某批次（批量移除该批次）</option>';
+      batchHtml += '<option value="__PRUNE_EMPTY__">🧹 清理空批次（移除没有谷子的批次）</option>';
+      selectEl.innerHTML = batchHtml;
+    }
+
+    function enterBatchDeleteMode() {
+      const selectEl = document.getElementById('batchModalSelect');
+      const labelEl = document.getElementById('batchModalSelectLabel');
+      BATCH_DELETE_CANDIDATES = buildBatchList();
+      const removable = BATCH_DELETE_CANDIDATES.filter(function(b){ return b !== '默认批次'; });
+      if (removable.length === 0) {
+        alert('当前没有可删除的批次（除默认批次外没有其它批次）。');
+        populateBatchModalSelect();
+        return;
+      }
+      labelEl.innerText = '请选择要删除的批次（该批次谷子将移到默认批次）：';
+      let html = '<option value="__BACK__">↙ 返回</option>';
+      html += removable.map(function(b){ return '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>'; }).join('');
+      selectEl.innerHTML = html;
+      BATCH_DELETE_MODE = true;
+    }
+
+    function leaveBatchDeleteMode() {
+      BATCH_DELETE_MODE = false;
+      BATCH_DELETE_CANDIDATES = [];
+      populateBatchModalSelect();
+    }
+
     // 🌟 【全新】通用批量修改模态框系统 (状态/地区/批次)
     // ==========================================
+
     function openBatchSelectModal(actionType) {
       const selected = getSelectedCacheItems();
-      if (selected.length === 0) return showToast('请先勾选谷子！');
+      if (selected.length === 0 && actionType !== 'batch') return showToast('请先勾选谷子！');
 
       CURRENT_BATCH_ACTION_TYPE = actionType;
       const modal = document.getElementById('batchSelectModal');
@@ -1399,34 +1445,28 @@
       const customGroup = document.getElementById('batchModalCustomInputGroup');
       const customInput = document.getElementById('batchModalCustomInput');
 
-      descEl.innerText = `已选中 ${selected.length} 件谷子`;
+      descEl.innerText = '已选中 ' + selected.length + ' 件谷子';
       customGroup.style.display = 'none';
       customInput.value = '';
 
       if (actionType === 'status') {
         titleEl.innerText = '⚙️ 批量修改状态';
         selectLabelEl.innerText = '请选择新状态：';
-        selectEl.innerHTML = STATUS_OPTIONS.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
+        selectEl.innerHTML = STATUS_OPTIONS.map(function(opt){ return '<option value="' + opt.value + '">' + opt.label + '</option>'; }).join('');
       } else if (actionType === 'country') {
         titleEl.innerText = '🌍 批量修改地区';
         selectLabelEl.innerText = '请选择新地区 (country)：';
-        selectEl.innerHTML = COUNTRY_OPTIONS.map(c => `<option value="${c}">${c}</option>`).join('');
+        selectEl.innerHTML = COUNTRY_OPTIONS.map(function(c){ return '<option value="' + c + '">' + c + '</option>'; }).join('');
       } else if (actionType === 'batch') {
         titleEl.innerText = '📦 批量修改所属批次';
-        selectLabelEl.innerText = '请选择或新建批次：';
-        const batchSet = new Set(['默认批次', '台湾711', '日本场贩', '泰国场贩']);
-        RAW_ITEMS.forEach(i => { if (i.batch_name) batchSet.add(i.batch_name.trim()); });
-        
-        let batchHtml = Array.from(batchSet).map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
-        batchHtml += `<option value="__NEW__">➕ 新建批次...</option>`;
-        batchHtml += `<option value="__DELETE_BATCH__">❌ 删除某批次（批量移除该批次）</option>`;
-        batchHtml += `<option value="__PRUNE_EMPTY__">🧹 清理空批次（移除没有谷子的批次）</option>`;
-        selectEl.innerHTML = batchHtml;
+        BATCH_DELETE_MODE = false;
+        populateBatchModalSelect();
       }
 
       modal.classList.add('active');
     }
     window.openBatchSelectModal = openBatchSelectModal;
+
 
     function closeBatchSelectModal() {
       const modal = document.getElementById('batchSelectModal');
@@ -1435,51 +1475,58 @@
     }
     window.closeBatchSelectModal = closeBatchSelectModal;
 
+
     function handleBatchModalSelectChange() {
       const selectEl = document.getElementById('batchModalSelect');
       const customGroup = document.getElementById('batchModalCustomInputGroup');
       if (CURRENT_BATCH_ACTION_TYPE === 'batch' && selectEl.value === '__NEW__') {
         customGroup.style.display = 'block';
         document.getElementById('batchModalCustomInput').focus();
-      } else {
-        customGroup.style.display = 'none';
+        return;
       }
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && selectEl.value === '__DELETE_BATCH__') {
+        customGroup.style.display = 'none';
+        enterBatchDeleteMode();
+        return;
+      }
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && selectEl.value === '__BACK__') {
+        customGroup.style.display = 'none';
+        populateBatchModalSelect();
+        return;
+      }
+      customGroup.style.display = 'none';
     }
     window.handleBatchModalSelectChange = handleBatchModalSelectChange;
 
-    async function confirmBatchSelectAction() {
-      const selected = getSelectedCacheItems();
-      if (selected.length === 0) return showToast('未勾选任何谷子！');
 
+
+    async function confirmBatchSelectAction() {
       const selectEl = document.getElementById('batchModalSelect');
       let targetValue = selectEl.value;
+      const selected = getSelectedCacheItems();
+
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && BATCH_DELETE_MODE) {
+        const delName = targetValue;
+        if (!delName || delName === '__BACK__') return;
+        const affected = RAW_ITEMS.filter(function(i){ return String(i.batch_name||'').trim() === delName; });
+        if (affected.length === 0) { alert('该批次没有谷子。'); leaveBatchDeleteMode(); return; }
+        if (!confirm('确定删除批次 [' + delName + '] 吗？该批次的 ' + affected.length + ' 件谷子将移到"默认批次"。')) return;
+        RAW_ITEMS.forEach(function(i){ if (String(i.batch_name||'').trim() === delName) i.batch_name = '默认批次'; });
+        await saveDataToSupabase();
+        updateBatchDropdownOptions();
+        renderTable();
+        leaveBatchDeleteMode();
+        showToast('已删除批次 [' + delName + ']，' + affected.length + ' 件谷子已移到"默认批次"！');
+        return;
+      }
+
+      if (selected.length === 0) return showToast('未勾选任何谷子！');
 
       if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__NEW__') {
         targetValue = document.getElementById('batchModalCustomInput').value.trim();
         if (!targetValue) return alert('请输入新批次名称！');
       }
 
-      // 删除某批次：把该批次所有谷子的 batch_name 设回默认批次
-      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__DELETE_BATCH__') {
-        const pick = prompt('请输入要删除的批次名称（该批次所有谷子将变为"默认批次"）：');
-        if (!pick || !pick.trim()) return;
-        const delName = pick.trim();
-        let cnt = 0;
-        selected.forEach(i => { if (String(i.batch_name||'').trim() === delName) { i.batch_name = '默认批次'; cnt++; } });
-        if (cnt === 0) {
-          const allCnt = RAW_ITEMS.filter(i => String(i.batch_name||'').trim() === delName).length;
-          if (allCnt === 0) return alert('没有谷子属于该批次，未做修改。');
-          RAW_ITEMS.forEach(i => { if (String(i.batch_name||'').trim() === delName) i.batch_name = '默认批次'; });
-          cnt = allCnt;
-        }
-        await saveDataToSupabase();
-        updateBatchDropdownOptions();
-        renderTable();
-        showToast(`已将批次 [${delName}] 的 ${cnt} 件谷子改为"默认批次"！`);
-        return;
-      }
-
-      // 清理空批次：把没有任何谷子使用的批次名从下拉移除（通过过滤 RAW_ITEMS 实现，实际是确保下拉只含在用批次）
       if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__PRUNE_EMPTY__') {
         await saveDataToSupabase();
         updateBatchDropdownOptions();
@@ -1489,14 +1536,15 @@
       }
 
       if (CURRENT_BATCH_ACTION_TYPE === 'status') {
-        selected.forEach(i => i.status = targetValue);
-        showToast(`已成功将选中的 ${selected.length} 件谷子状态修改为 [${targetValue}]！`);
+        selected.forEach(function(i){ i.status = targetValue; });
+        showToast('已成功将选中的 ' + selected.length + ' 件谷子状态修改为 [' + targetValue + ']！');
       } else if (CURRENT_BATCH_ACTION_TYPE === 'country') {
-        selected.forEach(i => i.country = targetValue);
-        showToast(`已成功将选中的 ${selected.length} 件谷子地区修改为 [${targetValue}]！`);
+        selected.forEach(function(i){ i.country = targetValue; });
+        showToast('已成功将选中的 ' + selected.length + ' 件谷子地区修改为 [' + targetValue + ']！');
       } else if (CURRENT_BATCH_ACTION_TYPE === 'batch') {
-        selected.forEach(i => i.batch_name = targetValue);
-        showToast(`已成功将选中的 ${selected.length} 件谷子批次修改为 [${targetValue}]！`);
+        if (targetValue === '__DELETE_BATCH__' || targetValue === '__PRUNE_EMPTY__' || targetValue === '__NEW__') return;
+        selected.forEach(function(i){ i.batch_name = targetValue; });
+        showToast('已成功将选中的 ' + selected.length + ' 件谷子批次修改为 [' + targetValue + ']！');
       }
 
       await saveDataToSupabase();
@@ -1505,6 +1553,7 @@
       renderTable();
     }
     window.confirmBatchSelectAction = confirmBatchSelectAction;
+
 
     async function batchSetImgModal() {
       const selected = getSelectedCacheItems();
