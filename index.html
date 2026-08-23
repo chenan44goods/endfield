@@ -618,6 +618,23 @@
     window.CURRENT_PENDING_APPLY_ITEMS = [];
 
     // 状态样式智能解析（支持 7 大新状态与老状态平滑映射）
+
+    // —— 囤货 / 3 个月到期 ——
+    function _fmtDate(d){ var y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0'); return y+'-'+m+'-'+dd; }
+    function todayISO(){ return _fmtDate(new Date()); }
+    function addMonthsStr(dateStr, months){ if(!dateStr) return ''; var p=String(dateStr).split('-').map(Number); if(p.length<3) return dateStr; var dt=new Date(p[0], (p[1]||1)-1, p[2]||1); dt.setMonth(dt.getMonth()+months); return _fmtDate(dt); }
+    function isArrivedStatus(s){ s=String(s||'').trim(); return s==='可排发'||s==='已到货'||s==='到货'; }
+    function ensureStockDate(item, prevStatus){ if(isArrivedStatus(item.status)){ var prev=String(prevStatus||'').trim(); if(!isArrivedStatus(prev) || !item.stock_date){ item.stock_date=todayISO(); item.stock_expiry=addMonthsStr(item.stock_date,3); } } }
+    function stockDateInfo(item){ var sd=item.stock_date; if(!sd) return null; return { start:sd, expiry: item.stock_expiry || addMonthsStr(sd,3) }; }
+
+    function stockLineHtml(item){
+      var info=stockDateInfo(item); if(!info) return '';
+      var exp=info.expiry, today=todayISO(), cls='', tag='';
+      if(exp < today){ cls='background:#fee2e2;color:#991b1b;'; tag='已到期'; }
+      else { var days=Math.round((new Date(exp)-new Date(today))/86400000); if(days<=30){ cls='background:#fef3c7;color:#b45309;'; tag='即将到期'; } else { cls='background:#dcfce7;color:#15803d;'; tag='囤货中'; } }
+      return '<div style="margin-top:4px;"><span style="display:inline-block;padding:1px 6px;border-radius:6px;'+cls+'font-weight:600;font-size:0.75rem;">'+tag+' 囤货至 '+exp+'</span><div style="color:#64748b;font-size:0.7rem;margin-top:1px;">囤货自 '+info.start+'</div></div>';
+    }
+
     function getStatusBadgeClass(status) {
       const s = (status || '').trim();
       const validStatuses = ['未出荷', '已下单', '国际运输中', '可排发', '待发货', '已排发', '未付款'];
@@ -814,7 +831,7 @@
             <td><span class="badge badge-country">${escapeHtml(countryVal)}</span></td>
             <td>￥${Number(item.price || 0).toFixed(2)}</td>
             <td>${item.quantity || 1}</td>
-            <td><span class="badge ${badgeClass}">${escapeHtml(statusVal)}</span></td>
+            <td><span class="badge ${badgeClass}">${escapeHtml(statusVal)}</span>${stockLineHtml(item)}</td>
             ${isDispatchMode ? `
               <td>
                 <button class="btn btn-success" style="padding: 4px 10px; font-size:0.8rem;" onclick="openApplyModalByIndex(${index})">
@@ -840,6 +857,7 @@
                   <span class="item-card-mobile-qty">x${item.quantity || 1}</span>
                   <span class="badge ${badgeClass}">${escapeHtml(statusVal)}</span>
                 </div>
+                ${stockLineHtml(item)}
               </div>
             </div>
             ${isDispatchMode ? `

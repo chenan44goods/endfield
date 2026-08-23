@@ -671,6 +671,7 @@
                 <th>数量</th>
                 <th>地区 (country)</th>
                 <th>状态</th>
+                <th>囤货有效期</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -882,6 +883,23 @@
       { value: '已排发', label: '已排发 (已发货寄出)', colorClass: 'badge-status-已排发' },
       { value: '未付款', label: '未付款 (待交谷子费)', colorClass: 'badge-status-未付款' }
     ];
+
+
+    // —— 囤货 / 3 个月到期 ——
+    function _fmtDate(d){ var y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0'); return y+'-'+m+'-'+dd; }
+    function todayISO(){ return _fmtDate(new Date()); }
+    function addMonthsStr(dateStr, months){ if(!dateStr) return ''; var p=String(dateStr).split('-').map(Number); if(p.length<3) return dateStr; var dt=new Date(p[0], (p[1]||1)-1, p[2]||1); dt.setMonth(dt.getMonth()+months); return _fmtDate(dt); }
+    function isArrivedStatus(s){ s=String(s||'').trim(); return s==='可排发'||s==='已到货'||s==='到货'; }
+    function ensureStockDate(item, prevStatus){ if(isArrivedStatus(item.status)){ var prev=String(prevStatus||'').trim(); if(!isArrivedStatus(prev) || !item.stock_date){ item.stock_date=todayISO(); item.stock_expiry=addMonthsStr(item.stock_date,3); } } }
+    function stockDateInfo(item){ var sd=item.stock_date; if(!sd) return null; return { start:sd, expiry: item.stock_expiry || addMonthsStr(sd,3) }; }
+
+    function stockCellHtml(item){
+      var info=stockDateInfo(item); if(!info) return '<span style="color:#cbd5e1;">—</span>';
+      var exp=info.expiry, today=todayISO(), cls='', tag='';
+      if(exp < today){ cls='background:#fee2e2;color:#991b1b;'; tag='已到期'; }
+      else { var days=Math.round((new Date(exp)-new Date(today))/86400000); if(days<=30){ cls='background:#fef3c7;color:#b45309;'; tag='即将到期'; } else { cls='background:#dcfce7;color:#15803d;'; tag='囤货中'; } }
+      return '<div style="font-size:0.8rem;line-height:1.4;"><span style="display:inline-block;padding:1px 6px;border-radius:6px;'+cls+'font-weight:600;">'+tag+'</span> <span style="color:#334155;font-weight:600;">'+exp+'</span><div style="color:#64748b;font-size:0.72rem;margin-top:2px;">囤货自 '+info.start+'</div></div>';
+    }
 
     const COUNTRY_OPTIONS = ['日本', '台湾', '印尼', '泰国', '美国', '韩国', '闲鱼', '淘宝店', '其它'];
 
@@ -1193,6 +1211,7 @@
             <td>${item.quantity || 1}</td>
             <td><span class="badge badge-country">${escapeHtml(countryStr)}</span></td>
             <td><span class="badge ${statusBadgeClass}">${escapeHtml(statusStr)}</span></td>
+            <td>${stockCellHtml(item)}</td>
             <td>
               <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editItemByIndex(${index})">编辑</button>
               <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="transferSingleByIndex(${index})">转单</button>
@@ -1214,6 +1233,7 @@
               ${mobileImgTag}
               <div class="admin-card-mobile-info">
                 <div style="font-weight:700;">${escapeHtml(item.name)}</div>
+                <div style="margin-top:4px;">${stockCellHtml(item)}</div>
                 <div style="font-size:0.85rem; color:var(--text-muted);">
                   <span>CN: <strong>${escapeHtml(item.cn)}</strong></span> |
                   <span>￥${Number(item.price || 0).toFixed(2)}</span> |
@@ -1266,13 +1286,19 @@
 
       if (editId) {
         const idx = RAW_ITEMS.findIndex(i => String(i.item_id || i.id) === String(editId));
-        if (idx !== -1) RAW_ITEMS[idx] = { ...RAW_ITEMS[idx], name, cn, batch_name, price, quantity, country, status, image_url: imageUrl };
+        if (idx !== -1) {
+          const prevStatus = RAW_ITEMS[idx].status;
+          RAW_ITEMS[idx] = { ...RAW_ITEMS[idx], name, cn, batch_name, price, quantity, country, status, image_url: imageUrl };
+          ensureStockDate(RAW_ITEMS[idx], prevStatus);
+        }
       } else {
-        RAW_ITEMS.unshift({
+        const newItem = {
           item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random()*1000),
           name, cn, batch_name, price, quantity, country, status, image_url: imageUrl,
           created_at: new Date().toISOString()
-        });
+        };
+        ensureStockDate(newItem, null);
+        RAW_ITEMS.unshift(newItem);
       }
 
       await saveDataToSupabase();
@@ -1561,7 +1587,7 @@
       }
 
       if (CURRENT_BATCH_ACTION_TYPE === 'status') {
-        selected.forEach(function(i){ i.status = targetValue; });
+        selected.forEach(function(i){ var prev = i.status; i.status = targetValue; ensureStockDate(i, prev); });
         showToast('已成功将选中的 ' + selected.length + ' 件谷子状态修改为 [' + targetValue + ']！');
       } else if (CURRENT_BATCH_ACTION_TYPE === 'country') {
         selected.forEach(function(i){ i.country = targetValue; });
