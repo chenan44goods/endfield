@@ -736,6 +736,12 @@
     .r-badge.st-已排发    { background:#e3e7ec; color:#64748b; }
     .r-badge.st-未付款    { background:#fbdcdc; color:#991b1b; }
     .r-badge.st-custom   { background:rgba(28,32,38,0.9); color:#fff; }
+    .result-item .r-apply {
+      border: none; background:#15803d; color:#fff; font-size:12px; font-weight:700;
+      padding: 7px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap; font-family: var(--sans);
+      transition: background 0.2s, transform 0.15s;
+    }
+    .result-item .r-apply:hover { background:#166534; transform: translateY(-1px); }
     .result-empty { text-align:center; padding:30px; color:var(--muted); font-size:13px; background:rgba(255,255,255,0.6); border-radius:8px; }
 
     @media (max-width: 900px) {
@@ -908,6 +914,7 @@
             <select id="batchFilter" onchange="filterByBatch()" style="padding:8px 14px; border-radius:8px; border:1px solid rgba(22,24,28,0.12); background:rgba(250,250,250,0.95); color:var(--ink); font-size:13px; font-family:var(--sans); outline:none; min-width:170px;">
               <option value="">全部分类</option>
             </select>
+            <button id="applyAllBtn" onclick="applyAllDispatchable()" style="display:none; padding:8px 16px; border-radius:8px; border:1px solid rgba(21,128,61,0.35); background:#d6f5df; color:#15803d; font-weight:700; font-size:13px; cursor:pointer; font-family:var(--sans); transition:background 0.2s;">⚡ 一键排发</button>
           </div>
         </div>
         <div id="resultList" style="max-height:64vh; overflow-y:auto;"></div>
@@ -1063,8 +1070,10 @@
       const batch = sel ? sel.value : '';
       const items = window.CURRENT_ITEMS || [];
       const filter = batch ? items.filter(i=>String(i.batch_name||'默认批次').trim() === batch) : items;
+      window.CURRENT_VIEW_ITEMS = filter;
       const list = document.getElementById('resultList');
       const stat = document.getElementById('resultStat');
+      const applyAllBtn = document.getElementById('applyAllBtn');
       const totalQty = filter.reduce((a,i)=>a+(Number(i.quantity)||1),0);
       const totalAmt = filter.reduce((a,i)=>a+(Number(i.quantity)||1)*(Number(i.price)||0),0);
       if (currentPanel === 'fee') {
@@ -1075,20 +1084,25 @@
         if (stat) stat.innerText = '共 ' + filter.length + ' 条，总件 ' + totalQty;
       }
       if (!filter.length) {
+        if (applyAllBtn) applyAllBtn.style.display = 'none';
         if (list) list.innerHTML = '<div class="result-empty">该谷子暂无符合条件的数据</div>';
         return;
       }
-      if (list) list.innerHTML = filter.map(it=>{
+      if (applyAllBtn) applyAllBtn.style.display = (currentPanel === 'dispatch') ? 'inline-block' : 'none';
+      if (list) list.innerHTML = filter.map((it, idx)=>{
         const q=Number(it.quantity)||1, pr=Number(it.price)||0;
         const showStatus = currentPanel !== 'fee';
+        const isDispatch = currentPanel === 'dispatch';
         const imgUrl = it.image_url ? String(it.image_url).trim() : '';
         const imgHtml = imgUrl ? '<img class="r-img" src="'+escapeHtml(imgUrl)+'" alt="谷子" loading="lazy" onclick="openImg(this.src)">' : '<div class="r-img-empty">无图</div>';
+        const applyBtn = (isDispatch && String(it.status||'').trim()==='可排发') ? '<button class="r-apply" onclick="applyDispatchItem('+idx+')">申请排发</button>' : '';
         return '<div class="result-item">'+imgHtml+
           '<div class="r-info"><div class="r-name">'+escapeHtml(it.name||'未命名')+'</div>'+
           '<div class="r-meta">'+(it.country||'日本')+' ×'+q+'</div></div>'+
           '<div style="display:flex; align-items:center; gap:12px;">'+
           '<span class="r-price">￥'+(pr*q).toFixed(2)+'</span>'+
           (showStatus ? '<span class="r-badge '+getStatusBadgeClass(it.status)+'">'+escapeHtml(it.status||'未出荷')+'</span>' : '')+
+          applyBtn+
           '</div></div>';
       }).join('');
     }
@@ -1107,6 +1121,61 @@
         '未交':'st-未付款'
       };
       return legacy[s] || 'st-custom';
+    }
+
+    function applyDispatchItem(idx){
+      const items = window.CURRENT_VIEW_ITEMS || [];
+      const it = items[idx];
+      if (!it) return showToast('获取谷子信息失败');
+      if (!confirm('确定申请排发「'+(it.name||'未命名')+'」吗？提交后该谷子状态将变为【待发货】。')) return;
+      submitApply([it]);
+    }
+    function applyAllDispatchable(){
+      const items = (window.CURRENT_ITEMS || []).filter(i=>String(i.status||'').trim()==='可排发');
+      if (!items.length) return showToast('没有可排发的谷子');
+      if (!confirm('确定对 '+items.length+' 件谷子一键提交排发申请吗？提交后这些谷子状态将变为【待发货】。')) return;
+      submitApply(items);
+    }
+    async function submitApply(items){
+      if (window.__APPLY_SUBMITTING) return showToast('正在提交，请勿重复点击！');
+      const key = (document.getElementById('panelKey').value||'').trim();
+      const cn = (document.getElementById('panelCn').value||'').trim();
+      if (!key) return showToast('请输入查询密钥');
+      if (!cn) return showToast('请输入您的 CN');
+      if (!items || !items.length) return showToast('没有可排发的谷子');
+      window.__APPLY_SUBMITTING = true;
+      try {
+        const data = await fetchLeaderData(key);
+        if (!data || !data.length) return showToast('未找到该密钥数据');
+        const row = data[0];
+        let groupData = row.group_data;
+        if (typeof groupData === 'string') { try { groupData = JSON.parse(groupData); } catch(e){ groupData = []; } }
+        if (!Array.isArray(groupData)) groupData = [];
+        let imgData = row.image_data;
+        if (typeof imgData === 'string') { try { imgData = JSON.parse(imgData); } catch(e){ imgData = {}; } }
+        if (!imgData || typeof imgData !== 'object') imgData = {};
+        if (!Array.isArray(imgData.applications)) imgData.applications = [];
+        const targetIds = new Set(items.map(i=>String(i.item_id||i.id)));
+        groupData.forEach(item => { if (targetIds.has(String(item.item_id||item.id))) item.status = '待发货'; });
+        imgData.applications.unshift({
+          id: 'app_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+          type: '排发申请',
+          cn: cn,
+          items: items.map(i=>({ item_id: i.item_id||i.id, name: i.name, quantity: i.quantity||1, country: i.country||'日本' })),
+          note: '',
+          time: new Date().toLocaleString('zh-CN'),
+          status: '待处理'
+        });
+        const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
+        const res = await fetch(SUPABASE_URL + '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key), { method: 'PATCH', headers: h, body: JSON.stringify({ group_data: groupData, image_data: imgData }) });
+        if (!res.ok) { throw new Error('HTTP ' + res.status); }
+        showToast('🎉 排发申请提交成功！谷子已标记为【待发货】');
+        doQuery('dispatch');
+      } catch(e){
+        showToast('提交失败: ' + e.message);
+      } finally {
+        window.__APPLY_SUBMITTING = false;
+      }
     }
 
     function openImg(src){
