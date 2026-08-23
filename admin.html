@@ -908,6 +908,7 @@
     const supabaseClient = (window.supabase || supabase).createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let CURRENT_RECORD_ID = null;
+    let CURRENT_VERSION = null;
     let CURRENT_QUERY_KEY = '4goods';
     let RAW_ITEMS = [];
     let RAW_APPLICATIONS = [];
@@ -1027,12 +1028,13 @@
         const { data, error } = await supabaseClient.from('leader_data').select('*').eq('query_key', CURRENT_QUERY_KEY);
         if (error) return showToast('读取失败: ' + error.message);
         if (!data || data.length === 0) {
-          CURRENT_RECORD_ID = null; RAW_ITEMS = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = [];
+          CURRENT_RECORD_ID = null; CURRENT_VERSION = null; RAW_ITEMS = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = [];
           renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList();
           alert('该密钥暂无数据！'); return;
         }
         const rec = data[0];
         CURRENT_RECORD_ID = rec.id;
+        CURRENT_VERSION = (rec.version !== undefined && rec.version !== null) ? Number(rec.version) : null;
         let gData = rec.group_data;
         if (typeof gData === 'string') { try { gData = JSON.parse(gData); } catch (e) { gData = []; } }
         RAW_ITEMS = Array.isArray(gData) ? gData : [];
@@ -1057,6 +1059,20 @@
           group_data: RAW_ITEMS,
           image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK }
         };
+        if (CURRENT_VERSION !== null) {
+          const nextVersion = (Number(CURRENT_VERSION) || 0) + 1;
+          payload.version = nextVersion;
+          const { data, error } = await supabaseClient.from('leader_data')
+            .update(payload).eq('id', CURRENT_RECORD_ID).eq('version', CURRENT_VERSION).select('id');
+          if (error) { showToast('保存失败: ' + error.message); return false; }
+          if (!data || data.length === 0) {
+            alert('⚠️ 数据已被其他人修改，已自动刷新为最新数据，请重新操作！');
+            await loadDataByQueryKey();
+            return false;
+          }
+          CURRENT_VERSION = nextVersion;
+          return true;
+        }
         const { error } = await supabaseClient.from('leader_data').update(payload).eq('id', CURRENT_RECORD_ID);
         if (error) { showToast('保存失败: ' + error.message); return false; }
         return true;
