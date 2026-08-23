@@ -750,12 +750,24 @@
     }
 
     @media (max-width: 900px) {
-      .page { grid-template-columns: 1fr; }
-      .right { padding: 6vh 6vw; }
-      .query-panel { grid-template-columns: 1fr; overflow-y: auto; }
-      .qp-left { justify-content: flex-start; padding: 7vh 6vw 3vh; }
-      .qp-right { display: flex; min-height: 55vh; padding: 2vh 6vw 8vh; overflow: visible; }
+      body { overflow-y: auto; overflow-x: hidden; }
+      .page { height: auto; min-height: 100vh; overflow: visible; grid-template-columns: 1fr; }
+      .right { padding: 6vh 6vw; justify-content: flex-start; }
+      .query-panel { display: block; overflow-y: auto; }
+      .qp-left { justify-content: flex-start; min-height: 0; padding: 5vh 6vw 2vh; }
+      .qp-right { display: block; min-height: 0; padding: 2vh 5vw 8vh; overflow: visible; }
       .brand-title { font-size: 54px; }
+    }
+
+    @media (max-width: 600px) {
+      .result-item { flex-wrap: wrap; gap: 10px 12px; padding: 12px 14px; }
+      .result-item .r-img, .result-item .r-img-empty { width: 84px; height: 84px; border-radius: 10px; }
+      .result-item .r-info { flex: 1 1 calc(100% - 96px); min-width: 0; }
+      .result-item .r-name { font-size: 15px; }
+      .result-item .r-price { font-size: 14px; }
+      .result-item .r-side { flex: 1 1 100%; justify-content: flex-end; margin-top: 4px; }
+      .result-header { flex-wrap: wrap; gap: 8px; }
+      .result-header > div { flex-wrap: wrap; }
     }
   </style>
 </head>
@@ -907,7 +919,7 @@
       <!-- 查询结果悬浮在背景图上 -->
       <div id="queryResultOverlay" style="display:none; width:min(820px, 88%);">
         <!-- 顶部筛选栏：右上角谷子名称筛选 -->
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:14px;">
+        <div class="result-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:14px;">
           <span id="resultStat" style="font-size:13px; color:#fff; font-weight:600; letter-spacing:0.06em; text-shadow:0 1px 6px rgba(0,0,0,0.35);"></span>
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="font-size:11px; letter-spacing:0.12em; color:#fff; opacity:0.9; text-shadow:0 1px 6px rgba(0,0,0,0.35);">BATCH · 分类筛选</span>
@@ -1099,7 +1111,7 @@
         return '<div class="result-item">'+imgHtml+
           '<div class="r-info"><div class="r-name">'+escapeHtml(it.name||'未命名')+'</div>'+
           '<div class="r-meta">'+(it.country||'日本')+' ×'+q+'</div></div>'+
-          '<div style="display:flex; align-items:center; gap:12px;">'+
+          '<div class="r-side" style="display:flex; align-items:center; gap:12px;">'+
           '<span class="r-price">￥'+(pr*q).toFixed(2)+'</span>'+
           (showStatus ? '<span class="r-badge '+getStatusBadgeClass(it.status)+'">'+escapeHtml(it.status||'未出荷')+'</span>' : '')+
           applyBtn+
