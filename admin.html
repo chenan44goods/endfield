@@ -1129,7 +1129,7 @@
             RAW_FEEDBACK = Array.isArray(freshImg.feedback) ? freshImg.feedback : RAW_FEEDBACK;
             updateBatchDropdownOptions();
             renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList();
-            if (myNew.length > 0) alert('✅ 检测到其他人已保存，已自动合并保留你新录入的 ' + myNew.length + ' 条谷子！其它修改以最新数据为准。');
+            if (myNew.length > 0) alert('✅ 已保存！检测到其他管理同时操作，已自动合并保留你新录入的 ' + myNew.length + ' 条谷子，其它修改以最新数据为准。');
             else alert('⚠️ 数据已被其他人修改，已刷新为最新数据，请重新操作。');
             return true;
           }
@@ -1713,6 +1713,20 @@
     window.batchDeleteItems = batchDeleteItems;
 
     // 🚀 核心：动态智能矩阵表格解析算法（已彻底修复 cnColIdx 变量名与格式对齐）
+    function dedupeParsedItems(parsedItems) {
+      const seen = new Set();
+      RAW_ITEMS.forEach(function(it){
+        seen.add(String(it.cn||'').trim() + '|' + String(it.name||'').trim() + '|' + String(it.batch_name||'').trim() + '|' + (it.quantity||1));
+      });
+      const fresh = [];
+      let skipped = 0;
+      parsedItems.forEach(function(it){
+        const k = String(it.cn||'').trim() + '|' + String(it.name||'').trim() + '|' + String(it.batch_name||'').trim() + '|' + (it.quantity||1);
+        if (seen.has(k)) { skipped++; } else { seen.add(k); fresh.push(it); }
+      });
+      return { fresh: fresh, skipped: skipped };
+    }
+
     function parseMatrixImportText(raw, batchCountry, batchName) {
       if (!raw) return [];
       const lines = raw.split(/\r?\n/).map(l => l.replace(/\r/g, '')).filter(l => l.trim().length > 0);
@@ -1851,11 +1865,14 @@
             });
           }
           if (parsedItems.length === 0) return showToast('未读取到有效谷子排单数据！');
-          RAW_ITEMS.push(...parsedItems);
+          const dedup = dedupeParsedItems(parsedItems);
+          if (dedup.fresh.length === 0) { e.target.value = ''; return showToast('本次内容与现有数据完全重复，已自动跳过，未重复导入！'); }
+          RAW_ITEMS.push(...dedup.fresh);
           await saveDataToSupabase();
           updateBatchDropdownOptions();
+          CURRENT_PAGE = Math.max(1, Math.ceil(RAW_ITEMS.length / PAGE_SIZE));
           renderTable();
-          showToast(`🎉 成功导入 ${parsedItems.length} 条谷子记录！`);
+          showToast(`🎉 成功导入 ${dedup.fresh.length} 条谷子记录${dedup.skipped ? '，跳过重复 ' + dedup.skipped + ' 条' : ''}！`);
           e.target.value = '';
         } catch (err) { showToast('Excel 解析失败！'); }
       };
@@ -1883,12 +1900,15 @@
       if (batchName) localStorage.setItem('LAST_IMPORT_BATCH', batchName);
       const parsedItems = parseMatrixImportText(rawText, defaultCountry, batchName);
       if (parsedItems.length === 0) return showToast('解析失败，请检查格式！');
-      RAW_ITEMS.push(...parsedItems);
+      const dedup = dedupeParsedItems(parsedItems);
+      if (dedup.fresh.length === 0) { closePasteModal(); return showToast('本次内容与现有数据完全重复，已自动跳过，未重复导入！'); }
+      RAW_ITEMS.push(...dedup.fresh);
       await saveDataToSupabase();
       updateBatchDropdownOptions();
+      CURRENT_PAGE = Math.max(1, Math.ceil(RAW_ITEMS.length / PAGE_SIZE));
       renderTable();
       closePasteModal();
-      showToast(`🎉 成功导入 ${parsedItems.length} 条记录！`);
+      showToast(`🎉 成功导入 ${dedup.fresh.length} 条记录${dedup.skipped ? '，跳过重复 ' + dedup.skipped + ' 条' : ''}！`);
     }
     window.submitPasteImport = submitPasteImport;
 
