@@ -555,9 +555,11 @@
             <!-- 所属批次字段 -->
             <div class="form-group">
               <label for="inputBatch">所属批次</label>
-              <input type="text" id="inputBatch" list="batchPresets" placeholder="如：台湾711 / 日本场贩" value="默认批次">
+              <select id="inputBatch">
+                <option value="默认批次">默认批次</option>
+              </select>
               <datalist id="batchPresets">
-                <!-- 动态自动填充 -->
+                <!-- 动态自动填充（粘贴导入联想用） -->
               </datalist>
             </div>
             <div class="form-group">
@@ -578,10 +580,9 @@
             <!-- 状态字段 -->
             <div class="form-group">
               <label for="inputStatus">状态 (选择预设或输入)</label>
-              <input type="text" id="inputStatus" list="statusPresets" placeholder="选择或输入状态" value="未出荷">
-              <datalist id="statusPresets">
+              <select id="inputStatus">
                 <!-- 动态从 STATUS_OPTIONS 生成 -->
-              </datalist>
+              </select>
             </div>
 
             <!-- 图片上传区域 -->
@@ -937,12 +938,28 @@
       checkAuthStatus();
     });
 
+    function ensureSelectOption(selectId, value) {
+      const sel = document.getElementById(selectId);
+      if (!sel || !value) return;
+      let found = false;
+      for (let i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === value) { found = true; break; }
+      }
+      if (!found) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.text = value;
+        sel.add(opt);
+      }
+      sel.value = value;
+    }
+
     // 动态初始化全页面的选项
     function initGlobalOptions() {
-      // 1. 渲染录入表单的状态 datalist
-      const statusPresets = document.getElementById('statusPresets');
-      if (statusPresets) {
-        statusPresets.innerHTML = STATUS_OPTIONS.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
+      // 1. 渲染录入表单的状态 select
+      const inputStatus = document.getElementById('inputStatus');
+      if (inputStatus) {
+        inputStatus.innerHTML = STATUS_OPTIONS.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
       }
 
       // 2. 渲染筛选器的状态 datalist
@@ -955,6 +972,12 @@
       const inputCountry = document.getElementById('inputCountry');
       if (inputCountry) {
         inputCountry.innerHTML = COUNTRY_OPTIONS.map(c => `<option value="${c}">${c}</option>`).join('');
+      }
+
+      // 3.5 渲染录入表单的批次 select（加载数据后由 updateBatchDropdownOptions 刷新）
+      const inputBatch = document.getElementById('inputBatch');
+      if (inputBatch) {
+        inputBatch.innerHTML = '<option value="默认批次">默认批次</option>';
       }
 
       // 4. 渲染筛选器的地区 select
@@ -1128,6 +1151,13 @@
         }
       });
       const list = Array.from(batchSet).filter(b => b === '默认批次' || removed.indexOf(b) === -1);
+
+      const inputBatchSel = document.getElementById('inputBatch');
+      if (inputBatchSel) {
+        const curBatch = inputBatchSel.value || '默认批次';
+        inputBatchSel.innerHTML = list.map(b => '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>').join('');
+        ensureSelectOption('inputBatch', curBatch);
+      }
 
       const dl = document.getElementById('batchPresets');
       const filterSel = document.getElementById('filterBatch');
@@ -1371,11 +1401,11 @@
       document.getElementById('editItemId').value = item.item_id || item.id;
       document.getElementById('inputName').value = item.name || '';
       document.getElementById('inputCn').value = item.cn || '';
-      document.getElementById('inputBatch').value = item.batch_name || '默认批次';
+      ensureSelectOption('inputBatch', item.batch_name || '默认批次');
       document.getElementById('inputPrice').value = item.price || 0;
       document.getElementById('inputQuantity').value = item.quantity || 1;
-      document.getElementById('inputCountry').value = item.country || '日本';
-      document.getElementById('inputStatus').value = item.status || '未出荷';
+      ensureSelectOption('inputCountry', item.country || '日本');
+      ensureSelectOption('inputStatus', item.status || '未出荷');
       document.getElementById('inputImageUrl').value = item.image_url || '';
       updateImagePreview(item.image_url || '');
       document.getElementById('formTitle').innerText = '✏️ 修改谷子信息';
