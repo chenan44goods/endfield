@@ -911,6 +911,7 @@
     let CURRENT_RECORD_ID = null;
     let CURRENT_VERSION = null;
     let DELETED_ITEM_IDS = new Set();
+    let DIRTY_ITEM_IDS = new Set();
     let CURRENT_QUERY_KEY = '4goods';
     let RAW_ITEMS = [];
     let RAW_APPLICATIONS = [];
@@ -1047,6 +1048,7 @@
       const keyInput = document.getElementById('adminQueryKey').value.trim();
       if (!keyInput) return showToast('请输入 Query Key！');
       DELETED_ITEM_IDS.clear();
+      DIRTY_ITEM_IDS.clear();
       CURRENT_QUERY_KEY = keyInput;
       localStorage.setItem('ADMIN_QUERY_KEY', CURRENT_QUERY_KEY);
       try {
@@ -1108,10 +1110,21 @@
             let freshItems = freshRec.group_data;
             if (typeof freshItems === 'string') { try { freshItems = JSON.parse(freshItems); } catch (e) { freshItems = []; } }
             if (!Array.isArray(freshItems)) freshItems = [];
-            const freshMap = {};
-            freshItems.forEach(function(it){ freshMap[String(it.item_id || it.id)] = true; });
-            const myNew = RAW_ITEMS.filter(function(it){ return !freshMap[String(it.item_id || it.id)]; });
-            const merged = freshItems.concat(myNew).filter(function(it){ return !DELETED_ITEM_IDS.has(String(it.item_id || it.id)); });
+            const freshById = {};
+            freshItems.forEach(function(it){ freshById[String(it.item_id || it.id)] = it; });
+            const mergedArr = [];
+            const seenIds = {};
+            let myNewCount = 0;
+            RAW_ITEMS.forEach(function(it){
+              const id = String(it.item_id || it.id);
+              if (!freshById[id]) { myNewCount++; }
+              if (!freshById[id] || DIRTY_ITEM_IDS.has(id)) { mergedArr.push(it); seenIds[id] = true; }
+            });
+            freshItems.forEach(function(it){
+              const id = String(it.item_id || it.id);
+              if (!seenIds[id]) { mergedArr.push(it); seenIds[id] = true; }
+            });
+            const merged = mergedArr.filter(function(it){ return !DELETED_ITEM_IDS.has(String(it.item_id || it.id)); });
             const retry = await supabaseClient.from('leader_data')
               .update({ group_data: merged, version: freshVersion + 1 })
               .eq('id', freshRec.id).eq('version', freshVersion).select('id');
@@ -1127,23 +1140,32 @@
             CURRENT_VERSION = freshVersion + 1;
             RAW_ITEMS = merged;
             DELETED_ITEM_IDS.clear();
+            DIRTY_ITEM_IDS.clear();
+        DIRTY_ITEM_IDS.clear();
+          DIRTY_ITEM_IDS.clear();
+      DIRTY_ITEM_IDS.clear();
             RAW_APPLICATIONS = Array.isArray(freshImg.applications) ? freshImg.applications : RAW_APPLICATIONS;
             RAW_LOGS = Array.isArray(freshImg.transfer_logs) ? freshImg.transfer_logs : RAW_LOGS;
             RAW_FEEDBACK = Array.isArray(freshImg.feedback) ? freshImg.feedback : RAW_FEEDBACK;
             updateBatchDropdownOptions();
             renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList();
-            if (myNew.length > 0) alert('✅ 已保存！检测到其他管理同时操作，已自动合并保留你新录入的 ' + myNew.length + ' 条谷子，其它修改以最新数据为准。');
-            else if (DELETED_ITEM_IDS.size > 0) alert('✅ 已保存！检测到其他管理同时操作，已自动合并保留你的删除操作。');
+            if (myNewCount > 0) alert('✅ 已保存！检测到其他管理同时操作，已自动合并保留你新录入的 ' + myNewCount + ' 条谷子，其它修改以最新数据为准。');
+            else if (DIRTY_ITEM_IDS.size > 0 || DELETED_ITEM_IDS.size > 0) alert('✅ 已保存！检测到其他管理同时操作，已自动合并保留你的修改/删除操作。');
             else alert('⚠️ 数据已被其他人修改，已刷新为最新数据，请重新操作。');
             return true;
           }
           CURRENT_VERSION = nextVersion;
           DELETED_ITEM_IDS.clear();
+        DIRTY_ITEM_IDS.clear();
+          DIRTY_ITEM_IDS.clear();
+      DIRTY_ITEM_IDS.clear();
           return true;
         }
         const { error } = await supabaseClient.from('leader_data').update(payload).eq('id', CURRENT_RECORD_ID);
         if (error) { showToast('保存失败: ' + error.message); return false; }
         DELETED_ITEM_IDS.clear();
+        DIRTY_ITEM_IDS.clear();
+      DIRTY_ITEM_IDS.clear();
         return true;
       } catch (err) { showToast('保存异常'); return false; }
     }
@@ -1382,6 +1404,7 @@
           const prevStatus = RAW_ITEMS[idx].status;
           RAW_ITEMS[idx] = { ...RAW_ITEMS[idx], name, cn, batch_name, price, quantity, country, status, image_url: imageUrl };
           ensureStockDate(RAW_ITEMS[idx], prevStatus);
+          DIRTY_ITEM_IDS.add(String(RAW_ITEMS[idx].item_id || RAW_ITEMS[idx].id));
         }
       } else {
         const newItem = {
@@ -1450,8 +1473,10 @@
 
       if (transferQty === currentQty) {
         item.cn = newCn.trim();
+        DIRTY_ITEM_IDS.add(String(item.item_id || item.id));
       } else {
         item.quantity = currentQty - transferQty;
+        DIRTY_ITEM_IDS.add(String(item.item_id || item.id));
         RAW_ITEMS.unshift({
           ...item,
           item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
@@ -1496,7 +1521,7 @@
       const newCn = prompt(`共选中 ${selected.length} 件谷子，请输入转入的新 CN：`);
       if (!newCn || !newCn.trim()) return;
       selected.forEach(item => {
-        const oldCn = item.cn; item.cn = newCn.trim();
+        const oldCn = item.cn; item.cn = newCn.trim(); DIRTY_ITEM_IDS.add(String(item.item_id || item.id));
         RAW_LOGS.unshift({ id: 'log_' + Date.now() + '_' + Math.floor(Math.random()*100), time: new Date().toLocaleString('zh-CN'), from_cn: oldCn, to_cn: item.cn, item_name: item.name, quantity: item.quantity || 1 });
       });
       await saveDataToSupabase(); renderTable(); renderTransferLogs(); showToast('批量转单成功！');
@@ -1679,14 +1704,14 @@
       }
 
       if (CURRENT_BATCH_ACTION_TYPE === 'status') {
-        selected.forEach(function(i){ var prev = i.status; i.status = targetValue; ensureStockDate(i, prev); });
+        selected.forEach(function(i){ var prev = i.status; i.status = targetValue; ensureStockDate(i, prev); DIRTY_ITEM_IDS.add(String(i.item_id || i.id)); });
         showToast('已成功将选中的 ' + selected.length + ' 件谷子状态修改为 [' + targetValue + ']！');
       } else if (CURRENT_BATCH_ACTION_TYPE === 'country') {
-        selected.forEach(function(i){ i.country = targetValue; });
+        selected.forEach(function(i){ i.country = targetValue; DIRTY_ITEM_IDS.add(String(i.item_id || i.id)); });
         showToast('已成功将选中的 ' + selected.length + ' 件谷子地区修改为 [' + targetValue + ']！');
       } else if (CURRENT_BATCH_ACTION_TYPE === 'batch') {
         if (targetValue === '__DELETE_BATCH__' || targetValue === '__PRUNE_EMPTY__' || targetValue === '__NEW__' || targetValue === '__RESTORE_OPTIONS__') return;
-        selected.forEach(function(i){ i.batch_name = targetValue; });
+        selected.forEach(function(i){ i.batch_name = targetValue; DIRTY_ITEM_IDS.add(String(i.item_id || i.id)); });
         showToast('已成功将选中的 ' + selected.length + ' 件谷子批次修改为 [' + targetValue + ']！');
       }
 
@@ -1703,7 +1728,7 @@
       if (selected.length === 0) return showToast('请先勾选谷子！');
       const url = prompt('请输入图片 URL 链接：');
       if (!url) return;
-      selected.forEach(i => i.image_url = url.trim());
+      selected.forEach(i => { i.image_url = url.trim(); DIRTY_ITEM_IDS.add(String(i.item_id || i.id)); });
       await saveDataToSupabase(); renderTable(); showToast('批量补图成功！');
     }
     window.batchSetImgModal = batchSetImgModal;
@@ -1986,7 +2011,7 @@
       if (!app) return;
       app.status = '已完成';
       const targetItemIds = new Set((app.items || []).map(i => String(i.item_id || i.id)));
-      RAW_ITEMS.forEach(item => { if (targetItemIds.has(String(item.item_id || item.id))) item.status = '已排发'; });
+      RAW_ITEMS.forEach(item => { if (targetItemIds.has(String(item.item_id || item.id))) { item.status = '已排发'; DIRTY_ITEM_IDS.add(String(item.item_id || item.id)); } });
       await saveDataToSupabase(); renderDispatchWorkbench(); renderTable(); showToast('已确认发货！');
     }
     window.confirmDispatchAppByIndex = confirmDispatchAppByIndex;
