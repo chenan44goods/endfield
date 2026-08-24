@@ -744,6 +744,30 @@
     .result-item .r-apply:hover { background:#166534; transform: translateY(-1px); }
     .result-empty { text-align:center; padding:30px; color:var(--muted); font-size:13px; background:rgba(255,255,255,0.6); border-radius:8px; }
 
+    /* ===== 垂直聚焦缩放轮播 Vertical Focus Carousel ===== */
+    .result-carousel {
+      position: relative;
+      height: 72vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scroll-snap-type: y mandatory;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      padding: 36vh 8px 36vh;      /* 上下留白：让首尾卡片也能吸附到正中 */
+      scrollbar-width: none;
+    }
+    .result-carousel::-webkit-scrollbar { display: none; }
+    .result-carousel .result-item {
+      scroll-snap-align: center;
+      margin: 0 auto 22px;
+      width: 100%;
+      border-radius: 16px;
+      box-shadow: 0 12px 34px rgba(0,0,0,0.26);
+      transform-origin: center center;
+      will-change: transform;
+      transition: none;            /* 缩放由 rAF 连续驱动，避免拖影 */
+    }
+
     @media (max-width: 900px) {
       .hud-rule.left, .hud-panel, .hud-baseline { display: none; }
       .hud-note { white-space: normal; width: 90%; font-size: 11px; padding: 8px 16px; bottom: 20px; }
@@ -761,6 +785,7 @@
     }
 
     @media (max-width: 600px) {
+      .result-carousel { height: 58vh; padding: 28vh 6px 28vh; }
       .result-item { flex-wrap: wrap; gap: 10px 12px; padding: 12px 14px; }
       .result-item .r-img, .result-item .r-img-empty { width: 84px; height: 84px; border-radius: 10px; }
       .result-item .r-info { flex: 1 1 calc(100% - 96px); min-width: 0; }
@@ -930,7 +955,7 @@
             <button id="applyAllBtn" onclick="applyAllDispatchable()" style="display:none; padding:8px 16px; border-radius:8px; border:1px solid rgba(21,128,61,0.35); background:#d6f5df; color:#15803d; font-weight:700; font-size:13px; cursor:pointer; font-family:var(--sans); transition:background 0.2s;">⚡ 一键排发</button>
           </div>
         </div>
-        <div id="resultList" style="max-height:64vh; overflow-y:auto;"></div>
+        <div id="resultList" class="result-carousel"></div>
       </div>
     </div>
   </div>
@@ -1099,6 +1124,7 @@
       if (!filter.length) {
         if (applyAllBtn) applyAllBtn.style.display = 'none';
         if (list) list.innerHTML = '<div class="result-empty">该谷子暂无符合条件的数据</div>';
+        updateCarousel();
         return;
       }
       if (applyAllBtn) applyAllBtn.style.display = (currentPanel === 'dispatch') ? 'inline-block' : 'none';
@@ -1118,6 +1144,7 @@
           applyBtn+
           '</div></div>';
       }).join('');
+      updateCarousel();
     }
 
     function escapeHtml(str){ return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1190,6 +1217,31 @@
         window.__APPLY_SUBMITTING = false;
       }
     }
+
+    // ===== 垂直聚焦缩放轮播：卡片离容器中心越近 scale 越大（中心=1，边缘最小=0.8） =====
+    let __carouselRaf = null;
+    function updateCarousel(){
+      const c = document.getElementById('resultList');
+      if (!c) return;
+      const center = c.clientHeight / 2;
+      const half = Math.max(center, 1);
+      const cards = c.querySelectorAll('.result-item');
+      for (let i = 0; i < cards.length; i++){
+        const card = cards[i];
+        const cardCenter = card.offsetTop + card.offsetHeight / 2 - c.scrollTop;
+        const k = Math.min(1, Math.abs(cardCenter - center) / half);
+        card.style.transform = 'scale(' + (1 - k * 0.2).toFixed(4) + ')';
+      }
+    }
+    function onCarouselScroll(){
+      if (__carouselRaf) return;
+      __carouselRaf = requestAnimationFrame(function(){ __carouselRaf = null; updateCarousel(); });
+    }
+    (function initCarousel(){
+      const rl = document.getElementById('resultList');
+      if (rl) rl.addEventListener('scroll', onCarouselScroll);
+      window.addEventListener('resize', updateCarousel);
+    })();
 
     function openImg(src){
       const m = document.createElement('div');
