@@ -457,6 +457,40 @@
       flex-direction: column;
       justify-content: center;
     }
+    /* 查询表单折叠交互 */
+    .qp-left-inner {
+      overflow: hidden;
+      transition: max-height 0.55s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease;
+      max-height: none;
+      opacity: 1;
+    }
+    .query-panel.folded .qp-left-inner {
+      opacity: 0;
+    }
+    .query-panel.folded .qp-left {
+      padding-top: 2vh;
+      padding-bottom: 2vh;
+    }
+    .fold-form-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      margin-top: 14px;
+      padding: 10px 0;
+      border: 1px solid rgba(22,24,28,0.16);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.96);
+      color: var(--ink);
+      font-size: 14px;
+      letter-spacing: 0.14em;
+      cursor: pointer;
+      font-family: var(--sans);
+      text-transform: uppercase;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .fold-form-btn:hover { background: #f3f4f6; }
     .qp-back {
       position: absolute;
       top: 34px;
@@ -901,6 +935,7 @@
   <!-- 自助查询面板 -->
   <div class="query-panel" id="queryPanel">
     <div class="qp-left">
+      <div class="qp-left-inner" id="qpLeftInner">
       <span class="qp-back" onclick="closePanel()">← 返回</span>
       <div>
         <div class="qp-sub">AS / INQUIRY · QUERY</div>
@@ -940,6 +975,8 @@
           <span>PROCEED SEARCH</span>
         </button>
       </div>
+      </div>
+      <button type="button" id="foldFormBtn" class="fold-form-btn" style="display:none" onclick="toggleFormFold()">▲</button>
     </div>
     <div class="qp-right">
       <!-- 查询结果悬浮在背景图上 -->
@@ -1096,9 +1133,12 @@
         if (!items.length) {
           const emptyText = mode==='fee' ? '没有待交款项，感谢配合' : (mode==='dispatch' ? '暂无待排发的谷子' : '未找到该 CN 的谷子记录');
           list.innerHTML = '<div class="result-empty">' + emptyText + '</div>';
+          const foldBtn = document.getElementById('foldFormBtn');
+          if (foldBtn) { foldBtn.style.display = 'none'; }
           return;
         }
         filterByBatch();
+        showFormFold();
       } catch(e){ showToast('查询异常: '+e.message); }
     }
 
@@ -1274,6 +1314,46 @@
     };
 
     let currentPanel = 'query';
+    // 查询表单折叠 / 展开（仅在有查询结果时显示）
+    function toggleFormFold(){
+      const panel = document.getElementById('queryPanel');
+      const inner = document.getElementById('qpLeftInner');
+      const btn = document.getElementById('foldFormBtn');
+      if (!panel || !inner || !btn) return;
+      const folded = panel.classList.toggle('folded');
+      if (folded) {
+        inner.style.maxHeight = '0px';
+        btn.textContent = '▼';
+        btn.title = '展开查询表单';
+      } else {
+        inner.style.maxHeight = inner.scrollHeight + 'px';
+        btn.textContent = '▲';
+        btn.title = '折叠查询表单';
+      }
+    }
+    window.toggleFormFold = toggleFormFold;
+
+    function showFormFold(){
+      const panel = document.getElementById('queryPanel');
+      const inner = document.getElementById('qpLeftInner');
+      const btn = document.getElementById('foldFormBtn');
+      if (!panel || !inner || !btn) return;
+      btn.style.display = 'flex';
+      panel.classList.remove('folded');
+      inner.style.maxHeight = inner.scrollHeight + 'px';
+      btn.textContent = '▲';
+      btn.title = '折叠查询表单';
+    }
+    window.showFormFold = showFormFold;
+
+    window.addEventListener('resize', function(){
+      const panel = document.getElementById('queryPanel');
+      const inner = document.getElementById('qpLeftInner');
+      if (panel && inner && !panel.classList.contains('folded')) {
+        inner.style.maxHeight = inner.scrollHeight + 'px';
+      }
+    });
+
     function openPanel(type){
       // 切换面板时先隐藏并清空遗留的查询结果，避免数据表卡住
       const overlay = document.getElementById('queryResultOverlay');
@@ -1341,6 +1421,12 @@
       const rList = document.getElementById('resultList');
       if (rList) rList.innerHTML = '';
       document.getElementById('queryPanel').classList.remove('open');
+      const foldBtn = document.getElementById('foldFormBtn');
+      if (foldBtn) { foldBtn.style.display = 'none'; }
+      const qpInner = document.getElementById('qpLeftInner');
+      if (qpInner) { qpInner.style.maxHeight = 'none'; }
+      const qPanel = document.getElementById('queryPanel');
+      if (qPanel) { qPanel.classList.remove('folded'); }
     }
     function panelAction(){
       const fn = PANEL_ACTIONS[currentPanel];
