@@ -1093,46 +1093,55 @@
             .update(payload).eq('id', CURRENT_RECORD_ID).eq('version', CURRENT_VERSION).select('id');
           if (error) { showToast('保存失败: ' + error.message); return false; }
           if (!data || data.length === 0) {
-            // 冲突：拉取最新数据，自动保留自己新录入的谷子后重试
-            const fresh = await supabaseClient.from('leader_data').select('*').eq('query_key', CURRENT_QUERY_KEY);
-            if (fresh.error || !fresh.data || fresh.data.length === 0) {
-              alert('⚠️ 数据已被其他人修改，且读取最新数据失败，请刷新后重试！');
+            // 冲突：循环拉取最新数据并合并保存（最多 6 次），避免后台写库频繁导致失败
+            let mergedApplied = false;
+            let mergeResult = null;
+            for (let mi = 0; mi < 6; mi++) {
+              const fresh = await supabaseClient.from('leader_data').select('*').eq('query_key', CURRENT_QUERY_KEY);
+              if (fresh.error || !fresh.data || fresh.data.length === 0) break;
+              const freshRec = fresh.data[0];
+              const freshVersion = (freshRec.version !== undefined && freshRec.version !== null) ? Number(freshRec.version) : null;
+              if (freshVersion === null) break;
+              let freshItems = freshRec.group_data;
+              if (typeof freshItems === 'string') { try { freshItems = JSON.parse(freshItems); } catch (e) { freshItems = []; } }
+              if (!Array.isArray(freshItems)) freshItems = [];
+              const freshById = {};
+              freshItems.forEach(function(it){ freshById[String(it.item_id || it.id)] = it; });
+              const mergedArr = [];
+              const seenIds = {};
+              let myNewCount = 0;
+              RAW_ITEMS.forEach(function(it){
+                const id = String(it.item_id || it.id);
+                if (!freshById[id]) { myNewCount++; }
+                if (!freshById[id] || DIRTY_ITEM_IDS.has(id)) { mergedArr.push(it); seenIds[id] = true; }
+              });
+              freshItems.forEach(function(it){
+                const id = String(it.item_id || it.id);
+                if (!seenIds[id]) { mergedArr.push(it); seenIds[id] = true; }
+              });
+              const merged = mergedArr.filter(function(it){ return !DELETED_ITEM_IDS.has(String(it.item_id || it.id)); });
+              const retry = await supabaseClient.from('leader_data')
+                .update({ group_data: merged, version: freshVersion + 1 })
+                .eq('id', freshRec.id).eq('version', freshVersion).select('id');
+              if (retry.error || !retry.data || retry.data.length === 0) {
+                await new Promise(r => setTimeout(r, 300));
+                continue;
+              }
+              mergedApplied = true;
+              mergeResult = { freshRec: freshRec, freshVersion: freshVersion, merged: merged, myNewCount: myNewCount };
+              break;
+            }
+            if (!mergedApplied || !mergeResult) {
+              alert('⚠️ 数据持续被更新，已自动刷新为最新数据，请重新操作！');
               await loadDataByQueryKey();
               return false;
             }
-            const freshRec = fresh.data[0];
-            const freshVersion = (freshRec.version !== undefined && freshRec.version !== null) ? Number(freshRec.version) : null;
-            if (freshVersion === null) {
-              alert('⚠️ 数据已被其他人修改，已自动刷新为最新数据，请重新操作！');
-              await loadDataByQueryKey();
-              return false;
-            }
-            let freshItems = freshRec.group_data;
-            if (typeof freshItems === 'string') { try { freshItems = JSON.parse(freshItems); } catch (e) { freshItems = []; } }
-            if (!Array.isArray(freshItems)) freshItems = [];
-            const freshById = {};
-            freshItems.forEach(function(it){ freshById[String(it.item_id || it.id)] = it; });
-            const mergedArr = [];
-            const seenIds = {};
-            let myNewCount = 0;
-            RAW_ITEMS.forEach(function(it){
-              const id = String(it.item_id || it.id);
-              if (!freshById[id]) { myNewCount++; }
-              if (!freshById[id] || DIRTY_ITEM_IDS.has(id)) { mergedArr.push(it); seenIds[id] = true; }
-            });
-            freshItems.forEach(function(it){
-              const id = String(it.item_id || it.id);
-              if (!seenIds[id]) { mergedArr.push(it); seenIds[id] = true; }
-            });
-            const merged = mergedArr.filter(function(it){ return !DELETED_ITEM_IDS.has(String(it.item_id || it.id)); });
-            const retry = await supabaseClient.from('leader_data')
-              .update({ group_data: merged, version: freshVersion + 1 })
-              .eq('id', freshRec.id).eq('version', freshVersion).select('id');
-            if (retry.error || !retry.data || retry.data.length === 0) {
-              alert('⚠️ 数据一直在被别人修改，已自动刷新为最新数据，请重新操作！');
-              await loadDataByQueryKey();
-              return false;
-            }
+            const freshRec = mergeResult.freshRec;
+            const freshVersion = mergeResult.freshVersion;
+            const merged = mergeResult.merged;
+            const myNewCount = mergeResult.myNewCount;
+            const hadDirty = DIRTY_ITEM_IDS.size > 0;
+            const hadDeleted = DELETED_ITEM_IDS.size > 0;
             let freshImg = freshRec.image_data;
             if (typeof freshImg === 'string') { try { freshImg = JSON.parse(freshImg); } catch (e) { freshImg = {}; } }
             if (!freshImg || typeof freshImg !== 'object') freshImg = {};
@@ -1141,20 +1150,17 @@
             RAW_ITEMS = merged;
             DELETED_ITEM_IDS.clear();
             DIRTY_ITEM_IDS.clear();
-        DIRTY_ITEM_IDS.clear();
-          DIRTY_ITEM_IDS.clear();
-      DIRTY_ITEM_IDS.clear();
             RAW_APPLICATIONS = Array.isArray(freshImg.applications) ? freshImg.applications : RAW_APPLICATIONS;
             RAW_LOGS = Array.isArray(freshImg.transfer_logs) ? freshImg.transfer_logs : RAW_LOGS;
             RAW_FEEDBACK = Array.isArray(freshImg.feedback) ? freshImg.feedback : RAW_FEEDBACK;
             updateBatchDropdownOptions();
             renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList();
-            if (myNewCount > 0) alert('✅ 已保存！检测到其他管理同时操作，已自动合并保留你新录入的 ' + myNewCount + ' 条谷子，其它修改以最新数据为准。');
-            else if (DIRTY_ITEM_IDS.size > 0 || DELETED_ITEM_IDS.size > 0) alert('✅ 已保存！检测到其他管理同时操作，已自动合并保留你的修改/删除操作。');
-            else alert('⚠️ 数据已被其他人修改，已刷新为最新数据，请重新操作。');
+            if (myNewCount > 0) alert('✅ 已保存！检测到数据有更新，已自动合并保留你新录入的 ' + myNewCount + ' 条谷子，其它修改以最新数据为准。');
+            else if (hadDirty || hadDeleted) alert('✅ 已保存！检测到数据有更新，已自动合并保留你的修改/删除操作。');
+            else alert('⚠️ 检测到数据有更新，已刷新为最新数据，请重新操作。');
             return true;
           }
-          CURRENT_VERSION = nextVersion;
+                    CURRENT_VERSION = nextVersion;
           DELETED_ITEM_IDS.clear();
         DIRTY_ITEM_IDS.clear();
           DIRTY_ITEM_IDS.clear();
