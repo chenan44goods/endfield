@@ -910,6 +910,7 @@
 
     let CURRENT_RECORD_ID = null;
     let CURRENT_VERSION = null;
+    let DELETED_ITEM_IDS = new Set();
     let CURRENT_QUERY_KEY = '4goods';
     let RAW_ITEMS = [];
     let RAW_APPLICATIONS = [];
@@ -1045,6 +1046,7 @@
     async function loadDataByQueryKey() {
       const keyInput = document.getElementById('adminQueryKey').value.trim();
       if (!keyInput) return showToast('请输入 Query Key！');
+      DELETED_ITEM_IDS.clear();
       CURRENT_QUERY_KEY = keyInput;
       localStorage.setItem('ADMIN_QUERY_KEY', CURRENT_QUERY_KEY);
       try {
@@ -1109,7 +1111,7 @@
             const freshMap = {};
             freshItems.forEach(function(it){ freshMap[String(it.item_id || it.id)] = true; });
             const myNew = RAW_ITEMS.filter(function(it){ return !freshMap[String(it.item_id || it.id)]; });
-            const merged = freshItems.concat(myNew);
+            const merged = freshItems.concat(myNew).filter(function(it){ return !DELETED_ITEM_IDS.has(String(it.item_id || it.id)); });
             const retry = await supabaseClient.from('leader_data')
               .update({ group_data: merged, version: freshVersion + 1 })
               .eq('id', freshRec.id).eq('version', freshVersion).select('id');
@@ -1124,20 +1126,24 @@
             CURRENT_RECORD_ID = freshRec.id;
             CURRENT_VERSION = freshVersion + 1;
             RAW_ITEMS = merged;
+            DELETED_ITEM_IDS.clear();
             RAW_APPLICATIONS = Array.isArray(freshImg.applications) ? freshImg.applications : RAW_APPLICATIONS;
             RAW_LOGS = Array.isArray(freshImg.transfer_logs) ? freshImg.transfer_logs : RAW_LOGS;
             RAW_FEEDBACK = Array.isArray(freshImg.feedback) ? freshImg.feedback : RAW_FEEDBACK;
             updateBatchDropdownOptions();
             renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList();
             if (myNew.length > 0) alert('✅ 已保存！检测到其他管理同时操作，已自动合并保留你新录入的 ' + myNew.length + ' 条谷子，其它修改以最新数据为准。');
+            else if (DELETED_ITEM_IDS.size > 0) alert('✅ 已保存！检测到其他管理同时操作，已自动合并保留你的删除操作。');
             else alert('⚠️ 数据已被其他人修改，已刷新为最新数据，请重新操作。');
             return true;
           }
           CURRENT_VERSION = nextVersion;
+          DELETED_ITEM_IDS.clear();
           return true;
         }
         const { error } = await supabaseClient.from('leader_data').update(payload).eq('id', CURRENT_RECORD_ID);
         if (error) { showToast('保存失败: ' + error.message); return false; }
+        DELETED_ITEM_IDS.clear();
         return true;
       } catch (err) { showToast('保存异常'); return false; }
     }
@@ -1707,6 +1713,7 @@
       if (selected.length === 0) return showToast('请先勾选谷子！');
       if (!confirm(`确定彻底删除选中的 ${selected.length} 件谷子吗？`)) return;
       const deleteIds = new Set(selected.map(i => String(i.item_id || i.id)));
+      deleteIds.forEach(id => DELETED_ITEM_IDS.add(id));
       RAW_ITEMS = RAW_ITEMS.filter(i => !deleteIds.has(String(i.item_id || i.id)));
       await saveDataToSupabase(); updateBatchDropdownOptions(); renderTable(); showToast('已彻底删除选中谷子！');
     }
@@ -1996,6 +2003,7 @@
       const app = window.APP_CACHE[appIndex];
       if (!app || !confirm('确定删除此发货记录吗？将联动删除排表中对应谷子！')) return;
       const targetItemIds = new Set((app.items || []).map(i => String(i.item_id || i.id)));
+      targetItemIds.forEach(id => DELETED_ITEM_IDS.add(id));
       RAW_ITEMS = RAW_ITEMS.filter(item => !targetItemIds.has(String(item.item_id || item.id)));
       RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
       await saveDataToSupabase(); updateBatchDropdownOptions(); renderDispatchWorkbench(); renderTable(); showToast('已彻底删除！');
