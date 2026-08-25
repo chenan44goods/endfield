@@ -528,6 +528,7 @@
 
     <div class="nav-tabs">
       <button class="tab-btn active" onclick="switchTab('tabItems')">📊 排表管理 (group_data)</button>
+      <button class="tab-btn" onclick="switchTab('tabLogistics')">🌍 国际运费 (logistics_data)</button>
       <button class="tab-btn" onclick="switchTab('tabDispatch')">🚀 排发工作台 (applications)</button>
       <button class="tab-btn" onclick="switchTab('tabLogs')">🔄 转单日志 (transfer_logs)</button>
       <button class="tab-btn" onclick="switchTab('tabFeedback')">📮 匿名反馈箱 (feedback)</button>
@@ -686,6 +687,49 @@
       </div>
     </div>
 
+    <!-- 标签页 1.5：国际运费 -->
+    <div class="tab-content" id="tabLogistics">
+      <div class="card">
+        <div class="card-title">
+          <span>🌍 国际运费导入 (logistics_data)</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div>
+            <label style="font-size:0.82rem; color:var(--text-muted); font-weight:600;">粘贴格式：第一行批次名，第二行表头 cn / 柄图 / 数量 / 国际，之后每行一个团员</label>
+            <textarea id="logisticsInputText" rows="10" style="width:100%; font-family:monospace; font-size:0.82rem; margin-top:6px;" placeholder="加拿大加开ax展亚克力砖国际&#10;cn&#9;柄图&#9;数量&#9;国际&#10;et&#9;加开ax展亚克力砖伊冯&#9;1&#9;24.65"></textarea>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button class="btn btn-primary" onclick="submitLogisticsImport()">解析并导入 logistics_data</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>📦 国际运费批次列表 (logistics_data)</span>
+          <span id="logisticsStats" style="font-size:0.85rem; color:var(--text-muted);"></span>
+        </div>
+        <div class="table-container desktop-table-view">
+          <table>
+            <thead>
+              <tr>
+                <th>批次名称</th>
+                <th>总人数</th>
+                <th>未交</th>
+                <th>已交</th>
+                <th>免交</th>
+                <th>应收 (元)</th>
+                <th>实收 (元)</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="logisticsTableBody"></tbody>
+          </table>
+        </div>
+        <div class="mobile-cards-view" id="logisticsMobileCardsView"></div>
+      </div>
+    </div>
+
     <!-- 标签页 2：排发工作台 -->
     <div class="tab-content" id="tabDispatch">
       <div class="card">
@@ -775,6 +819,26 @@
             <button class="btn btn-primary" onclick="copyMemberLink()">📋 复制团员自查专属链接</button>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 国际运费批次明细 Modal -->
+  <div class="modal-overlay" id="logisticsDetailModal">
+    <div class="modal" style="max-width: 720px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 id="logisticsDetailTitle" style="font-size: 1.1rem; font-weight: 700;">🌍 国际运费批次明细</h3>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeLogisticsDetail()">✕</button>
+      </div>
+      <div style="margin-bottom: 10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <span id="logisticsDetailSummary" style="font-size:0.85rem; color:var(--text-muted);"></span>
+        <button class="btn btn-success" onclick="markAllLogisticsPaid()">全部标记已交</button>
+      </div>
+      <div class="table-container" style="max-height:60vh; overflow:auto;">
+        <table>
+          <thead><tr><th>CN</th><th>柄图</th><th>数量</th><th>应收 (元)</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody id="logisticsDetailBody"></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -917,6 +981,9 @@
     let RAW_APPLICATIONS = [];
     let RAW_LOGS = [];
     let RAW_FEEDBACK = [];
+    let RAW_LOGISTICS = [];
+    let LOGISTICS_DELETED_BATCHES = new Set();
+    let LOGISTICS_DETAIL_INDEX = -1;
     let CURRENT_DISPATCH_SUBTAB = 'pending';
 
     window.ITEM_CACHE = [];
@@ -1038,6 +1105,7 @@
       const targetEl = document.getElementById(tabId);
       if (targetEl) targetEl.classList.add('active');
       if (tabId === 'tabItems') renderTable();
+      if (tabId === 'tabLogistics') renderLogistics();
       if (tabId === 'tabDispatch') renderDispatchWorkbench();
       if (tabId === 'tabLogs') renderTransferLogs();
       if (tabId === 'tabFeedback') renderFeedbackList();
@@ -1055,8 +1123,9 @@
         const { data, error } = await supabaseClient.from('leader_data').select('*').eq('query_key', CURRENT_QUERY_KEY);
         if (error) return showToast('读取失败: ' + error.message);
         if (!data || data.length === 0) {
-          CURRENT_RECORD_ID = null; CURRENT_VERSION = null; RAW_ITEMS = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = [];
-          renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList();
+          CURRENT_RECORD_ID = null; CURRENT_VERSION = null; RAW_ITEMS = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = []; RAW_LOGISTICS = [];
+          LOGISTICS_DELETED_BATCHES.clear();
+          renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics(); renderLogistics();
           alert('该密钥暂无数据！'); return;
         }
         const rec = data[0];
@@ -1071,10 +1140,11 @@
         RAW_APPLICATIONS = Array.isArray(iData.applications) ? iData.applications : [];
         RAW_LOGS = Array.isArray(iData.transfer_logs) ? iData.transfer_logs : [];
         RAW_FEEDBACK = Array.isArray(iData.feedback) ? iData.feedback : [];
+        RAW_LOGISTICS = Array.isArray(iData.logistics_data) ? iData.logistics_data : [];
         showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)`);
         CURRENT_PAGE = 1;
         updateBatchDropdownOptions();
-        renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList();
+        renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
       } catch (err) { showToast('数据加载网络异常'); }
     }
     window.loadDataByQueryKey = loadDataByQueryKey;
@@ -1084,7 +1154,7 @@
       try {
         const payload = {
           group_data: RAW_ITEMS,
-          image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK }
+          image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK, logistics_data: RAW_LOGISTICS }
         };
         if (CURRENT_VERSION !== null) {
           const nextVersion = (Number(CURRENT_VERSION) || 0) + 1;
@@ -1120,15 +1190,20 @@
                 if (!seenIds[id]) { mergedArr.push(it); seenIds[id] = true; }
               });
               const merged = mergedArr.filter(function(it){ return !DELETED_ITEM_IDS.has(String(it.item_id || it.id)); });
+              let freshImg2 = freshRec.image_data;
+              if (typeof freshImg2 === 'string') { try { freshImg2 = JSON.parse(freshImg2); } catch (e) { freshImg2 = {}; } }
+              if (!freshImg2 || typeof freshImg2 !== 'object') freshImg2 = {};
+              const freshLogistics = Array.isArray(freshImg2.logistics_data) ? freshImg2.logistics_data : [];
+              freshImg2.logistics_data = mergeLogisticsData(freshLogistics, RAW_LOGISTICS, LOGISTICS_DELETED_BATCHES);
               const retry = await supabaseClient.from('leader_data')
-                .update({ group_data: merged, version: freshVersion + 1 })
+                .update({ group_data: merged, image_data: freshImg2, version: freshVersion + 1 })
                 .eq('id', freshRec.id).eq('version', freshVersion).select('id');
               if (retry.error || !retry.data || retry.data.length === 0) {
                 await new Promise(r => setTimeout(r, 300));
                 continue;
               }
               mergedApplied = true;
-              mergeResult = { freshRec: freshRec, freshVersion: freshVersion, merged: merged, myNewCount: myNewCount };
+              mergeResult = { freshRec: freshRec, freshVersion: freshVersion, merged: merged, mergedLogistics: freshImg2.logistics_data, myNewCount: myNewCount };
               break;
             }
             if (!mergedApplied || !mergeResult) {
@@ -1148,13 +1223,15 @@
             CURRENT_RECORD_ID = freshRec.id;
             CURRENT_VERSION = freshVersion + 1;
             RAW_ITEMS = merged;
+            RAW_LOGISTICS = mergeResult.mergedLogistics || RAW_LOGISTICS;
+            LOGISTICS_DELETED_BATCHES.clear();
             DELETED_ITEM_IDS.clear();
             DIRTY_ITEM_IDS.clear();
             RAW_APPLICATIONS = Array.isArray(freshImg.applications) ? freshImg.applications : RAW_APPLICATIONS;
             RAW_LOGS = Array.isArray(freshImg.transfer_logs) ? freshImg.transfer_logs : RAW_LOGS;
             RAW_FEEDBACK = Array.isArray(freshImg.feedback) ? freshImg.feedback : RAW_FEEDBACK;
             updateBatchDropdownOptions();
-            renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList();
+            renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
             if (myNewCount > 0) alert('✅ 已保存！检测到数据有更新，已自动合并保留你新录入的 ' + myNewCount + ' 条谷子，其它修改以最新数据为准。');
             else if (hadDirty || hadDeleted) alert('✅ 已保存！检测到数据有更新，已自动合并保留你的修改/删除操作。');
             else alert('⚠️ 检测到数据有更新，已刷新为最新数据，请重新操作。');
@@ -1165,6 +1242,7 @@
         DIRTY_ITEM_IDS.clear();
           DIRTY_ITEM_IDS.clear();
       DIRTY_ITEM_IDS.clear();
+          LOGISTICS_DELETED_BATCHES.clear();
           return true;
         }
         const { error } = await supabaseClient.from('leader_data').update(payload).eq('id', CURRENT_RECORD_ID);
@@ -1172,6 +1250,7 @@
         DELETED_ITEM_IDS.clear();
         DIRTY_ITEM_IDS.clear();
       DIRTY_ITEM_IDS.clear();
+        LOGISTICS_DELETED_BATCHES.clear();
         return true;
       } catch (err) { showToast('保存异常'); return false; }
     }
@@ -2180,6 +2259,196 @@
       RAW_FEEDBACK = []; await saveDataToSupabase(); renderFeedbackList(); showToast('已清空！');
     }
     window.clearAllFeedback = clearAllFeedback;
+
+    /* --- 标签页 1.5：国际运费 logistics_data --- */
+    function mergeLogisticsData(freshList, myList, deletedSet) {
+      const byName = {};
+      (Array.isArray(freshList) ? freshList : []).forEach(b => {
+        if (b && b.batch_name && !deletedSet.has(b.batch_name)) byName[b.batch_name] = b;
+      });
+      (Array.isArray(myList) ? myList : []).forEach(b => {
+        if (b && b.batch_name) byName[b.batch_name] = b;
+      });
+      return Object.keys(byName).map(k => byName[k]);
+    }
+
+    function parseLogisticsImportText(rawText) {
+      if (!rawText || !rawText.trim()) return null;
+      const lines = String(rawText).split(/\r?\n/).map(l => l.replace(/\u3000/g, ' ').trimEnd());
+      const nonEmpty = lines.map((l, i) => ({ l: l.trim(), i })).filter(x => x.l);
+      if (nonEmpty.length < 3) return null;
+      const batchName = nonEmpty[0].l;
+      if (!batchName) return null;
+      let headerIdx = -1;
+      for (let k = 1; k < nonEmpty.length; k++) {
+        const lower = nonEmpty[k].l.toLowerCase();
+        if (lower.includes('cn') && (lower.includes('国际') || lower.includes('金额') || lower.includes('费用'))) { headerIdx = k; break; }
+      }
+      if (headerIdx === -1) headerIdx = 1;
+      const members = [];
+      for (let k = headerIdx + 1; k < nonEmpty.length; k++) {
+        const row = nonEmpty[k].l;
+        if (['合计', '总计', '总金额', '总数', '平均', '应收', '实收', '已收', '未收', '备注'].some(w => row.includes(w))) continue;
+        const cols = row.split(/\t+/).map(x => x.trim()).filter(x => x !== '');
+        if (cols.length === 0) continue;
+        const cn = cols[0];
+        if (!cn || (cols.length === 1 && /^[0-9.]+$/.test(cn))) continue;
+        let itemName = cols[1] || '';
+        let qty = parseFloat((cols[2] || '1').replace(/[^\d.-]/g, '')) || 1;
+        let amount = 0;
+        if (cols.length >= 4) {
+          amount = parseFloat((cols[3] || '0').replace(/[^\d.-]/g, '')) || 0;
+        } else if (cols.length === 2) {
+          amount = parseFloat((cols[1] || '0').replace(/[^\d.-]/g, '')) || 0;
+          itemName = '';
+        } else if (cols.length === 3) {
+          amount = parseFloat((cols[2] || '0').replace(/[^\d.-]/g, '')) || 0;
+        }
+        if (amount <= 0) continue;
+        members.push({
+          id: 'log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+          cn: cn,
+          item_name: itemName,
+          quantity: Math.max(1, qty),
+          amount_due: Math.round(amount * 100) / 100,
+          amount_paid: 0,
+          status: '未交',
+          created_at: new Date().toISOString()
+        });
+      }
+      if (members.length === 0) return null;
+      return { batch_name: batchName, fee_members: members };
+    }
+    window.parseLogisticsImportText = parseLogisticsImportText;
+
+    async function submitLogisticsImport() {
+      const rawText = document.getElementById('logisticsInputText').value;
+      const parsed = parseLogisticsImportText(rawText);
+      if (!parsed) return showToast('解析失败！请按格式粘贴：第一行批次名，第二行 cn 柄图 数量 国际，后面是数据行');
+      LOGISTICS_DELETED_BATCHES.delete(parsed.batch_name);
+      const existingIdx = RAW_LOGISTICS.findIndex(b => b && b.batch_name === parsed.batch_name);
+      if (existingIdx !== -1) {
+        if (!confirm('批次「' + parsed.batch_name + '」已存在，确定用本次数据整批替换吗？')) return;
+        RAW_LOGISTICS[existingIdx].fee_members = parsed.fee_members;
+        RAW_LOGISTICS[existingIdx].updated_at = new Date().toISOString();
+      } else {
+        RAW_LOGISTICS.push({ batch_name: parsed.batch_name, fee_members: parsed.fee_members, created_at: new Date().toISOString() });
+      }
+      await saveDataToSupabase();
+      renderLogistics();
+      showToast('✅ 国际运费批次「' + parsed.batch_name + '」已导入 ' + parsed.fee_members.length + ' 条记录！');
+    }
+    window.submitLogisticsImport = submitLogisticsImport;
+
+    function logisticsBatchStats(batch) {
+      const members = Array.isArray(batch.fee_members) ? batch.fee_members : [];
+      let unpaid = 0, paid = 0, free = 0, due = 0, recv = 0;
+      members.forEach(m => {
+        const st = String(m.status || '').trim();
+        const dueAmt = Number(m.amount_due || 0);
+        const paidAmt = Number(m.amount_paid || 0);
+        due += dueAmt; recv += paidAmt;
+        if (st === '未交') unpaid++;
+        else if (st === '已交') paid++;
+        else if (st === '免交') free++;
+      });
+      return { total: members.length, unpaid: unpaid, paid: paid, free: free, due: Math.round(due * 100) / 100, recv: Math.round(recv * 100) / 100 };
+    }
+
+    function renderLogistics() {
+      const tbody = document.getElementById('logisticsTableBody');
+      const mobileView = document.getElementById('logisticsMobileCardsView');
+      const statsEl = document.getElementById('logisticsStats');
+      if (!tbody) return;
+      let totalMembers = 0, unpaidTotal = 0, dueTotal = 0;
+      RAW_LOGISTICS.forEach(b => { const s = logisticsBatchStats(b); totalMembers += s.total; unpaidTotal += s.unpaid; dueTotal += s.due; });
+      if (statsEl) statsEl.innerText = '共 ' + RAW_LOGISTICS.length + ' 个批次 / ' + totalMembers + ' 人 / 未交 ' + unpaidTotal + ' 人 / 应收 ￥' + dueTotal.toFixed(2);
+      if (RAW_LOGISTICS.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);">暂无国际运费数据，请先在上方导入</td></tr>';
+        if (mobileView) mobileView.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted);">暂无国际运费数据</div>';
+        return;
+      }
+      let html = '', cardsHtml = '';
+      RAW_LOGISTICS.forEach((batch, index) => {
+        const s = logisticsBatchStats(batch);
+        const batchName = batch.batch_name || '未命名批次';
+        html += '<tr><td style="font-weight:600;">' + escapeHtml(batchName) + '</td><td>' + s.total + '</td><td style="color:#dc2626; font-weight:600;">' + s.unpaid + '</td><td style="color:#16a34a;">' + s.paid + '</td><td style="color:#64748b;">' + s.free + '</td><td>￥' + s.due.toFixed(2) + '</td><td>￥' + s.recv.toFixed(2) + '</td><td><button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem;" onclick="openLogisticsDetail(' + index + ')">明细</button> <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogisticsBatch(' + index + ')">删除</button></td></tr>';
+        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(batchName) + '</span><span class="badge ' + (s.unpaid > 0 ? 'badge-status-未付款' : 'badge-status-可排发') + '">未交 ' + s.unpaid + '</span></div><div style="font-size:0.9rem; padding:6px 0;">共 ' + s.total + ' 人 | 未交 ' + s.unpaid + ' | 应收 ￥' + s.due.toFixed(2) + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openLogisticsDetail(' + index + ')">📋 明细</button> <button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteLogisticsBatch(' + index + ')">🗑️ 删除</button></div></div>';
+      });
+      tbody.innerHTML = html;
+      if (mobileView) mobileView.innerHTML = cardsHtml;
+    }
+    window.renderLogistics = renderLogistics;
+
+    function openLogisticsDetail(index) {
+      const batch = RAW_LOGISTICS[index];
+      if (!batch) return;
+      LOGISTICS_DETAIL_INDEX = index;
+      document.getElementById('logisticsDetailTitle').innerText = '🌍 国际运费明细 - ' + (batch.batch_name || '未命名批次');
+      const members = Array.isArray(batch.fee_members) ? batch.fee_members : [];
+      const s = logisticsBatchStats(batch);
+      document.getElementById('logisticsDetailSummary').innerText = '共 ' + s.total + ' 人 | 未交 ' + s.unpaid + ' | 已交 ' + s.paid + ' | 免交 ' + s.free + ' | 应收 ￥' + s.due.toFixed(2) + ' | 实收 ￥' + s.recv.toFixed(2);
+      const tbody = document.getElementById('logisticsDetailBody');
+      if (members.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">该批次暂无成员记录</td></tr>';
+      } else {
+        tbody.innerHTML = members.map((m, i) => {
+          const st = String(m.status || '未交').trim();
+          const stBadge = st === '已交' ? 'badge-status-已排发' : (st === '免交' ? 'badge-status-custom' : 'badge-status-未付款');
+          let ops = '';
+          if (st !== '已交') ops += '<button class="btn btn-success" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'已交\')">标已交</button> ';
+          if (st !== '免交') ops += '<button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'免交\')">免交</button> ';
+          if (st !== '未交') ops += '<button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'未交\')">改未交</button>';
+          return '<tr><td><strong>' + escapeHtml(m.cn) + '</strong></td><td>' + escapeHtml(m.item_name || '国际运费') + '</td><td>' + (m.quantity || 1) + '</td><td>￥' + Number(m.amount_due || 0).toFixed(2) + '</td><td><span class="badge ' + stBadge + '">' + escapeHtml(st) + '</span></td><td>' + ops + '</td></tr>';
+        }).join('');
+      }
+      document.getElementById('logisticsDetailModal').classList.add('active');
+    }
+    window.openLogisticsDetail = openLogisticsDetail;
+
+    function closeLogisticsDetail() { document.getElementById('logisticsDetailModal').classList.remove('active'); }
+    window.closeLogisticsDetail = closeLogisticsDetail;
+
+    async function setLogisticsMemberStatus(memberIdx, status) {
+      const batch = RAW_LOGISTICS[LOGISTICS_DETAIL_INDEX];
+      if (!batch || !Array.isArray(batch.fee_members)) return;
+      const m = batch.fee_members[memberIdx];
+      if (!m) return;
+      m.status = status;
+      if (status === '已交') { m.amount_paid = Number(m.amount_due || 0); m.paid_at = new Date().toISOString(); }
+      if (status === '未交') { m.amount_paid = 0; delete m.paid_at; }
+      await saveDataToSupabase();
+      renderLogistics();
+      openLogisticsDetail(LOGISTICS_DETAIL_INDEX);
+      showToast('已将 ' + m.cn + ' 标记为 [' + status + ']');
+    }
+    window.setLogisticsMemberStatus = setLogisticsMemberStatus;
+
+    async function markAllLogisticsPaid() {
+      const batch = RAW_LOGISTICS[LOGISTICS_DETAIL_INDEX];
+      if (!batch || !Array.isArray(batch.fee_members)) return;
+      if (!confirm('确定将批次「' + (batch.batch_name || '') + '」全部成员标记为已交吗？')) return;
+      batch.fee_members.forEach(m => {
+        if (String(m.status || '').trim() !== '免交') { m.status = '已交'; m.amount_paid = Number(m.amount_due || 0); m.paid_at = new Date().toISOString(); }
+      });
+      await saveDataToSupabase();
+      renderLogistics();
+      openLogisticsDetail(LOGISTICS_DETAIL_INDEX);
+      showToast('该批次已全部标记已交！');
+    }
+    window.markAllLogisticsPaid = markAllLogisticsPaid;
+
+    async function deleteLogisticsBatch(index) {
+      const batch = RAW_LOGISTICS[index];
+      if (!batch) return;
+      if (!confirm('确定删除国际运费批次「' + (batch.batch_name || '') + '」吗？不可恢复！')) return;
+      LOGISTICS_DELETED_BATCHES.add(batch.batch_name);
+      RAW_LOGISTICS.splice(index, 1);
+      await saveDataToSupabase();
+      renderLogistics();
+      showToast('国际运费批次已删除！');
+    }
+    window.deleteLogisticsBatch = deleteLogisticsBatch;
 
     function copyMemberLink() {
       const url = `${window.location.origin}/index.html?key=${encodeURIComponent(CURRENT_QUERY_KEY)}`;
