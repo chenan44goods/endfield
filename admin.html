@@ -560,27 +560,17 @@
               <label for="inputCn">认领 CN (圈名) *</label>
               <input type="text" id="inputCn" required placeholder="如：小明">
             </div>
-            <!-- 所属批次/制品（新批次体系：下拉绑定 batch_id，禁止手输；默认仅活跃，可打开归档开关） -->
-            <div class="form-group" style="grid-column: 1 / -1;">
-              <label style="font-size:0.85rem; display:flex; align-items:center; gap:6px;">
-                <input type="checkbox" id="batchIncludeArchived" onchange="updateBatchDropdownOptions()"> 显示归档批次
+            <!-- 所属批次字段（默认只加载未完成未完全收款批次，勾选后显示已收款完结批次） -->
+            <div class="form-group" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <div style="flex:1; min-width:220px;">
+                <label for="inputBatchId">所属批次</label>
+                <select id="inputBatchId" onchange="handleBatchSelectChange()">
+                  <option value="">请选择批次</option>
+                </select>
+              </div>
+              <label style="font-size:0.85rem; display:flex; align-items:center; gap:4px; margin-top:16px;">
+                <input type="checkbox" id="batchIncludeArchived" onchange="updateBatchDropdownOptions()"> 显示已收款完结批次
               </label>
-            </div>
-            <div class="form-group">
-              <label for="inputBatchDisk">所属批次</label>
-              <select id="inputBatchDisk" onchange="handleBatchDiskChange()">
-                <option value="">请选择所属批次</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="inputBatchGoods">制品名称</label>
-              <select id="inputBatchGoods" onchange="handleBatchGoodsChange()">
-                <option value="">请先选择所属批次</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="inputOpenDate">开团日期</label>
-              <input type="date" id="inputOpenDate" readonly placeholder="选择批次后自动带出">
             </div>
             <datalist id="batchPresets">
               <!-- 动态自动填充（粘贴导入联想用） -->
@@ -671,9 +661,6 @@
           <select id="filterBatch" style="max-width: 140px;" onchange="onFilterChange()">
             <option value="">全部批次</option>
           </select>
-          <label style="font-size:0.82rem; display:flex; align-items:center; gap:4px;">
-            <input type="checkbox" id="filterIncludeArchived" onchange="updateBatchDropdownOptions()"> 显示归档批次
-          </label>
           
           <select id="filterCountry" style="max-width: 140px;" onchange="onFilterChange()">
             <!-- 动态生成 -->
@@ -781,7 +768,7 @@
           </div>
           <div class="form-group">
             <label for="batchStatus">状态</label>
-            <select id="batchStatus"><option value="活跃">活跃</option><option value="归档">归档</option></select>
+            <select id="batchStatus"><option value="活跃">未完成未完全收款</option><option value="归档">已完全全部收款并完整录入</option></select>
           </div>
           <div class="form-group">
             <label for="batchIdPreview">自动生成 batch_id（无需填写）</label>
@@ -811,8 +798,8 @@
           <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
             <label style="font-size:0.85rem; display:flex; align-items:center; gap:6px;">批次筛选</label>
             <select id="batchFilterMode" onchange="renderBatches()" style="padding:6px 10px; font-size:0.85rem;">
-              <option value="active">仅活跃</option>
-              <option value="archived">仅归档</option>
+              <option value="active">未完成未完全收款</option>
+              <option value="archived">已完全全部收款并完整录入</option>
               <option value="all">全部</option>
             </select>
             <select id="batchDropdown" style="max-width:380px; padding:6px 10px; font-size:0.85rem;"></select>
@@ -967,7 +954,7 @@
         </div>
         <div class="form-group">
           <label for="batchImportStatus">状态</label>
-          <select id="batchImportStatus"><option value="活跃">活跃</option><option value="归档">归档</option></select>
+          <select id="batchImportStatus"><option value="活跃">未完成未完全收款</option><option value="归档">已完全全部收款并完整录入</option></select>
         </div>
       </div>
       <div style="margin-top:10px;">
@@ -991,9 +978,7 @@
       <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 14px;" id="batchModalDesc">
         已选中 0 件谷子
       </p>
-      <label style="font-size:0.85rem; display:flex; align-items:center; gap:6px; margin-bottom:10px;">
-        <input type="checkbox" id="batchModalIncludeArchived" onchange="populateBatchModalSelect()"> 显示归档批次
-      </label>
+
       <div class="form-group" style="margin-bottom: 14px;">
         <label id="batchModalSelectLabel">请选择：</label>
         <select id="batchModalSelect" style="padding: 10px 12px; font-size: 0.95rem;" onchange="handleBatchModalSelectChange()">
@@ -1234,10 +1219,8 @@
       }
 
       // 3.5 渲染录入表单的批次 select（加载数据后由 updateBatchDropdownOptions 刷新）
-      const inputBatchDisk = document.getElementById('inputBatchDisk');
-      if (inputBatchDisk) { inputBatchDisk.innerHTML = '<option value="">请选择所属批次</option>'; }
-      const inputBatchGoods = document.getElementById('inputBatchGoods');
-      if (inputBatchGoods) { inputBatchGoods.innerHTML = '<option value="">请先选择所属批次</option>'; }
+      const inputBatchId = document.getElementById('inputBatchId');
+      if (inputBatchId) { inputBatchId.innerHTML = '<option value="">请选择批次</option>'; }
 
       // 4. 渲染筛选器的地区 select
       const filterCountry = document.getElementById('filterCountry');
@@ -1460,44 +1443,31 @@
       const allBatches = Array.isArray(RAW_BATCHES) ? RAW_BATCHES : [];
       const visibleBatches = allBatches.filter(b => includeArchived || String(b.status || '活跃').trim() !== '归档');
 
-      const diskSel = document.getElementById('inputBatchDisk');
-      if (diskSel) {
-        const curDisk = diskSel.value || '';
-        const disks = [];
+      const inputBatchSel = document.getElementById('inputBatchId');
+      if (inputBatchSel) {
+        const curBatch = inputBatchSel.value || '';
+        let html = '<option value="">请选择批次</option>';
         visibleBatches.forEach(b => {
-          const d = String(b.disk_name || '').trim();
-          if (d && disks.indexOf(d) === -1) disks.push(d);
+          const tag = String(b.disk_tag || '').trim();
+          const label = b.batch_id + ' ' + b.disk_name + ' ' + b.goods_title + (tag ? ' ' + tag : '');
+          html += '<option value="' + escapeHtml(b.batch_id) + '">' + escapeHtml(label) + '</option>';
         });
         legacyList.forEach(b => {
-          if (b !== '默认批次' && disks.indexOf(b) === -1) disks.push(b);
+          if (b === '默认批次') return;
+          html += '<option value="legacy:' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>';
         });
-        diskSel.innerHTML = '<option value="">请选择所属批次</option>' + disks.map(d => '<option value="' + escapeHtml(d) + '">' + escapeHtml(d) + '</option>').join('');
-        if (curDisk) ensureSelectOption('inputBatchDisk', curDisk);
+        inputBatchSel.innerHTML = html;
+        if (curBatch) ensureSelectOption('inputBatchId', curBatch);
       }
-      populateBatchGoodsOptions();
-      const openDateEl = document.getElementById('inputOpenDate');
-      if (openDateEl) openDateEl.value = '';
 
       const dl = document.getElementById('batchPresets');
       const filterSel = document.getElementById('filterBatch');
       const curFilter = filterSel ? filterSel.value : '';
-      const filterIncludeArchived = document.getElementById('filterIncludeArchived')?.checked || false;
-      const filterSet = new Set(['默认批次']);
-      RAW_ITEMS.forEach(i => { const bn = String(i.batch_name || '').trim(); if (bn) filterSet.add(bn); });
-      allBatches.forEach(b => { if (b.disk_name) filterSet.add(b.disk_name); });
-      const filterList = Array.from(filterSet).filter(b => {
-        if (b === '默认批次') return true;
-        if (filterIncludeArchived) return true;
-        if (removed.indexOf(b) !== -1) return false;
-        if (isArchivedBatchName(b)) return false;
-        return true;
-      });
-
       if (dl) {
-        dl.innerHTML = filterList.map(b => '<option value="' + escapeHtml(b) + '">').join('');
+        dl.innerHTML = legacyList.map(b => '<option value="' + escapeHtml(b) + '">').join('');
       }
       if (filterSel) {
-        filterSel.innerHTML = '<option value="">全部批次</option>' + filterList.map(b => '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>').join('');
+        filterSel.innerHTML = '<option value="">全部批次</option>' + legacyList.map(b => '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>').join('');
         filterSel.value = curFilter;
       }
     }
@@ -1691,14 +1661,14 @@
       const editId = document.getElementById('editItemId').value;
       const name = document.getElementById('inputName').value.trim();
       const cn = document.getElementById('inputCn').value.trim();
-      const goodsVal = document.getElementById('inputBatchGoods').value || '';
+      const batchSelVal = document.getElementById('inputBatchId').value || '';
       let batch_name = '默认批次';
       let batch_id = '';
       let open_date = '';
-      if (goodsVal.indexOf('legacy:') === 0) {
-        batch_name = goodsVal.slice(7).trim() || '默认批次';
-      } else if (goodsVal) {
-        const selBatch = RAW_BATCHES.find(x => String(x.batch_id) === String(goodsVal));
+      if (batchSelVal.indexOf('legacy:') === 0) {
+        batch_name = batchSelVal.slice(7).trim() || '默认批次';
+      } else if (batchSelVal) {
+        const selBatch = RAW_BATCHES.find(x => String(x.batch_id) === String(batchSelVal));
         if (selBatch) {
           batch_id = selBatch.batch_id;
           batch_name = (selBatch.disk_name || '').trim() || '默认批次';
@@ -1748,23 +1718,13 @@
       document.getElementById('editItemId').value = item.item_id || item.id;
       document.getElementById('inputName').value = item.name || '';
       document.getElementById('inputCn').value = item.cn || '';
-      const diskSel = document.getElementById('inputBatchDisk');
-      const goodsSel = document.getElementById('inputBatchGoods');
+      const bSel = document.getElementById('inputBatchId');
       if (item.batch_id && RAW_BATCHES.some(x => String(x.batch_id) === String(item.batch_id))) {
-        const b = RAW_BATCHES.find(x => String(x.batch_id) === String(item.batch_id));
-        if (diskSel && b) ensureSelectOption('inputBatchDisk', b.disk_name);
-        populateBatchGoodsOptions();
-        if (goodsSel && b) ensureSelectOption('inputBatchGoods', b.batch_id);
-        document.getElementById('inputOpenDate').value = b ? b.open_date || '' : (item.open_date || '');
+        ensureSelectOption('inputBatchId', item.batch_id);
       } else if (item.batch_name) {
-        if (diskSel) ensureSelectOption('inputBatchDisk', item.batch_name);
-        populateBatchGoodsOptions();
-        if (goodsSel) ensureSelectOption('inputBatchGoods', 'legacy:' + item.batch_name);
-        document.getElementById('inputOpenDate').value = item.open_date || '';
+        ensureSelectOption('inputBatchId', 'legacy:' + item.batch_name);
       } else {
-        if (diskSel) diskSel.value = '';
-        if (goodsSel) goodsSel.value = '';
-        document.getElementById('inputOpenDate').value = '';
+        if (bSel) bSel.value = '';
       }
       document.getElementById('inputPrice').value = item.price || 0;
       document.getElementById('inputQuantity').value = item.quantity || 1;
@@ -1781,11 +1741,8 @@
     function clearForm() {
       document.getElementById('editItemId').value = '';
       document.getElementById('itemForm').reset();
-      const diskSel = document.getElementById('inputBatchDisk');
-      const goodsSel = document.getElementById('inputBatchGoods');
-      if (diskSel) diskSel.value = '';
-      if (goodsSel) goodsSel.value = '';
-      document.getElementById('inputOpenDate').value = '';
+      const inputBatchSel = document.getElementById('inputBatchId');
+      if (inputBatchSel) inputBatchSel.value = '';
       document.getElementById('inputCountry').value = '日本';
       document.getElementById('inputStatus').value = '未出荷';
       document.getElementById('inputImageUrl').value = '';
@@ -1892,28 +1849,22 @@
       return matches.every(function(b){ return String(b.status || '活跃').trim() === '归档'; });
     }
 
-    function buildBatchList(includeArchived) {
+    function buildBatchList() {
       const removed = getRemovedBatchOptions();
       const set = new Set(['默认批次']);
       RAW_ITEMS.forEach(function(i){ if (i.batch_name && i.batch_name.trim()) set.add(i.batch_name.trim()); });
-      return Array.from(set).filter(function(b){
-        if (b === '默认批次') return true;
-        if (removed.indexOf(b) !== -1) return false;
-        if (includeArchived || !isArchivedBatchName(b)) return true;
-        return false;
-      });
+      return Array.from(set).filter(function(b){ return b === '默认批次' || removed.indexOf(b) === -1; });
     }
 
     function populateBatchModalSelect() {
       const selectEl = document.getElementById('batchModalSelect');
       const labelEl = document.getElementById('batchModalSelectLabel');
       labelEl.innerText = '请选择或新建批次：';
-      const includeArchived = document.getElementById('batchModalIncludeArchived')?.checked || false;
-      const batchSet = buildBatchList(includeArchived);
+      const batchSet = buildBatchList();
       let batchHtml = Array.from(batchSet).map(function(b){ return '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>'; }).join('');
       batchHtml += '<option value="__NEW__">➕ 新建批次...</option>';
-      batchHtml += '<option value="__DELETE_BATCH__">🗂 归档某个批次选项（仅隐藏选项，不改谷子）</option>';
-      batchHtml += '<option value="__RESTORE_OPTIONS__">🔄 恢复已归档批次选项</option>';
+      batchHtml += '<option value="__DELETE_BATCH__">❌ 删除某个批次选项（仅从下拉移除，不改谷子）</option>';
+      batchHtml += '<option value="__RESTORE_OPTIONS__">🔄 恢复已移除的批次选项</option>';
       batchHtml += '<option value="__PRUNE_EMPTY__">🧹 清理空批次（仅隐藏没有谷子的批次）</option>';
       selectEl.innerHTML = batchHtml;
     }
@@ -1921,15 +1872,14 @@
     function enterBatchDeleteMode() {
       const selectEl = document.getElementById('batchModalSelect');
       const labelEl = document.getElementById('batchModalSelectLabel');
-      const includeArchived = document.getElementById('batchModalIncludeArchived')?.checked || false;
-      BATCH_DELETE_CANDIDATES = buildBatchList(includeArchived);
+      BATCH_DELETE_CANDIDATES = buildBatchList();
       const removable = BATCH_DELETE_CANDIDATES.filter(function(b){ return b !== '默认批次'; });
       if (removable.length === 0) {
         alert('当前没有可移除的批次选项（除默认批次外没有其它批次）。');
         populateBatchModalSelect();
         return;
       }
-      labelEl.innerText = '请选择要归档隐藏的批次（不会改动你的谷子）：';
+      labelEl.innerText = '请选择要从下拉列表移除的批次（不会改动你的谷子）：';
       let html = '<option value="__BACK__">↙ 返回</option>';
       html += removable.map(function(b){ return '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>'; }).join('');
       selectEl.innerHTML = html;
@@ -1973,8 +1923,6 @@
       } else if (actionType === 'batch') {
         titleEl.innerText = '📦 批量修改所属批次';
         BATCH_DELETE_MODE = false;
-        const archToggle = document.getElementById('batchModalIncludeArchived');
-        if (archToggle) archToggle.checked = false;
         populateBatchModalSelect();
       }
 
@@ -2023,24 +1971,24 @@
       if (CURRENT_BATCH_ACTION_TYPE === 'batch' && BATCH_DELETE_MODE) {
         const delName = targetValue;
         if (!delName || delName === '__BACK__') return;
-        if (!confirm('确定归档隐藏批次 [' + delName + '] 吗？你的谷子数据不会被改动。')) return;
+        if (!confirm('确定从下拉列表移除批次 [' + delName + '] 吗？你的谷子数据不会被改动。')) return;
         addRemovedBatchOption(delName);
         updateBatchDropdownOptions();
         renderTable();
         leaveBatchDeleteMode();
-        showToast('已归档隐藏批次 [' + delName + ']，谷子数据未改动。');
+        showToast('已从下拉列表移除批次 [' + delName + ']，谷子数据未改动。');
         return;
       }
 
       if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__RESTORE_OPTIONS__') {
         const rem = getRemovedBatchOptions();
-        if (rem.length === 0) { alert('当前没有已归档的批次选项。'); return; }
-        if (!confirm('确定恢复所有已归档的批次选项吗？')) return;
+        if (rem.length === 0) { alert('当前没有已移除的批次选项。'); return; }
+        if (!confirm('确定恢复所有已移除的批次选项吗？')) return;
         setRemovedBatchOptions([]);
         updateBatchDropdownOptions();
         renderTable();
         closeBatchSelectModal();
-        showToast('已恢复所有已归档批次选项。');
+        showToast('已恢复所有批次选项。');
         return;
       }
 
@@ -2924,21 +2872,22 @@
         const tag = String(b.disk_tag || '').trim();
         const tagHtml = tag ? escapeHtml(tag) : '<span style="color:#cbd5e1;">—</span>';
         const status = String(b.status || '活跃').trim();
+        const statusLabel = status === '归档' ? '已完全全部收款并完整录入' : '未完成未完全收款';
         const stCls = status === '归档' ? 'badge-status-custom' : 'badge-status-可排发';
         const bid = escapeHtml(String(b.batch_id || ''));
         const archBtn = status === '归档'
-          ? '<button class="btn btn-secondary" style="padding:2px 8px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">恢复活跃</button>'
-          : '<button class="btn btn-secondary" style="padding:2px 8px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">归档</button>';
+          ? '<button class="btn btn-secondary" style="padding:2px 8px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">恢复未完成</button>'
+          : '<button class="btn btn-secondary" style="padding:2px 8px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">标记已完结</button>';
         html += '<tr>'
           + '<td style="font-family:monospace;font-size:0.85rem;">' + escapeHtml(b.batch_id) + '</td>'
           + '<td>' + escapeHtml(b.disk_name) + '</td>'
           + '<td>' + escapeHtml(b.goods_title) + '</td>'
           + '<td>' + tagHtml + '</td>'
           + '<td>' + escapeHtml(b.open_date || '') + '</td>'
-          + '<td><span class="badge ' + stCls + '">' + escapeHtml(status) + '</span></td>'
+          + '<td><span class="badge ' + stCls + '">' + escapeHtml(statusLabel) + '</span></td>'
           + '<td><button class="btn btn-primary" style="padding:2px 8px;font-size:0.8rem;" onclick="copyBatchById(\'' + bid + '\')">复制</button> ' + archBtn + '</td>'
           + '</tr>';
-        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(b.batch_id) + '</span><span class="badge ' + stCls + '">' + escapeHtml(status) + '</span></div><div style="font-size:0.9rem;padding:6px 0;"><strong>' + escapeHtml(b.disk_name) + '</strong><br>' + escapeHtml(b.goods_title) + (tag ? '<br>车次: ' + escapeHtml(tag) : '') + '<br>开团: ' + escapeHtml(b.open_date || '') + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px;font-size:0.8rem;" onclick="copyBatchById(\'' + bid + '\')">复制</button> <button class="btn btn-secondary" style="padding:4px 10px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">' + (status === '归档' ? '恢复活跃' : '归档') + '</button></div></div>';
+        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(b.batch_id) + '</span><span class="badge ' + stCls + '">' + escapeHtml(statusLabel) + '</span></div><div style="font-size:0.9rem;padding:6px 0;"><strong>' + escapeHtml(b.disk_name) + '</strong><br>' + escapeHtml(b.goods_title) + (tag ? '<br>车次: ' + escapeHtml(tag) : '') + '<br>开团: ' + escapeHtml(b.open_date || '') + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px;font-size:0.8rem;" onclick="copyBatchById(\'' + bid + '\')">复制</button> <button class="btn btn-secondary" style="padding:4px 10px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">' + (status === '归档' ? '恢复活跃' : '归档') + '</button></div></div>';
       });
       tbody.innerHTML = html;
       if (mobileView) mobileView.innerHTML = cardsHtml;
@@ -2966,55 +2915,14 @@
       const { error } = await supabaseClient.from('batches').update({ status: next, updated_at: new Date().toISOString() }).eq('id', b.id);
       if (error) return showToast('状态更新失败: ' + error.message);
       await loadBatches();
-      showToast('已' + (next === '归档' ? '归档' : '恢复活跃') + ': ' + b.batch_id);
+      showToast('已' + (next === '归档' ? '标记为已完全全部收款并完整录入' : '恢复为未完成未完全收款') + ': ' + b.batch_id);
     }
     window.toggleBatchStatus = toggleBatchStatus;
 
-    function populateBatchGoodsOptions() {
-      const diskSel = document.getElementById('inputBatchDisk');
-      const goodsSel = document.getElementById('inputBatchGoods');
-      if (!goodsSel) return;
-      const includeArchived = document.getElementById('batchIncludeArchived')?.checked || false;
-      const allBatches = Array.isArray(RAW_BATCHES) ? RAW_BATCHES : [];
-      const visibleBatches = allBatches.filter(b => includeArchived || String(b.status || '活跃').trim() !== '归档');
-      const disk = diskSel ? diskSel.value : '';
-      const curGoods = goodsSel.value || '';
-      let html = '<option value="">请选择制品名称</option>';
-      if (disk) {
-        const matches = visibleBatches.filter(b => String(b.disk_name || '').trim() === disk);
-        matches.forEach(b => {
-          const tag = String(b.disk_tag || '').trim();
-          const label = b.goods_title + (tag ? ' ' + tag : '') + ' ' + (b.open_date || '');
-          html += '<option value="' + escapeHtml(b.batch_id) + '">' + escapeHtml(label) + '</option>';
-        });
-        if (matches.length === 0 && (includeArchived || !isArchivedBatchName(disk))) {
-          html += '<option value="legacy:' + escapeHtml(disk) + '">' + escapeHtml('历史: ' + disk) + '</option>';
-        }
-      }
-      goodsSel.innerHTML = html;
-      if (curGoods) ensureSelectOption('inputBatchGoods', curGoods);
+    function handleBatchSelectChange() {
+      // 选择所属批次后无需额外处理
     }
-    window.populateBatchGoodsOptions = populateBatchGoodsOptions;
-
-    function handleBatchDiskChange() {
-      populateBatchGoodsOptions();
-      const openDateEl = document.getElementById('inputOpenDate');
-      if (openDateEl) openDateEl.value = '';
-    }
-    window.handleBatchDiskChange = handleBatchDiskChange;
-
-    function handleBatchGoodsChange() {
-      const val = document.getElementById('inputBatchGoods')?.value || '';
-      const openDateEl = document.getElementById('inputOpenDate');
-      if (!openDateEl) return;
-      if (val && val.indexOf('legacy:') !== 0) {
-        const b = RAW_BATCHES.find(x => String(x.batch_id) === String(val));
-        openDateEl.value = b ? b.open_date || '' : '';
-      } else {
-        openDateEl.value = '';
-      }
-    }
-    window.handleBatchGoodsChange = handleBatchGoodsChange;
+    window.handleBatchSelectChange = handleBatchSelectChange;
 
     function parsePasteOrderRows(rawText) {
       const lines = String(rawText || '').split(/\r?\n/);
