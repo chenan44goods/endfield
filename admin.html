@@ -638,11 +638,12 @@
               <select id="excelDefaultCountry" style="width: 90px; padding: 4px 8px;">
                 <option value="日本">日本</option><option value="台湾">台湾</option><option value="印尼">印尼</option><option value="泰国">泰国</option><option value="闲鱼">闲鱼</option>
               </select>
+              <label for="pasteBatchName" style="font-size:0.85rem; color:var(--text-muted); font-weight:600;">Excel批次名:</label>
+              <input type="text" id="pasteBatchName" list="batchPresets" placeholder="可选" style="width:150px; padding:4px 8px;">
               <label class="btn btn-success" style="cursor: pointer; margin: 0;">
                 📁 导入 Excel
                 <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleExcelImport(event)">
               </label>
-              <button type="button" class="btn btn-secondary" onclick="openPasteModal()">📋 粘贴表格文本</button>
             </div>
           </div>
         </form>
@@ -1045,27 +1046,6 @@
     </div>
   </div>
 
-  <!-- 粘贴表格文本导入 Modal -->
-  <div class="modal-overlay" id="pasteModal">
-    <div class="modal" style="max-width: 650px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="font-size: 1.1rem; font-weight: 700;">📋 粘贴 Excel / WPS 表格文本导入</h3>
-        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closePasteModal()">✕</button>
-      </div>
-      <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:6px;">
-        💡 支持直接粘贴任意拼盘汇总表（自动识别种类、单价、团员、地区，并精准对齐每列数量）
-      </p>
-            <div style="margin-bottom: 12px;">
-        <label style="font-size:0.82rem; color:var(--text-muted); font-weight:600;">所属分类 / 批次（可选，团员自查可按此筛分）</label>
-        <input type="text" id="pasteBatchName" list="batchPresets" placeholder="如：印尼koi8.23拼盘 / 台湾711 / 日本场贩" style="width:100%; margin-top:6px;">
-      </div>
-<textarea id="pasteInputText" rows="10" placeholder="直接粘贴 Excel 表格复制内容（含制表符 \t 分隔）..." style="font-family: monospace; font-size: 0.82rem; margin-bottom: 12px;"></textarea>
-      <div style="display: flex; justify-content: flex-end; gap: 8px;">
-        <button class="btn btn-secondary" onclick="closePasteModal()">取消</button>
-        <button class="btn btn-primary" onclick="submitPasteImport()">解析并导入 group_data</button>
-      </div>
-    </div>
-  </div>
 
     <div class="tab-content" id="tabCalc">
     <div class="card" style="margin-bottom:12px;">
@@ -1187,6 +1167,7 @@
     let LOGISTICS_DETAIL_INDEX = -1;
     let RAW_BATCHES = [];
     let PENDING_BATCH_TITLES = [];
+    let PENDING_BATCH_RAW = '';
     let CURRENT_DISPATCH_SUBTAB = 'pending';
 
     window.ITEM_CACHE = [];
@@ -2256,37 +2237,6 @@
     }
     window.handleExcelImport = handleExcelImport;
 
-    function openPasteModal() {
-      document.getElementById('pasteInputText').value = '';
-      // 记住上次导入用的批次，避免每次重复输入
-      const lastBatch = localStorage.getItem('LAST_IMPORT_BATCH') || '';
-      const bInput = document.getElementById('pasteBatchName');
-      if (bInput && lastBatch) bInput.value = lastBatch;
-      document.getElementById('pasteModal').classList.add('active');
-    }
-    window.openPasteModal = openPasteModal;
-    function closePasteModal() { document.getElementById('pasteModal').classList.remove('active'); }
-    window.closePasteModal = closePasteModal;
-
-    async function submitPasteImport() {
-      const rawText = document.getElementById('pasteInputText').value;
-      if (!rawText || !rawText.trim()) return showToast('请先粘贴文本内容！');
-      const defaultCountry = document.getElementById('excelDefaultCountry').value || '日本';
-      const batchName = (document.getElementById('pasteBatchName')?.value || '').trim();
-      if (batchName) localStorage.setItem('LAST_IMPORT_BATCH', batchName);
-      const parsedItems = parseMatrixImportText(rawText, defaultCountry, batchName);
-      if (parsedItems.length === 0) return showToast('解析失败，请检查格式！');
-      const dedup = dedupeParsedItems(parsedItems);
-      if (dedup.fresh.length === 0) { closePasteModal(); return showToast('本次内容与现有数据完全重复，已自动跳过，未重复导入！'); }
-      RAW_ITEMS.push(...dedup.fresh);
-      await saveDataToSupabase();
-      updateBatchDropdownOptions();
-      CURRENT_PAGE = Math.max(1, Math.ceil(RAW_ITEMS.length / PAGE_SIZE));
-      renderTable();
-      closePasteModal();
-      showToast(`🎉 成功导入 ${dedup.fresh.length} 条记录${dedup.skipped ? '，跳过重复 ' + dedup.skipped + ' 条' : ''}！`);
-    }
-    window.submitPasteImport = submitPasteImport;
 
     /* --- 标签页 2：排发工作台 --- */
     function switchDispatchSubTab(sub) {
@@ -2827,6 +2777,7 @@
       const titles = parseBatchGoodsTitles(rawText);
       if (titles.length === 0) return showToast('未识别到“种类”行，请确认粘贴的是拼谷助手表格文本');
       PENDING_BATCH_TITLES = titles;
+      PENDING_BATCH_RAW = rawText;
       document.getElementById('batchImportDiskName').value = '';
       document.getElementById('batchImportDiskTag').value = '';
       document.getElementById('batchImportOpenDate').value = '';
@@ -2847,6 +2798,7 @@
       if (!diskName || !openDate || PENDING_BATCH_TITLES.length === 0) return showToast('请填写所属批次和开团日期！');
       let okCount = 0;
       const errors = [];
+      const createdBatches = [];
       for (const title of PENDING_BATCH_TITLES) {
         const res = await insertBatch({
           query_key: CURRENT_QUERY_KEY,
@@ -2859,14 +2811,56 @@
           updated_at: new Date().toISOString(),
           version: 1
         });
-        if (res.ok) okCount++; else errors.push(title + ': ' + res.error);
+        if (res.ok) { okCount++; createdBatches.push({ title: title, batch_id: res.row.batch_id }); }
+        else errors.push(title + ': ' + res.error);
       }
+
+      let syncedItems = 0;
+      const parsed = parsePasteOrderRows(PENDING_BATCH_RAW);
+      if (parsed && parsed.rows.length && createdBatches.length) {
+        const defaultCountry = document.getElementById('excelDefaultCountry')?.value || '其它';
+        const now = new Date().toISOString();
+        const items = [];
+        parsed.rows.forEach(row => {
+          row.qtys.forEach((qty, j) => {
+            if (qty > 0 && createdBatches[j]) {
+              items.push({
+                item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + Math.floor(Math.random() * 1000),
+                name: createdBatches[j].title,
+                cn: row.cn,
+                batch_name: diskName,
+                batch_id: createdBatches[j].batch_id,
+                open_date: openDate,
+                price: parsed.prices[j] || 0,
+                quantity: qty,
+                country: defaultCountry,
+                status: '未出荷',
+                image_url: '',
+                created_at: now
+              });
+            }
+          });
+        });
+        if (items.length) {
+          RAW_ITEMS.push(...items);
+          const saved = await saveDataToSupabase();
+          if (saved) {
+            syncedItems = items.length;
+            updateBatchDropdownOptions();
+            renderTable();
+          } else {
+            errors.push('排表同步失败，请手动检查');
+          }
+        }
+      }
+
       closeBatchImportModal();
       document.getElementById('batchPasteInput').value = '';
       PENDING_BATCH_TITLES = [];
+      PENDING_BATCH_RAW = '';
       await loadBatches();
-      if (errors.length) showToast('完成 ' + okCount + ' 个批次，失败 ' + errors.length + ' 条');
-      else showToast('✅ 已生成 ' + okCount + ' 个批次，仅写入 batch 数据表');
+      if (errors.length) showToast('完成 ' + okCount + ' 个批次，失败 ' + errors.length + ' 条；同步排表 ' + syncedItems + ' 条');
+      else showToast('✅ 已生成 ' + okCount + ' 个批次，并同步排表 ' + syncedItems + ' 条记录！');
     }
     window.confirmBatchImport = confirmBatchImport;
 
@@ -2990,6 +2984,42 @@
       }
     }
     window.handleBatchGoodsChange = handleBatchGoodsChange;
+
+    function parsePasteOrderRows(rawText) {
+      const lines = String(rawText || '').split(/\r?\n/);
+      let colIndexes = [], titles = [], prices = [], cnColIdx = -1, startRow = -1;
+      for (let i = 0; i < lines.length; i++) {
+        const cells = lines[i].replace(/^\t+/, '').split('\t').map(c => c.trim());
+        const first = (cells[0] || '').replace(/[:：]/g, '');
+        if (first.includes('种类')) {
+          cells.slice(1).forEach((c, idx) => {
+            if (c && !/^(默认|合计|总计|总金额|单价|数量|小计)/.test(c)) {
+              colIndexes.push(idx + 1);
+              titles.push(c);
+            }
+          });
+        } else if (first.includes('单价')) {
+          prices = colIndexes.map(j => parseFloat(String(cells[j] === undefined ? '' : cells[j]).replace(/[^\d.-]/g, '')) || 0);
+        } else if (first.includes('总金额') || first.includes('昵称/总数')) {
+          for (let j = 0; j < cells.length; j++) {
+            if (String(cells[j] || '').indexOf('昵称') !== -1 || String(cells[j] || '').indexOf('总数') !== -1) { cnColIdx = j; break; }
+          }
+          startRow = i + 1;
+          break;
+        }
+      }
+      if (!titles.length || cnColIdx < 0 || startRow < 0) return null;
+      const rows = [];
+      for (let i = startRow; i < lines.length; i++) {
+        const cells = lines[i].replace(/^\t+/, '').split('\t').map(c => c.trim());
+        if (cells.length <= cnColIdx) continue;
+        const cn = cells[cnColIdx];
+        if (!cn || /^(总金额|合计|总计)/.test(cn) || cn.indexOf('昵称/总数') !== -1 || cn === '总数') continue;
+        const qtys = colIndexes.map(j => parseFloat(String(cells[cnColIdx + j] === undefined ? '' : cells[cnColIdx + j]).replace(/[^\d.-]/g, '')) || 0);
+        rows.push({ cn: cn, qtys: qtys });
+      }
+      return { titles: titles, prices: prices, rows: rows };
+    }
 
     function copyMemberLink() {
       const url = `${window.location.origin}/index.html?key=${encodeURIComponent(CURRENT_QUERY_KEY)}`;
