@@ -671,6 +671,9 @@
           <select id="filterBatch" style="max-width: 140px;" onchange="onFilterChange()">
             <option value="">全部批次</option>
           </select>
+          <label style="font-size:0.82rem; display:flex; align-items:center; gap:4px;">
+            <input type="checkbox" id="filterIncludeArchived" onchange="updateBatchDropdownOptions()"> 显示归档批次
+          </label>
           
           <select id="filterCountry" style="max-width: 140px;" onchange="onFilterChange()">
             <!-- 动态生成 -->
@@ -1478,9 +1481,17 @@
       const dl = document.getElementById('batchPresets');
       const filterSel = document.getElementById('filterBatch');
       const curFilter = filterSel ? filterSel.value : '';
-      const filterSet = new Set(legacyList);
-      visibleBatches.forEach(b => { if (b.disk_name) filterSet.add(b.disk_name); });
-      const filterList = Array.from(filterSet).filter(b => b === '默认批次' || removed.indexOf(b) === -1 || visibleBatches.some(ab => ab.disk_name === b));
+      const filterIncludeArchived = document.getElementById('filterIncludeArchived')?.checked || false;
+      const filterSet = new Set(['默认批次']);
+      RAW_ITEMS.forEach(i => { const bn = String(i.batch_name || '').trim(); if (bn) filterSet.add(bn); });
+      allBatches.forEach(b => { if (b.disk_name) filterSet.add(b.disk_name); });
+      const filterList = Array.from(filterSet).filter(b => {
+        if (b === '默认批次') return true;
+        if (filterIncludeArchived) return true;
+        if (removed.indexOf(b) !== -1) return false;
+        if (isArchivedBatchName(b)) return false;
+        return true;
+      });
 
       if (dl) {
         dl.innerHTML = filterList.map(b => '<option value="' + escapeHtml(b) + '">').join('');
@@ -1901,8 +1912,8 @@
       const batchSet = buildBatchList(includeArchived);
       let batchHtml = Array.from(batchSet).map(function(b){ return '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>'; }).join('');
       batchHtml += '<option value="__NEW__">➕ 新建批次...</option>';
-      batchHtml += '<option value="__DELETE_BATCH__">❌ 删除某个批次选项（仅从下拉移除，不改谷子）</option>';
-      batchHtml += '<option value="__RESTORE_OPTIONS__">🔄 恢复已移除的批次选项</option>';
+      batchHtml += '<option value="__DELETE_BATCH__">🗂 归档某个批次选项（仅隐藏选项，不改谷子）</option>';
+      batchHtml += '<option value="__RESTORE_OPTIONS__">🔄 恢复已归档批次选项</option>';
       batchHtml += '<option value="__PRUNE_EMPTY__">🧹 清理空批次（仅隐藏没有谷子的批次）</option>';
       selectEl.innerHTML = batchHtml;
     }
@@ -1918,7 +1929,7 @@
         populateBatchModalSelect();
         return;
       }
-      labelEl.innerText = '请选择要从下拉列表移除的批次（不会改动你的谷子）：';
+      labelEl.innerText = '请选择要归档隐藏的批次（不会改动你的谷子）：';
       let html = '<option value="__BACK__">↙ 返回</option>';
       html += removable.map(function(b){ return '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>'; }).join('');
       selectEl.innerHTML = html;
@@ -2012,24 +2023,24 @@
       if (CURRENT_BATCH_ACTION_TYPE === 'batch' && BATCH_DELETE_MODE) {
         const delName = targetValue;
         if (!delName || delName === '__BACK__') return;
-        if (!confirm('确定从下拉列表移除批次 [' + delName + '] 吗？你的谷子数据不会被改动。')) return;
+        if (!confirm('确定归档隐藏批次 [' + delName + '] 吗？你的谷子数据不会被改动。')) return;
         addRemovedBatchOption(delName);
         updateBatchDropdownOptions();
         renderTable();
         leaveBatchDeleteMode();
-        showToast('已从下拉列表移除批次 [' + delName + ']，谷子数据未改动。');
+        showToast('已归档隐藏批次 [' + delName + ']，谷子数据未改动。');
         return;
       }
 
       if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__RESTORE_OPTIONS__') {
         const rem = getRemovedBatchOptions();
-        if (rem.length === 0) { alert('当前没有已移除的批次选项。'); return; }
-        if (!confirm('确定恢复所有已移除的批次选项吗？')) return;
+        if (rem.length === 0) { alert('当前没有已归档的批次选项。'); return; }
+        if (!confirm('确定恢复所有已归档的批次选项吗？')) return;
         setRemovedBatchOptions([]);
         updateBatchDropdownOptions();
         renderTable();
         closeBatchSelectModal();
-        showToast('已恢复所有批次选项。');
+        showToast('已恢复所有已归档批次选项。');
         return;
       }
 
