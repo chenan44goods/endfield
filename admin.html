@@ -560,11 +560,22 @@
               <label for="inputCn">认领 CN (圈名) *</label>
               <input type="text" id="inputCn" required placeholder="如：小明">
             </div>
-            <!-- 所属批次字段（新批次体系：下拉绑定 batch_id，禁止手输） -->
+            <!-- 所属批次/制品（新批次体系：下拉绑定 batch_id，禁止手输；默认仅活跃，可打开归档开关） -->
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label style="font-size:0.85rem; display:flex; align-items:center; gap:6px;">
+                <input type="checkbox" id="batchIncludeArchived" onchange="updateBatchDropdownOptions()"> 显示归档批次
+              </label>
+            </div>
             <div class="form-group">
-              <label for="inputBatchId">所属批次</label>
-              <select id="inputBatchId" onchange="handleBatchSelectChange()">
-                <option value="">请选择批次</option>
+              <label for="inputBatchDisk">所属批次</label>
+              <select id="inputBatchDisk" onchange="handleBatchDiskChange()">
+                <option value="">请选择所属批次</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="inputBatchGoods">制品名称</label>
+              <select id="inputBatchGoods" onchange="handleBatchGoodsChange()">
+                <option value="">请先选择所属批次</option>
               </select>
             </div>
             <div class="form-group">
@@ -794,9 +805,12 @@
         <div class="card-title">
           <span>📦 批次列表</span>
           <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-            <label style="font-size:0.85rem; display:flex; align-items:center; gap:6px;">
-              <input type="checkbox" id="batchShowArchived" onchange="renderBatches()"> 显示已归档
-            </label>
+            <label style="font-size:0.85rem; display:flex; align-items:center; gap:6px;">批次筛选</label>
+            <select id="batchFilterMode" onchange="renderBatches()" style="padding:6px 10px; font-size:0.85rem;">
+              <option value="active">仅活跃</option>
+              <option value="archived">仅归档</option>
+              <option value="all">全部</option>
+            </select>
             <select id="batchDropdown" style="max-width:380px; padding:6px 10px; font-size:0.85rem;"></select>
           </div>
         </div>
@@ -1173,7 +1187,6 @@
     let LOGISTICS_DETAIL_INDEX = -1;
     let RAW_BATCHES = [];
     let PENDING_BATCH_TITLES = [];
-    let PENDING_BATCH_RAW = '';
     let CURRENT_DISPATCH_SUBTAB = 'pending';
 
     window.ITEM_CACHE = [];
@@ -1234,10 +1247,10 @@
       }
 
       // 3.5 渲染录入表单的批次 select（加载数据后由 updateBatchDropdownOptions 刷新）
-      const inputBatchId = document.getElementById('inputBatchId');
-      if (inputBatchId) {
-        inputBatchId.innerHTML = '<option value="">请选择批次</option>';
-      }
+      const inputBatchDisk = document.getElementById('inputBatchDisk');
+      if (inputBatchDisk) { inputBatchDisk.innerHTML = '<option value="">请选择所属批次</option>'; }
+      const inputBatchGoods = document.getElementById('inputBatchGoods');
+      if (inputBatchGoods) { inputBatchGoods.innerHTML = '<option value="">请先选择所属批次</option>'; }
 
       // 4. 渲染筛选器的地区 select
       const filterCountry = document.getElementById('filterCountry');
@@ -1456,31 +1469,34 @@
       });
       const legacyList = Array.from(batchSet).filter(b => b === '默认批次' || removed.indexOf(b) === -1);
 
-      const activeBatches = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(b => String(b.status || '活跃').trim() !== '归档');
+      const includeArchived = document.getElementById('batchIncludeArchived')?.checked || false;
+      const allBatches = Array.isArray(RAW_BATCHES) ? RAW_BATCHES : [];
+      const visibleBatches = allBatches.filter(b => includeArchived || String(b.status || '活跃').trim() !== '归档');
 
-      const inputBatchSel = document.getElementById('inputBatchId');
-      if (inputBatchSel) {
-        const curBatch = inputBatchSel.value || '';
-        let html = '<option value="">请选择批次</option>';
-        activeBatches.forEach(b => {
-          const tag = String(b.disk_tag || '').trim();
-          const label = b.batch_id + ' ' + b.disk_name + ' ' + b.goods_title + (tag ? ' ' + tag : '');
-          html += '<option value="' + escapeHtml(b.batch_id) + '">' + escapeHtml(label) + '</option>';
+      const diskSel = document.getElementById('inputBatchDisk');
+      if (diskSel) {
+        const curDisk = diskSel.value || '';
+        const disks = [];
+        visibleBatches.forEach(b => {
+          const d = String(b.disk_name || '').trim();
+          if (d && disks.indexOf(d) === -1) disks.push(d);
         });
         legacyList.forEach(b => {
-          if (b === '默认批次') return;
-          html += '<option value="legacy:' + escapeHtml(b) + '">' + escapeHtml('历史: ' + b) + '</option>';
+          if (b !== '默认批次' && disks.indexOf(b) === -1) disks.push(b);
         });
-        inputBatchSel.innerHTML = html;
-        if (curBatch) ensureSelectOption('inputBatchId', curBatch);
+        diskSel.innerHTML = '<option value="">请选择所属批次</option>' + disks.map(d => '<option value="' + escapeHtml(d) + '">' + escapeHtml(d) + '</option>').join('');
+        if (curDisk) ensureSelectOption('inputBatchDisk', curDisk);
       }
+      populateBatchGoodsOptions();
+      const openDateEl = document.getElementById('inputOpenDate');
+      if (openDateEl) openDateEl.value = '';
 
       const dl = document.getElementById('batchPresets');
       const filterSel = document.getElementById('filterBatch');
       const curFilter = filterSel ? filterSel.value : '';
       const filterSet = new Set(legacyList);
-      activeBatches.forEach(b => { if (b.disk_name) filterSet.add(b.disk_name); });
-      const filterList = Array.from(filterSet).filter(b => b === '默认批次' || removed.indexOf(b) === -1 || activeBatches.some(ab => ab.disk_name === b));
+      visibleBatches.forEach(b => { if (b.disk_name) filterSet.add(b.disk_name); });
+      const filterList = Array.from(filterSet).filter(b => b === '默认批次' || removed.indexOf(b) === -1 || visibleBatches.some(ab => ab.disk_name === b));
 
       if (dl) {
         dl.innerHTML = filterList.map(b => '<option value="' + escapeHtml(b) + '">').join('');
@@ -1489,7 +1505,6 @@
         filterSel.innerHTML = '<option value="">全部批次</option>' + filterList.map(b => '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>').join('');
         filterSel.value = curFilter;
       }
-      handleBatchSelectChange();
     }
 
     function onSearchInput() {
@@ -1681,14 +1696,14 @@
       const editId = document.getElementById('editItemId').value;
       const name = document.getElementById('inputName').value.trim();
       const cn = document.getElementById('inputCn').value.trim();
-      const batchSelVal = document.getElementById('inputBatchId').value || '';
+      const goodsVal = document.getElementById('inputBatchGoods').value || '';
       let batch_name = '默认批次';
       let batch_id = '';
       let open_date = '';
-      if (batchSelVal.indexOf('legacy:') === 0) {
-        batch_name = batchSelVal.slice(7).trim() || '默认批次';
-      } else if (batchSelVal) {
-        const selBatch = RAW_BATCHES.find(x => String(x.batch_id) === String(batchSelVal));
+      if (goodsVal.indexOf('legacy:') === 0) {
+        batch_name = goodsVal.slice(7).trim() || '默认批次';
+      } else if (goodsVal) {
+        const selBatch = RAW_BATCHES.find(x => String(x.batch_id) === String(goodsVal));
         if (selBatch) {
           batch_id = selBatch.batch_id;
           batch_name = (selBatch.disk_name || '').trim() || '默认批次';
@@ -1738,16 +1753,22 @@
       document.getElementById('editItemId').value = item.item_id || item.id;
       document.getElementById('inputName').value = item.name || '';
       document.getElementById('inputCn').value = item.cn || '';
-      const bSel = document.getElementById('inputBatchId');
+      const diskSel = document.getElementById('inputBatchDisk');
+      const goodsSel = document.getElementById('inputBatchGoods');
       if (item.batch_id && RAW_BATCHES.some(x => String(x.batch_id) === String(item.batch_id))) {
-        ensureSelectOption('inputBatchId', item.batch_id);
         const b = RAW_BATCHES.find(x => String(x.batch_id) === String(item.batch_id));
+        if (diskSel && b) ensureSelectOption('inputBatchDisk', b.disk_name);
+        populateBatchGoodsOptions();
+        if (goodsSel && b) ensureSelectOption('inputBatchGoods', b.batch_id);
         document.getElementById('inputOpenDate').value = b ? b.open_date || '' : (item.open_date || '');
       } else if (item.batch_name) {
-        ensureSelectOption('inputBatchId', 'legacy:' + item.batch_name);
+        if (diskSel) ensureSelectOption('inputBatchDisk', item.batch_name);
+        populateBatchGoodsOptions();
+        if (goodsSel) ensureSelectOption('inputBatchGoods', 'legacy:' + item.batch_name);
         document.getElementById('inputOpenDate').value = item.open_date || '';
       } else {
-        if (bSel) bSel.value = '';
+        if (diskSel) diskSel.value = '';
+        if (goodsSel) goodsSel.value = '';
         document.getElementById('inputOpenDate').value = '';
       }
       document.getElementById('inputPrice').value = item.price || 0;
@@ -1765,8 +1786,10 @@
     function clearForm() {
       document.getElementById('editItemId').value = '';
       document.getElementById('itemForm').reset();
-      const inputBatchSel = document.getElementById('inputBatchId');
-      if (inputBatchSel) inputBatchSel.value = '';
+      const diskSel = document.getElementById('inputBatchDisk');
+      const goodsSel = document.getElementById('inputBatchGoods');
+      if (diskSel) diskSel.value = '';
+      if (goodsSel) goodsSel.value = '';
       document.getElementById('inputOpenDate').value = '';
       document.getElementById('inputCountry').value = '日本';
       document.getElementById('inputStatus').value = '未出荷';
@@ -2804,7 +2827,6 @@
       const titles = parseBatchGoodsTitles(rawText);
       if (titles.length === 0) return showToast('未识别到“种类”行，请确认粘贴的是拼谷助手表格文本');
       PENDING_BATCH_TITLES = titles;
-      PENDING_BATCH_RAW = rawText;
       document.getElementById('batchImportDiskName').value = '';
       document.getElementById('batchImportDiskTag').value = '';
       document.getElementById('batchImportOpenDate').value = '';
@@ -2825,7 +2847,6 @@
       if (!diskName || !openDate || PENDING_BATCH_TITLES.length === 0) return showToast('请填写所属批次和开团日期！');
       let okCount = 0;
       const errors = [];
-      const createdBatches = [];
       for (const title of PENDING_BATCH_TITLES) {
         const res = await insertBatch({
           query_key: CURRENT_QUERY_KEY,
@@ -2838,62 +2859,25 @@
           updated_at: new Date().toISOString(),
           version: 1
         });
-        if (res.ok) { okCount++; createdBatches.push({ title: title, batch_id: res.row.batch_id }); }
-        else errors.push(title + ': ' + res.error);
+        if (res.ok) okCount++; else errors.push(title + ': ' + res.error);
       }
-
-      let syncedItems = 0;
-      const parsed = parsePasteOrderRows(PENDING_BATCH_RAW);
-      if (parsed && parsed.rows.length && createdBatches.length) {
-        const defaultCountry = document.getElementById('excelDefaultCountry')?.value || '其它';
-        const now = new Date().toISOString();
-        const items = [];
-        parsed.rows.forEach(row => {
-          row.qtys.forEach((qty, j) => {
-            if (qty > 0 && createdBatches[j]) {
-              items.push({
-                item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + Math.floor(Math.random() * 1000),
-                name: createdBatches[j].title,
-                cn: row.cn,
-                batch_name: diskName,
-                batch_id: createdBatches[j].batch_id,
-                open_date: openDate,
-                price: parsed.prices[j] || 0,
-                quantity: qty,
-                country: defaultCountry,
-                status: '未出荷',
-                image_url: '',
-                created_at: now
-              });
-            }
-          });
-        });
-        if (items.length) {
-          RAW_ITEMS.push(...items);
-          const saved = await saveDataToSupabase();
-          if (saved) {
-            syncedItems = items.length;
-            updateBatchDropdownOptions();
-            renderTable();
-          } else {
-            errors.push('排表同步失败，请手动检查');
-          }
-        }
-      }
-
       closeBatchImportModal();
       document.getElementById('batchPasteInput').value = '';
       PENDING_BATCH_TITLES = [];
-      PENDING_BATCH_RAW = '';
       await loadBatches();
-      if (errors.length) showToast('完成 ' + okCount + ' 个批次，失败 ' + errors.length + ' 条；同步排表 ' + syncedItems + ' 条');
-      else showToast('✅ 已生成 ' + okCount + ' 个批次，并同步排表 ' + syncedItems + ' 条记录！');
+      if (errors.length) showToast('完成 ' + okCount + ' 个批次，失败 ' + errors.length + ' 条');
+      else showToast('✅ 已生成 ' + okCount + ' 个批次，仅写入 batch 数据表');
     }
     window.confirmBatchImport = confirmBatchImport;
 
     function renderBatches() {
-      const showArchived = document.getElementById('batchShowArchived')?.checked || false;
-      const visible = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(b => showArchived || String(b.status || '活跃').trim() !== '归档');
+      const filterMode = document.getElementById('batchFilterMode')?.value || 'active';
+      const st = b => String(b.status || '活跃').trim();
+      const visible = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(b => {
+        if (filterMode === 'all') return true;
+        if (filterMode === 'archived') return st(b) === '归档';
+        return st(b) !== '归档';
+      });
       const tbody = document.getElementById('batchesTableBody');
       const mobileView = document.getElementById('batchesMobileCardsView');
       const dropdown = document.getElementById('batchDropdown');
@@ -2961,8 +2945,41 @@
     }
     window.toggleBatchStatus = toggleBatchStatus;
 
-    function handleBatchSelectChange() {
-      const val = document.getElementById('inputBatchId')?.value || '';
+    function populateBatchGoodsOptions() {
+      const diskSel = document.getElementById('inputBatchDisk');
+      const goodsSel = document.getElementById('inputBatchGoods');
+      if (!goodsSel) return;
+      const includeArchived = document.getElementById('batchIncludeArchived')?.checked || false;
+      const allBatches = Array.isArray(RAW_BATCHES) ? RAW_BATCHES : [];
+      const visibleBatches = allBatches.filter(b => includeArchived || String(b.status || '活跃').trim() !== '归档');
+      const disk = diskSel ? diskSel.value : '';
+      const curGoods = goodsSel.value || '';
+      let html = '<option value="">请选择制品名称</option>';
+      if (disk) {
+        const matches = visibleBatches.filter(b => String(b.disk_name || '').trim() === disk);
+        matches.forEach(b => {
+          const tag = String(b.disk_tag || '').trim();
+          const label = b.goods_title + (tag ? ' ' + tag : '') + ' ' + (b.open_date || '');
+          html += '<option value="' + escapeHtml(b.batch_id) + '">' + escapeHtml(label) + '</option>';
+        });
+        if (matches.length === 0) {
+          html += '<option value="legacy:' + escapeHtml(disk) + '">' + escapeHtml('历史: ' + disk) + '</option>';
+        }
+      }
+      goodsSel.innerHTML = html;
+      if (curGoods) ensureSelectOption('inputBatchGoods', curGoods);
+    }
+    window.populateBatchGoodsOptions = populateBatchGoodsOptions;
+
+    function handleBatchDiskChange() {
+      populateBatchGoodsOptions();
+      const openDateEl = document.getElementById('inputOpenDate');
+      if (openDateEl) openDateEl.value = '';
+    }
+    window.handleBatchDiskChange = handleBatchDiskChange;
+
+    function handleBatchGoodsChange() {
+      const val = document.getElementById('inputBatchGoods')?.value || '';
       const openDateEl = document.getElementById('inputOpenDate');
       if (!openDateEl) return;
       if (val && val.indexOf('legacy:') !== 0) {
@@ -2972,43 +2989,7 @@
         openDateEl.value = '';
       }
     }
-    window.handleBatchSelectChange = handleBatchSelectChange;
-
-    function parsePasteOrderRows(rawText) {
-      const lines = String(rawText || '').split(/\r?\n/);
-      let colIndexes = [], titles = [], prices = [], cnColIdx = -1, startRow = -1;
-      for (let i = 0; i < lines.length; i++) {
-        const cells = lines[i].replace(/^\t+/, '').split('\t').map(c => c.trim());
-        const first = (cells[0] || '').replace(/[:：]/g, '');
-        if (first.includes('种类')) {
-          cells.slice(1).forEach((c, idx) => {
-            if (c && !/^(默认|合计|总计|总金额|单价|数量|小计)/.test(c)) {
-              colIndexes.push(idx + 1);
-              titles.push(c);
-            }
-          });
-        } else if (first.includes('单价')) {
-          prices = colIndexes.map(j => parseFloat(String(cells[j] === undefined ? '' : cells[j]).replace(/[^\d.-]/g, '')) || 0);
-        } else if (first.includes('总金额') || first.includes('昵称/总数')) {
-          for (let j = 0; j < cells.length; j++) {
-            if (String(cells[j] || '').indexOf('昵称') !== -1 || String(cells[j] || '').indexOf('总数') !== -1) { cnColIdx = j; break; }
-          }
-          startRow = i + 1;
-          break;
-        }
-      }
-      if (!titles.length || cnColIdx < 0 || startRow < 0) return null;
-      const rows = [];
-      for (let i = startRow; i < lines.length; i++) {
-        const cells = lines[i].replace(/^\t+/, '').split('\t').map(c => c.trim());
-        if (cells.length <= cnColIdx) continue;
-        const cn = cells[cnColIdx];
-        if (!cn || /^(总金额|合计|总计)/.test(cn) || cn.indexOf('昵称/总数') !== -1 || cn === '总数') continue;
-        const qtys = colIndexes.map(j => parseFloat(String(cells[cnColIdx + j] === undefined ? '' : cells[cnColIdx + j]).replace(/[^\d.-]/g, '')) || 0);
-        rows.push({ cn: cn, qtys: qtys });
-      }
-      return { titles: titles, prices: prices, rows: rows };
-    }
+    window.handleBatchGoodsChange = handleBatchGoodsChange;
 
     function copyMemberLink() {
       const url = `${window.location.origin}/index.html?key=${encodeURIComponent(CURRENT_QUERY_KEY)}`;
