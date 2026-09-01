@@ -2689,7 +2689,7 @@
       for (let i = 0; i < 6; i++) {
         const candidate = Object.assign({}, data, { batch_id: generateBatchId(data.open_date) });
         const { error } = await supabaseClient.from('batches').insert([candidate]);
-        if (!error) return { ok: true, row: candidate };
+        if (!error) { RAW_BATCHES.push(candidate); return { ok: true, row: candidate }; }
         if (String(error.code || '') === '23505') { await loadBatches(); continue; }
         return { ok: false, error: error.message };
       }
@@ -2740,7 +2740,7 @@
         const first = cells[0].replace(/[:：]/g, '');
         if (first.includes('种类')) {
           cells.slice(1).forEach(c => {
-            if (c && !/^(默认|合计|总计|总金额|单价|数量|小计)/.test(c) && titles.indexOf(c) === -1) titles.push(c);
+            if (c && !/^(默认|合计|总计|总金额|单价|数量|小计)/.test(c)) titles.push(c);
           });
           if (titles.length) break;
         }
