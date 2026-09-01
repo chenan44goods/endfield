@@ -133,6 +133,10 @@
       display: block;
     }
 
+    /* 算账中心子页：只显示当前选中的功能页 */
+    .tab-content#tabCalc .pane { display: none; }
+    .tab-content#tabCalc .pane.active { display: block; }
+
     /* Cards */
     .card {
       background: var(--card-bg);
@@ -278,6 +282,7 @@
     .badge-status-可排发 { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 700; } /* 翠绿：可排发 */
     .badge-status-待发货 { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; } /* 紫色：打包准备中 */
     .badge-status-已排发 { background-color: #e2e8f0; color: #64748b; border: 1px solid #cbd5e1; } /* 中灰：流程结束 */
+    .badge-status-已交 { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 700; } /* 翠绿：国际运费已交 */
     .badge-status-未付款 { background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; } /* 警示红 */
 
     /* 老状态兼容颜色 */
@@ -528,7 +533,9 @@
 
     <div class="nav-tabs">
       <button class="tab-btn active" onclick="switchTab('tabItems')">📊 排表管理 (group_data)</button>
+      <button class="tab-btn" onclick="switchTab('tabCalc')">🧮 算账中心</button>
       <button class="tab-btn" onclick="switchTab('tabLogistics')">🌍 国际运费 (logistics_data)</button>
+      <button class="tab-btn" onclick="switchTab('tabBatches')">📦 批次管理 (batches)</button>
       <button class="tab-btn" onclick="switchTab('tabDispatch')">🚀 排发工作台 (applications)</button>
       <button class="tab-btn" onclick="switchTab('tabLogs')">🔄 转单日志 (transfer_logs)</button>
       <button class="tab-btn" onclick="switchTab('tabFeedback')">📮 匿名反馈箱 (feedback)</button>
@@ -706,7 +713,7 @@
 
       <div class="card">
         <div class="card-title">
-          <span>📦 国际运费批次列表 (logistics_data)</span>
+          <span>🌍 国际运费批次列表 (logistics_data)</span>
           <span id="logisticsStats" style="font-size:0.85rem; color:var(--text-muted);"></span>
         </div>
         <div class="table-container desktop-table-view">
@@ -727,6 +734,79 @@
           </table>
         </div>
         <div class="mobile-cards-view" id="logisticsMobileCardsView"></div>
+      </div>
+    </div>
+
+    <!-- 标签页 1.6：批次管理 -->
+    <div class="tab-content" id="tabBatches">
+      <div class="card">
+        <div class="card-title">
+          <span>➕ 手动新建批次</span>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="batchDiskName">大盘名称 *</label>
+            <input type="text" id="batchDiskName" required placeholder="如：26科隆美终末地 coco爆佩">
+          </div>
+          <div class="form-group">
+            <label for="batchGoodsTitle">制品名称 *</label>
+            <input type="text" id="batchGoodsTitle" required placeholder="如：26科隆展毛绒头‑莱万汀 立牌">
+          </div>
+          <div class="form-group">
+            <label for="batchDiskTag">车次标记（选填）</label>
+            <input type="text" id="batchDiskTag" placeholder="如：①车；没有车次就留空">
+          </div>
+          <div class="form-group">
+            <label for="batchOpenDate">开团日期 *</label>
+            <input type="date" id="batchOpenDate" required onchange="updateBatchIdPreview()">
+          </div>
+          <div class="form-group">
+            <label for="batchStatus">状态</label>
+            <select id="batchStatus"><option value="活跃">活跃</option><option value="归档">归档</option></select>
+          </div>
+          <div class="form-group">
+            <label for="batchIdPreview">自动生成 batch_id（无需填写）</label>
+            <input type="text" id="batchIdPreview" readonly placeholder="batch_MMDD_01">
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:4px;">
+          <button class="btn btn-primary" onclick="saveManualBatch()">保存批次</button>
+          <button class="btn btn-secondary" onclick="clearBatchForm()">清空</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>📋 拼谷助手粘贴批量导入批次</span>
+        </div>
+        <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:6px;">保持原粘贴方式不变：粘贴后读取“种类”行，每个制品自动生成一条批次；会先弹出确认窗填写大盘名称、车次、开团日期。</p>
+        <textarea id="batchPasteInput" rows="8" style="width:100%; font-family:monospace; font-size:0.82rem;" placeholder="直接粘贴拼谷助手表格文本..."></textarea>
+        <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+          <button class="btn btn-success" onclick="openBatchImportConfirm()">解析种类并生成批次</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>📦 批次列表</span>
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <label style="font-size:0.85rem; display:flex; align-items:center; gap:6px;">
+              <input type="checkbox" id="batchShowArchived" onchange="renderBatches()"> 显示已归档
+            </label>
+            <select id="batchDropdown" style="max-width:380px; padding:6px 10px; font-size:0.85rem;"></select>
+          </div>
+        </div>
+        <div class="table-container desktop-table-view">
+          <table>
+            <thead>
+              <tr>
+                <th>batch_id</th><th>大盘名称</th><th>制品名称</th><th>车次</th><th>开团日期</th><th>状态</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="batchesTableBody"></tbody>
+          </table>
+        </div>
+        <div class="mobile-cards-view" id="batchesMobileCardsView"></div>
       </div>
     </div>
 
@@ -843,6 +923,42 @@
     </div>
   </div>
 
+  <!-- 批次批量导入确认 Modal -->
+  <div class="modal-overlay" id="batchImportModal">
+    <div class="modal" style="max-width: 640px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="font-size: 1.1rem; font-weight: 700;">📦 确认批量生成批次</h3>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeBatchImportModal()">✕</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="batchImportDiskName">大盘名称 *</label>
+          <input type="text" id="batchImportDiskName" required placeholder="整批统一，如：26科隆美终末地">
+        </div>
+        <div class="form-group">
+          <label for="batchImportDiskTag">车次标记（选填）</label>
+          <input type="text" id="batchImportDiskTag" placeholder="如：①车；没有就留空">
+        </div>
+        <div class="form-group">
+          <label for="batchImportOpenDate">开团日期 *</label>
+          <input type="date" id="batchImportOpenDate" required>
+        </div>
+        <div class="form-group">
+          <label for="batchImportStatus">状态</label>
+          <select id="batchImportStatus"><option value="活跃">活跃</option><option value="归档">归档</option></select>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:6px;">将自动生成以下批次：</div>
+        <div id="batchImportPreview" style="background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px; max-height:220px; overflow:auto; font-size:0.85rem;"></div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+        <button class="btn btn-secondary" onclick="closeBatchImportModal()">取消</button>
+        <button class="btn btn-primary" onclick="confirmBatchImport()">确认生成</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 🌟 【新增】通用批量修改下拉选择弹窗（状态 / 地区 / 批次） -->
   <div class="modal-overlay" id="batchSelectModal">
     <div class="modal" style="max-width: 440px;">
@@ -933,6 +1049,73 @@
     </div>
   </div>
 
+    <div class="tab-content" id="tabCalc">
+    <div class="card" style="margin-bottom:12px;">
+      <div class="tabbar">
+        <button class="tab-btn active" onclick="pane('kanpei')">✂️ 砍配计算</button>
+        <button class="tab-btn" onclick="pane('erdiao')">♻️ 盲抽二调</button>
+        <button class="tab-btn" onclick="pane('export')">📤 台账</button>
+      <button class="tab-btn" onclick="pane('refund')">💰 退款补录</button>
+      </div>
+      <p style="font-size:0.8rem;color:var(--text-muted);">用表格填，不用写代码。金额自动按“分”计算，防浮点误差；计算/写库有防重复锁；校验不通过不会改动数据。</p>
+    </div>
+
+    <div class="card pane active" id="pane-kanpei">
+      <h3 style="margin-top:0;">第一步：录订单</h3>
+      <p style="font-size:0.8rem;color:var(--text-muted);">整配订单：同属一整组的几行，填相同“组号”；单品：一行一单。角色=谷子名，认领人=团员名。</p>
+      <table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr>
+        <th>订单类型</th><th>组号</th><th>角色(谷子)</th><th>原单价</th><th>认领人(CN)</th><th>数量</th><th></th>
+      </tr></thead><tbody id="kOrderRows"></tbody></table>
+      <button class="btn btn-secondary" style="margin-top:8px;" onclick="addOrderRow()">＋ 添加一行订单</button>
+      <h3 style="margin-top:18px;">第二步：填实际到货</h3>
+      <p style="font-size:0.8rem;color:var(--text-muted);">每个角色实际到了几件（和上面“角色”同名即可）。</p>
+      <table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr><th>角色(谷子)</th><th>实到数量</th><th></th></tr></thead><tbody id="kArrRows"></tbody></table>
+      <button class="btn btn-secondary" style="margin-top:8px;" onclick="addArrRow()">＋ 添加一行实到</button>
+      <button class="btn btn-primary" style="margin-top:16px;" onclick="runKanpei()">🧮 计算砍配并写入</button>
+      <div id="kOut" class="box" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="card pane" id="pane-erdiao">
+      <h3 style="margin-top:0;">角色与出货</h3>
+      <p style="font-size:0.8rem;color:var(--text-muted);">目标总价=当前单价×计划配数，实际配数×新价要等于目标总价。先按“当前单价×实际配数”算总价：比目标大→所有角色统一降价；比目标小→冷门(已降价)只降不升、热门继续+价补足，已降价的绝不再加回。点“载入当前角色数据”自动带入当前单价与计划配数，再填实际配数。</p>
+      <table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr>
+        <th>角色(谷子)</th><th>当前单价(已调价)</th><th>计划配数</th><th>实际配数</th><th>冷门?(已降价)</th><th></th>
+      </tr></thead><tbody id="eRoleRows"></tbody></table>
+      <button class="btn btn-secondary" style="margin-top:8px;" onclick="addRoleRow()">＋ 添加一行角色</button> <button class="btn btn-primary" style="margin-top:8px;" onclick="loadErdiaoRoles()">📥 载入当前角色数据</button>
+      <button class="btn btn-warn" style="margin-top:16px;" onclick="runErdiao()">♻️ 计算二调并写入</button>
+      <div id="eOut" class="box" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="card pane" id="pane-export">
+      <button class="btn btn-primary" onclick="exportLedger()">📥 浏览器下载全团台账 Excel</button>
+      <p style="margin-top:12px;font-size:0.8rem;color:var(--text-muted);">Excel 导入（写入排表）：列顺序 名称 | CN | 数量 | 单价 | 地区 | 批次 | 状态，首行是表头。</p>
+      <input type="file" id="calcImportFile" accept=".xlsx,.xls,.csv" onchange="importLedger(event)" />
+      <pre id="impMsg" class="box" style="margin-top:8px;"></pre>
+    </div>
+    <div class="card pane" id="pane-refund">
+      <h3 style="margin-top:0;">💰 手动补录退款</h3>
+      <p style="font-size:0.8rem;color:var(--text-muted);">用于 砍配 / 交错钱 / 没买到 / 其他 的退款。填完点“补录”，写入退款表，之后 Bot /退款表 会连收款码一起导出。</p>
+      <div class="row">
+        <div><label>团员CN</label><input id="mr-cn" placeholder="团员名称/CN"></div>
+        <div><label>应退金额</label><input id="mr-amt" type="number" step="0.01" placeholder="金额(元)"></div>
+        <div><label>退款类型</label><select id="mr-type"><option>砍配</option><option>交错钱</option><option>没买到</option><option>其他</option></select></div>
+        <div><label>原因</label><input id="mr-reason" placeholder="原因（可空）"></div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:12px;" onclick="saveManualRefund()">💾 补录退款并写入</button>
+      <pre id="mrOut" class="box" style="margin-top:10px;"></pre>
+      <h3 style="margin-top:22px;">📋 已录入的退款记录</h3>
+      <p style="font-size:0.78rem;color:var(--text-muted);">勾选后点“批量标记已退”，表示这几笔已退款给团员（批量退款）。</p>
+      <button class="btn btn-primary" style="margin-bottom:8px;" onclick="batchMarkRefunded()">✅ 批量标记已退</button>
+      <div style="overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:10px;">
+        <table style="width:100%;font-size:13px;border-collapse:collapse;">
+          <thead><tr style="background:#f1f5f9;"><th style="width:36px;padding:6px;"><input type="checkbox" id="refAll" onclick="toggleAllRef()"></th><th style="padding:6px;text-align:left;">团员CN</th><th style="padding:6px;">金额</th><th style="padding:6px;">类型</th><th style="padding:6px;">原因</th><th style="padding:6px;">状态</th><th style="padding:6px;">录于</th></tr></thead>
+          <tbody id="refRows"><tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:12px;">加载中…</td></tr></tbody>
+        </table>
+      </div>
+      <pre id="refListMsg" class="box" style="margin-top:8px;"></pre>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script>
@@ -984,6 +1167,8 @@
     let RAW_LOGISTICS = [];
     let LOGISTICS_DELETED_BATCHES = new Set();
     let LOGISTICS_DETAIL_INDEX = -1;
+    let RAW_BATCHES = [];
+    let PENDING_BATCH_TITLES = [];
     let CURRENT_DISPATCH_SUBTAB = 'pending';
 
     window.ITEM_CACHE = [];
@@ -1106,6 +1291,7 @@
       if (targetEl) targetEl.classList.add('active');
       if (tabId === 'tabItems') renderTable();
       if (tabId === 'tabLogistics') renderLogistics();
+      if (tabId === 'tabBatches') loadBatches();
       if (tabId === 'tabDispatch') renderDispatchWorkbench();
       if (tabId === 'tabLogs') renderTransferLogs();
       if (tabId === 'tabFeedback') renderFeedbackList();
@@ -2394,7 +2580,7 @@
       } else {
         tbody.innerHTML = members.map((m, i) => {
           const st = String(m.status || '未交').trim();
-          const stBadge = st === '已交' ? 'badge-status-已排发' : (st === '免交' ? 'badge-status-custom' : 'badge-status-未付款');
+          const stBadge = st === '已交' ? 'badge-status-已交' : (st === '免交' ? 'badge-status-custom' : 'badge-status-未付款');
           let ops = '';
           if (st !== '已交') ops += '<button class="btn btn-success" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'已交\')">标已交</button> ';
           if (st !== '免交') ops += '<button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'免交\')">免交</button> ';
@@ -2450,6 +2636,236 @@
     }
     window.deleteLogisticsBatch = deleteLogisticsBatch;
 
+    /* --- 标签页 1.6：批次管理 batches --- */
+    function generateBatchId(dateStr) {
+      let d;
+      if (dateStr) { d = new Date(dateStr + 'T00:00:00'); } else { d = new Date(); }
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const prefix = 'batch_' + mm + dd + '_';
+      let maxNum = 0;
+      (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).forEach(b => {
+        const bid = String(b.batch_id || '');
+        if (bid.startsWith(prefix)) {
+          const n = parseInt(bid.slice(prefix.length), 10);
+          if (!isNaN(n) && n > maxNum) maxNum = n;
+        }
+      });
+      return prefix + String(maxNum + 1).padStart(2, '0');
+    }
+
+    function updateBatchIdPreview() {
+      const el = document.getElementById('batchIdPreview');
+      if (!el) return;
+      const dateVal = document.getElementById('batchOpenDate')?.value || '';
+      el.value = dateVal ? generateBatchId(dateVal) : 'batch_MMDD_01';
+    }
+    window.updateBatchIdPreview = updateBatchIdPreview;
+
+    async function loadBatches() {
+      try {
+        const { data, error } = await supabaseClient.from('batches').select('*').eq('query_key', CURRENT_QUERY_KEY).order('created_at', { ascending: false });
+        if (error) {
+          if (String(error.code || '') === 'PGRST205' || String(error.message || '').indexOf('Could not find the table') !== -1) {
+            showToast('⚠️ batches 表尚未创建，请先在 Supabase 执行建表 SQL');
+          } else {
+            showToast('批次读取失败: ' + error.message);
+          }
+          RAW_BATCHES = [];
+          renderBatches();
+          return;
+        }
+        RAW_BATCHES = Array.isArray(data) ? data : [];
+        renderBatches();
+      } catch (e) {
+        RAW_BATCHES = [];
+        renderBatches();
+        showToast('批次读取异常');
+      }
+    }
+    window.loadBatches = loadBatches;
+
+    async function insertBatch(data) {
+      for (let i = 0; i < 6; i++) {
+        const candidate = Object.assign({}, data, { batch_id: generateBatchId(data.open_date) });
+        const { error } = await supabaseClient.from('batches').insert([candidate]);
+        if (!error) return { ok: true, row: candidate };
+        if (String(error.code || '') === '23505') { await loadBatches(); continue; }
+        return { ok: false, error: error.message };
+      }
+      return { ok: false, error: 'batch_id 生成冲突，请重试' };
+    }
+
+    async function saveManualBatch() {
+      const diskName = (document.getElementById('batchDiskName').value || '').trim();
+      const goodsTitle = (document.getElementById('batchGoodsTitle').value || '').trim();
+      const diskTag = (document.getElementById('batchDiskTag').value || '').trim();
+      const openDate = (document.getElementById('batchOpenDate').value || '').trim();
+      const status = document.getElementById('batchStatus').value || '活跃';
+      if (!diskName || !goodsTitle || !openDate) return showToast('大盘名称、制品名称、开团日期为必填！');
+      const res = await insertBatch({
+        query_key: CURRENT_QUERY_KEY,
+        disk_name: diskName,
+        goods_title: goodsTitle,
+        disk_tag: diskTag,
+        open_date: openDate,
+        status: status,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        version: 1
+      });
+      if (!res.ok) return showToast('保存失败: ' + res.error);
+      clearBatchForm();
+      await loadBatches();
+      showToast('✅ 批次已创建: ' + res.row.batch_id);
+    }
+    window.saveManualBatch = saveManualBatch;
+
+    function clearBatchForm() {
+      document.getElementById('batchDiskName').value = '';
+      document.getElementById('batchGoodsTitle').value = '';
+      document.getElementById('batchDiskTag').value = '';
+      document.getElementById('batchOpenDate').value = '';
+      document.getElementById('batchStatus').value = '活跃';
+      updateBatchIdPreview();
+    }
+    window.clearBatchForm = clearBatchForm;
+
+    function parseBatchGoodsTitles(rawText) {
+      const titles = [];
+      const lines = String(rawText || '').split(/\r?\n/);
+      for (const line of lines) {
+        const cells = line.split(/\t+/).map(c => c.trim()).filter(Boolean);
+        if (cells.length < 2) continue;
+        const first = cells[0].replace(/[:：]/g, '');
+        if (first.includes('种类')) {
+          cells.slice(1).forEach(c => {
+            if (c && !/^(默认|合计|总计|总金额|单价|数量|小计)/.test(c) && titles.indexOf(c) === -1) titles.push(c);
+          });
+          if (titles.length) break;
+        }
+      }
+      return titles;
+    }
+
+    function openBatchImportConfirm() {
+      const rawText = document.getElementById('batchPasteInput').value;
+      const titles = parseBatchGoodsTitles(rawText);
+      if (titles.length === 0) return showToast('未识别到“种类”行，请确认粘贴的是拼谷助手表格文本');
+      PENDING_BATCH_TITLES = titles;
+      document.getElementById('batchImportDiskName').value = '';
+      document.getElementById('batchImportDiskTag').value = '';
+      document.getElementById('batchImportOpenDate').value = '';
+      document.getElementById('batchImportStatus').value = '活跃';
+      document.getElementById('batchImportPreview').innerHTML = titles.map(t => '<div style="padding:3px 0;">• ' + escapeHtml(t) + '</div>').join('');
+      document.getElementById('batchImportModal').classList.add('active');
+    }
+    window.openBatchImportConfirm = openBatchImportConfirm;
+
+    function closeBatchImportModal() { document.getElementById('batchImportModal').classList.remove('active'); }
+    window.closeBatchImportModal = closeBatchImportModal;
+
+    async function confirmBatchImport() {
+      const diskName = (document.getElementById('batchImportDiskName').value || '').trim();
+      const diskTag = (document.getElementById('batchImportDiskTag').value || '').trim();
+      const openDate = (document.getElementById('batchImportOpenDate').value || '').trim();
+      const status = document.getElementById('batchImportStatus').value || '活跃';
+      if (!diskName || !openDate || PENDING_BATCH_TITLES.length === 0) return showToast('请填写大盘名称和开团日期！');
+      let okCount = 0;
+      const errors = [];
+      for (const title of PENDING_BATCH_TITLES) {
+        const res = await insertBatch({
+          query_key: CURRENT_QUERY_KEY,
+          disk_name: diskName,
+          goods_title: title,
+          disk_tag: diskTag,
+          open_date: openDate,
+          status: status,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          version: 1
+        });
+        if (res.ok) okCount++; else errors.push(title + ': ' + res.error);
+      }
+      closeBatchImportModal();
+      document.getElementById('batchPasteInput').value = '';
+      PENDING_BATCH_TITLES = [];
+      await loadBatches();
+      if (errors.length) showToast('完成 ' + okCount + ' 条，失败 ' + errors.length + ' 条');
+      else showToast('✅ 已生成 ' + okCount + ' 个批次！');
+    }
+    window.confirmBatchImport = confirmBatchImport;
+
+    function renderBatches() {
+      const showArchived = document.getElementById('batchShowArchived')?.checked || false;
+      const visible = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(b => showArchived || String(b.status || '活跃').trim() !== '归档');
+      const tbody = document.getElementById('batchesTableBody');
+      const mobileView = document.getElementById('batchesMobileCardsView');
+      const dropdown = document.getElementById('batchDropdown');
+      if (dropdown) {
+        dropdown.innerHTML = '<option value="">—— 选择批次预览 ——</option>' + visible.map(b => {
+          const tag = String(b.disk_tag || '').trim();
+          const label = b.batch_id + ' ' + b.disk_name + ' ' + b.goods_title + (tag ? ' ' + tag : '');
+          return '<option value="' + escapeHtml(b.batch_id) + '">' + escapeHtml(label) + '</option>';
+        }).join('');
+      }
+      if (!tbody) return;
+      if (visible.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-muted);">暂无批次数据，请先新建或批量导入</td></tr>';
+        if (mobileView) mobileView.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted);">暂无批次数据</div>';
+        return;
+      }
+      let html = '', cardsHtml = '';
+      visible.forEach(b => {
+        const tag = String(b.disk_tag || '').trim();
+        const tagHtml = tag ? escapeHtml(tag) : '<span style="color:#cbd5e1;">—</span>';
+        const status = String(b.status || '活跃').trim();
+        const stCls = status === '归档' ? 'badge-status-custom' : 'badge-status-可排发';
+        const bid = escapeHtml(String(b.batch_id || ''));
+        const archBtn = status === '归档'
+          ? '<button class="btn btn-secondary" style="padding:2px 8px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">恢复活跃</button>'
+          : '<button class="btn btn-secondary" style="padding:2px 8px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">归档</button>';
+        html += '<tr>'
+          + '<td style="font-family:monospace;font-size:0.85rem;">' + escapeHtml(b.batch_id) + '</td>'
+          + '<td>' + escapeHtml(b.disk_name) + '</td>'
+          + '<td>' + escapeHtml(b.goods_title) + '</td>'
+          + '<td>' + tagHtml + '</td>'
+          + '<td>' + escapeHtml(b.open_date || '') + '</td>'
+          + '<td><span class="badge ' + stCls + '">' + escapeHtml(status) + '</span></td>'
+          + '<td><button class="btn btn-primary" style="padding:2px 8px;font-size:0.8rem;" onclick="copyBatchById(\'' + bid + '\')">复制</button> ' + archBtn + '</td>'
+          + '</tr>';
+        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(b.batch_id) + '</span><span class="badge ' + stCls + '">' + escapeHtml(status) + '</span></div><div style="font-size:0.9rem;padding:6px 0;"><strong>' + escapeHtml(b.disk_name) + '</strong><br>' + escapeHtml(b.goods_title) + (tag ? '<br>车次: ' + escapeHtml(tag) : '') + '<br>开团: ' + escapeHtml(b.open_date || '') + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px;font-size:0.8rem;" onclick="copyBatchById(\'' + bid + '\')">复制</button> <button class="btn btn-secondary" style="padding:4px 10px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">' + (status === '归档' ? '恢复活跃' : '归档') + '</button></div></div>';
+      });
+      tbody.innerHTML = html;
+      if (mobileView) mobileView.innerHTML = cardsHtml;
+    }
+    window.renderBatches = renderBatches;
+
+    function copyBatchById(batchId) {
+      const b = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).find(x => String(x.batch_id) === String(batchId));
+      if (!b) return;
+      document.getElementById('batchDiskName').value = b.disk_name || '';
+      document.getElementById('batchDiskTag').value = b.disk_tag || '';
+      document.getElementById('batchOpenDate').value = b.open_date || '';
+      document.getElementById('batchGoodsTitle').value = '';
+      document.getElementById('batchStatus').value = '活跃';
+      updateBatchIdPreview();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      showToast('已复制：' + (b.disk_name || '') + '，只需修改制品名称');
+    }
+    window.copyBatchById = copyBatchById;
+
+    async function toggleBatchStatus(batchId) {
+      const b = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).find(x => String(x.batch_id) === String(batchId));
+      if (!b) return;
+      const next = String(b.status || '活跃').trim() === '归档' ? '活跃' : '归档';
+      const { error } = await supabaseClient.from('batches').update({ status: next, updated_at: new Date().toISOString() }).eq('id', b.id);
+      if (error) return showToast('状态更新失败: ' + error.message);
+      await loadBatches();
+      showToast('已' + (next === '归档' ? '归档' : '恢复活跃') + ': ' + b.batch_id);
+    }
+    window.toggleBatchStatus = toggleBatchStatus;
+
     function copyMemberLink() {
       const url = `${window.location.origin}/index.html?key=${encodeURIComponent(CURRENT_QUERY_KEY)}`;
       navigator.clipboard.writeText(url).then(() => showToast('自查链接已复制！')).catch(() => prompt('请手动复制链接：', url));
@@ -2461,5 +2877,255 @@
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
   </script>
+
+<script>
+// ================== 算账中心（砍配/二调/台账），表格填单，无需代码 ==================
+function _c(x){ if(x==null||isNaN(x))return 0; return Math.round((Number(x)+Number.EPSILON)*100); }
+function _f(c){ var n=Number(c); return (n/100).toFixed(2); }
+var _busy2={};
+function _lock(k){ if(_busy2[k])return false; _busy2[k]=true; return true; }
+function _unlock(k){ _busy2[k]=false; }
+function _out(id,t){ var el=document.getElementById(id); if(el) el.textContent=t; }
+function pane(name){
+  document.querySelectorAll('.tab-content#tabCalc .card.pane').forEach(function(x){x.classList.remove('active');});
+  var t=document.getElementById('pane-'+name); if(t) t.classList.add('active');
+  document.querySelectorAll('.tab-content#tabCalc .tabbar .tab-btn').forEach(function(b){b.classList.remove('active');});
+  var map={kanpei:'砍配',erdiao:'二调',export:'台账',refund:'退款补录'};
+  if(name==='refund'&&typeof loadRefundList==='function') loadRefundList();
+  document.querySelectorAll('.tab-content#tabCalc .tabbar .tab-btn').forEach(function(b){ if(b.textContent.indexOf(map[name])>=0) b.classList.add('active'); });
+}
+function addOrderRow(){
+  var tb=document.getElementById('kOrderRows'), tr=document.createElement('tr');
+  tr.innerHTML='<td><select class="k-type"><option value="整配">整配</option><option value="单品">单品</option></select></td>'+
+    '<td><input class="k-grp" style="width:60px" placeholder="1"></td>'+
+    '<td><input class="k-role" placeholder="角色/谷子名" style="min-width:130px"></td>'+
+    '<td><input class="k-price" type="number" step="0.01" style="width:80px" placeholder="单价"></td>'+
+    '<td><input class="k-cn" placeholder="认领人/CN" style="min-width:90px"></td>'+
+    '<td><input class="k-qty" type="number" value="1" style="width:56px"></td>'+
+    '<td><button class="btn btn-secondary" onclick="this.parentElement.parentElement.remove()">✕</button></td>';
+  tb.appendChild(tr);
+}
+function addArrRow(){
+  var tb=document.getElementById('kArrRows'), tr=document.createElement('tr');
+  tr.innerHTML='<td><input class="a-role" placeholder="角色/谷子名" style="min-width:130px"></td>'+
+    '<td><input class="a-num" type="number" value="0" style="width:70px"></td>'+
+    '<td><button class="btn btn-secondary" onclick="this.parentElement.parentElement.remove()">✕</button></td>';
+  tb.appendChild(tr);
+}
+function addRoleRow(){
+  var tb=document.getElementById('eRoleRows'), tr=document.createElement('tr');
+  tr.innerHTML='<td><input class="r-name" placeholder="角色/谷子名" style="min-width:130px"></td>'+
+    '<td><input class="r-price" type="number" step="0.01" style="width:80px" placeholder="当前单价"></td>'+
+    '<td><input class="r-plan" type="number" style="width:70px" value="0"></td>'+
+    '<td><input class="r-qty" type="number" style="width:70px" placeholder="实际数"></td>'+
+    '<td style="text-align:center"><input class="r-cold" type="checkbox" title="已降价，只降不升"></td>'+
+    '<td><button class="btn btn-secondary" onclick="this.parentElement.parentElement.remove()">✕</button></td>';
+  tb.appendChild(tr);
+}
+function _collectOrders(){
+  var orders=[], groups={};
+  [].forEach.call(document.querySelectorAll('#kOrderRows tr'),function(tr){
+    var type=tr.querySelector('.k-type').value, role=(tr.querySelector('.k-role').value||'').trim();
+    if(!role) return;
+    var price=Number(tr.querySelector('.k-price').value||0), cn=(tr.querySelector('.k-cn').value||'').trim(), qty=Number(tr.querySelector('.k-qty').value||1);
+    if(type==='整配'){ var g=(tr.querySelector('.k-grp').value||'1').trim();
+      if(!groups[g]){ groups[g]={type:'整配',groupName:'组'+g,roles:[],claims:[]}; orders.push(groups[g]); }
+      groups[g].roles.push({role_id:role,role_name:role,original_price:price});
+      groups[g].claims.push({role_id:role,member_cn:cn,member_qq:'',qty:qty});
+    } else { orders.push({type:'单品单领',role_id:role,role_name:role,original_price:price,member_cn:cn,member_qq:'',qty:qty}); }
+  });
+  return orders;
+}
+function _collectArrival(){ var o={}; [].forEach.call(document.querySelectorAll('#kArrRows tr'),function(tr){ var r=(tr.querySelector('.a-role').value||'').trim(); if(r) o[r]=Number(tr.querySelector('.a-num').value||0); }); return o; }
+function _collectRoles(){ var roles=[], cold=[]; [].forEach.call(document.querySelectorAll('#eRoleRows tr'),function(tr){ var n=(tr.querySelector('.r-name').value||'').trim(); if(!n) return; var base=Number(tr.querySelector('.r-price').value||0), plan=Number(tr.querySelector('.r-plan').value||0), real=Number(tr.querySelector('.r-qty').value||0); roles.push({role_id:n,role_name:n,base_price:base,plan_qty:plan,real_qty:real}); if(tr.querySelector('.r-cold').checked) cold.push(n); }); return {roles:roles,cold:cold}; }
+function _mk(o,c,role,type,reason,amtCents){
+  var rr=role||{};
+  return {query_key:CURRENT_QUERY_KEY,batch_name:o.groupName||o.batch_name||'',order_type:type==='整配砍配'?'整配订单':'单品单领',
+    member_cn:(c&&c.member_cn)||o.member_cn||'',member_qq:(c&&c.member_qq)||o.member_qq||'',item_id:String(o.item_id||rr.role_id||o.role_id||''),
+    item_name:String(o.item_name||o.name||rr.role_name||o.role_name||''),role_id:String(rr.role_id||o.role_id||''),role_name:String(rr.role_name||o.role_name||''),
+    original_price:Number(o.original_price||rr.original_price||0),settled_price:Number(o.settled_price||o.original_price||rr.original_price||0),
+    kanpei_type:type,kanpei_reason:reason,refund_amount:_f(amtCents),refund_status:amtCents>0?'待退款':'无需退款',source:'web'};
+}
+async function runKanpei(){
+  if(!_lock('kanpei')){ _out('kOut','⏳ 正在计算/写入中…'); return; }
+  try{
+    var orders=_collectOrders(), arrival=_collectArrival();
+    if(!orders.length) throw new Error('请先添加(至少一行)订单');
+    var rows=[];
+    orders.forEach(function(o){
+      if(o.type==='整配'){
+        var need={}; o.claims.forEach(function(c){ var rid=String(c.role_id||''); need[rid]=(need[rid]||0)+Number(c.qty||1); });
+        var cut=null; o.roles.forEach(function(r){ var rid=String(r.role_id||''); if(Number(arrival[rid]||0)<(need[rid]||0)&&!cut) cut=r; });
+        if(cut){ var reason='【整配砍配】'+o.groupName+' 角色「'+cut.role_name+'」到货不足（需 '+(need[cut.role_id]||0)+' / 实到 '+(arrival[cut.role_id]||0)+'）';
+          o.claims.forEach(function(c){ var pr=c.original_price||cut.original_price||0; rows.push(_mk(o,c,cut,'整配砍配',reason,Math.round(Number(c.qty||1)*_c(pr)))); });
+        } else { o.claims.forEach(function(c){ rows.push(_mk(o,c,null,'整配砍配','货源充足，无需退款',0)); }); }
+      } else {
+        var rid=String(o.role_id||''), want=Number(o.qty||1), have=Number(arrival[rid]||0);
+        if(have<want){ rows.push(_mk(o,null,{role_id:rid,role_name:o.role_name},'单品砍配','【单品砍配】角色「'+o.role_name+'」到货不足（需 '+want+' / 实到 '+have+'）',Math.round(Number(o.qty||1)*_c(o.original_price||0)))); }
+        else { rows.push(_mk(o,null,{role_id:rid,role_name:o.role_name},'单品砍配','货源充足',0)); }
+      }
+    });
+    rows.forEach(function(r){ if(Number(r.refund_amount)<0) throw new Error('应退金额不能为负，已中止且未写库'); });
+    var nz=rows.filter(function(r){return Number(r.refund_amount)>0;});
+    if(nz.length){ var {error}=await supabaseClient.from('refunds').upsert(nz,{onConflict:'query_key,item_id,member_qq'}); if(error) throw new Error('写入 refunds 失败: '+error.message); }
+    var lines=['✅ 共 '+rows.length+' 条砍配结果，应退>0 的 '+nz.length+' 条已写入 refunds'];
+    rows.forEach(function(r){ lines.push(r.member_cn+' | '+r.item_name+' | 应退 ¥'+r.refund_amount+' | '+r.refund_status+' | '+r.kanpei_reason); });
+    _out('kOut',lines.join('\n')); showToast('砍配完成');
+  }catch(e){ _out('kOut','❌ '+e.message); }
+  finally{ _unlock('kanpei'); }
+}
+function loadErdiaoRoles(){
+  var roles={};
+  (RAW_ITEMS||[]).forEach(function(it){
+    var n=String(it.name||'').trim(); if(!n) return;
+    if(!roles[n]) roles[n]={name:n, base:Number(it.settled_price||it.price||0), plan:0};
+    roles[n].plan += Number(it.quantity||1);
+    var b=Number(it.settled_price||it.price||0); if(b>roles[n].base) roles[n].base=b;
+  });
+  var tb=document.getElementById('eRoleRows'); if(!tb) return;
+  var names=Object.keys(roles);
+  if(!names.length){ alert('当前排表没有角色数据'); return; }
+  if(!confirm('将从当前排表按角色载入 '+names.length+' 行（会覆盖当前已填行）。计划配数=排表数量合计，实际配数需你填真实到手数。继续？')) return;
+  tb.innerHTML='';
+  names.forEach(function(n){ var r=roles[n]; var tr=document.createElement('tr');
+    tr.innerHTML='<td><input class="r-name" value="'+_rc_esc(n)+'"></td>'+
+      '<td><input class="r-price" type="number" step="0.01" style="width:80px" value="'+r.base+'"></td>'+
+      '<td><input class="r-plan" type="number" style="width:70px" value="'+r.plan+'"></td>'+
+      '<td><input class="r-qty" type="number" style="width:70px" placeholder="实际数"></td>'+
+      '<td style="text-align:center"><input class="r-cold" type="checkbox" title="已降价，只降不升"></td>'+
+      '<td><button class="btn btn-secondary" onclick="this.parentElement.parentElement.remove()">✕</button></td>';
+    tb.appendChild(tr); });
+}
+
+async function runErdiao(){
+  if(!_lock('erdiao')){ _out('eOut','⏳ 正在计算/写入中…'); return; }
+  try{
+    var data=_collectRoles(), roles=data.roles;
+    if(!roles.length) throw new Error('请先添加(至少一行)角色');
+    roles.forEach(function(r){
+      if(!(Number(r.plan_qty)>0)) throw new Error('角色「'+r.role_name+'」计划配数必须大于0');
+      if(!(Number(r.real_qty)>0)) throw new Error('角色「'+r.role_name+'」请填写实际配数（真实到手数）');
+    });
+    var cold={}; data.cold.forEach(function(n){ cold[n]=true; });
+    // 目标总价 T = 当前单价×计划配数；现价总价 R = 当前单价×实际配数
+    var T=0, R=0;
+    roles.forEach(function(r){ T+=_c(r.base_price)*r.plan_qty; R+=_c(r.base_price)*r.real_qty; });
+    var np={};
+    var mode='';
+    if(R>T){
+      // 情况一：总价偏大 → 所有角色统一按比例降价
+      mode='总价偏大，全部降价';
+      roles.forEach(function(r){ np[String(r.role_id)]=Math.round(_c(r.base_price)*T/R); });
+    } else if(R<T){
+      // 情况二：总价偏小 → 冷门(已降价)只降不升，热门继续+价补足
+      mode='总价偏小，冷门只降/热门续涨';
+      var coldTotal=0, hotTotal=0, hotRoles=[];
+      roles.forEach(function(r){
+        if(cold[r.role_id]){
+          var nv=Math.min(_c(r.base_price), Math.round(_c(r.base_price)*r.plan_qty/r.real_qty));
+          np[String(r.role_id)]=nv; coldTotal+=nv*r.real_qty;
+        } else { hotRoles.push(r); hotTotal+=_c(r.base_price)*r.real_qty; }
+      });
+      var need=T-coldTotal-hotTotal;
+      if(need<0) need=0;
+      if(!hotRoles.length) throw new Error('没有非冷门(热门)角色可补回差额');
+      var hotQty=hotRoles.reduce(function(s,r){return s+r.real_qty;},0);
+      var per=Math.round(need/hotQty);
+      hotRoles.forEach(function(r){ np[String(r.role_id)]=_c(r.base_price)+per; });
+    } else {
+      // 总价相等：价格不变
+      mode='总价一致，价格不变';
+      roles.forEach(function(r){ np[String(r.role_id)]=_c(r.base_price); });
+    }
+    // 尾差（四舍五入）修正：优先调到配数最多的非冷门
+    var after=0; roles.forEach(function(r){ after+=np[String(r.role_id)]*r.real_qty; });
+    var residual=T-after;
+    if(residual!==0){
+      var pool=roles.filter(function(r){ return !cold[r.role_id]; });
+      if(!pool.length) pool=roles;
+      var maxr=pool.reduce(function(a,b){return b.real_qty>=a.real_qty?b:a;});
+      var per2=Math.round(residual/maxr.real_qty);
+      if(per2!==0){ np[String(maxr.role_id)]+=per2; after+=per2*maxr.real_qty; }
+    }
+    var eps=Math.abs(T-after);
+    if(eps>50) throw new Error('调价前后总货值误差 '+eps+' 分，异常，拒绝写入');
+    var log=[];
+    roles.forEach(function(r){
+      var base=_c(r.base_price), nv=np[String(r.role_id)];
+      var tag;
+      if(cold[r.role_id]) tag=(nv<base?'（冷门，降价）':'（冷门，不升）');
+      else tag=(nv>base?'（热门，涨价）':(nv<base?'（降价）':'（持平）'));
+      log.push(r.role_name+' | ¥'+_f(base)+' → ¥'+_f(nv)+tag);
+    });
+    var lr=roles.map(function(r){return {query_key:CURRENT_QUERY_KEY,role_id:String(r.role_id),role_name:r.role_name,old_price:_f(_c(r.base_price)),new_price:_f(np[String(r.role_id)]),before_total:_f(T),after_total:_f(after),diff:_f(T-after)};});
+    var {error:le}=await supabaseClient.from('price_adjust_log').upsert(lr,{onConflict:'query_key,role_id'}); if(le) throw new Error('写入调价日志失败: '+le.message);
+    var upd=0; RAW_ITEMS=RAW_ITEMS.map(function(it){ var rn=String(it.name||'').trim(); if(np[rn]!=null){ var nv=_f(np[rn]); if(String(it.settled_price||'')!==nv){ upd++; var c=Object.assign({},it); c.settled_price=Number(nv); return c; } } return it; });
+    if(upd){ await _saveItems(); }
+    var lines=['✅ '+mode+'：目标总价 ¥'+_f(T)+'，调价后 ¥'+_f(after)+'（误差 '+eps+' 分，四舍五入）'+(upd?'，已更新 '+upd+' 条结算价':'')]; lines.push('角色 | 旧价 → 新价'); lines.push.apply(lines,log);
+    _out('eOut',lines.join('\n')); showToast('二调完成');
+  }catch(e){ _out('eOut','❌ '+e.message); }
+  finally{ _unlock('erdiao'); }
+}
+function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); return saveDataToSupabase(); }
+async function saveManualRefund(){
+  var cn=(document.getElementById('mr-cn').value||'').trim();
+  var amt=Number(document.getElementById('mr-amt').value||0);
+  var type=document.getElementById('mr-type').value;
+  var reason=(document.getElementById('mr-reason').value||'').trim();
+  var out=document.getElementById('mrOut');
+  if(!cn){ out.textContent='❌ 请填团员CN'; return; }
+  if(!(amt>0)){ out.textContent='❌ 请填正确的应退金额'; return; }
+  var qq=''; try{ var bd=await supabaseClient.from('qq_bindings').select('qq_number').eq('buyer_cn',cn); if(bd.data&&bd.data.length) qq=String(bd.data[0].qq_number||''); }catch(e){}
+  var row={ query_key:CURRENT_QUERY_KEY, batch_name:'', order_type:'手动补录', member_qq:qq, member_cn:cn,
+    item_id:'manual_'+Date.now(), item_name:'', role_id:'', role_name:cn, original_price:0, settled_price:0,
+    kanpei_type:type, kanpei_reason:reason, refund_amount:amt, refund_status:'待退款', source:'web' };
+  try{ var re=await supabaseClient.from('refunds').insert([row]); if(re.error) throw new Error(re.error.message);
+    out.textContent='✅ 已补录 '+cn+' 退款 ¥'+amt+'（'+type+(reason?' / '+reason:'')+'）';
+    document.getElementById('mr-cn').value=''; document.getElementById('mr-amt').value=''; document.getElementById('mr-reason').value='';
+    showToast('退款已补录'); await loadRefundList(); }catch(err){ out.textContent='❌ '+err.message; }
+}
+function _rc_esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];}); }
+async function loadRefundList(){
+  var tb=document.getElementById('refRows'); if(!tb) return;
+  var msg=document.getElementById('refListMsg'); if(msg) msg.textContent='加载中…';
+  try{
+    var re=await supabaseClient.from('refunds').select('id,member_cn,refund_amount,kanpei_type,kanpei_reason,refund_status,created_at').order('id',{ascending:false});
+    if(re.error) throw new Error(re.error.message);
+    var rows=re.data||[];
+    if(!rows.length){ tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:12px;">暂无退款记录，可先补录一笔</td></tr>'; if(msg) msg.textContent=''; return; }
+    tb.innerHTML=rows.map(function(r){
+      var st=r.refund_status==='已退'?'<span style="color:#15803d;font-weight:600;">已退</span>':'<span style="color:#b45309;font-weight:600;">待退款</span>';
+      return '<tr><td style="text-align:center;padding:6px;"><input type="checkbox" class="refChk" data-id="'+r.id+'"></td>'+
+        '<td style="padding:6px;">'+_rc_esc(r.member_cn||'')+'</td><td style="padding:6px;text-align:right;">¥'+r.refund_amount+'</td>'+
+        '<td style="padding:6px;">'+_rc_esc(r.kanpei_type||'')+'</td><td style="padding:6px;">'+_rc_esc(r.kanpei_reason||'')+'</td><td style="padding:6px;">'+st+'</td>'+
+        '<td style="padding:6px;font-size:11px;color:var(--text-muted);">'+_rc_esc((r.created_at||'').slice(0,10))+'</td></tr>';
+    }).join('');
+    if(msg) msg.textContent='共 '+rows.length+' 条';
+  }catch(err){ if(msg) msg.textContent='❌ '+err.message; }
+}
+function toggleAllRef(){ var all=document.getElementById('refAll'); var cbs=document.querySelectorAll('.refChk'); cbs.forEach(function(c){ c.checked=all.checked; }); }
+async function batchMarkRefunded(){
+  var ids=[]; document.querySelectorAll('.refChk').forEach(function(c){ if(c.checked) ids.push(c.getAttribute('data-id')); });
+  var msg=document.getElementById('refListMsg');
+  if(!ids.length){ msg.textContent='请先勾选要标记“已退”的记录'; return; }
+  try{ var re=await supabaseClient.from('refunds').update({refund_status:'已退'}).in('id',ids); if(re.error) throw new Error(re.error.message);
+    msg.textContent='✅ 已将 '+ids.length+' 条标记为已退'; loadRefundList(); showToast('已标记已退'); }
+  catch(err){ msg.textContent='❌ '+err.message; }
+}
+function exportLedger(){
+  var rows=RAW_ITEMS.map(function(it){ return [it.name,it.cn,it.quantity,it.price,it.country,it.batch_name,it.status,it.item_id,it.settled_price]; });
+  var ws=XLSX.utils.aoa_to_sheet([['名称','CN','数量','单价','地区','批次','状态','item_id','二调结算价']].concat(rows));
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'台账');
+  var d=new Date(); var ts=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  XLSX.writeFile(wb,'谷团台账_'+CURRENT_QUERY_KEY+'_'+ts+'.xlsx');
+}
+function importLedger(e){
+  var file=e.target.files[0]; if(!file) return;
+  var rd=new FileReader();
+  rd.onload=async function(){ try{ var wb=XLSX.read(rd.result,{type:'array'}); var arr=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1}); if(!arr||arr.length<2) throw new Error('文件无数据'); var items=[]; for(var i=1;i<arr.length;i++){var row=arr[i]; if(row&&row.length) items.push({cn:row[1],name:row[0],quantity:Number(row[2])||1,price:Number(row[3])||0,country:row[4]||'',batch_name:row[5]||'默认批次',status:row[6]||'未出荷',item_id:'item_'+Date.now()+'_'+i});} RAW_ITEMS=RAW_ITEMS.concat(items); await _saveItems(); _out('impMsg','✅ 已导入 '+items.length+' 条并写入 group_data'); showToast('导入完成'); }catch(err){ _out('impMsg','❌ '+err.message); } };
+  rd.readAsArrayBuffer(file);
+}
+</script>
+
 </body>
 </html>
