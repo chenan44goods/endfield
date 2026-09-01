@@ -988,6 +988,9 @@
       <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 14px;" id="batchModalDesc">
         已选中 0 件谷子
       </p>
+      <label style="font-size:0.85rem; display:flex; align-items:center; gap:6px; margin-bottom:10px;">
+        <input type="checkbox" id="batchModalIncludeArchived" onchange="populateBatchModalSelect()"> 显示归档批次
+      </label>
       <div class="form-group" style="margin-bottom: 14px;">
         <label id="batchModalSelectLabel">请选择：</label>
         <select id="batchModalSelect" style="padding: 10px 12px; font-size: 0.95rem;" onchange="handleBatchModalSelectChange()">
@@ -1288,7 +1291,7 @@
       if (event && event.currentTarget) event.currentTarget.classList.add('active');
       const targetEl = document.getElementById(tabId);
       if (targetEl) targetEl.classList.add('active');
-      if (tabId === 'tabItems') renderTable();
+      if (tabId === 'tabItems') { renderTable(); loadBatches(); }
       if (tabId === 'tabLogistics') renderLogistics();
       if (tabId === 'tabBatches') loadBatches();
       if (tabId === 'tabDispatch') renderDispatchWorkbench();
@@ -1330,6 +1333,7 @@
         CURRENT_PAGE = 1;
         updateBatchDropdownOptions();
         renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
+        loadBatches();
       } catch (err) { showToast('数据加载网络异常'); }
     }
     window.loadDataByQueryKey = loadDataByQueryKey;
@@ -1448,9 +1452,8 @@
           batchSet.add(i.batch_name.trim());
         }
       });
-      const legacyList = Array.from(batchSet).filter(b => b === '默认批次' || removed.indexOf(b) === -1);
-
       const includeArchived = document.getElementById('batchIncludeArchived')?.checked || false;
+      const legacyList = Array.from(batchSet).filter(b => b === '默认批次' || (removed.indexOf(b) === -1 && (includeArchived || !isArchivedBatchName(b))));
       const allBatches = Array.isArray(RAW_BATCHES) ? RAW_BATCHES : [];
       const visibleBatches = allBatches.filter(b => includeArchived || String(b.status || '活跃').trim() !== '归档');
 
@@ -1870,18 +1873,32 @@
       setRemovedBatchOptions(list);
     }
 
-    function buildBatchList() {
+    function isArchivedBatchName(name) {
+      const n = String(name || '').trim();
+      if (!n) return false;
+      const matches = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(function(b){ return String(b.disk_name || '').trim() === n; });
+      if (matches.length === 0) return false;
+      return matches.every(function(b){ return String(b.status || '活跃').trim() === '归档'; });
+    }
+
+    function buildBatchList(includeArchived) {
       const removed = getRemovedBatchOptions();
       const set = new Set(['默认批次']);
       RAW_ITEMS.forEach(function(i){ if (i.batch_name && i.batch_name.trim()) set.add(i.batch_name.trim()); });
-      return Array.from(set).filter(function(b){ return b === '默认批次' || removed.indexOf(b) === -1; });
+      return Array.from(set).filter(function(b){
+        if (b === '默认批次') return true;
+        if (removed.indexOf(b) !== -1) return false;
+        if (includeArchived || !isArchivedBatchName(b)) return true;
+        return false;
+      });
     }
 
     function populateBatchModalSelect() {
       const selectEl = document.getElementById('batchModalSelect');
       const labelEl = document.getElementById('batchModalSelectLabel');
       labelEl.innerText = '请选择或新建批次：';
-      const batchSet = buildBatchList();
+      const includeArchived = document.getElementById('batchModalIncludeArchived')?.checked || false;
+      const batchSet = buildBatchList(includeArchived);
       let batchHtml = Array.from(batchSet).map(function(b){ return '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>'; }).join('');
       batchHtml += '<option value="__NEW__">➕ 新建批次...</option>';
       batchHtml += '<option value="__DELETE_BATCH__">❌ 删除某个批次选项（仅从下拉移除，不改谷子）</option>';
@@ -1893,7 +1910,8 @@
     function enterBatchDeleteMode() {
       const selectEl = document.getElementById('batchModalSelect');
       const labelEl = document.getElementById('batchModalSelectLabel');
-      BATCH_DELETE_CANDIDATES = buildBatchList();
+      const includeArchived = document.getElementById('batchModalIncludeArchived')?.checked || false;
+      BATCH_DELETE_CANDIDATES = buildBatchList(includeArchived);
       const removable = BATCH_DELETE_CANDIDATES.filter(function(b){ return b !== '默认批次'; });
       if (removable.length === 0) {
         alert('当前没有可移除的批次选项（除默认批次外没有其它批次）。');
@@ -1944,6 +1962,8 @@
       } else if (actionType === 'batch') {
         titleEl.innerText = '📦 批量修改所属批次';
         BATCH_DELETE_MODE = false;
+        const archToggle = document.getElementById('batchModalIncludeArchived');
+        if (archToggle) archToggle.checked = false;
         populateBatchModalSelect();
       }
 
@@ -2956,7 +2976,7 @@
           const label = b.goods_title + (tag ? ' ' + tag : '') + ' ' + (b.open_date || '');
           html += '<option value="' + escapeHtml(b.batch_id) + '">' + escapeHtml(label) + '</option>';
         });
-        if (matches.length === 0) {
+        if (matches.length === 0 && (includeArchived || !isArchivedBatchName(disk))) {
           html += '<option value="legacy:' + escapeHtml(disk) + '">' + escapeHtml('历史: ' + disk) + '</option>';
         }
       }
