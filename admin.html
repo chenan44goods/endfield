@@ -803,13 +803,14 @@
               <option value="all">全部</option>
             </select>
             <select id="batchDropdown" style="max-width:380px; padding:6px 10px; font-size:0.85rem;"></select>
+            <button class="btn btn-danger" id="batchDeleteBtn" onclick="batchDeleteSelected()">🗑 批量删除</button>
           </div>
         </div>
         <div class="table-container desktop-table-view">
           <table>
             <thead>
               <tr>
-                <th>batch_id</th><th>所属批次</th><th>制品名称</th><th>车次</th><th>开团日期</th><th>状态</th><th>操作</th>
+                <th><input type="checkbox" id="batchSelectAll" onchange="toggleSelectAllBatches(this.checked)"></th><th>batch_id</th><th>所属批次</th><th>制品名称</th><th>车次</th><th>开团日期</th><th>状态</th><th>操作</th>
               </tr>
             </thead>
             <tbody id="batchesTableBody"></tbody>
@@ -1159,6 +1160,7 @@
     let RAW_BATCHES = [];
     let PENDING_BATCH_TITLES = [];
     let PENDING_BATCH_RAW = '';
+    let BATCH_SELECTED_IDS = new Set();
     let CURRENT_DISPATCH_SUBTAB = 'pending';
 
     window.ITEM_CACHE = [];
@@ -2863,7 +2865,7 @@
       }
       if (!tbody) return;
       if (visible.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-muted);">暂无批次数据，请先新建或批量导入</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-muted);">暂无批次数据，请先新建或批量导入</td></tr>';
         if (mobileView) mobileView.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted);">暂无批次数据</div>';
         return;
       }
@@ -2879,6 +2881,7 @@
           ? '<button class="btn btn-secondary" style="padding:2px 8px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">恢复未完成</button>'
           : '<button class="btn btn-secondary" style="padding:2px 8px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">标记已完结</button>';
         html += '<tr>'
+          + '<td><input type="checkbox" class="batch-checkbox" value="' + bid + '" ' + (BATCH_SELECTED_IDS.has(String(b.batch_id)) ? 'checked' : '') + ' onchange="toggleBatchSelect(this.value, this.checked)"></td>'
           + '<td style="font-family:monospace;font-size:0.85rem;">' + escapeHtml(b.batch_id) + '</td>'
           + '<td>' + escapeHtml(b.disk_name) + '</td>'
           + '<td>' + escapeHtml(b.goods_title) + '</td>'
@@ -2887,10 +2890,11 @@
           + '<td><span class="badge ' + stCls + '">' + escapeHtml(statusLabel) + '</span></td>'
           + '<td><button class="btn btn-primary" style="padding:2px 8px;font-size:0.8rem;" onclick="copyBatchById(\'' + bid + '\')">复制</button> ' + archBtn + '</td>'
           + '</tr>';
-        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(b.batch_id) + '</span><span class="badge ' + stCls + '">' + escapeHtml(statusLabel) + '</span></div><div style="font-size:0.9rem;padding:6px 0;"><strong>' + escapeHtml(b.disk_name) + '</strong><br>' + escapeHtml(b.goods_title) + (tag ? '<br>车次: ' + escapeHtml(tag) : '') + '<br>开团: ' + escapeHtml(b.open_date || '') + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px;font-size:0.8rem;" onclick="copyBatchById(\'' + bid + '\')">复制</button> <button class="btn btn-secondary" style="padding:4px 10px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">' + (status === '归档' ? '恢复活跃' : '归档') + '</button></div></div>';
+        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><input type="checkbox" class="batch-checkbox" value="' + bid + '" ' + (BATCH_SELECTED_IDS.has(String(b.batch_id)) ? 'checked' : '') + ' onchange="toggleBatchSelect(this.value, this.checked)"> <span class="badge badge-batch">' + escapeHtml(b.batch_id) + '</span><span class="badge ' + stCls + '">' + escapeHtml(statusLabel) + '</span></div><div style="font-size:0.9rem;padding:6px 0;"><strong>' + escapeHtml(b.disk_name) + '</strong><br>' + escapeHtml(b.goods_title) + (tag ? '<br>车次: ' + escapeHtml(tag) : '') + '<br>开团: ' + escapeHtml(b.open_date || '') + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px;font-size:0.8rem;" onclick="copyBatchById(\'' + bid + '\')">复制</button> <button class="btn btn-secondary" style="padding:4px 10px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">' + (status === '归档' ? '恢复活跃' : '归档') + '</button></div></div>';
       });
       tbody.innerHTML = html;
       if (mobileView) mobileView.innerHTML = cardsHtml;
+      updateBatchSelectAllState();
     }
     window.renderBatches = renderBatches;
 
@@ -2959,6 +2963,55 @@
       }
       return { titles: titles, prices: prices, rows: rows };
     }
+
+    function toggleBatchSelect(batchId, checked) {
+      const id = String(batchId || '');
+      if (checked) BATCH_SELECTED_IDS.add(id); else BATCH_SELECTED_IDS.delete(id);
+      updateBatchSelectAllState();
+    }
+    window.toggleBatchSelect = toggleBatchSelect;
+
+    function toggleSelectAllBatches(checked) {
+      const filterMode = document.getElementById('batchFilterMode')?.value || 'active';
+      const st2 = b => String(b.status || '活跃').trim();
+      const visible = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(b => {
+        if (filterMode === 'all') return true;
+        if (filterMode === 'archived') return st2(b) === '归档';
+        return st2(b) !== '归档';
+      });
+      BATCH_SELECTED_IDS.clear();
+      if (checked) visible.forEach(b => BATCH_SELECTED_IDS.add(String(b.batch_id)));
+      document.querySelectorAll('.batch-checkbox').forEach(cb => { cb.checked = checked; });
+      updateBatchSelectAllState();
+    }
+    window.toggleSelectAllBatches = toggleSelectAllBatches;
+
+    function updateBatchSelectAllState() {
+      const boxes = document.querySelectorAll('.batch-checkbox');
+      const all = document.getElementById('batchSelectAll');
+      if (all) all.checked = boxes.length > 0 && Array.from(boxes).every(cb => cb.checked);
+      const btn = document.getElementById('batchDeleteBtn');
+      if (btn) btn.innerText = '🗑 批量删除' + (BATCH_SELECTED_IDS.size ? ' (' + BATCH_SELECTED_IDS.size + ')' : '');
+    }
+    window.updateBatchSelectAllState = updateBatchSelectAllState;
+
+    async function batchDeleteSelected() {
+      if (BATCH_SELECTED_IDS.size === 0) return showToast('请先勾选要删除的批次！');
+      const list = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(b => BATCH_SELECTED_IDS.has(String(b.batch_id)));
+      if (list.length === 0) return showToast('勾选的批次已不存在，请刷新后重试');
+      if (!confirm('确定删除 ' + list.length + ' 个批次吗？\n此操作只删除批次记录，不会删除排表明细里的谷子数据。')) return;
+      let ok = 0, fail = 0;
+      for (const b of list) {
+        const { error } = await supabaseClient.from('batches').delete().eq('id', b.id);
+        if (error) fail++; else ok++;
+      }
+      BATCH_SELECTED_IDS.clear();
+      await loadBatches();
+      updateBatchDropdownOptions();
+      if (ok) showToast('✅ 已删除 ' + ok + ' 个批次' + (fail ? '，失败 ' + fail + ' 个' : ''));
+      else showToast('删除失败，请稍后重试');
+    }
+    window.batchDeleteSelected = batchDeleteSelected;
 
     function copyMemberLink() {
       const url = `${window.location.origin}/index.html?key=${encodeURIComponent(CURRENT_QUERY_KEY)}`;
