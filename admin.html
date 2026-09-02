@@ -798,9 +798,9 @@
           <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
             <label style="font-size:0.85rem; display:flex; align-items:center; gap:6px;">批次筛选</label>
             <select id="batchFilterMode" onchange="renderBatches()" style="padding:6px 10px; font-size:0.85rem;">
+              <option value="all" selected>全部</option>
               <option value="active">未完成未完全收款</option>
               <option value="archived">已完全全部收款并完整录入</option>
-              <option value="all">全部</option>
             </select>
             <select id="batchDropdown" style="max-width:380px; padding:6px 10px; font-size:0.85rem;"></select>
             <button class="btn btn-danger" id="batchDeleteBtn" onclick="batchDeleteSelected()">🗑 批量删除</button>
@@ -1462,14 +1462,18 @@
         if (curBatch) ensureSelectOption('inputBatchId', curBatch);
       }
 
+      const filterLegacySet = new Set(['默认批次']);
+      RAW_ITEMS.forEach(i => { const bn = String(i.batch_name || '').trim(); if (bn) filterLegacySet.add(bn); });
+      const filterLegacyList = Array.from(filterLegacySet).filter(b => b === '默认批次' || removed.indexOf(b) === -1);
+
       const dl = document.getElementById('batchPresets');
       const filterSel = document.getElementById('filterBatch');
       const curFilter = filterSel ? filterSel.value : '';
       if (dl) {
-        dl.innerHTML = legacyList.map(b => '<option value="' + escapeHtml(b) + '">').join('');
+        dl.innerHTML = filterLegacyList.map(b => '<option value="' + escapeHtml(b) + '">').join('');
       }
       if (filterSel) {
-        filterSel.innerHTML = '<option value="">全部批次</option>' + legacyList.map(b => '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>').join('');
+        filterSel.innerHTML = '<option value="">全部批次</option>' + filterLegacyList.map(b => '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>').join('');
         filterSel.value = curFilter;
       }
     }
@@ -2996,7 +3000,7 @@
     window.updateBatchSelectAllState = updateBatchSelectAllState;
 
     async function batchDeleteSelected() {
-      if (BATCH_SELECTED_IDS.size === 0) return showToast('请先勾选要删除的批次！');
+      if (BATCH_SELECTED_IDS.size === 0) return alert('请先勾选要删除的批次！');
       const list = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(b => BATCH_SELECTED_IDS.has(String(b.batch_id)));
       if (list.length === 0) return showToast('勾选的批次已不存在，请刷新后重试');
       if (!confirm('确定删除 ' + list.length + ' 个批次吗？\n此操作只删除批次记录，不会删除排表明细里的谷子数据。')) return;
