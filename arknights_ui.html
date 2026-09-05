@@ -464,8 +464,8 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     }
 
     .container {
-          max-width: 1320px;
-          margin: 0 16px 0 88px;   /* 左侧留出 88px 侧边栏 */
+          max-width: none;         /* 流式填满导航与右栏之间，宽屏不留空白 */
+          margin: 0 calc(var(--rail-w) + 16px) 0 88px;
         }
 
     header {
