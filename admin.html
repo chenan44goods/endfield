@@ -68,7 +68,8 @@
 }
 
 * { margin:0; padding:0; box-sizing:border-box; }
-html,body { height:100%; overflow:hidden; }
+html { height:100%; }
+  body { min-height:100%; overflow-x:hidden; overflow-y:auto; }
 body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-main); }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1811,8 +1812,9 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           // 终末地加载转场：首次进入播放完整动画，同一会话内再次进入走快速通道
           var skipIntro = false;
           try {
-            skipIntro = sessionStorage.getItem('INTRO_SHOWN') === '1';
-            sessionStorage.setItem('INTRO_SHOWN', '1');
+            // 永久记忆：每台设备只完整播放一次开场动画（localStorage 不随标签页/重启重置）
+            skipIntro = localStorage.getItem('INTRO_SEEN') === '1';
+            localStorage.setItem('INTRO_SEEN', '1');
           } catch (e) {}
           var intro;
           if (skipIntro && typeof window.runIntroFast === 'function') {
