@@ -47,6 +47,18 @@
       border-radius: 6px;
       box-shadow: 0 22px 45px -20px rgba(33,33,33,0.55);
     }
+    /* 左上角：山团团黑色徽标 */
+    .corner-mark {
+      position: absolute;
+      top: 26px;
+      left: clamp(24px, 6.5vw, 96px);
+      width: clamp(150px, 16vw, 210px);
+      opacity: 0.92;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .hud-rule.top { display: none; }
+    .relay { display: none; }
     /* 网格纸背景 */
     .page {
       position: relative;
@@ -814,6 +826,7 @@
     @media (max-width: 900px) {
       .hud { display:none !important; }
       .mobile-contact { display:block; margin:14px 6vw 34px; font-size:12px; color:var(--ink-soft); text-align:center; letter-spacing:0.02em; }
+      .corner-mark { width: 118px; top: 14px; left: 14px; opacity: 0.9; }
     }
 
     /* ===== 垂直聚焦缩放轮播 Vertical Focus Carousel ===== */
@@ -900,6 +913,7 @@
     <!-- 背景水印 -->
     <div class="watermark watermark-e">E</div>
     <div class="watermark watermark-a">A</div>
+    <img class="corner-mark" src="images/logo_mark_black.png" alt="山团团">
 
     <!-- 左侧品牌区 -->
     <div class="left">
@@ -962,10 +976,6 @@
         <div class="entry-line"></div>
       </div>
 
-      <!-- 终末地 Logo（项目图片素材） -->
-      <div class="relay" aria-hidden="true">
-        <img src="images/endfield_logo_v2.png" alt="终末地">
-      </div>
     </div>
     <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243</div>
   </div>
