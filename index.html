@@ -58,6 +58,8 @@
       pointer-events: none;
     }
     .hud-rule.top { display: none; }
+    .hud-rule.left { display: none; }
+    .filter-bar { display: none; }
     .relay { display: none; }
     /* 网格纸背景 */
     .page {
@@ -161,7 +163,7 @@
     .brand-sub {
       margin-top: 20px;
       padding-top: 14px;
-      border-top: 1px solid var(--ink-soft);
+      border-top: none;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -250,7 +252,7 @@
     .right {
       position: relative;
       z-index: 2;
-      padding: 12vh 4vw 8vh 2vw;
+      padding: 12vh 4vw 8vh 7vw;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -920,7 +922,6 @@
       <div class="eyebrow">山团大观园 · 团员自助</div>
       <div class="brand-titles">
         <div class="filter-bar"></div>
-        <img class="brand-logo" src="images/logo_orbipom.jpg" alt="山团团 OrbiPom">
         <div class="brand-sub"><span class="no">№</span> SHAN TUAN · GRAND GARDEN</div>
       </div>
 
