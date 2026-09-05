@@ -162,30 +162,31 @@
       bottom: -8px;
       width: 2.5px;
       background: var(--accent);
-      box-shadow: 0 0 18px rgba(122,138,90,0.55);
+      box-shadow: 0 0 18px rgba(22,24,28,0.55);
     }
 
     /* 进入控制台按钮 + 光带 */
     .console-btn {
       position: relative;
-      width: 208px;
-      padding: 20px 30px;
-      background: var(--navy-2);
-      color: #e9edf6;
-      border: none;
+      width: auto;
+      padding: 11px 20px;
+      background: transparent;
+      color: var(--ink);
+      border: 1.5px solid var(--ink);
       border-radius: 2px;
       font-family: var(--serif-cn);
-      font-size: 18px;
-      letter-spacing: 0.18em;
+      font-size: 14px;
+      letter-spacing: 0.14em;
       cursor: pointer;
       overflow: hidden;
       text-align: left;
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-      box-shadow: 0 22px 45px -18px rgba(15,25,49,0.55);
+      transition: transform 0.25s ease, background 0.25s ease, color 0.25s ease;
+      box-shadow: none;
     }
     .console-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 28px 55px -18px rgba(15,25,49,0.6);
+      transform: translateY(-1px);
+      background: var(--ink);
+      color: #f5f4ec;
     }
     .console-btn .label {
       display: inline-flex;
@@ -199,8 +200,8 @@
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 10px rgba(122,138,90,0.9);
+      background: var(--paper);
+      box-shadow: 0 0 8px rgba(233,226,48,0.85);
       flex-shrink: 0;
     }
     /* 上下移动的光带 */
@@ -210,7 +211,7 @@
       right: 0;
       height: 46%;
       top: -60%;
-      background: linear-gradient(180deg, transparent, rgba(159,174,127,0.3), transparent);
+      background: linear-gradient(180deg, transparent, rgba(22,24,28,0.3), transparent);
       animation: scanY 2.6s cubic-bezier(0.45,0,0.2,1) infinite;
       pointer-events: none;
     }
@@ -279,7 +280,7 @@
       top: 5px; right: 5px;
       width: 8px; height: 8px;
       background: var(--accent);
-      box-shadow: 0 0 8px rgba(122,138,90,0.8);
+      box-shadow: 0 0 8px rgba(22,24,28,0.8);
       clip-path: polygon(0 0, 100% 0, 100% 100%);
     }
     .entry:hover .entry-icon {
@@ -288,8 +289,8 @@
       transform: translateY(-2px);
     }
     .entry:hover .entry-icon::after {
-      background: #cfd83a;
-      box-shadow: 0 0 10px rgba(207,216,58,0.9);
+      background: var(--paper);
+      box-shadow: 0 0 10px rgba(233,226,48,0.85);
     }
 
     .entry-meta { display: flex; flex-direction: column; gap: 6px; }
@@ -346,7 +347,7 @@
       border-radius: 50%;
       border: 1px solid rgba(74,79,87,0.18);
       background: radial-gradient(circle, rgba(255,255,255,0.32), rgba(233,235,238,0.18) 60%, transparent 72%);
-      box-shadow: 0 0 60px rgba(122,138,90,0.12);
+      box-shadow: 0 0 60px rgba(22,24,28,0.12);
     }
     .relay svg { width: 100%; height: 100%; overflow: visible; }
     .relay img {
@@ -360,7 +361,7 @@
     .relay .stroke2 { stroke: currentColor; stroke-width: 1.6; fill: none; }
     .relay .fill { fill: rgba(74,79,87,0.05); }
     .relay .dot { fill: currentColor; }
-    .relay .accent { stroke: rgba(122,138,90,0.7); }
+    .relay .accent { stroke: rgba(22,24,28,0.7); }
 
     /* 等高线地形纹理（终末地特征） */
     .topo {
@@ -400,7 +401,7 @@
       bottom: 0;
       width: 1px;
       background: linear-gradient(180deg, transparent, var(--accent), transparent);
-      box-shadow: 0 0 26px rgba(122,138,90,0.65);
+      box-shadow: 0 0 26px rgba(22,24,28,0.65);
       z-index: 1;
       opacity: 0.7;
       pointer-events: none;
@@ -560,7 +561,7 @@
     .panel-btn .scan {
       position: absolute;
       inset: 0;
-      background: linear-gradient(90deg, transparent, rgba(159,174,127,0.25), transparent);
+      background: linear-gradient(90deg, transparent, rgba(22,24,28,0.25), transparent);
       animation: scanXbtn 2s linear infinite;
     }
     @keyframes scanXbtn {
@@ -624,7 +625,7 @@
     .hud-corner::before, .hud-corner::after {
       content: "";
       position: absolute;
-      background: rgba(122,138,90,0.7);
+      background: rgba(22,24,28,0.7);
     }
     .hud-corner::before { width: 100%; height: 1.5px; }
     .hud-corner::after  { width: 1.5px; height: 100%; }
@@ -657,7 +658,7 @@
       right: 90px;
       width: 150px;
       padding: 12px 14px;
-      border-left: 2px solid rgba(122,138,90,0.6);
+      border-left: 2px solid rgba(22,24,28,0.6);
       background: rgba(31,35,42,0.05);
       backdrop-filter: blur(2px);
       color: var(--ink-soft);
@@ -671,7 +672,7 @@
     .hud-panel .bar { margin-top: 8px; height: 3px; background: rgba(74,79,87,0.18); position: relative; }
     .hud-panel .bar::after {
       content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 62%;
-      background: rgba(122,138,90,0.7);
+      background: rgba(22,24,28,0.7);
       animation: barPulse 3s ease-in-out infinite;
     }
     @keyframes barPulse { 0%,100% { width: 56%; } 50% { width: 74%; } }
@@ -691,7 +692,7 @@
     .hud-status .dot {
       width: 7px; height: 7px; border-radius: 50%;
       background: var(--accent);
-      box-shadow: 0 0 12px rgba(122,138,90,0.9);
+      box-shadow: 0 0 12px rgba(22,24,28,0.9);
       animation: dotPulse 2s ease-in-out infinite;
     }
     .hud-status .dot.warn { background: var(--warn); box-shadow: 0 0 12px rgba(184,135,74,0.9); animation-delay: 0.4s; }
@@ -724,7 +725,7 @@
       padding: 10px 28px;
       background: rgba(31,35,42,0.05);
       backdrop-filter: blur(2px);
-      border-top: 1px solid rgba(122,138,90,0.4);
+      border-top: 1px solid rgba(22,24,28,0.4);
       color: var(--ink-soft);
       font-size: 12px;
       letter-spacing: 0.08em;
@@ -799,7 +800,17 @@
       transition: background 0.2s, transform 0.15s;
     }
     .result-item .r-apply:hover { background:#166534; transform: translateY(-1px); }
-    .result-empty { text-align:center; padding:30px; color:var(--muted); font-size:13px; background:rgba(255,255,255,0.6); border-radius:8px; }
+    .result-empty { text-align:center; padding:30px; color:var(--ink-soft); font-size:13px; background:rgba(250,250,246,0.82); border-radius:8px; white-space:pre-line; line-height:1.7; }
+    .stat-pill { display:inline-block; background:rgba(22,24,28,0.72); color:#f5f4ec; padding:7px 14px; border-radius:999px; font-size:13px; font-weight:600; letter-spacing:0.06em; backdrop-filter:blur(3px); }
+    .batch-label-pill { display:inline-block; background:rgba(22,24,28,0.72); color:#f5f4ec; padding:8px 12px; border-radius:999px; font-size:11px; letter-spacing:0.12em; backdrop-filter:blur(3px); }
+    .qspin { display:inline-block; width:14px; height:14px; border:2px solid rgba(22,24,28,0.2); border-top-color:var(--ink); border-radius:50%; animation:qspin 0.8s linear infinite; vertical-align:-2px; margin-right:8px; }
+    @keyframes qspin { to { transform:rotate(360deg); } }
+    /* 📱 移动端：隐藏纯装饰 HUD，联系方式改为随内容滚动，不再悬浮遮挡 */
+    .mobile-contact { display:none; }
+    @media (max-width: 900px) {
+      .hud { display:none !important; }
+      .mobile-contact { display:block; margin:14px 6vw 34px; font-size:12px; color:var(--ink-soft); text-align:center; letter-spacing:0.02em; }
+    }
 
     /* ===== 垂直聚焦缩放轮播 Vertical Focus Carousel ===== */
     .result-carousel {
@@ -953,6 +964,7 @@
         <img src="images/endfield_logo_v2.png" alt="终末地">
       </div>
     </div>
+    <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243</div>
   </div>
 
   <!-- 自助查询面板 -->
@@ -1006,9 +1018,9 @@
       <div id="queryResultOverlay" style="display:none; width:min(820px, 88%);">
         <!-- 顶部筛选栏：右上角谷子名称筛选 -->
         <div class="result-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:14px;">
-          <span id="resultStat" style="font-size:13px; color:#fff; font-weight:600; letter-spacing:0.06em; text-shadow:0 1px 6px rgba(0,0,0,0.35);"></span>
+          <span id="resultStat" class="stat-pill"></span>
           <div style="display:flex; align-items:center; gap:10px;">
-            <span style="font-size:11px; letter-spacing:0.12em; color:#fff; opacity:0.9; text-shadow:0 1px 6px rgba(0,0,0,0.35);">BATCH · 分类筛选</span>
+            <span class="batch-label-pill">BATCH · 分类筛选</span>
             <select id="batchFilter" onchange="filterByBatch()" style="padding:8px 14px; border-radius:8px; border:1px solid rgba(22,24,28,0.12); background:rgba(250,250,250,0.95); color:var(--ink); font-size:13px; font-family:var(--sans); outline:none; min-width:170px;">
               <option value="">全部分类</option>
             </select>
@@ -1105,6 +1117,12 @@
       const stat = document.getElementById('resultStat');
       if (!key) return showToast('请输入查询密钥');
       if (!cn) return showToast('请输入您的 CN');
+      const _qbtn = document.getElementById('queryBtn');
+      if (_qbtn) _qbtn.disabled = true;
+      if (resBox && list) {
+        resBox.style.display = 'block';
+        list.innerHTML = '<div class="result-empty"><span class="qspin"></span>正在连接数据库，查询中……</div>';
+      }
       try {
         const data = await fetchLeaderData(key);
         if (!data || !data.length) return showToast('未找到该密钥数据');
@@ -1154,7 +1172,7 @@
           stat.innerText = '共 ' + items.length + ' 条，总件 ' + totalQty;
         }
         if (!items.length) {
-          const emptyText = mode==='fee' ? '没有待交款项，感谢配合' : (mode==='dispatch' ? '暂无待排发的谷子' : '未找到该 CN 的谷子记录');
+          const emptyText = mode==='fee' ? '没有待交款项，感谢配合' : (mode==='dispatch' ? '暂无待排发的谷子' : '未找到「' + cn + '」的记录\n请确认 CN 拼写是否正确，或联系团长确认是否已登记');
           list.innerHTML = '<div class="result-empty">' + emptyText + '</div>';
           const foldBtn = document.getElementById('foldFormBtn');
           if (foldBtn) { foldBtn.style.display = 'none'; }
@@ -1163,6 +1181,7 @@
         filterByBatch();
         showFormFold();
       } catch(e){ showToast('查询异常: '+e.message); }
+      finally { if (typeof _qbtn !== 'undefined' && _qbtn) _qbtn.disabled = false; }
     }
 
     // 按分类（batch_name）筛选（只显示选定的分类）
