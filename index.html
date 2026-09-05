@@ -6,7 +6,6 @@
   <title>山团大观园 · 谷团自助查询</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -76,8 +75,6 @@
       z-index: 0;
       pointer-events: none;
       box-shadow: inset 0 0 120px rgba(120,116,20,0.10);
-    }
-    .page::after {
       background:
         linear-gradient(90deg, rgba(255,255,255,0.35), transparent 8%, transparent 92%, rgba(255,255,255,0.35)),
         repeating-linear-gradient(0deg, transparent 0 40px, rgba(255,255,255,0.25) 40px 41px);
@@ -442,7 +439,7 @@
       z-index: 20;
       display: grid;
       grid-template-columns: minmax(360px, 30%) 1fr;
-      background: url('images/panel_bg.png') center / cover no-repeat;
+      background: url('images/panel_bg.webp') center / cover no-repeat;
       transform: translateX(100%);
       transition: transform 0.55s cubic-bezier(0.76,0,0.18,1);
     }
@@ -580,7 +577,33 @@
       overflow: hidden;
       padding: 6vh 3vw;
     }
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 48px;
+      z-index: 3000;
+      max-width: 82vw;
+      padding: 12px 22px;
+      border-radius: 8px;
+      background: var(--navy);
+      color: #f5f4ec;
+      font-size: 14px;
+      line-height: 1.5;
+      letter-spacing: 0.02em;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+      opacity: 0;
+      transform: translateX(-50%) translateY(16px);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      pointer-events: none;
+      white-space: pre-line;
+    }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* 键盘焦点可见性（无障碍） */
+    .entry:focus-visible, .qp-back:focus-visible {
+      outline: 2px solid var(--ink);
+      outline-offset: 4px;
+    }
 
 
     /* ============ 终末地工业 HUD 装饰元素 ============ */
@@ -865,11 +888,11 @@
 
     <!-- 左侧品牌区 -->
     <div class="left">
-      <div class="eyebrow">山团大观园 · 管理端</div>
+      <div class="eyebrow">山团大观园 · 团员自助</div>
       <div class="brand-titles">
         <div class="filter-bar"></div>
-        <div class="brand-title">Admin</div>
-        <div class="brand-title sub">Console</div>
+        <div class="brand-title">Grand</div>
+        <div class="brand-title sub">Garden</div>
         <div class="brand-sub"><span class="no">№</span> SHAN TUAN · GRAND GARDEN</div>
       </div>
 
@@ -878,7 +901,7 @@
           <span class="scan"></span>
           <span class="label">进入控制台</span>
         </button>
-        <div class="console-caption">N / CONSOLE · ADMIN</div>
+        <div class="console-caption">N / SELF · SERVICE</div>
       </div>
     </div>
 
@@ -942,17 +965,17 @@
         <div class="qp-title" id="panelTitle">自助查询</div>
 
         <div class="field" style="margin-top: 34px;">
-          <label>Query Key · 查询密钥</label>
+          <label for="panelKey">Query Key · 查询密钥</label>
           <input id="panelKey" placeholder="输入团长提供的密钥">
         </div>
         <div class="field">
-          <label>CN · 圈名</label>
+          <label for="panelCn">CN · 圈名</label>
           <input id="panelCn" placeholder="输入你的 CN / 圈名">
         </div>
         <!-- 反馈表单字段（默认隐藏） -->
         <div id="fbFields" style="display:none;">
           <div class="field" style="margin-top: 34px;">
-            <label>反馈分类</label>
+            <label for="fbCategory">反馈分类</label>
             <select id="fbCategory" style="width:100%; border:none; border-bottom:1px solid var(--ink-soft); background:transparent; padding:10px 2px; font-size:16px; color:var(--ink); outline:none; font-family:var(--sans);">
               <option value="建议">💡 建议</option>
               <option value="问题反馈">⚠️ 问题反馈</option>
@@ -961,7 +984,7 @@
             </select>
           </div>
           <div class="field">
-            <label>反馈详情 *</label>
+            <label for="fbContent">反馈详情 *</label>
             <textarea id="fbContent" rows="4" placeholder="请描述您的想法、建议或遇到的问题..." style="width:100%; border:none; border-bottom:1px solid var(--ink-soft); background:transparent; padding:10px 2px; font-size:16px; color:var(--ink); outline:none; font-family:var(--sans); resize:vertical;"></textarea>
           </div>
           <button class="panel-btn" id="fbSubmitBtn" onclick="submitFeedback()">
@@ -1211,9 +1234,10 @@
       submitApply([it]);
     }
     function applyAllDispatchable(){
-      const items = (window.CURRENT_ITEMS || []).filter(i=>String(i.status||'').trim()==='可排发');
+      // 只对当前分类筛选下的可排发项操作，避免"选了分类却全量提交"的误操作
+      const items = (window.CURRENT_VIEW_ITEMS || window.CURRENT_ITEMS || []).filter(i=>String(i.status||'').trim()==='可排发');
       if (!items.length) return showToast('没有可排发的谷子');
-      if (!confirm('确定对 '+items.length+' 件谷子一键提交排发申请吗？提交后这些谷子状态将变为【待发货】。')) return;
+      if (!confirm('确定对当前筛选下的 '+items.length+' 件谷子一键提交排发申请吗？提交后这些谷子状态将变为【待发货】。')) return;
       submitApply(items);
     }
     async function submitApply(items){
@@ -1288,9 +1312,13 @@
       m.style.cssText = 'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
       const im = document.createElement('img');
       im.src = src;
+      im.alt = '谷子大图';
       im.style.cssText = 'max-width:92vw;max-height:92vh;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.6);';
       m.appendChild(im);
-      m.onclick = () => document.body.removeChild(m);
+      function closeLb(){ document.removeEventListener('keydown', onLbKey); if (m.parentNode) m.parentNode.removeChild(m); }
+      function onLbKey(e){ if (e.key === 'Escape') closeLb(); }
+      m.onclick = closeLb;
+      document.addEventListener('keydown', onLbKey);
       document.body.appendChild(m);
     }
 
@@ -1435,6 +1463,26 @@
     function enterConsole(){
       window.location.href = 'admin.html';
     }
+
+    // ===== 页面初始化 =====
+    (function initPage(){
+      // 支持 admin 后台复制的 ?key=xxx 专属链接：自动填入查询密钥
+      try {
+        const k = new URLSearchParams(location.search).get('key');
+        if (k && k.trim()) {
+          const el = document.getElementById('panelKey');
+          if (el) el.value = k.trim();
+        }
+      } catch(e){}
+      // 功能入口 / 返回按钮支持键盘操作（Tab 聚焦 + Enter/空格触发）
+      document.querySelectorAll('.entry, .qp-back').forEach(el => {
+        el.setAttribute('tabindex', '0');
+        el.setAttribute('role', 'button');
+        el.addEventListener('keydown', ev => {
+          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); el.click(); }
+        });
+      });
+    })();
   </script>
 </body>
 </html>
