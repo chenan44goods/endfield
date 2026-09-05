@@ -13,9 +13,9 @@
    ═══════════════════════════════════════════════════════════ */
 :root {
   /* ── 硬性主色（全局唯一强调色，禁止他用） ───────── */
-  --primary-yellow: #F9E73E;              /* ★ 唯一主黄 */
-  --primary-yellow-rgb: 249, 231, 62;     /* 供 rgba 阴影派生 */
-  --primary-yellow-soft: rgba(249,231,62,.14);  /* 选中态透明底 */
+  --primary-yellow: #FEFE2C;              /* ★ 唯一主黄 */
+  --primary-yellow-rgb: 254, 254, 44;     /* 供 rgba 阴影派生 */
+  --primary-yellow-soft: rgba(254,254,44,.14);  /* 选中态透明底 */
 
   /* ── 色板 Color ─────────────────────────── */
   --c-void:      #000000;   /* 纯黑 */
@@ -160,7 +160,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
   width:100vw;
   height:100vh;
   z-index:9999;
-  background:var(--primary-yellow);   /* 纯黄 #F9E73E */
+  background:var(--primary-yellow);   /* 纯黄 #FEFE2C */
   border:none;
   border-radius:0;
   /* 入场核心：初始完全在屏幕右侧外，加 .show 后 transition 平滑推进铺满 */
@@ -360,9 +360,9 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           --radius: 0px;
 
           /* ════ 终末地设计令牌（加载转场 / 黄黑体系）════ */
-          --primary-yellow: #F9E73E;               /* ★ 唯一主黄 */
-          --primary-yellow-rgb: 249, 231, 62;
-          --primary-yellow-soft: rgba(249,231,62,.14);
+          --primary-yellow: #FEFE2C;               /* ★ 唯一主黄 */
+          --primary-yellow-rgb: 254, 254, 44;
+          --primary-yellow-soft: rgba(254,254,44,.14);
           --c-void: #000000;                        /* 纯黑 */
           --c-ink-0: #000000;
           --c-ink-1: #1A1A1A;
@@ -432,7 +432,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           top: 0; left: 0; width: 100%; height: 8px;
           background: linear-gradient(90deg,
             #111 0%, #111 6%,
-            #F9E73E 6%, #F9E73E 94%,
+            #FEFE2C 6%, #FEFE2C 94%,
             #111 94%, #111 100%);
         }
 
@@ -4315,12 +4315,12 @@ function importLedger(e){
   </script>
   <style>
     /* 🎨 主题统一覆盖层：残留旧配色 → 黑黄体系（追加于所有规则之后，可整体删除） */
-    .btn-primary { background: linear-gradient(180deg, #F9E73E, #eeda1e) !important; color: #111 !important; border: 1.5px solid #111 !important; font-weight: 800; }
-    .btn-primary:hover { background: #ffe95c !important; color: #111 !important; }
+    .btn-primary { background: linear-gradient(180deg, #FEFE2C, #e8e014) !important; color: #111 !important; border: 1.5px solid #111 !important; font-weight: 800; }
+    .btn-primary:hover { background: #fffb66 !important; color: #111 !important; }
     .btn-primary:disabled { opacity: .55; }
-    .btn-purple { background: #111 !important; color: #F9E73E !important; border: 1px solid #F9E73E !important; }
-    .btn-purple:hover { background: #000 !important; color: #ffe95c !important; }
-    input:focus, select:focus, textarea:focus { border-color: #111 !important; box-shadow: 0 0 0 2px rgba(249,231,62,.55) !important; outline: none !important; }
+    .btn-purple { background: #111 !important; color: #FEFE2C !important; border: 1px solid #FEFE2C !important; }
+    .btn-purple:hover { background: #000 !important; color: #fffb66 !important; }
+    input:focus, select:focus, textarea:focus { border-color: #111 !important; box-shadow: 0 0 0 2px rgba(254,254,44,.55) !important; outline: none !important; }
   </style>
 </body>
 </html>

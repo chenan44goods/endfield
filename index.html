@@ -9,16 +9,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --ink: #16181c;
-      --ink-soft: #3a3d42;
+      --ink: #212121;
+      --ink-soft: #212121;
       --muted: #7b7e83;
       --line: rgba(255,255,255,0.85);
-      --paper: #e9e230;
+      --paper: #FEFE2C;
       --paper-2: #f2efd8;
-      --navy: #2b2f36;
-      --navy-2: #1f232a;
+      --navy: #212121;
+      --navy-2: #191919;
       --navy-ink: #2e333b;
-      --accent: #1c1e22;
+      --accent: #212121;
       --accent-soft: #3a3d42;
       --warn: #222;
       --serif: "Playfair Display", "Noto Serif SC", serif;
@@ -33,24 +33,28 @@
     body {
       font-family: var(--sans);
       color: var(--ink);
-      background: #e9e230;
+      background: #FEFE2C;
       overflow: hidden;
       -webkit-font-smoothing: antialiased;
     }
 
+    /* 背景图自带等高线，隐藏 JS 绘制的重复层 */
+    .topo { display: none; }
+    .brand-logo {
+      display: block;
+      width: min(380px, 82%);
+      border: 2px solid #212121;
+      border-radius: 6px;
+      box-shadow: 0 22px 45px -20px rgba(33,33,33,0.55);
+    }
     /* 网格纸背景 */
     .page {
       position: relative;
       height: 100vh;
       width: 100vw;
       background:
-        radial-gradient(120% 90% at 82% 6%, rgba(255,255,255,0.35), transparent 52%),
-        linear-gradient(180deg, #e5dd2a 0%, #ece82a 42%, #f5f4ec 78%, #fdfdfb 100%),
-        linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px),
-        linear-gradient(rgba(255,255,255,0.22) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.22) 1px, transparent 1px);
-      background-size: auto, auto, 72px 72px, 72px 72px, 18px 18px, 18px 18px;
+        linear-gradient(rgba(255,255,255,0.10), rgba(255,255,255,0.10)),
+        url("images/bg_topo_light.jpg") center / cover no-repeat #FEFE2C;
       display: grid;
       grid-template-columns: 1fr 1fr;
       overflow: hidden;
@@ -902,8 +906,7 @@
       <div class="eyebrow">山团大观园 · 团员自助</div>
       <div class="brand-titles">
         <div class="filter-bar"></div>
-        <div class="brand-title">Grand</div>
-        <div class="brand-title sub">Garden</div>
+        <img class="brand-logo" src="images/logo_orbipom.jpg" alt="山团团 OrbiPom">
         <div class="brand-sub"><span class="no">№</span> SHAN TUAN · GRAND GARDEN</div>
       </div>
 
