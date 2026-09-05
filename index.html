@@ -6,7 +6,8 @@
   <title>山团大观园 · 谷团自助查询</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"></noscript>
   <style>
     :root {
       --ink: #212121;
@@ -798,6 +799,59 @@
     .batch-label-pill { display:inline-block; background:rgba(22,24,28,0.72); color:#f5f4ec; padding:8px 12px; border-radius:999px; font-size:11px; letter-spacing:0.12em; backdrop-filter:blur(3px); }
     .qspin { display:inline-block; width:14px; height:14px; border:2px solid rgba(22,24,28,0.2); border-top-color:var(--ink); border-radius:50%; animation:qspin 0.8s linear infinite; vertical-align:-2px; margin-right:8px; }
     @keyframes qspin { to { transform:rotate(360deg); } }
+
+    /* 🏆 帝江号大胃袋榜（可爱贴纸风） */
+    .taotie-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      margin-top: 20px; padding: 9px 18px;
+      background: #fff; border: 2px solid #212121; border-radius: 999px;
+      font-family: var(--sans); font-size: 13px; font-weight: 700; color: var(--ink);
+      cursor: pointer; box-shadow: 3px 3px 0 #212121; transition: all .2s ease;
+    }
+    .taotie-btn:hover { transform: translateY(-2px) rotate(-1deg); box-shadow: 4px 5px 0 #212121; background: #FEFE2C; }
+    .taotie-overlay {
+      position: fixed; inset: 0; z-index: 2600;
+      background: rgba(33,33,33,0.45); backdrop-filter: blur(3px);
+      display: none; align-items: center; justify-content: center; padding: 18px;
+    }
+    .taotie-overlay.open { display: flex; }
+    .taotie-card {
+      position: relative; width: min(440px, 94vw); max-height: 84vh;
+      display: flex; flex-direction: column;
+      background: #fffdf6; border: 3px solid #212121; border-radius: 26px;
+      box-shadow: 8px 10px 0 rgba(33,33,33,0.85);
+      animation: ttPop .32s cubic-bezier(.34,1.56,.64,1);
+    }
+    @keyframes ttPop { from { transform: scale(.7) rotate(-2deg); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .taotie-close {
+      position: absolute; top: 12px; right: 14px; width: 32px; height: 32px;
+      border-radius: 50%; border: 2px solid #212121; background: #FEFE2C;
+      font-weight: 900; font-size: 13px; cursor: pointer; color: var(--ink);
+    }
+    .taotie-close:hover { transform: rotate(90deg); transition: transform .25s; }
+    .taotie-head { display: flex; gap: 12px; align-items: center; padding: 20px 22px 12px; border-bottom: 2px dashed rgba(33,33,33,0.2); }
+    .taotie-mascot { font-size: 34px; }
+    .taotie-title { font-family: var(--serif-cn); font-size: 24px; font-weight: 900; color: var(--ink); }
+    .taotie-sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+    .taotie-list { overflow-y: auto; padding: 12px 18px 16px; }
+    .tt-row {
+      display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+      border-radius: 16px; margin-bottom: 8px; background: #fff;
+      border: 2px solid rgba(33,33,33,0.08);
+    }
+    .tt-row.top1 { background: #FFF9C4; border-color: #212121; box-shadow: 4px 4px 0 rgba(33,33,33,0.9); }
+    .tt-medal { font-size: 24px; width: 34px; text-align: center; flex-shrink: 0; }
+    .tt-rank {
+      width: 30px; height: 30px; border-radius: 50%; background: #FEFE2C;
+      border: 2px solid #212121; display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 13px; flex-shrink: 0;
+    }
+    .tt-info { flex: 1; min-width: 0; }
+    .tt-cn { font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tt-count { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+    .tt-amount { font-weight: 900; color: var(--ink); font-size: 16px; white-space: nowrap; }
+    .taotie-loading, .taotie-empty { text-align: center; padding: 26px; color: var(--ink-soft); font-size: 13px; }
+    .taotie-foot { padding: 10px 18px 16px; font-size: 10px; color: var(--muted); text-align: center; border-top: 2px dashed rgba(33,33,33,0.14); }
     /* 📱 移动端：隐藏纯装饰 HUD，联系方式改为随内容滚动，不再悬浮遮挡 */
     .mobile-contact { display:none; }
     @media (max-width: 900px) {
@@ -906,6 +960,7 @@
           <span class="label">进入控制台</span>
         </button>
         <div class="console-caption">N / SELF · SERVICE</div>
+        <button class="taotie-btn" onclick="openTaotie()">🏆 帝江号大胃袋榜</button>
       </div>
     </div>
 
@@ -1020,6 +1075,22 @@
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <!-- 🏆 饕餮榜 -->
+  <div class="taotie-overlay" id="taotieOverlay" onclick="if(event.target===this)closeTaotie()">
+    <div class="taotie-card">
+      <button class="taotie-close" onclick="closeTaotie()">✕</button>
+      <div class="taotie-head">
+        <span class="taotie-mascot">🐱</span>
+        <div>
+          <div class="taotie-title">帝江号大胃袋榜</div>
+          <div class="taotie-sub">帝江号货舱消费总排行 · 谁的大胃袋最能装？</div>
+        </div>
+      </div>
+      <div class="taotie-list" id="taotieList"><div class="taotie-loading"><span class="qspin"></span>正在翻账本……</div></div>
+      <div class="taotie-foot">* 统计全部谷子订单金额排行 · 数据来源：山团大观园账本</div>
+    </div>
+  </div>
 
   <script>
     // 生成终末地式等高线地形背景
@@ -1468,6 +1539,51 @@
     }
     function enterConsole(){
       window.location.href = 'admin.html';
+    }
+
+    // ===== 🏆 帝江号大胃袋榜：按团员统计消费总额并排行 =====
+    function openTaotie() {
+      document.getElementById('taotieOverlay').classList.add('open');
+      loadTaotie();
+    }
+    function closeTaotie() {
+      document.getElementById('taotieOverlay').classList.remove('open');
+    }
+    async function loadTaotie() {
+      const listEl = document.getElementById('taotieList');
+      listEl.innerHTML = '<div class="taotie-loading"><span class="qspin"></span>正在翻账本……</div>';
+      try {
+        const k = new URLSearchParams(location.search).get('key')
+          || (document.getElementById('panelKey').value || '').trim()
+          || '4goods';
+        const data = await fetchLeaderData(k);
+        if (!data || !data.length) { listEl.innerHTML = '<div class="taotie-empty">没有找到这个密钥的账本数据～\n检查一下密钥再试试吧！</div>'; return; }
+        let gd = data[0].group_data || [];
+        if (typeof gd === 'string') { try { gd = JSON.parse(gd); } catch (e) { gd = []; } }
+        if (!Array.isArray(gd) || !gd.length) { listEl.innerHTML = '<div class="taotie-empty">账本还是空白的，快去下第一单吧～</div>'; return; }
+        const agg = {};
+        for (const it of gd) {
+          const cn = String(it.cn || '').trim();
+          if (!cn) continue;
+          const key = cn.toLowerCase();
+          if (!agg[key]) agg[key] = { cn: cn, total: 0, count: 0 };
+          agg[key].total += (Number(it.price) || 0) * (Number(it.quantity) || 1);
+          agg[key].count += (Number(it.quantity) || 1);
+        }
+        const rows = Object.values(agg).sort(function (a, b) { return b.total - a.total; }).slice(0, 20);
+        if (!rows.length) { listEl.innerHTML = '<div class="taotie-empty">账本还是空白的～</div>'; return; }
+        const medals = ['🥇', '🥈', '🥉'];
+        listEl.innerHTML = rows.map(function (r, i) {
+          const rank = i < 3 ? '<span class="tt-medal">' + medals[i] + '</span>' : '<span class="tt-rank">' + (i + 1) + '</span>';
+          const crown = i === 0 ? ' 👑' : '';
+          return '<div class="tt-row' + (i === 0 ? ' top1' : '') + '">' + rank +
+            '<div class="tt-info"><div class="tt-cn">' + escapeHtml(r.cn) + crown +
+            '</div><div class="tt-count">共 ' + r.count + ' 件谷子</div></div>' +
+            '<div class="tt-amount">¥' + r.total.toFixed(2) + '</div></div>';
+        }).join('');
+      } catch (e) {
+        listEl.innerHTML = '<div class="taotie-empty">账本翻不开了：' + escapeHtml(e.message) + '\n稍后再试试～</div>';
+      }
     }
 
     // ===== 页面初始化 =====
