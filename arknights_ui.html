@@ -4334,11 +4334,10 @@ function importLedger(e){
       });
     }
 
-    // 阶段 3：主界面右划推入（body.loaded） + 黄屏收窄成右侧黄条
+    // 阶段 3：主界面右划推入（body.loaded）
+    // 2026-09-07 优化：移除全屏纯黄过场（用户反馈像老版黄屏），黄屏元素不再参与动画，仅静默清除
     function floodExit() {
       document.body.classList.add('loaded');
-      var flood = document.getElementById('flood');
-      if (flood) flood.classList.add('exit');
       return new Promise(function (resolve) {
         setTimeout(resolve, CFG.floodExitMs + 100);
       });
