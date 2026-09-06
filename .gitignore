@@ -6,3 +6,22 @@ deepblue_demo.html
 
 # 本地构建缓存
 .wrangler/
+
+# 云黑小程序源码（独立项目，不发布到网页仓库，见其内 README）
+yunhei_miniprogram/
+yunhei_miniprogram_qq/
+# 视频录屏用的演示版网站（假数据，不用发布）
+demo_index.html
+mock.js
+demo_goods/
+video_work/
+
+# 敏感业务数据 / 内部文件，禁止入库（含团员信息，仓库是公开的）
+数据备份_*.json
+数据备份_*批次*.json
+711杯子订单导入.csv
+补款表.csv
+退款表.csv
+__pycache__/
+_旧版本备份/
+.deploy_site/
