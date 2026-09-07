@@ -2900,6 +2900,12 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         return;
       }
 
+      // ➕ 新建批次：先把自定义名字取出来，再过内部值防护（顺序不能反，否则新建被兜底拦截）
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__NEW__') {
+        targetValue = document.getElementById('batchModalCustomInput').value.trim();
+        if (!targetValue) return alert('请输入新批次名称！');
+      }
+
       // 🛡 分组行不允许被"确认修改"直接写入：转为展开该分组（防止内部值写进数据）
       if (CURRENT_BATCH_ACTION_TYPE === 'batch' && String(targetValue).indexOf('__GROUP__:') === 0) {
         enterBatchGroupMode(String(targetValue).slice('__GROUP__:'.length));
