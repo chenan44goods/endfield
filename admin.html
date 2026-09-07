@@ -1816,11 +1816,13 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       }
     }
 
-    function showToast(msg) {
+    let toastTimer = null;
+    function showToast(msg, ms) {
       const toast = document.getElementById('toast');
       toast.innerText = msg;
       toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 3000);
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), ms || 4000);
     }
 
     async function login() {
@@ -4546,8 +4548,14 @@ function importLedger(e){
 
     /* ── Toast ── */
     .toast {
+      z-index: 10001;  /* 必须高于弹窗遮罩(10000)，否则弹窗内操作的报错会被遮罩盖住看不见 */
       border-radius: 16px;
       box-shadow: 0 6px 20px rgba(0,0,0,.25);
+      max-width: min(460px, 86vw);
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.5;
+      font-size: 0.95rem;
       transition: opacity .3s var(--m3e-ease), transform .3s var(--m3e-spring);
     }
 
