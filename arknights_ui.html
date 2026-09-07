@@ -2923,11 +2923,6 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         return showToast('未勾选任何谷子！' + hint);
       }
 
-      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__NEW__') {
-        targetValue = document.getElementById('batchModalCustomInput').value.trim();
-        if (!targetValue) return alert('请输入新批次名称！');
-      }
-
       if (CURRENT_BATCH_ACTION_TYPE === 'status') {
         selected.forEach(function(i){ var prev = i.status; i.status = targetValue; ensureStockDate(i, prev); DIRTY_ITEM_IDS.add(String(i.item_id || i.id)); });
         showToast('已成功将选中的 ' + selected.length + ' 件谷子状态修改为 [' + targetValue + ']！');
