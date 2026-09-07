@@ -34,7 +34,7 @@
     body {
       font-family: var(--sans);
       color: var(--ink);
-      background: #FEFE2C;
+      background: #d6d8c5; /* 优化：原纯黄加载闪屏，改为与面板图一致的浅灰（2026-09-07） */
       overflow: hidden;
       -webkit-font-smoothing: antialiased;
     }
@@ -434,7 +434,7 @@
       z-index: 20;
       display: grid;
       grid-template-columns: minmax(360px, 30%) 1fr;
-      background: url('images/panel_bg.webp') center / cover no-repeat;
+      background: #d6d8c5 url('images/panel_bg.webp') center / cover no-repeat;
       transform: translateX(100%);
       transition: transform 0.55s cubic-bezier(0.76,0,0.18,1);
     }
