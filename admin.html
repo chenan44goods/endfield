@@ -1247,6 +1247,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
             <button class="btn btn-secondary" onclick="openBatchSelectModal('status')">批量改状态</button>
             <button class="btn btn-secondary" onclick="openBatchSelectModal('country')">批量改地区</button>
             <button class="btn btn-secondary" onclick="batchSetImgModal()">批量补图</button>
+            <button class="btn btn-secondary" onclick="archiveShippedItems()">🗄️ 归档已排发</button>
             <button class="btn btn-danger" onclick="batchDeleteItems()">批量彻底删除</button>
           </div>
         </div>
@@ -1718,6 +1719,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     let DIRTY_ITEM_IDS = new Set();
     let CURRENT_QUERY_KEY = '4goods';
     let RAW_ITEMS = [];
+let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_items），不参与排表渲染
     let RAW_APPLICATIONS = [];
     let RAW_LOGS = [];
     let RAW_FEEDBACK = [];
@@ -1886,7 +1888,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         const { data, error } = await supabaseClient.from('leader_data').select('*').eq('query_key', CURRENT_QUERY_KEY);
         if (error) return showToast('读取失败: ' + error.message);
         if (!data || data.length === 0) {
-          CURRENT_RECORD_ID = null; CURRENT_VERSION = null; RAW_ITEMS = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = []; RAW_LOGISTICS = [];
+          CURRENT_RECORD_ID = null; CURRENT_VERSION = null; RAW_ITEMS = []; RAW_ARCHIVED = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = []; RAW_LOGISTICS = [];
           LOGISTICS_DELETED_BATCHES.clear();
           renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
           alert('该密钥暂无数据！'); return;
@@ -1904,6 +1906,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         RAW_LOGS = Array.isArray(iData.transfer_logs) ? iData.transfer_logs : [];
         RAW_FEEDBACK = Array.isArray(iData.feedback) ? iData.feedback : [];
         RAW_LOGISTICS = Array.isArray(iData.logistics_data) ? iData.logistics_data : [];
+        RAW_ARCHIVED = Array.isArray(iData.archived_items) ? iData.archived_items : [];
         showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)`);
         CURRENT_PAGE = 1;
         updateBatchDropdownOptions();
@@ -1913,12 +1916,57 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     }
     window.loadDataByQueryKey = loadDataByQueryKey;
 
+    // 🗄️ 归档已排发：从 group_data 移入 image_data.archived_items（数据保留，三端可查）
+    async function archiveShippedItems() {
+      if (!CURRENT_RECORD_ID) return showToast('请先加载数据');
+      const shipped = RAW_ITEMS.filter(function (it) { return String(it.status || '').trim() === '已排发'; });
+      if (!shipped.length) return showToast('当前没有「已排发」状态的谷子，无需归档');
+      if (!confirm('确定归档 ' + shipped.length + ' 条「已排发」谷子吗？\n\n' +
+        '· 排表明细将移除它们（后台更轻快）\n' +
+        '· 团员自查、帝江号大胃袋榜数据不受影响\n' +
+        '· 机器人 /查排发 照常可查\n' +
+        '（当前归档区已有 ' + RAW_ARCHIVED.length + ' 条历史记录）')) return;
+      const now = new Date().toLocaleString('zh-CN');
+      shipped.forEach(function (it) {
+        it._archived_at = now;
+        DELETED_ITEM_IDS.add(String(it.item_id || it.id));
+      });
+      RAW_ARCHIVED = shipped.concat(RAW_ARCHIVED);
+      RAW_ITEMS = RAW_ITEMS.filter(function (it) { return String(it.status || '').trim() !== '已排发'; });
+      const ok = await saveDataToSupabase();
+      if (ok) {
+        showToast('🗄️ 已归档 ' + shipped.length + ' 条已排发谷子（累计 ' + RAW_ARCHIVED.length + ' 条）');
+        renderTable(); updateBatchDropdownOptions();
+      }
+    }
+    window.archiveShippedItems = archiveShippedItems;
+
+    // 🗄️ 保存前与数据库归档区做并集合并，防止旧页面保存时覆盖归档数据
+    async function _mergedArchivedItems() {
+      try {
+        const { data } = await supabaseClient.from('leader_data').select('image_data').eq('query_key', CURRENT_QUERY_KEY);
+        let fresh = (data && data[0] && data[0].image_data) || {};
+        if (typeof fresh === 'string') { try { fresh = JSON.parse(fresh); } catch (e) { fresh = {}; } }
+        const freshArr = Array.isArray(fresh.archived_items) ? fresh.archived_items : [];
+        const seen = {};
+        RAW_ARCHIVED.forEach(function (it) { seen[String(it.item_id || it.id)] = true; });
+        const out = RAW_ARCHIVED.slice();
+        freshArr.forEach(function (it) {
+          const k = String(it.item_id || it.id);
+          if (!seen[k]) { seen[k] = true; out.push(it); }
+        });
+        return out;
+      } catch (e) { return RAW_ARCHIVED; }
+    }
+
     async function saveDataToSupabase() {
       if (!CURRENT_QUERY_KEY) return showToast('未指定 Query Key');
       try {
+        const mergedArch = await _mergedArchivedItems();
+        RAW_ARCHIVED = mergedArch;
         const payload = {
           group_data: RAW_ITEMS,
-          image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK, logistics_data: RAW_LOGISTICS }
+          image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK, logistics_data: RAW_LOGISTICS, archived_items: mergedArch }
         };
         if (CURRENT_VERSION !== null) {
           const nextVersion = (Number(CURRENT_VERSION) || 0) + 1;
@@ -1959,6 +2007,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
               if (!freshImg2 || typeof freshImg2 !== 'object') freshImg2 = {};
               const freshLogistics = Array.isArray(freshImg2.logistics_data) ? freshImg2.logistics_data : [];
               freshImg2.logistics_data = mergeLogisticsData(freshLogistics, RAW_LOGISTICS, LOGISTICS_DELETED_BATCHES);
+              freshImg2.archived_items = mergedArch;
               const retry = await supabaseClient.from('leader_data')
                 .update({ group_data: merged, image_data: freshImg2, version: freshVersion + 1 })
                 .eq('id', freshRec.id).eq('version', freshVersion).select('id');
