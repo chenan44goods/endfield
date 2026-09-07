@@ -1185,7 +1185,10 @@
         const data = await fetchLeaderData(key);
         if (!data || !data.length) return showToast('未找到该密钥数据');
         const gd = data[0].group_data || [];
-        const arr = Array.isArray(gd) ? gd : (typeof gd==='string' ? JSON.parse(gd) : []);
+        const active = Array.isArray(gd) ? gd : (typeof gd==='string' ? JSON.parse(gd) : []);
+        let arc = (data[0].image_data && data[0].image_data.archived_items) || [];
+        if (typeof arc === 'string') { try { arc = JSON.parse(arc); } catch(e){ arc = []; } }
+        const arr = active.concat(Array.isArray(arc) ? arc : []);   // 合并已排发归档区：数据完整保留
         const lower = cn.toLowerCase();
         let items;
         if (mode === 'fee') {
@@ -1203,11 +1206,10 @@
             return c === lower && s === '可排发';
           });
         } else {
-          // 自助查询：该 CN 非已排发
+          // 自助查询：该 CN 的全部谷子（含已排发归档，状态标签可见，历史不丢）
           items = arr.filter(it => {
             const c = String(it.cn||'').trim().toLowerCase();
-            const s = String(it.status||'').trim();
-            return c === lower && s !== '已排发';
+            return c === lower;
           });
         }
         resBox.style.display = 'block';
@@ -1560,6 +1562,9 @@
         if (!data || !data.length) { listEl.innerHTML = '<div class="taotie-empty">没有找到这个密钥的账本数据～\n检查一下密钥再试试吧！</div>'; return; }
         let gd = data[0].group_data || [];
         if (typeof gd === 'string') { try { gd = JSON.parse(gd); } catch (e) { gd = []; } }
+        let arcT = (data[0].image_data && data[0].image_data.archived_items) || [];
+        if (typeof arcT === 'string') { try { arcT = JSON.parse(arcT); } catch (e) { arcT = []; } }
+        if (Array.isArray(arcT)) gd = gd.concat(arcT);   // 合并归档区：大胃袋统计不缩水
         if (!Array.isArray(gd) || !gd.length) { listEl.innerHTML = '<div class="taotie-empty">账本还是空白的，快去下第一单吧～</div>'; return; }
         const agg = {};
         for (const it of gd) {
