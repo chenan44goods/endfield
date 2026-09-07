@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>山团团管理组 · 团长后台管理系统</title>
+  <title>山团团管理组 · 团长后台管理系统（试用版）</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   
@@ -414,7 +414,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           --warning: #f59e0b;
           --danger: #ef4444;
           --purple: #8b5cf6;
-          --radius: 0px;
+          --radius: 20px;
 
           /* ════ 终末地设计令牌（加载转场 / 黄黑体系）════ */
           --primary-yellow: #FEFE2C;               /* ★ 唯一主黄 */
@@ -1099,14 +1099,15 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
 </div>
   <div class="app" id="app">
   <nav class="side-nav">
+    <div class="nav-group-label">货物</div>
     <button class="tab-btn active" onclick="switchTab('tabItems')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-table-2" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18" /></svg> 排表管理 (group_data)</button>
-    <button class="tab-btn" onclick="switchTab('tabCalc')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-calculator" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="16" height="20" x="4" y="2" rx="2" /><line x1="8" x2="16" y1="6" y2="6" /><line x1="16" x2="16" y1="14" y2="18" /><path d="M16 10h.01" /><path d="M12 10h.01" /><path d="M8 10h.01" /><path d="M12 14h.01" /><path d="M8 14h.01" /><path d="M12 18h.01" /><path d="M8 18h.01" /></svg> 算账中心</button>
     <button class="tab-btn" onclick="switchTab('tabLogistics')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-plane" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /></svg> 国际运费 (logistics_data)</button>
-    <button class="tab-btn" onclick="switchTab('tabBatches')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-boxes" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z" /><path d="m7 16.5-4.74-2.85" /><path d="m7 16.5 5-3" /><path d="M7 16.5v5.17" /><path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z" /><path d="m17 16.5-5-3" /><path d="m17 16.5 4.74-2.85" /><path d="M17 16.5v5.17" /><path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z" /><path d="M12 8 7.26 5.15" /><path d="m12 8 4.74-2.85" /><path d="M12 13.5V8" /></svg> 批次管理 (batches)</button>
+    <div class="nav-group-label">排发</div>
     <button class="tab-btn" onclick="switchTab('tabDispatch')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-package" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" /><path d="M12 22V12" /><path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7" /><path d="m7.5 4.27 9 5.15" /></svg> 排发工作台 (applications)</button>
-    <button class="tab-btn" onclick="switchTab('tabLogs')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-refresh-cw" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></svg> 转单日志 (transfer_logs)</button>
-    <button class="tab-btn" onclick="switchTab('tabFeedback')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-inbox" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></svg> 匿名反馈箱 (feedback)</button>
-    <button class="tab-btn" onclick="switchTab('tabSettings')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-settings" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg> 团务设置与实用工具</button>
+    <div class="nav-group-label">算账</div>
+    <button class="tab-btn" onclick="switchTab('tabCalc')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-calculator" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="16" height="20" x="4" y="2" rx="2" /><line x1="8" x2="16" y1="6" y2="6" /><line x1="16" x2="16" y1="14" y2="18" /><path d="M16 10h.01" /><path d="M12 10h.01" /><path d="M8 10h.01" /><path d="M12 14h.01" /><path d="M8 14h.01" /><path d="M12 18h.01" /><path d="M8 18h.01" /></svg> 算账中心</button>
+    <div class="nav-group-label">团务</div>
+    <button class="tab-btn" onclick="switchTab('tabFeedback')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-inbox" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></svg> 反馈与团务 (feedback)</button>
     <div class="nav-deco">O2</div>
     <div class="nav-deco">O39</div>
   </nav>
@@ -1118,11 +1119,6 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         <span class="t-bracket">[</span>
         <span class="t-bracket">]</span>
         <span class="t-sub">// MANAGEMENT SYSTEM</span>
-      </div>
-      <div class="key-selector">
-        <label for="adminQueryKey" style="font-size: 0.88rem; font-weight: 600;">当前 Query Key:</label>
-        <input type="text" id="adminQueryKey" value="4goods" placeholder="请输入 Query Key">
-        <button class="btn btn-primary" onclick="loadDataByQueryKey()">切换并加载数据</button>
       </div>
       <div class="user-info">
         <span id="userEmailSpan" style="color: var(--text-muted);">已登录: 检查中...</span>
@@ -1209,6 +1205,18 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
               </div>
             </div>
           </div>
+
+          <details id="pasteImportBox" style="margin-bottom: 12px; border: 1px dashed rgba(0,0,0,.18); border-radius: 16px; padding: 10px 14px;">
+            <summary style="cursor: pointer; font-size: 0.88rem; font-weight: 600;">📋 粘贴导入（拼谷汇总文本，免下载 Excel）</summary>
+            <div style="margin-top: 10px;">
+              <textarea id="pasteImportInput" rows="7" style="width:100%; font-family:monospace; font-size:0.78rem;" placeholder="直接粘贴【xx】汇总详情整段文本（Tab 分隔，含 种类/单价/成员行）…&#10;批次名和默认地区用下方 Excel 导入那一排的设置，地区也会按标题里的国家自动识别"></textarea>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
+                <button type="button" class="btn btn-secondary" onclick="parsePasteImportPreview()">🔍 解析预览</button>
+                <span style="font-size:0.78rem; color:var(--text-muted);">解析后先预览确认，不会直接写入</span>
+              </div>
+              <div id="pasteImportPreview" style="display:none; margin-top:10px;"></div>
+            </div>
+          </details>
 
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <button type="submit" class="btn btn-primary">保存谷子到 group_data</button>
@@ -1347,84 +1355,6 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       </div>
     </div>
 
-    <!-- 标签页 1.6：批次管理 -->
-    <div class="tab-content" id="tabBatches">
-      <div class="card">
-        <div class="card-title">
-          <span>➕ 手动新建批次</span>
-        </div>
-        <div class="form-grid">
-          <div class="form-group">
-            <label for="batchDiskName">所属批次 *</label>
-            <input type="text" id="batchDiskName" required placeholder="如：26科隆美终末地 coco爆佩">
-          </div>
-          <div class="form-group">
-            <label for="batchGoodsTitle">制品名称 *</label>
-            <input type="text" id="batchGoodsTitle" required placeholder="如：26科隆展毛绒头‑莱万汀 立牌">
-          </div>
-          <div class="form-group">
-            <label for="batchDiskTag">车次标记（选填）</label>
-            <input type="text" id="batchDiskTag" placeholder="如：①车；没有车次就留空">
-          </div>
-          <div class="form-group">
-            <label for="batchOpenDate">开团日期 *</label>
-            <input type="date" id="batchOpenDate" required onchange="updateBatchIdPreview()">
-          </div>
-          <div class="form-group">
-            <label for="batchStatus">状态</label>
-            <select id="batchStatus"><option value="活跃">未完成未完全收款</option><option value="归档">已完全全部收款并完整录入</option></select>
-          </div>
-          <div class="form-group">
-            <label for="batchIdPreview">自动生成 batch_id（无需填写）</label>
-            <input type="text" id="batchIdPreview" readonly placeholder="batch_MMDD_01">
-          </div>
-        </div>
-        <div style="display:flex; gap:8px; margin-top:4px;">
-          <button class="btn btn-primary" onclick="saveManualBatch()">保存批次</button>
-          <button class="btn btn-secondary" onclick="clearBatchForm()">清空</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">
-          <span>📋 拼谷助手粘贴批量导入批次</span>
-        </div>
-        <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:6px;">保持原粘贴方式不变：粘贴后读取“种类”行，每个制品自动生成一条批次；会先弹出确认窗填写大盘名称、车次、开团日期。</p>
-        <textarea id="batchPasteInput" rows="8" style="width:100%; font-family:monospace; font-size:0.82rem;" placeholder="直接粘贴拼谷助手表格文本..."></textarea>
-        <div style="display:flex; justify-content:flex-end; margin-top:8px;">
-          <button class="btn btn-success" onclick="openBatchImportConfirm()">解析种类并生成批次</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">
-          <span>📦 批次列表</span>
-          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-            <label style="font-size:0.85rem; display:flex; align-items:center; gap:6px;">批次筛选</label>
-            <select id="batchFilterMode" onchange="renderBatches()" style="padding:6px 10px; font-size:0.85rem;">
-              <option value="all" selected>全部</option>
-              <option value="active">未完成未完全收款</option>
-              <option value="archived">已完全全部收款并完整录入</option>
-            </select>
-            <select id="batchDropdown" style="max-width:380px; padding:6px 10px; font-size:0.85rem;"></select>
-            <button class="btn btn-secondary" id="batchStatusBtn" onclick="openBatchStatusModal()">⚙️ 批量改状态</button>
-            <button class="btn btn-danger" id="batchDeleteBtn" onclick="batchDeleteSelected()">🗑 批量删除</button>
-          </div>
-        </div>
-        <div class="table-container desktop-table-view">
-          <table>
-            <thead>
-              <tr>
-                <th><input type="checkbox" id="batchSelectAll" onchange="toggleSelectAllBatches(this.checked)"></th><th>batch_id</th><th>所属批次</th><th>制品名称</th><th>车次</th><th>开团日期</th><th>状态</th><th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="batchesTableBody"></tbody>
-          </table>
-        </div>
-        <div class="mobile-cards-view" id="batchesMobileCardsView"></div>
-      </div>
-    </div>
-
     <!-- 标签页 2：排发工作台 -->
     <div class="tab-content" id="tabDispatch">
       <div class="card">
@@ -1441,25 +1371,22 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         <div class="btn-group" style="margin-bottom: 16px;">
           <button class="btn btn-primary" id="btnSubPending" onclick="switchDispatchSubTab('pending')">待处理申请列表</button>
           <button class="btn btn-secondary" id="btnSubCompleted" onclick="switchDispatchSubTab('completed')">已完成记录列表</button>
+          <button class="btn btn-secondary" id="btnSubLogs" onclick="showDispatchLogs()">🔄 转单日志</button>
         </div>
         <div id="dispatchSubContent"></div>
-      </div>
-    </div>
-
-    <!-- 标签页 3：转单日志 -->
-    <div class="tab-content" id="tabLogs">
-      <div class="card">
-        <div class="card-title">
-          <span>🔄 团员转单历史记录 (transfer_logs)</span>
-          <button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.8rem;" onclick="clearAllTransferLogs()">清空全部日志</button>
-        </div>
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr><th>时间</th><th>原 CN</th><th>转给新 CN</th><th>谷子名称</th><th>数量</th><th>操作</th></tr>
-            </thead>
-            <tbody id="transferLogsTableBody"></tbody>
-          </table>
+        <div id="dispatchLogsHost" style="display: none;">
+          <div class="card-title">
+            <span>🔄 团员转单历史记录 (transfer_logs)</span>
+            <button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.8rem;" onclick="clearAllTransferLogs()">清空全部日志</button>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr><th>时间</th><th>原 CN</th><th>转给新 CN</th><th>谷子名称</th><th>数量</th><th>操作</th></tr>
+              </thead>
+              <tbody id="transferLogsTableBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -1502,16 +1429,21 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         </div>
         <div class="mobile-cards-view" id="feedbackMobileCardsView"></div>
       </div>
-    </div>
 
-    <!-- 标签页 5：团务设置与实用工具 -->
-    <div class="tab-content" id="tabSettings">
       <div class="card">
-        <div class="card-title">🛠️ 团务与测试工具</div>
+        <div class="card-title">🛠️ 团务设置与实用工具</div>
         <div style="display: flex; flex-direction: column; gap: 16px;">
           <div>
             <label style="font-size: 0.88rem; font-weight: 600; display: block; margin-bottom: 6px;">发送给团员的自查链接：</label>
             <button class="btn btn-primary" onclick="copyMemberLink()">📋 复制团员自查专属链接</button>
+          </div>
+          <div>
+            <label for="adminQueryKey" style="font-size: 0.88rem; font-weight: 600; display: block; margin-bottom: 6px;">数据源（Query Key）：</label>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <input type="text" id="adminQueryKey" value="4goods" placeholder="请输入 Query Key" style="max-width: 240px;">
+              <button class="btn btn-primary" onclick="loadDataByQueryKey()">切换并加载数据</button>
+            </div>
+            <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;">低频操作：切换后加载的是该 key 对应的全部数据，请确认 key 无误。批次的新建/归纳/归档统一在「排表管理」的批量改批次弹窗里完成。</p>
           </div>
         </div>
       </div>
@@ -1926,7 +1858,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     window.handleSignOut = handleSignOut;
 
     function switchTab(tabId) {
-      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.side-nav .tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       if (event && event.currentTarget) event.currentTarget.classList.add('active');
       const targetEl = document.getElementById(tabId);
@@ -3180,14 +3112,82 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     }
     window.handleExcelImport = handleExcelImport;
 
+    /* --- 粘贴导入（拼谷汇总文本，复用 parseMatrixImportText 解析器）--- */
+    let PASTE_IMPORT_PENDING = null;
+    function parsePasteImportPreview() {
+      const raw = (document.getElementById('pasteImportInput')?.value || '').trim();
+      if (!raw) return showToast('请先粘贴汇总详情文本！');
+      const country = document.getElementById('excelDefaultCountry')?.value || '日本';
+      const batchName = (document.getElementById('pasteBatchName')?.value || '').trim();
+      const parsed = parseMatrixImportText(raw, country, batchName);
+      if (!parsed.length) return showToast('没解析到数据：请确认粘贴的是完整汇总详情（需含 种类/单价/成员 行）');
+      const dedup = dedupeParsedItems(parsed);
+      PASTE_IMPORT_PENDING = dedup.fresh;
+      const box = document.getElementById('pasteImportPreview');
+      if (!dedup.fresh.length) {
+        box.style.display = '';
+        box.innerHTML = '<div style="color:var(--danger); font-size:0.85rem;">解析到 ' + parsed.length + ' 条，但全部与现有数据重复，无需导入。</div>';
+        return;
+      }
+      const totalAmt = dedup.fresh.reduce((a, i) => a + (Number(i.price) || 0) * (Number(i.quantity) || 1), 0);
+      const cns = [...new Set(dedup.fresh.map(i => i.cn))];
+      const countries = [...new Set(dedup.fresh.map(i => i.country))].join('、');
+      let html = '<div style="font-size:0.85rem; margin-bottom:6px;">解析 <strong>' + parsed.length + '</strong> 条' +
+        (dedup.skipped ? '（跳过与现有数据重复的 ' + dedup.skipped + ' 条）' : '') +
+        '，待导入 <strong>' + dedup.fresh.length + '</strong> 条：<strong>' + cns.length + '</strong> 位 CN · 合计 <strong>￥' + totalAmt.toFixed(2) + '</strong> · 批次 <strong>' + escapeHtml(batchName || '默认批次') + '</strong> · 地区 <strong>' + escapeHtml(countries) + '</strong></div>';
+      const byCn = {};
+      dedup.fresh.forEach(i => { (byCn[i.cn] = byCn[i.cn] || []).push(i.name + '×' + (i.quantity || 1)); });
+      html += '<div style="max-height:180px; overflow:auto; border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:8px 10px; font-size:0.78rem;">';
+      Object.keys(byCn).forEach(cn => { html += '<div style="padding:2px 0;"><strong>' + escapeHtml(cn) + '</strong>：' + escapeHtml(byCn[cn].join('、')) + '</div>'; });
+      html += '</div>';
+      html += '<div style="display:flex; gap:8px; margin-top:8px;"><button type="button" class="btn btn-primary" onclick="confirmPasteImport()">✅ 确认导入以上 ' + dedup.fresh.length + ' 条</button><button type="button" class="btn btn-secondary" onclick="clearPasteImport()">清空</button></div>';
+      box.style.display = '';
+      box.innerHTML = html;
+    }
+    window.parsePasteImportPreview = parsePasteImportPreview;
+
+    async function confirmPasteImport() {
+      if (!PASTE_IMPORT_PENDING || !PASTE_IMPORT_PENDING.length) return showToast('请先解析预览！');
+      RAW_ITEMS.push(...PASTE_IMPORT_PENDING);
+      await saveDataToSupabase();
+      updateBatchDropdownOptions();
+      CURRENT_PAGE = Math.max(1, Math.ceil(RAW_ITEMS.length / PAGE_SIZE));
+      renderTable();
+      const n = PASTE_IMPORT_PENDING.length;
+      clearPasteImport();
+      showToast('🎉 粘贴导入成功 ' + n + ' 条！');
+    }
+    window.confirmPasteImport = confirmPasteImport;
+
+    function clearPasteImport() {
+      PASTE_IMPORT_PENDING = null;
+      const t = document.getElementById('pasteImportInput'); if (t) t.value = '';
+      const p = document.getElementById('pasteImportPreview'); if (p) { p.style.display = 'none'; p.innerHTML = ''; }
+    }
+    window.clearPasteImport = clearPasteImport;
+
     /* --- 标签页 2：排发工作台 --- */
     function switchDispatchSubTab(sub) {
       CURRENT_DISPATCH_SUBTAB = sub;
       document.getElementById('btnSubPending').classList.toggle('btn-primary', sub === 'pending');
       document.getElementById('btnSubCompleted').classList.toggle('btn-primary', sub === 'completed');
+      document.getElementById('btnSubLogs').classList.remove('btn-primary');
+      document.getElementById('dispatchSubContent').style.display = '';
+      document.getElementById('dispatchLogsHost').style.display = 'none';
       renderDispatchWorkbench();
     }
     window.switchDispatchSubTab = switchDispatchSubTab;
+
+    function showDispatchLogs() {
+      CURRENT_DISPATCH_SUBTAB = 'logs';
+      document.getElementById('btnSubPending').classList.remove('btn-primary');
+      document.getElementById('btnSubCompleted').classList.remove('btn-primary');
+      document.getElementById('btnSubLogs').classList.add('btn-primary');
+      document.getElementById('dispatchSubContent').style.display = 'none';
+      document.getElementById('dispatchLogsHost').style.display = '';
+      renderTransferLogs();
+    }
+    window.showDispatchLogs = showDispatchLogs;
 
     function chunkArray(arr, chunkSize = 10) {
       const results = [];
@@ -4383,14 +4383,248 @@ function importLedger(e){
   })();
   </script>
   <style>
-    /* 🎨 主题统一覆盖层：残留旧配色 → 黑黄体系（追加于所有规则之后，可整体删除） */
-    .btn-primary { background: linear-gradient(180deg, #FFFDE7, #FFF3A0) !important; color: #212121 !important; border: 1px solid #d9cd7a !important; font-weight: 700; }
-    .btn-primary:hover { background: #FFF3AE !important; color: #212121 !important; }
+    /* ═══════════════════════════════════════════════════════════
+       M3E 主题层 · Material 3 Expressive 改版
+       依据 M3E Canvas 设计稿（谷团工具·团长后台，4 屏桌面稿）
+       只做外观升级：不改任何 class 名 / DOM / JS；
+       整块删除即可回退到旧版外观。
+       ═══════════════════════════════════════════════════════════ */
+    :root {
+      /* ── 形状 Shape tokens ── */
+      --m3e-r-input: 12px;   /* 输入框 */
+      --m3e-r-card: 20px;    /* 卡片 / 表格容器 */
+      --m3e-r-sheet: 28px;   /* 弹窗（M3 bottom-sheet 级圆角） */
+      --m3e-r-full: 999px;   /* 胶囊：按钮 / 徽章 / 导航项 */
+      /* ── 动效 Motion（M3 emphasized + spring）── */
+      --m3e-ease: cubic-bezier(0.2, 0, 0, 1);
+      --m3e-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --m3e-dur: 220ms;
+      /* ── 状态层 State layer（M3 悬停 8% / 按压 14%）── */
+      --m3e-state-hover: linear-gradient(rgba(0,0,0,.08), rgba(0,0,0,.08));
+      --m3e-state-press: linear-gradient(rgba(0,0,0,.14), rgba(0,0,0,.14));
+    }
+
+    /* ── 全局选区 / 键盘焦点 ── */
+    ::selection { background: rgba(254,254,44,.45); }
+    button:focus-visible, input:focus-visible, select:focus-visible,
+    textarea:focus-visible, a:focus-visible {
+      outline: 2px solid #b9ad6b; outline-offset: 2px;
+    }
+
+    /* ── 按钮：M3 胶囊形 + 状态层 + 弹性按压 ── */
+    .btn {
+      border-radius: var(--m3e-r-full);
+      padding: 10px 22px;
+      font-weight: 600;
+      transition: transform var(--m3e-dur) var(--m3e-spring),
+                  box-shadow var(--m3e-dur) var(--m3e-ease),
+                  background-color var(--m3e-dur) var(--m3e-ease);
+    }
+    .btn:hover  { background-image: var(--m3e-state-hover); }
+    .btn:active { transform: scale(.96); background-image: var(--m3e-state-press); }
+    .btn-primary {
+      background-color: var(--primary-yellow) !important;  /* 取代旧黄渐变：M3 实色 */
+      color: #1a1a1a !important;
+      border: none !important;
+      font-weight: 700;
+    }
+    .btn-primary:hover { filter: brightness(1.05); box-shadow: 0 4px 14px rgba(254,254,44,.38); }
     .btn-primary:disabled { opacity: .55; }
-    .btn-purple { background: #f6f5ef !important; color: #212121 !important; border: 1px solid #cfcabb !important; }
-    .btn-purple:hover { background: #edece3 !important; color: #212121 !important; }
-    input:focus, select:focus, textarea:focus { border-color: #b9ad6b !important; box-shadow: 0 0 0 2px rgba(254,254,44,.30) !important; outline: none !important; }
-    /* 📐 布局修复：算账中心区块原本在 .container 外，左移被导航遮挡——补齐同样边距 */
+    .btn-purple { background-color: #f3e8ff; color: #6b21a8; border: none; }   /* M3 tonal 紫 */
+    .btn-purple:hover { background-color: #eddbff; }
+    .btn-success, .btn-danger, .btn-secondary { border: none; }
+
+    /* ── 侧边导航：M3 导航胶囊选中态（取代左黄条）── */
+    .side-nav .tab-btn {
+      margin: 2px 10px;
+      padding: 10px 6px;
+      border-left: none;
+      border-radius: var(--m3e-r-full);
+    }
+    .side-nav .tab-btn:hover { background: rgba(254,254,44,.10); color: var(--primary-yellow); }
+    .side-nav .tab-btn.active {
+      background: var(--primary-yellow);
+      color: #111;
+      border-left: none;
+    }
+
+    /* ── 卡片：M3 圆角 + 柔和描边 + 双层低影 ── */
+    .card {
+      border-radius: var(--m3e-r-card);
+      border: 1px solid rgba(0,0,0,.10);
+      box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.05);
+    }
+    .app-card { border-radius: var(--m3e-r-card); }
+
+    /* ── 输入框：圆角 + 黄色聚焦环 ── */
+    input[type="text"], input[type="number"], input[type="date"], select, textarea {
+      border-radius: var(--m3e-r-input);
+      border: 1px solid rgba(0,0,0,.14);
+      background: #fbfbf8;
+      transition: border-color var(--m3e-dur) var(--m3e-ease),
+                  box-shadow var(--m3e-dur) var(--m3e-ease),
+                  background var(--m3e-dur) var(--m3e-ease);
+    }
+    input:hover, select:hover, textarea:hover { border-color: rgba(0,0,0,.26); }
+    input:focus, select:focus, textarea:focus {
+      border-color: #cfc46a;
+      background: #ffffff;
+      box-shadow: 0 0 0 3px rgba(254,254,44,.30);
+      outline: none;
+    }
+
+    /* ── 表格：容器圆角描边 + 黄色悬停 + 细分隔线 ── */
+    .table-container {
+      border: 1px solid rgba(0,0,0,.08);
+      border-radius: var(--m3e-r-card);
+    }
+    th { font-size: .78rem; letter-spacing: .06em; }
+    td, th { border-bottom-color: rgba(0,0,0,.06); }
+    tbody tr { transition: background-color .15s var(--m3e-ease); }
+    tbody tr:hover { background-color: rgba(254,254,44,.07); }
+
+    /* ── 徽章：统一 M3 tonal（去描边，保留原有语义配色）── */
+    .badge { border: none; }
+
+    /* ── 分页：胶囊化，选中态改主黄（修复残留靛蓝）── */
+    .page-btn {
+      border-radius: var(--m3e-r-full);
+      transition: all var(--m3e-dur) var(--m3e-ease);
+    }
+    .page-btn:hover { border-color: #cfc46a; background: var(--primary-yellow-soft); }
+    .page-btn.active {
+      background: var(--primary-yellow);
+      border-color: var(--primary-yellow);
+      color: #1a1a1a;
+      font-weight: 700;
+    }
+
+    /* ── 批次级联选择器：chip 化 + 黄色选中 ── */
+    .cascade-trigger {
+      border-radius: var(--m3e-r-full);
+      padding: 6px 14px;
+      transition: all var(--m3e-dur) var(--m3e-ease);
+    }
+    .cascade-trigger:hover, .cascade-trigger.open {
+      border-color: #cfc46a;
+      box-shadow: 0 0 0 3px rgba(254,254,44,.22);
+    }
+    .cascade-panel {
+      border-radius: 16px;
+      box-shadow: 0 6px 24px rgba(0,0,0,.14), 0 2px 6px rgba(0,0,0,.08);
+    }
+    .cascade-option { border-radius: 8px; }
+    .cascade-option.selected { background: var(--primary-yellow-soft); font-weight: 700; }
+
+    /* ── 弹窗：M3 大圆角 + 玻璃遮罩 + emphasized 入场 ── */
+    .modal-overlay.active { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    .modal {
+      border-radius: var(--m3e-r-sheet);
+      padding: 28px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.30);
+      transform: translateY(14px) scale(.97);
+      opacity: 0;
+      transition: transform 260ms var(--m3e-ease), opacity 200ms var(--m3e-ease);
+    }
+    .modal-overlay.active .modal { transform: translateY(0) scale(1); opacity: 1; }
+
+    /* ── Toast ── */
+    .toast {
+      border-radius: 16px;
+      box-shadow: 0 6px 20px rgba(0,0,0,.25);
+      transition: opacity .3s var(--m3e-ease), transform .3s var(--m3e-spring);
+    }
+
+    /* ── 算账中心子标签：之前无样式，补 M3 分段控件 ── */
+    .tabbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .tab-content#tabCalc .tabbar .tab-btn {
+      padding: 9px 20px;
+      border-radius: var(--m3e-r-full);
+      border: 1px solid rgba(0,0,0,.12);
+      background: #f4f3ee;
+      color: #444;
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--m3e-dur) var(--m3e-ease);
+    }
+    .tab-content#tabCalc .tabbar .tab-btn:hover { background: #edece3; }
+    .tab-content#tabCalc .tabbar .tab-btn.active {
+      background: var(--primary-yellow);
+      border-color: var(--primary-yellow);
+      color: #1a1a1a;
+      font-weight: 700;
+      box-shadow: 0 3px 10px rgba(254,254,44,.35);
+    }
+
+    /* ── 计算结果输出框（.box 此前无样式）── */
+    .box {
+      background: #f7f6f0;
+      border: 1px solid rgba(0,0,0,.08);
+      border-radius: var(--m3e-r-card);
+      padding: 16px;
+      font-size: .9rem;
+    }
+
+    /* ── 侧边导航分组标签 ── */
+    .nav-group-label {
+      margin: 14px 12px 4px;
+      padding-left: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .3em;
+      color: rgba(255,255,255,.38);
+      text-align: left;
+    }
+
+    /* ── 滚动条 ── */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0,0,0,.18);
+      border-radius: var(--m3e-r-full);
+      border: 2px solid transparent;
+      background-clip: content-box;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.32); background-clip: content-box; border: 2px solid transparent; }
+    .side-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); background-clip: content-box; }
+
+    /* ── 无障碍：跟随系统减少动效 ── */
+    @media (prefers-reduced-motion: reduce) {
+      .btn, .modal, .toast, .page-btn, .tab-content#tabCalc .tabbar .tab-btn { transition-duration: 1ms; }
+    }
+
+    /* ── 移动端适配（≤768px）：导航变顶部横滑条，隐藏右侧装饰条 ── */
+    @media (max-width: 768px) {
+      .rail, .nav-deco, .nav-group-label { display: none; }
+      .side-nav {
+        position: sticky;
+        top: 0;
+        width: 100%;
+        height: auto;
+        flex-direction: row;
+        align-items: center;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 8px;
+        gap: 4px;
+        -webkit-overflow-scrolling: touch;
+      }
+      .side-nav .tab-btn {
+        flex: 0 0 auto;
+        white-space: nowrap;
+        padding: 8px 14px;
+        font-size: .8rem;
+        margin: 0;
+      }
+      .side-nav .tab-btn svg { width: 15px; height: 15px; vertical-align: -2.5px; margin-right: 4px; }
+      .container { margin: 0 12px !important; }
+      .tab-content#tabCalc { margin: 0 12px !important; }
+      .load-title .lt-main { font-size: 24px; }
+      .load-title .lt-sub { font-size: 12px; }
+    }
+
+    /* 📐 布局修复（保留）：算账中心区块原本在 .container 外，补齐同样边距 */
     .tab-content#tabCalc { margin: 0 calc(var(--rail-w) + 16px) 0 88px; }
   </style>
 </body>
