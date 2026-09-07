@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>山团团管理组 · 团长后台管理系统</title>
+  <title>山团团管理组 · 团长后台管理系统（试用版）</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   
@@ -1557,6 +1557,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       <div class="form-group" id="batchModalCustomInputGroup" style="display: none; margin-bottom: 14px;">
         <label>输入新批次名称：</label>
         <input type="text" id="batchModalCustomInput" placeholder="输入自定义新批次名称...">
+        <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">已按今天日期预填"月.日 "前缀，接着输入团名即可；名字里带 月.日 会自动归纳进当月分组</div>
       </div>
       <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px;">
         <button class="btn btn-secondary" onclick="closeBatchSelectModal()">取消</button>
@@ -2826,7 +2827,12 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       const searchInput = document.getElementById('batchModalSearch');
       if (CURRENT_BATCH_ACTION_TYPE === 'batch' && selectEl.value === '__NEW__') {
         customGroup.style.display = 'block';
-        document.getElementById('batchModalCustomInput').focus();
+        const newBatchInput = document.getElementById('batchModalCustomInput');
+        if (!newBatchInput.value) {
+          const now = new Date();
+          newBatchInput.value = (now.getMonth() + 1) + '.' + now.getDate() + ' ';
+        }
+        newBatchInput.focus();
         return;
       }
       if (CURRENT_BATCH_ACTION_TYPE === 'batch' && selectEl.value === '__DELETE_BATCH__') {
@@ -2890,6 +2896,16 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         renderTable();
         showToast('已清理空批次！');
         return;
+      }
+
+      // 🛡 分组行不允许被"确认修改"直接写入：转为展开该分组（防止内部值写进数据）
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && String(targetValue).indexOf('__GROUP__:') === 0) {
+        enterBatchGroupMode(String(targetValue).slice('__GROUP__:'.length));
+        return;
+      }
+      // 🛡 兜底：任何下划线开头的内部值都不允许写入谷子数据
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && String(targetValue).indexOf('__') === 0) {
+        return showToast('这是内部功能选项，请选择具体批次！');
       }
 
       if (selected.length === 0) {
