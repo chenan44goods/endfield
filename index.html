@@ -1011,6 +1011,15 @@
         <div class="entry-line"></div>
       </div>
 
+      <div class="entry" onclick="openPanel('fbreply')">
+        <div class="entry-icon"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-mail-search" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></div>
+        <div class="entry-meta">
+          <div class="entry-sub">AS / FEEDBACK · REPLY</div>
+          <div class="entry-name">查反馈回复</div>
+        </div>
+        <div class="entry-line"></div>
+      </div>
+
     </div>
     <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243</div>
   </div>
@@ -1026,7 +1035,7 @@
 
         <div class="field" style="margin-top: 34px;">
           <label for="panelKey">Query Key · 查询密钥</label>
-          <input id="panelKey" placeholder="输入团长提供的密钥">
+          <input id="panelKey" placeholder="输入团长提供的密钥" oninput="if(typeof currentPanel!=='undefined' && currentPanel==='fbreply') renderMyFbCodes()">
         </div>
         <div class="field">
           <label for="panelCn">CN · 圈名</label>
@@ -1051,6 +1060,21 @@
             <span class="scan"></span>
             <span>SUBMIT FEEDBACK</span>
           </button>
+          <div id="fbSubmitResult" style="display:none;"></div>
+        </div>
+
+        <!-- 查反馈回复字段（默认隐藏） -->
+        <div id="fbReplyFields" style="display:none;">
+          <div class="field" style="margin-top: 34px;">
+            <label for="fbCode">反馈编号 · 取件码</label>
+            <input id="fbCode" placeholder="提交反馈时给你的 6 位编号" style="text-transform:uppercase; letter-spacing:2px;" autocomplete="off">
+          </div>
+          <div id="fbMyCodes" style="font-size:12px; color:var(--ink-soft); margin:10px 0 2px; line-height:1.8;"></div>
+          <button class="panel-btn" id="fbQueryBtn" onclick="queryFeedbackReply()">
+            <span class="scan"></span>
+            <span>CHECK REPLY</span>
+          </button>
+          <div id="fbReplyResult" style="display:none; margin-top:18px;"></div>
         </div>
 
         <button class="panel-btn" id="queryBtn" onclick="panelAction()">
@@ -1480,7 +1504,8 @@
       query: '自助查询',
       fee: '交肾核算',
       dispatch: '排发调度',
-      feedback: '匿名反馈'
+      feedback: '匿名反馈',
+      fbreply: '查反馈回复'
     };
     const PANEL_ACTIONS = {
       query: () => doQuery('query'),
@@ -1546,13 +1571,22 @@
       const fb = document.getElementById('fbFields');
       const isQuery = type === 'query';
       const isFeedback = type === 'feedback';
-      // 自助查询/交肾核算/排发调度 需要 密钥+CN；匿名反馈仅需要查询密钥（用于定位写入的数据行），不需要 CN
-      const needKey = (type === 'query' || type === 'fee' || type === 'dispatch' || type === 'feedback');
+      const isFbReply = type === 'fbreply';
+      // 自助查询/交肾核算/排发调度 需要 密钥+CN；匿名反馈与查回复仅需要查询密钥（用于定位写入的数据行），不需要 CN
+      const needKey = (type === 'query' || type === 'fee' || type === 'dispatch' || type === 'feedback' || type === 'fbreply');
       const needCn = (type === 'query' || type === 'fee' || type === 'dispatch');
       if (q) q.parentElement.style.display = needKey ? 'block' : 'none';
       if (cn) cn.parentElement.style.display = needCn ? 'block' : 'none';
       if (qBtn) qBtn.style.display = needCn ? 'block' : 'none';
       if (fb) fb.style.display = isFeedback ? 'block' : 'none';
+      const fbr = document.getElementById('fbReplyFields');
+      if (fbr) fbr.style.display = isFbReply ? 'block' : 'none';
+      if (isFbReply) renderMyFbCodes();
+      // 每次打开面板清掉上一次的残留结果
+      const fbs = document.getElementById('fbSubmitResult');
+      if (fbs) { fbs.style.display = 'none'; fbs.innerHTML = ''; }
+      const fbrr = document.getElementById('fbReplyResult');
+      if (fbrr) { fbrr.style.display = 'none'; fbrr.innerHTML = ''; }
       document.getElementById('queryPanel').classList.add('open');
     }
     async function submitFeedback(){
@@ -1571,8 +1605,10 @@
         if (typeof imgData === 'string') { try { imgData = JSON.parse(imgData); } catch(e){ imgData = {}; } }
         if (!imgData || typeof imgData !== 'object') imgData = {};
         if (!Array.isArray(imgData.feedback)) imgData.feedback = [];
+        const newCode = genFbCode();
         imgData.feedback.unshift({
           id: 'fb_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+          code: newCode,
           content: content,
           category: category,
           status: '未读',
@@ -1582,14 +1618,131 @@
         const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
         const res = await fetch(SUPABASE_URL + '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key), { method: 'PATCH', headers: h, body: JSON.stringify({ image_data: imgData }) });
         if (!res.ok) { throw new Error('HTTP ' + res.status); }
-        showToast('✅ 反馈已提交，感谢您的建议！');
+        saveMyFbCode(key, newCode);
+        showFbSubmitResult(newCode);
         document.getElementById('fbContent').value = '';
+        showToast('✅ 反馈已提交，请截图保存编号！');
       } catch(e){
         showToast('提交失败: ' + e.message);
       } finally {
         window.__FEEDBACK_SUBMITTING = false;
       }
     }
+    /* ===== 匿名反馈取件码：给匿名反馈一个回执凭据，团员凭码查团长的回复 ===== */
+    function esc(s){
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+        return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+      });
+    }
+    function genFbCode(){
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let s = '';
+      for (let i = 0; i < 6; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
+      return s;
+    }
+    // 老反馈没有 code 字段时，用 id 稳定推导出一个（前后端同一个算法，结果一致）
+    function deriveFbCode(id){
+      const s = String(id || '');
+      if (!s) return '';
+      let h = 2166136261;
+      for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
+      return h.toString(36).toUpperCase().replace(/[^0-9A-Z]/g, '').padStart(6, '0').slice(-6);
+    }
+    function normCode(c){ return String(c || '').trim().toUpperCase().replace(/[^0-9A-Z]/g, ''); }
+    function fbCodeOf(fb){ return normCode(fb && (fb.code || deriveFbCode(fb.id))); }
+    function myCodesKey(key){ return 'shantu_FB_CODES_' + (key || 'default'); }
+    function getMyFbCodes(key){
+      try { const a = JSON.parse(localStorage.getItem(myCodesKey(key)) || '[]'); return Array.isArray(a) ? a : []; } catch(e){ return []; }
+    }
+    function saveMyFbCode(key, code){
+      try {
+        const a = getMyFbCodes(key);
+        if (a.indexOf(code) < 0) a.unshift(code);
+        localStorage.setItem(myCodesKey(key), JSON.stringify(a.slice(0, 8)));
+      } catch(e){}
+    }
+    function renderMyFbCodes(){
+      const kEl = document.getElementById('panelKey');
+      const box = document.getElementById('fbMyCodes');
+      const input = document.getElementById('fbCode');
+      if (!box) return;
+      const codes = getMyFbCodes(((kEl && kEl.value) || '').trim());
+      if (!codes.length) { box.innerHTML = '<span style="opacity:.75;">在这台手机上提交过反馈的话，编号会自动填好。</span>'; return; }
+      box.innerHTML = '本机提交过的编号（点一下自动填入）：<br>' + codes.map(function(c){
+        return '<span onclick="var i=document.getElementById(\'fbCode\'); if(i) i.value=\'' + c + '\';" style="display:inline-block; margin:3px 6px 3px 0; padding:3px 9px; border:1px solid rgba(33,33,33,0.25); border-radius:6px; cursor:pointer; letter-spacing:1px;">' + esc(c) + '</span>';
+      }).join('');
+      if (input && !input.value) input.value = codes[0];
+    }
+    function showFbSubmitResult(code){
+      const box = document.getElementById('fbSubmitResult');
+      if (!box) return;
+      box.style.display = 'block';
+      box.innerHTML =
+        '<div style="margin-top:18px; padding:16px; border:1px dashed rgba(33,33,33,0.3); border-radius:10px; background:rgba(33,33,33,0.04);">' +
+        '<div style="font-size:12px; letter-spacing:1px; color:var(--ink-soft);">YOUR FEEDBACK CODE · 反馈编号</div>' +
+        '<div id="fbNewCode" style="margin:8px 0 6px; font-size:28px; font-weight:700; letter-spacing:5px; color:var(--accent);">' + esc(code) + '</div>' +
+        '<div style="font-size:12px; line-height:1.75; color:var(--ink-soft);">' +
+        '团长回复后，回首页点「查反馈回复」，输入密钥 + 这个编号就能看到答复。<br>' +
+        '⚠️ 这个编号只显示这一次，请截图保存；弄丢了只能重新提一条。</div>' +
+        '<div style="margin-top:12px;">' +
+        '<button type="button" onclick="copyFbCode()" style="padding:8px 14px; border-radius:8px; border:1px solid rgba(33,33,33,0.3); background:transparent; color:var(--ink); font-size:13px; cursor:pointer;">复制编号</button>' +
+        '</div></div>';
+    }
+    function copyFbCode(){
+      const el = document.getElementById('fbNewCode');
+      if (!el) return;
+      const txt = el.innerText.trim();
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt);
+        else {
+          const ta = document.createElement('textarea');
+          ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        }
+        showToast('编号已复制：' + txt);
+      } catch(e){ showToast('复制失败，请手动截图保存'); }
+    }
+    async function queryFeedbackReply(){
+      const key = (document.getElementById('panelKey').value || '').trim();
+      const code = normCode(document.getElementById('fbCode').value);
+      const box = document.getElementById('fbReplyResult');
+      if (!key) return showToast('请输入查询密钥');
+      if (!code) return showToast('请输入反馈编号');
+      if (box) { box.style.display = 'block'; box.innerHTML = '<div style="font-size:13px; color:var(--ink-soft);">🛰️ 正在调取档案……</div>'; }
+      try {
+        const data = await fetchLeaderData(key);
+        if (!data || !data.length) {
+          if (box) box.innerHTML = '<div style="font-size:13px; color:var(--ink-soft);">未找到该密钥的数据，请核对查询密钥。</div>';
+          return;
+        }
+        let imgData = data[0].image_data;
+        if (typeof imgData === 'string') { try { imgData = JSON.parse(imgData); } catch(e){ imgData = {}; } }
+        const list = (imgData && Array.isArray(imgData.feedback)) ? imgData.feedback : [];
+        const fb = list.filter(function(f){ return fbCodeOf(f) === code; })[0];
+        if (!fb) {
+          if (box) box.innerHTML = '<div style="padding:14px; border-radius:10px; background:rgba(33,33,33,0.04); font-size:13px; line-height:1.75; color:var(--ink-soft);">' +
+            '没有找到编号 <b>' + esc(code) + '</b> 对应的反馈。<br>请检查是否输错（不区分大小写）；如果是在别的手机或浏览器上提交的，需要手动输入当时的编号。</div>';
+          return;
+        }
+        const st = fb.status || '未读';
+        const stColor = (st === '已处理') ? '#15803d' : ((st === '已读') ? '#185FA5' : '#a16207');
+        const replyHtml = (fb.reply && String(fb.reply).trim())
+          ? '<div style="margin-top:12px; padding:12px; border-radius:8px; background:rgba(21,128,61,0.08); border:1px solid rgba(21,128,61,0.25); font-size:14px; line-height:1.8; color:var(--ink); white-space:pre-wrap;">💬 <b>团长回复：</b><br>' + esc(fb.reply) + '</div>'
+          : '<div style="margin-top:12px; font-size:13px; color:var(--ink-soft);">团长还没回复这条，过几天再来看看。</div>';
+        if (box) box.innerHTML =
+          '<div style="padding:16px; border-radius:10px; background:rgba(33,33,33,0.04); border:1px solid rgba(33,33,33,0.12);">' +
+          '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">' +
+          '<span style="font-size:14px; font-weight:600;">编号 ' + esc(code) + ' · ' + esc(fb.category || '其他') + '</span>' +
+          '<span style="font-size:12px; padding:3px 9px; border-radius:20px; border:1px solid ' + stColor + '55; color:' + stColor + ';">' + esc(st) + '</span>' +
+          '</div>' +
+          '<div style="margin-top:6px; font-size:12px; color:var(--ink-soft);">提交时间：' + esc(fb.created_at || '') + '</div>' +
+          '<div style="margin-top:10px; font-size:13px; line-height:1.8; color:var(--ink-soft); white-space:pre-wrap;">📝 <b>我的反馈：</b><br>' + esc(fb.content || '') + '</div>' +
+          replyHtml +
+          '</div>';
+      } catch(e){
+        if (box) box.innerHTML = '<div style="font-size:13px; color:var(--ink-soft);">查询失败：' + esc(e.message) + '</div>';
+      }
+    }
+
     function closePanel(){
       const overlay = document.getElementById('queryResultOverlay');
       if (overlay) overlay.style.display = 'none';

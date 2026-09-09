@@ -1423,7 +1423,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         <div class="table-container desktop-table-view">
           <table>
             <thead>
-              <tr><th>状态</th><th>分类</th><th>提交时间</th><th>反馈内容</th><th>团长回复</th><th style="text-align: right;">操作</th></tr>
+              <tr><th>取件码</th><th>状态</th><th>分类</th><th>提交时间</th><th>反馈内容</th><th>团长回复</th><th style="text-align: right;">操作</th></tr>
             </thead>
             <tbody id="feedbackTableBody"></tbody>
           </table>
@@ -1918,6 +1918,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         RAW_APPLICATIONS = Array.isArray(iData.applications) ? iData.applications : [];
         RAW_LOGS = Array.isArray(iData.transfer_logs) ? iData.transfer_logs : [];
         RAW_FEEDBACK = Array.isArray(iData.feedback) ? iData.feedback : [];
+        // 老反馈没有取件码：按 id 推导补一个，下次保存时自动写回数据库
+        RAW_FEEDBACK.forEach(function (f) { if (f && !f.code) f.code = fbCodeOf(f); });
         RAW_LOGISTICS = Array.isArray(iData.logistics_data) ? iData.logistics_data : [];
         RAW_ARCHIVED = Array.isArray(iData.archived_items) ? iData.archived_items : [];
         showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)`);
@@ -2059,6 +2061,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             RAW_APPLICATIONS = Array.isArray(freshImg.applications) ? freshImg.applications : RAW_APPLICATIONS;
             RAW_LOGS = Array.isArray(freshImg.transfer_logs) ? freshImg.transfer_logs : RAW_LOGS;
             RAW_FEEDBACK = Array.isArray(freshImg.feedback) ? freshImg.feedback : RAW_FEEDBACK;
+            RAW_FEEDBACK.forEach(function (f) { if (f && !f.code) f.code = fbCodeOf(f); });
             updateBatchDropdownOptions();
             renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
             if (myNewCount > 0) alert('✅ 已保存！检测到数据有更新，已自动合并保留你新录入的 ' + myNewCount + ' 条谷子，其它修改以最新数据为准。');
@@ -3387,6 +3390,17 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     window.clearAllTransferLogs = clearAllTransferLogs;
 
     /* --- 标签页 4：匿名反馈箱 --- */
+    // 取件码：新反馈自带 code；老反馈没有 code 时用 id 稳定推导（算法与团员自查页一致）
+    function fbNormCode(c){ return String(c || '').trim().toUpperCase().replace(/[^0-9A-Z]/g, ''); }
+    function fbDeriveCode(id){
+      const s = String(id || '');
+      if (!s) return '';
+      let h = 2166136261;
+      for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
+      return h.toString(36).toUpperCase().replace(/[^0-9A-Z]/g, '').padStart(6, '0').slice(-6);
+    }
+    function fbCodeOf(fb){ return fbNormCode(fb && (fb.code || fbDeriveCode(fb.id))); }
+
     function renderFeedbackList() {
       const tbody = document.getElementById('feedbackTableBody');
       const mobileCards = document.getElementById('feedbackMobileCardsView');
@@ -3400,7 +3414,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       window.FEEDBACK_CACHE = RAW_FEEDBACK;
 
       if (RAW_FEEDBACK.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">暂无反馈</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">暂无反馈</td></tr>`;
         if (mobileCards) mobileCards.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">暂无反馈</div>`;
         return;
       }
@@ -3409,6 +3423,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       RAW_FEEDBACK.forEach((fb, index) => {
         tableHtml += `
           <tr>
+            <td><code style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.82rem; letter-spacing:1px; background:#f1f5f9; padding:2px 6px; border-radius:4px; color:#334155;">${escapeHtml(fbCodeOf(fb))}</code></td>
             <td><span class="badge badge-fb-${fb.status || '未读'}">${escapeHtml(fb.status || '未读')}</span></td>
             <td><span class="badge badge-category">${escapeHtml(fb.category || '其他')}</span></td>
             <td style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(fb.created_at || '')}</td>
@@ -3426,6 +3441,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               <span class="badge badge-category">${escapeHtml(fb.category || '其他')}</span>
               <span class="badge badge-fb-${fb.status || '未读'}">${escapeHtml(fb.status || '未读')}</span>
             </div>
+            <div style="font-size:0.78rem; color:var(--text-muted);">取件码 <code style="font-family:ui-monospace,Menlo,Consolas,monospace; letter-spacing:1px; background:#f1f5f9; padding:1px 6px; border-radius:4px; color:#334155;">${escapeHtml(fbCodeOf(fb))}</code></div>
             <div style="font-size:0.9rem;">${escapeHtml(fb.content || '')}</div>
             <div class="admin-card-mobile-actions">
               <button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openFeedbackModal(${index})">💬 回复</button>
