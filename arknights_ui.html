@@ -1700,11 +1700,13 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     function stockDateInfo(item){ var sd=item.stock_date; if(!sd) return null; return { start:sd, expiry: item.stock_expiry || addMonthsStr(sd,3) }; }
     // 总闸：不管状态是在哪儿被改的（编辑弹窗/批量改/排发确认/团员页提交），
     // 只要最终状态不属于"到货组"，入库日与到期日一律清空，避免误点「可排发」后残留。
-    function sanitizeStockDates(items){
+    // 传了 onlyIds 就只处理本次动过的条目 —— 库里的历史数据一概不碰。
+    function sanitizeStockDates(items, onlyIds){
       if(!Array.isArray(items)) return 0;
       var n=0;
       for(var i=0;i<items.length;i++){
         var it=items[i]; if(!it) continue;
+        if(onlyIds && onlyIds.size && !onlyIds.has(String(it.item_id||it.id))) continue;
         if(!isArrivedStatus(it.status) && (it.stock_date || it.stock_expiry)){ it.stock_date=null; it.stock_expiry=null; n++; }
       }
       return n;
@@ -1975,8 +1977,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       try {
         const mergedArch = await _mergedArchivedItems();
         RAW_ARCHIVED = mergedArch;
-        // 写库前统一清理：状态已不是"到货组"的，囤货日期全部归零
-        if (Array.isArray(RAW_ITEMS)) sanitizeStockDates(RAW_ITEMS);
+        // 写库前清理囤货日期，但只清「本次动过的条目」（DIRTY_ITEM_IDS），
+        // 库里那些历史遗留的错误日期不会被顺手改掉 —— 团长没让我动的数据，一个都不动。
+        if (Array.isArray(RAW_ITEMS)) sanitizeStockDates(RAW_ITEMS, DIRTY_ITEM_IDS);
         const payload = {
           group_data: RAW_ITEMS,
           image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK, logistics_data: RAW_LOGISTICS, archived_items: mergedArch }
