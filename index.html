@@ -740,10 +740,11 @@
       border-radius: 12px;
       box-shadow: 0 8px 24px rgba(0,0,0,0.22);
       backdrop-filter: blur(3px);
-      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+      /* 注意：这里绝不能给 transform 加过渡。缩放是由滚动逐帧计算的，
+         一旦加了 transition，每帧都要"追赶"目标值，手机上就会发黏、拖影、掉帧。 */
+      transition: box-shadow 0.18s ease, border-color 0.18s ease;
     }
     .result-item:hover {
-      transform: translateY(-2px);
       box-shadow: 0 12px 30px rgba(0,0,0,0.28);
       border-color: rgba(22,24,28,0.18);
     }
@@ -867,7 +868,9 @@
       height: 72vh;
       overflow-y: auto;
       overflow-x: hidden;
-      scroll-snap-type: y mandatory;
+      /* proximity（邻近吸附）比 mandatory（强制吸附）跟手：强制吸附会和手指"抢"滚动位置，
+         在手机上表现为一顿一顿的；proximity 只在接近卡片时才轻轻吸过去。 */
+      scroll-snap-type: y proximity;
       -webkit-overflow-scrolling: touch;
       overscroll-behavior: contain;
       padding: 36vh 8px 36vh;      /* 上下留白：让首尾卡片也能吸附到正中 */
@@ -902,8 +905,10 @@
     }
 
     @media (max-width: 600px) {
-      .result-carousel { height: 58vh; padding: 28vh 6px 28vh; }
-      .result-item { flex-wrap: wrap; gap: 10px 12px; padding: 12px 14px; }
+      .result-carousel { height: 64vh; padding: 24vh 6px 24vh; }
+      /* 手机上去掉毛玻璃和高斯模糊：这类效果每帧都要重绘，是滑动掉帧的大户 */
+      .result-item { flex-wrap: wrap; gap: 10px 12px; padding: 12px 14px; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: 0 4px 14px rgba(0,0,0,0.18); }
+      .stat-pill, .batch-label-pill { backdrop-filter: none; -webkit-backdrop-filter: none; }
       .result-item .r-img, .result-item .r-img-empty { width: 84px; height: 84px; border-radius: 10px; }
       .result-item .r-info { flex: 1 1 calc(100% - 96px); min-width: 0; }
       .result-item .r-name { font-size: 15px; }
@@ -1285,7 +1290,7 @@
       if (!filter.length) {
         if (applyAllBtn) applyAllBtn.style.display = 'none';
         if (list) list.innerHTML = '<div class="result-empty">该谷子暂无符合条件的数据</div>';
-        updateCarousel();
+        measureCarousel();
         return;
       }
       if (applyAllBtn) applyAllBtn.style.display = (currentPanel === 'dispatch') ? 'inline-block' : 'none';
@@ -1308,7 +1313,8 @@
           applyBtn+
           '</div></div>';
       }).join('');
-      updateCarousel();
+      measureCarousel();
+      watchCarouselImages();
     }
 
     function escapeHtml(str){ return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1365,7 +1371,8 @@
         if (!imgData || typeof imgData !== 'object') imgData = {};
         if (!Array.isArray(imgData.applications)) imgData.applications = [];
         const targetIds = new Set(items.map(i=>String(i.item_id||i.id)));
-        groupData.forEach(item => { if (targetIds.has(String(item.item_id||item.id))) item.status = '待发货'; });
+        // 状态改为「待发货」时，同步清掉囤货入库日/到期日，避免误点「可排发」留下的日期一直挂着
+        groupData.forEach(item => { if (targetIds.has(String(item.item_id||item.id))) { item.status = '待发货'; item.stock_date = null; item.stock_expiry = null; } });
         imgData.applications.unshift({
           id: 'app_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
           type: '排发申请',
@@ -1388,29 +1395,64 @@
     }
 
     // ===== 垂直聚焦缩放轮播：卡片离容器中心越近 scale 越大（中心=1，边缘最小=0.8） =====
+    // 性能要点（移动端流畅度）：卡片位置只在渲染完成后测量一次并缓存；
+    // 滚动时只做纯数学计算，不再读取 offsetTop / offsetHeight，
+    // 避免每帧强制浏览器重新排版（这是原先手机上滑动卡顿、掉帧的主因）。
     let __carouselRaf = null;
-    function updateCarousel(){
+    let __carouselGeom = [];
+    function measureCarousel(){
       const c = document.getElementById('resultList');
       if (!c) return;
+      const cards = c.querySelectorAll('.result-item');
+      const geom = new Array(cards.length);
+      for (let i = 0; i < cards.length; i++){
+        geom[i] = { el: cards[i], top: cards[i].offsetTop, h: cards[i].offsetHeight, last: '' };
+      }
+      __carouselGeom = geom;
+      updateCarousel();
+    }
+    function updateCarousel(){
+      const c = document.getElementById('resultList');
+      if (!c || !__carouselGeom.length) return;
       const center = c.clientHeight / 2;
       const half = Math.max(center, 1);
-      const cards = c.querySelectorAll('.result-item');
-      for (let i = 0; i < cards.length; i++){
-        const card = cards[i];
-        const cardCenter = card.offsetTop + card.offsetHeight / 2 - c.scrollTop;
+      const st = c.scrollTop;
+      for (let i = 0; i < __carouselGeom.length; i++){
+        const g = __carouselGeom[i];
+        const cardCenter = g.top + g.h / 2 - st;
         const k = Math.min(1, Math.abs(cardCenter - center) / half);
-        card.style.transform = 'scale(' + (1 - k * 0.2).toFixed(4) + ')';
+        const t = 'scale(' + (1 - k * 0.2).toFixed(3) + ')';
+        if (t !== g.last){ g.last = t; g.el.style.transform = t; }  // 只在数值真变了才写样式
       }
     }
     function onCarouselScroll(){
       if (__carouselRaf) return;
       __carouselRaf = requestAnimationFrame(function(){ __carouselRaf = null; updateCarousel(); });
     }
+    let __measureTimer = null;
+    function scheduleMeasureCarousel(){
+      if (__measureTimer) clearTimeout(__measureTimer);
+      __measureTimer = setTimeout(function(){ __measureTimer = null; measureCarousel(); }, 120);
+    }
+    // 图片是懒加载的，加载完高度会变，需要重新测量
+    function watchCarouselImages(){
+      const c = document.getElementById('resultList');
+      if (!c) return;
+      const imgs = c.querySelectorAll('img.r-img');
+      for (let i = 0; i < imgs.length; i++){
+        if (imgs[i].complete) continue;
+        imgs[i].addEventListener('load', scheduleMeasureCarousel, { once: true });
+        imgs[i].addEventListener('error', scheduleMeasureCarousel, { once: true });
+      }
+    }
     (function initCarousel(){
       const rl = document.getElementById('resultList');
-      if (rl) rl.addEventListener('scroll', onCarouselScroll);
-      window.addEventListener('resize', updateCarousel);
+      if (rl) rl.addEventListener('scroll', onCarouselScroll, { passive: true });
+      window.addEventListener('resize', scheduleMeasureCarousel);
+      window.addEventListener('orientationchange', scheduleMeasureCarousel);
     })();
+    window.measureCarousel = measureCarousel;
+    window.scheduleMeasureCarousel = scheduleMeasureCarousel;
 
     function openImg(src){
       const m = document.createElement('div');

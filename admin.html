@@ -1698,6 +1698,17 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     function isArrivedStatus(s){ s=String(s||'').trim(); return s==='可排发'||s==='已到货'||s==='到货'; }
     function ensureStockDate(item, prevStatus){ if(isArrivedStatus(item.status)){ var prev=String(prevStatus||'').trim(); if(!isArrivedStatus(prev) || !item.stock_date){ item.stock_date=todayISO(); item.stock_expiry=addMonthsStr(item.stock_date,3); } } else { item.stock_date=null; item.stock_expiry=null; } }
     function stockDateInfo(item){ var sd=item.stock_date; if(!sd) return null; return { start:sd, expiry: item.stock_expiry || addMonthsStr(sd,3) }; }
+    // 总闸：不管状态是在哪儿被改的（编辑弹窗/批量改/排发确认/团员页提交），
+    // 只要最终状态不属于"到货组"，入库日与到期日一律清空，避免误点「可排发」后残留。
+    function sanitizeStockDates(items){
+      if(!Array.isArray(items)) return 0;
+      var n=0;
+      for(var i=0;i<items.length;i++){
+        var it=items[i]; if(!it) continue;
+        if(!isArrivedStatus(it.status) && (it.stock_date || it.stock_expiry)){ it.stock_date=null; it.stock_expiry=null; n++; }
+      }
+      return n;
+    }
 
     function stockCellHtml(item){
       var info=stockDateInfo(item); if(!info) return '<span style="color:#cbd5e1;">—</span>';
@@ -1964,6 +1975,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       try {
         const mergedArch = await _mergedArchivedItems();
         RAW_ARCHIVED = mergedArch;
+        // 写库前统一清理：状态已不是"到货组"的，囤货日期全部归零
+        if (Array.isArray(RAW_ITEMS)) sanitizeStockDates(RAW_ITEMS);
         const payload = {
           group_data: RAW_ITEMS,
           image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK, logistics_data: RAW_LOGISTICS, archived_items: mergedArch }
@@ -3315,7 +3328,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (!app) return;
       app.status = '已完成';
       const targetItemIds = new Set((app.items || []).map(i => String(i.item_id || i.id)));
-      RAW_ITEMS.forEach(item => { if (targetItemIds.has(String(item.item_id || item.id))) { item.status = '已排发'; DIRTY_ITEM_IDS.add(String(item.item_id || item.id)); } });
+      RAW_ITEMS.forEach(item => { if (targetItemIds.has(String(item.item_id || item.id))) { const _prevStatus = item.status; item.status = '已排发'; ensureStockDate(item, _prevStatus); DIRTY_ITEM_IDS.add(String(item.item_id || item.id)); } });
       await saveDataToSupabase(); renderDispatchWorkbench(); renderTable(); showToast('已确认发货！');
     }
     window.confirmDispatchAppByIndex = confirmDispatchAppByIndex;
