@@ -1696,7 +1696,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     function todayISO(){ return _fmtDate(new Date()); }
     function addMonthsStr(dateStr, months){ if(!dateStr) return ''; var p=String(dateStr).split('-').map(Number); if(p.length<3) return dateStr; var dt=new Date(p[0], (p[1]||1)-1, p[2]||1); dt.setMonth(dt.getMonth()+months); return _fmtDate(dt); }
     function isArrivedStatus(s){ s=String(s||'').trim(); return s==='可排发'||s==='已到货'||s==='到货'; }
-    function ensureStockDate(item, prevStatus){ if(isArrivedStatus(item.status)){ var prev=String(prevStatus||'').trim(); if(!isArrivedStatus(prev) || !item.stock_date){ item.stock_date=todayISO(); item.stock_expiry=addMonthsStr(item.stock_date,3); } } }
+    function ensureStockDate(item, prevStatus){ if(isArrivedStatus(item.status)){ var prev=String(prevStatus||'').trim(); if(!isArrivedStatus(prev) || !item.stock_date){ item.stock_date=todayISO(); item.stock_expiry=addMonthsStr(item.stock_date,3); } } else { item.stock_date=null; item.stock_expiry=null; } }
     function stockDateInfo(item){ var sd=item.stock_date; if(!sd) return null; return { start:sd, expiry: item.stock_expiry || addMonthsStr(sd,3) }; }
 
     function stockCellHtml(item){
