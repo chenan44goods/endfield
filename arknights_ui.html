@@ -769,6 +769,11 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     .badge-status-已申请发货 { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; }
     .badge-status-custom { background-color: #f8fafc; color: #334155; border: 1px solid #cbd5e1; }
 
+    /* 支付方式颜色：微信绿 / 支付宝蓝 / 其他灰 */
+    .badge-pay-微信 { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+    .badge-pay-支付宝 { background-color: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
+    .badge-pay-其他 { background-color: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+
     .badge-fb-未读 { background-color: #fee2e2; color: #991b1b; }
     .badge-fb-已读 { background-color: #e0f2fe; color: #0369a1; }
     .badge-fb-已处理 { background-color: #d1fae5; color: #065f46; }
@@ -1299,6 +1304,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
                 <th>数量</th>
                 <th>地区 (country)</th>
                 <th>状态</th>
+                <th>支付方式</th>
                 <th>囤货有效期</th>
                 <th>操作</th>
               </tr>
@@ -1464,7 +1470,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       </div>
       <div class="table-container" style="max-height:60vh; overflow:auto;">
         <table>
-          <thead><tr><th>CN</th><th>柄图</th><th>数量</th><th>应收 (元)</th><th>状态</th><th>操作</th></tr></thead>
+          <thead><tr><th>CN</th><th>柄图</th><th>数量</th><th>应收 (元)</th><th>状态</th><th>支付方式</th><th>操作</th></tr></thead>
           <tbody id="logisticsDetailBody"></tbody>
         </table>
       </div>
@@ -2340,6 +2346,14 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return legacyMap[s] || 'badge-status-custom';
     }
 
+    // 支付方式彩色标签：微信绿 / 支付宝蓝 / 其他灰（普通订单与国际运费共用）
+    function getPayMethodBadge(pm) {
+      const pmRaw = String(pm || '').trim();
+      if (!pmRaw) return '<span style="color:var(--text-muted);font-size:0.8rem;">—</span>';
+      const pmCls = pmRaw.indexOf('微信') >= 0 ? 'badge-pay-微信' : (pmRaw.indexOf('支付宝') >= 0 ? 'badge-pay-支付宝' : 'badge-pay-其他');
+      return '<span class="badge ' + pmCls + '">' + escapeHtml(pmRaw) + '</span>';
+    }
+
     function renderTable() {
       const tbody = document.getElementById('itemsTableBody');
       const mobileView = document.getElementById('adminMobileCardsView');
@@ -2384,7 +2398,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       window.ITEM_CACHE = pageItems;
 
       if (totalItems === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</td></tr>`;
         if (mobileView) mobileView.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配数据</div>`;
         document.getElementById('tablePagination').innerHTML = '';
         return;
@@ -3695,16 +3709,19 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       document.getElementById('logisticsDetailSummary').innerText = '共 ' + s.total + ' 人 | 未交 ' + s.unpaid + ' | 已交 ' + s.paid + ' | 免交 ' + s.free + ' | 应收 ￥' + s.due.toFixed(2) + ' | 实收 ￥' + s.recv.toFixed(2);
       const tbody = document.getElementById('logisticsDetailBody');
       if (members.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">该批次暂无成员记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">该批次暂无成员记录</td></tr>';
       } else {
         tbody.innerHTML = members.map((m, i) => {
           const st = String(m.status || '未交').trim();
           const stBadge = st === '已交' ? 'badge-status-已交' : (st === '免交' ? 'badge-status-custom' : 'badge-status-未付款');
+          const pmRaw = String(m.pay_method || '').trim();
+          const pmCls = pmRaw.indexOf('微信') >= 0 ? 'badge-pay-微信' : (pmRaw.indexOf('支付宝') >= 0 ? 'badge-pay-支付宝' : 'badge-pay-其他');
+          const pmHtml = pmRaw ? '<span class="badge ' + pmCls + '">' + escapeHtml(pmRaw) + '</span>' : '<span style="color:var(--text-muted);font-size:0.8rem;">—</span>';
           let ops = '';
           if (st !== '已交') ops += '<button class="btn btn-success" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'已交\')">标已交</button> ';
           if (st !== '免交') ops += '<button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'免交\')">免交</button> ';
           if (st !== '未交') ops += '<button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'未交\')">改未交</button>';
-          return '<tr><td><strong>' + escapeHtml(m.cn) + '</strong></td><td>' + escapeHtml(m.item_name || '国际运费') + '</td><td>' + (m.quantity || 1) + '</td><td>￥' + Number(m.amount_due || 0).toFixed(2) + '</td><td><span class="badge ' + stBadge + '">' + escapeHtml(st) + '</span></td><td>' + ops + '</td></tr>';
+          return '<tr><td><strong>' + escapeHtml(m.cn) + '</strong></td><td>' + escapeHtml(m.item_name || '国际运费') + '</td><td>' + (m.quantity || 1) + '</td><td>￥' + Number(m.amount_due || 0).toFixed(2) + '</td><td><span class="badge ' + stBadge + '">' + escapeHtml(st) + '</span></td><td>' + pmHtml + '</td><td>' + ops + '</td></tr>';
         }).join('');
       }
       document.getElementById('logisticsDetailModal').classList.add('active');
