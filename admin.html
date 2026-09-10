@@ -3513,14 +3513,68 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
 
     /* --- 标签页 1.5：国际运费 logistics_data --- */
     function mergeLogisticsData(freshList, myList, deletedSet) {
+      // 按批次名归并；同一批次内按成员(cn)做字段级合并。
+      // 关键修复：任一侧为「已交」则结果保留「已交」，付款信息以「已交」那侧为准，
+      // 避免团长保存网页时把机器人刚写入的"已交"状态覆盖掉。
       const byName = {};
-      (Array.isArray(freshList) ? freshList : []).forEach(b => {
-        if (b && b.batch_name && !deletedSet.has(b.batch_name)) byName[b.batch_name] = b;
-      });
-      (Array.isArray(myList) ? myList : []).forEach(b => {
-        if (b && b.batch_name) byName[b.batch_name] = b;
-      });
-      return Object.keys(byName).map(k => byName[k]);
+      const addBatch = function (b, isLocal) {
+        if (!b || !b.batch_name) return;
+        if (!isLocal && deletedSet && deletedSet.has(b.batch_name)) return;
+        const name = b.batch_name;
+        const members = Array.isArray(b.fee_members) ? b.fee_members : [];
+        if (!byName[name]) {
+          byName[name] = { batch_name: name };
+          Object.keys(b).forEach(function (k) {
+            if (k === 'batch_name') return;
+            byName[name][k] = (k === 'fee_members')
+              ? members.map(function (m) { return Object.assign({}, m); })
+              : b[k];
+          });
+          return;
+        }
+        // 批次已存在：批次级字段以 local 优先（保留团长编辑），再合并成员
+        const existing = byName[name];
+        Object.keys(b).forEach(function (k) {
+          if (k === 'batch_name' || k === 'fee_members') return;
+          if (b[k] !== undefined && b[k] !== null && b[k] !== '') existing[k] = b[k];
+        });
+        const existById = {};
+        (existing.fee_members || []).forEach(function (m) {
+          if (m && (m.cn || m.id)) existById[String(m.cn || m.id)] = true;
+        });
+        const merged = (existing.fee_members || []).map(function (m) {
+          const key = String(m.cn || m.id);
+          const other = members.find(function (x) { return String(x.cn || x.id) === key; });
+          if (!other) return m;
+          const mPaid = (m.status === '已交');
+          const oPaid = (other.status === '已交');
+          const status = (mPaid || oPaid) ? '已交' : (m.status || other.status);
+          const base = mPaid ? m : (oPaid ? other : m); // 已交侧优先；都未交用 fresh
+          const res = Object.assign({}, base);
+          res.status = status;
+          if (status === '已交') {
+            const paidSide = mPaid ? m : other;
+            if (paidSide.paid_at) res.paid_at = paidSide.paid_at;
+            if (paidSide.pay_method) res.pay_method = paidSide.pay_method;
+            if (paidSide.amount_paid !== undefined && paidSide.amount_paid !== null) res.amount_paid = paidSide.amount_paid;
+          }
+          ['cn', 'item_name', 'quantity', 'amount_due'].forEach(function (f) {
+            if (res[f] === undefined || res[f] === null || res[f] === '') {
+              const alt = (base === m) ? other : m;
+              if (alt[f] !== undefined && alt[f] !== null && alt[f] !== '') res[f] = alt[f];
+            }
+          });
+          return res;
+        });
+        members.forEach(function (m) {
+          const k = String(m.cn || m.id);
+          if (!existById[k] && !(existing.fee_members || []).some(function (x) { return String(x.cn || x.id) === k; })) merged.push(m);
+        });
+        existing.fee_members = merged;
+      };
+      (Array.isArray(freshList) ? freshList : []).forEach(function (b) { addBatch(b, false); });
+      (Array.isArray(myList) ? myList : []).forEach(function (b) { addBatch(b, true); });
+      return Object.keys(byName).map(function (k) { return byName[k]; });
     }
 
     function parseLogisticsImportText(rawText) {
