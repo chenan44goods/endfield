@@ -1241,6 +1241,38 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         </form>
       </div>
 
+      <!-- 💰 收款对账统计（普通订单 group_data） -->
+      <div class="card">
+        <div class="card-title">
+          <span>💰 收款对账统计 (group_data)</span>
+          <div class="btn-group">
+            <label style="display:flex; align-items:center; gap:4px; font-size:0.82rem; color:var(--text-muted); white-space:nowrap; cursor:pointer;" title="勾选后一并统计状态为「已完全全部收款」的归档批次">
+              <input type="checkbox" id="payStatsIncludeArchived" onchange="onPayStatsToggleArchived()"> 包含已收款完结批次
+            </label>
+            <button class="btn btn-secondary" onclick="renderPayStats()">🔄 刷新</button>
+          </div>
+        </div>
+        <div id="payStatsSummary" style="font-size:0.9rem; margin-bottom:12px; line-height:2; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px 12px;"></div>
+        <div class="table-container desktop-table-view">
+          <table>
+            <thead>
+              <tr>
+                <th>批次</th>
+                <th>笔数</th>
+                <th>人数</th>
+                <th>应收 (元)</th>
+                <th>实收 (元)</th>
+                <th>未收 (元)</th>
+                <th>未付款</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="payStatsTableBody"></tbody>
+          </table>
+        </div>
+        <div class="mobile-cards-view" id="payStatsMobileCardsView"></div>
+      </div>
+
       <!-- 数据表格与批量操作 -->
       <div class="card">
         <div class="card-title">
@@ -1472,6 +1504,24 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         <table>
           <thead><tr><th>CN</th><th>柄图</th><th>数量</th><th>应收 (元)</th><th>状态</th><th>支付方式</th><th>操作</th></tr></thead>
           <tbody id="logisticsDetailBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 💰 收款对账明细 Modal -->
+  <div class="modal-overlay" id="payDetailModal">
+    <div class="modal" style="max-width:780px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 id="payDetailTitle" style="font-size: 1.1rem; font-weight: 700;">💰 收款对账明细</h3>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closePayDetail()">✕</button>
+      </div>
+      <div id="payDetailSummary" style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;"></div>
+      <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:8px;">应收=该批次全部订单金额；实收=已标记付款（非「未付款」）的订单金额；未收=差额。付款方式来自团员 /已付 上报。</p>
+      <div class="table-container" style="max-height:60vh; overflow:auto;">
+        <table>
+          <thead><tr><th>CN</th><th>笔数</th><th>应收 (元)</th><th>已付 (元)</th><th>未付 (元)</th><th>支付方式</th></tr></thead>
+          <tbody id="payDetailBody"></tbody>
         </table>
       </div>
     </div>
@@ -2354,6 +2404,151 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return '<span class="badge ' + pmCls + '">' + escapeHtml(pmRaw) + '</span>';
     }
 
+    // ==========================================
+    // 💰 收款对账统计（普通订单 group_data）
+    // 应收 = Σ(单价×数量)；实收 = 非「未付款」订单金额；未收 = 应收 - 实收
+    // 「未付款」= 待交谷子费，未付款即视为欠款；付款方式来自团员 /已付 上报。
+    // ==========================================
+    let PAY_STATS_INCLUDE_ARCHIVED = false;
+    let PAY_STATS_CACHE = [];
+
+    function isOrderPaid(it) { return String((it && it.status) || '').trim() !== '未付款'; }
+
+    function _payMethodKey(pm) {
+      const s = String(pm || '').trim();
+      if (s.indexOf('微信') >= 0) return '微信';
+      if (s.indexOf('支付宝') >= 0) return '支付宝';
+      return s ? '其他' : '未注明';
+    }
+
+    function computePayStats(includeArchived) {
+      const batches = {};
+      const methods = { '微信': 0, '支付宝': 0, '其他': 0, '未注明': 0 };
+      const overallMembers = new Set();
+      let due = 0, recv = 0, cnt = 0, unpaidCnt = 0;
+      const r2 = function (n) { return Math.round(n * 100) / 100; };
+      RAW_ITEMS.forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        const bn = (String(it.batch_name || '').trim()) || '默认批次';
+        if (!includeArchived && bn !== '默认批次' && isArchivedBatchName(bn)) return;
+        const amt = (Number(it.price) || 0) * (Number(it.quantity) || 1);
+        let b = batches[bn];
+        if (!b) { b = { name: bn, due: 0, recv: 0, cnt: 0, unpaidCnt: 0, members: new Set(), methods: { '微信': 0, '支付宝': 0, '其他': 0, '未注明': 0 } }; batches[bn] = b; }
+        b.due += amt; b.cnt += 1; b.members.add(String(it.cn || ''));
+        due += amt; cnt += 1; overallMembers.add(String(it.cn || ''));
+        if (isOrderPaid(it)) {
+          b.recv += amt; recv += amt;
+          const k = _payMethodKey(it.pay_method);
+          b.methods[k] += amt; methods[k] += amt;
+        } else {
+          b.unpaidCnt += 1; unpaidCnt += 1;
+        }
+      });
+      const list = Object.keys(batches).map(function (k) {
+        const b = batches[k];
+        return { name: b.name, cnt: b.cnt, members: b.members.size, due: r2(b.due), recv: r2(b.recv), unpaid: r2(b.due - b.recv), unpaidCnt: b.unpaidCnt, methods: b.methods, archived: isArchivedBatchName(b.name) };
+      }).sort(function (a, b) { return b.due - a.due || b.unpaid - a.unpaid; });
+      Object.keys(methods).forEach(function (k) { methods[k] = r2(methods[k]); });
+      return { list: list, overall: { cnt: cnt, members: overallMembers.size, due: r2(due), recv: r2(recv), unpaid: r2(due - recv), unpaidCnt: unpaidCnt, methods: methods } };
+    }
+
+    function renderPayStats() {
+      const sumEl = document.getElementById('payStatsSummary');
+      const tbody = document.getElementById('payStatsTableBody');
+      const mobileView = document.getElementById('payStatsMobileCardsView');
+      if (!tbody) return;
+      const s = computePayStats(PAY_STATS_INCLUDE_ARCHIVED);
+      const o = s.overall;
+      PAY_STATS_CACHE = s.list;
+      if (sumEl) {
+        sumEl.innerHTML =
+          '<span class="badge badge-batch">共 ' + o.cnt + ' 笔</span> ' +
+          '<span class="badge badge-country">' + o.members + ' 人</span><br>' +
+          '应收 <strong style="font-size:1.05rem;">￥' + o.due.toFixed(2) + '</strong> ｜ ' +
+          '实收 <strong style="color:#16a34a; font-size:1.05rem;">￥' + o.recv.toFixed(2) + '</strong> ｜ ' +
+          '未收 <strong style="color:' + (o.unpaid > 0.0000001 ? '#dc2626' : '#64748b') + '; font-size:1.05rem;">￥' + o.unpaid.toFixed(2) + '</strong>' +
+          (o.unpaidCnt ? '（未付款 ' + o.unpaidCnt + ' 笔）' : '') +
+          '<br><span style="font-size:0.82rem; color:var(--text-muted);">平台分账：微信 ￥' + o.methods['微信'].toFixed(2) +
+          ' ｜ 支付宝 ￥' + o.methods['支付宝'].toFixed(2) +
+          (o.methods['其他'] ? ' ｜ 其他 ￥' + o.methods['其他'].toFixed(2) : '') +
+          (o.methods['未注明'] ? ' ｜ 未注明 ￥' + o.methods['未注明'].toFixed(2) : '') +
+          '</span>' +
+          (o.methods['未注明'] > 0.0000001 ? '<br><span style="font-size:0.78rem; color:var(--text-muted);">「未注明」= 早期订单或团长手动改的状态，没记支付方式；团员用 /已付 上报后会自动归类到微信/支付宝。</span>' : '');
+      }
+      if (s.list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:var(--text-muted);">暂无订单数据</td></tr>';
+        if (mobileView) mobileView.innerHTML = '';
+        return;
+      }
+      let html = '', cardsHtml = '';
+      s.list.forEach(function (b, i) {
+        const needCls = b.unpaid > 0.0000001 ? 'badge-status-未付款' : 'badge-status-可排发';
+        html += '<tr>' +
+          '<td style="font-weight:600;">' + escapeHtml(b.name) + (b.archived ? ' <span class="badge badge-status-custom" style="font-size:0.7rem;">已完结</span>' : '') + '</td>' +
+          '<td>' + b.cnt + '</td><td>' + b.members + '</td>' +
+          '<td>￥' + b.due.toFixed(2) + '</td>' +
+          '<td style="color:#16a34a; font-weight:600;">￥' + b.recv.toFixed(2) + '</td>' +
+          '<td style="color:' + (b.unpaid > 0.0000001 ? '#dc2626' : '#64748b') + '; font-weight:600;">￥' + b.unpaid.toFixed(2) + '</td>' +
+          '<td>' + (b.unpaidCnt ? '<span class="badge ' + needCls + '">' + b.unpaidCnt + ' 笔</span>' : '0') + '</td>' +
+          '<td><button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem;" onclick="openPayDetail(' + i + ')">明细</button></td>' +
+          '</tr>';
+        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(b.name) + '</span><span class="badge ' + needCls + '">未付款 ' + b.unpaidCnt + '</span></div><div style="font-size:0.9rem; padding:6px 0;">共 ' + b.cnt + ' 笔 | ' + b.members + ' 人 | 应收 ￥' + b.due.toFixed(2) + '<br>实收 ￥' + b.recv.toFixed(2) + ' | 未收 ￥' + b.unpaid.toFixed(2) + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openPayDetail(' + i + ')">📋 明细</button></div></div>';
+      });
+      tbody.innerHTML = html;
+      if (mobileView) mobileView.innerHTML = cardsHtml;
+    }
+    window.renderPayStats = renderPayStats;
+
+    function onPayStatsToggleArchived() {
+      const cb = document.getElementById('payStatsIncludeArchived');
+      PAY_STATS_INCLUDE_ARCHIVED = !!(cb && cb.checked);
+      renderPayStats();
+    }
+    window.onPayStatsToggleArchived = onPayStatsToggleArchived;
+
+    function openPayDetail(idx) {
+      const batch = PAY_STATS_CACHE[idx];
+      if (!batch) return;
+      const batchName = batch.name;
+      const byCn = {};
+      RAW_ITEMS.forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        const bn = (String(it.batch_name || '').trim()) || '默认批次';
+        if (bn !== batchName) return;
+        const cn = String(it.cn || '(未填CN)');
+        const amt = (Number(it.price) || 0) * (Number(it.quantity) || 1);
+        let g = byCn[cn];
+        if (!g) { g = { cn: cn, cnt: 0, due: 0, recv: 0, unpaid: 0, methods: {} }; byCn[cn] = g; }
+        g.cnt += 1; g.due += amt;
+        if (isOrderPaid(it)) { g.recv += amt; const k = _payMethodKey(it.pay_method); g.methods[k] = (g.methods[k] || 0) + 1; }
+        else { g.unpaid += amt; }
+      });
+      const rows = Object.keys(byCn).map(function (k) { return byCn[k]; })
+        .sort(function (a, b) { return (b.unpaid - a.unpaid) || (b.due - a.due); });
+      const totalDue = rows.reduce(function (a, r) { return a + r.due; }, 0);
+      const totalRecv = rows.reduce(function (a, r) { return a + r.recv; }, 0);
+      const unpaidPeople = rows.filter(function (r) { return r.unpaid > 0.0000001; }).length;
+      document.getElementById('payDetailTitle').innerText = '💰 收款对账明细 - ' + batchName;
+      document.getElementById('payDetailSummary').innerText =
+        '共 ' + rows.length + ' 人 | 未付款 ' + unpaidPeople + ' 人 | 应收 ￥' + totalDue.toFixed(2) + ' | 实收 ￥' + totalRecv.toFixed(2) + ' | 未收 ￥' + (totalDue - totalRecv).toFixed(2);
+      const tbody = document.getElementById('payDetailBody');
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">该批次暂无订单</td></tr>';
+      } else {
+        tbody.innerHTML = rows.map(function (r) {
+          const pmKeys = Object.keys(r.methods).sort(function (a, b) { return r.methods[b] - r.methods[a]; });
+          const pmHtml = pmKeys.length ? pmKeys.map(function (k) { return getPayMethodBadge(k) + (r.methods[k] > 1 ? '<span style="font-size:0.72rem;color:var(--text-muted);">×' + r.methods[k] + '</span>' : ''); }).join(' ') : '<span style="color:var(--text-muted);font-size:0.8rem;">—</span>';
+          const un = r.unpaid > 0.0000001;
+          return '<tr><td><strong>' + escapeHtml(r.cn) + '</strong></td><td>' + r.cnt + '</td><td>￥' + r.due.toFixed(2) + '</td><td style="color:#16a34a;">￥' + r.recv.toFixed(2) + '</td><td style="color:' + (un ? '#dc2626' : '#64748b') + '; font-weight:' + (un ? '700' : '400') + ';">￥' + r.unpaid.toFixed(2) + '</td><td>' + pmHtml + '</td></tr>';
+        }).join('');
+      }
+      document.getElementById('payDetailModal').classList.add('active');
+    }
+    window.openPayDetail = openPayDetail;
+
+    function closePayDetail() { document.getElementById('payDetailModal').classList.remove('active'); }
+    window.closePayDetail = closePayDetail;
+
     function renderTable() {
       const tbody = document.getElementById('itemsTableBody');
       const mobileView = document.getElementById('adminMobileCardsView');
@@ -2401,6 +2596,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</td></tr>`;
         if (mobileView) mobileView.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配数据</div>`;
         document.getElementById('tablePagination').innerHTML = '';
+        renderPayStats();
         return;
       }
 
@@ -2424,6 +2620,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             <td>${item.quantity || 1}</td>
             <td><span class="badge badge-country">${escapeHtml(countryStr)}</span></td>
             <td><span class="badge ${statusBadgeClass}">${escapeHtml(statusStr)}</span></td>
+            <td>${getPayMethodBadge(item.pay_method)}</td>
             <td>${stockCellHtml(item)}</td>
             <td>
               <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editItemByIndex(${index})">编辑</button>
@@ -2452,6 +2649,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
                   <span>￥${Number(item.price || 0).toFixed(2)}</span> |
                   <span>x${item.quantity || 1}</span>
                 </div>
+                <div style="margin-top:4px; font-size:0.8rem;">支付方式: ${getPayMethodBadge(item.pay_method)}</div>
               </div>
             </div>
             <div class="admin-card-mobile-actions">
@@ -2465,6 +2663,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       tbody.innerHTML = html;
       if (mobileView) mobileView.innerHTML = cardsHtml;
       renderPaginationBar(totalItems, totalPages);
+      renderPayStats();
     }
 
     function renderPaginationBar(totalItems, totalPages) {
