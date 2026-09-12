@@ -2469,7 +2469,6 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           '应收 <strong style="font-size:1.05rem;">￥' + o.due.toFixed(2) + '</strong> ｜ ' +
           '实收 <strong style="color:#16a34a; font-size:1.05rem;">￥' + o.recv.toFixed(2) + '</strong> ｜ ' +
           '未收 <strong style="color:' + (o.unpaid > 0.0000001 ? '#dc2626' : '#64748b') + '; font-size:1.05rem;">￥' + o.unpaid.toFixed(2) + '</strong>' +
-          (o.unpaidCnt ? '（未付款 ' + o.unpaidCnt + ' 笔）' : '') +
           '<br><span style="font-size:0.82rem; color:var(--text-muted);">平台分账：微信 ￥' + o.methods['微信'].toFixed(2) +
           ' ｜ 支付宝 ￥' + o.methods['支付宝'].toFixed(2) +
           (o.methods['其他'] ? ' ｜ 其他 ￥' + o.methods['其他'].toFixed(2) : '') +
@@ -2491,7 +2490,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           '<td>￥' + b.due.toFixed(2) + '</td>' +
           '<td style="color:#16a34a; font-weight:600;">￥' + b.recv.toFixed(2) + '</td>' +
           '<td style="color:' + (b.unpaid > 0.0000001 ? '#dc2626' : '#64748b') + '; font-weight:600;">￥' + b.unpaid.toFixed(2) + '</td>' +
-          '<td>' + (b.unpaidCnt ? '<span class="badge ' + needCls + '">' + b.unpaidCnt + ' 笔</span>' : '0') + '</td>' +
+          '<td>' + (b.unpaidCnt ? '<span class="badge ' + needCls + '">' + b.unpaidCnt + '</span>' : '<span style="color:var(--text-muted);">—</span>') + '</td>' +
           '<td><button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem;" onclick="openPayDetail(' + i + ')">明细</button></td>' +
           '</tr>';
         cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(b.name) + '</span><span class="badge ' + needCls + '">未付款 ' + b.unpaidCnt + '</span></div><div style="font-size:0.9rem; padding:6px 0;">' + b.members + ' 人 | 应收 ￥' + b.due.toFixed(2) + '<br>实收 ￥' + b.recv.toFixed(2) + ' | 未收 ￥' + b.unpaid.toFixed(2) + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openPayDetail(' + i + ')">📋 明细</button></div></div>';
