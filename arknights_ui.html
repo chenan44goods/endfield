@@ -1505,7 +1505,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       </div>
       <div class="table-container" style="max-height:60vh; overflow:auto;">
         <table>
-          <thead><tr><th>CN</th><th>柄图</th><th>数量</th><th>应收 (元)</th><th>状态</th><th>支付方式</th><th>操作</th></tr></thead>
+          <thead><tr><th>CN</th><th>支付方式</th><th>柄图</th><th>数量</th><th>应收 (元)</th><th>状态</th><th>操作</th></tr></thead>
           <tbody id="logisticsDetailBody"></tbody>
         </table>
       </div>
@@ -1523,7 +1523,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:8px;">应收=该批次全部订单金额；实收=已标记付款（非「未付款」）的订单金额；未收=差额。付款方式来自团员 /已付 上报。</p>
       <div class="table-container" style="max-height:60vh; overflow:auto;">
         <table>
-          <thead><tr><th>CN</th><th>笔数</th><th>应收 (元)</th><th>已付 (元)</th><th>未付 (元)</th><th>支付方式</th></tr></thead>
+          <thead><tr><th>CN</th><th>支付方式</th><th>笔数</th><th>应收 (元)</th><th>已付 (元)</th><th>未付 (元)</th></tr></thead>
           <tbody id="payDetailBody"></tbody>
         </table>
       </div>
@@ -2543,7 +2543,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           const pmKeys = Object.keys(r.methods).sort(function (a, b) { return r.methods[b] - r.methods[a]; });
           const pmHtml = pmKeys.length ? pmKeys.map(function (k) { return getPayMethodBadge(k) + (r.methods[k] > 1 ? '<span style="font-size:0.72rem;color:var(--text-muted);">×' + r.methods[k] + '</span>' : ''); }).join(' ') : '<span style="color:var(--text-muted);font-size:0.8rem;">—</span>';
           const un = r.unpaid > 0.0000001;
-          return '<tr><td><strong>' + escapeHtml(r.cn) + '</strong></td><td>' + r.cnt + '</td><td>￥' + r.due.toFixed(2) + '</td><td style="color:#16a34a;">￥' + r.recv.toFixed(2) + '</td><td style="color:' + (un ? '#dc2626' : '#64748b') + '; font-weight:' + (un ? '700' : '400') + ';">￥' + r.unpaid.toFixed(2) + '</td><td>' + pmHtml + '</td></tr>';
+          return '<tr><td><strong>' + escapeHtml(r.cn) + '</strong></td><td>' + pmHtml + '</td><td>' + r.cnt + '</td><td>￥' + r.due.toFixed(2) + '</td><td style="color:#16a34a;">￥' + r.recv.toFixed(2) + '</td><td style="color:' + (un ? '#dc2626' : '#64748b') + '; font-weight:' + (un ? '700' : '400') + ';">￥' + r.unpaid.toFixed(2) + '</td></tr>';
         }).join('');
       }
       document.getElementById('payDetailModal').classList.add('active');
@@ -3924,7 +3924,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           if (st !== '已交') ops += '<button class="btn btn-success" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'已交\')">标已交</button> ';
           if (st !== '免交') ops += '<button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'免交\')">免交</button> ';
           if (st !== '未交') ops += '<button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'未交\')">改未交</button>';
-          return '<tr><td><strong>' + escapeHtml(m.cn) + '</strong></td><td>' + escapeHtml(m.item_name || '国际运费') + '</td><td>' + (m.quantity || 1) + '</td><td>￥' + Number(m.amount_due || 0).toFixed(2) + '</td><td><span class="badge ' + stBadge + '">' + escapeHtml(st) + '</span></td><td>' + pmHtml + '</td><td>' + ops + '</td></tr>';
+          return '<tr><td><strong>' + escapeHtml(m.cn) + '</strong></td><td>' + pmHtml + '</td><td>' + escapeHtml(m.item_name || '国际运费') + '</td><td>' + (m.quantity || 1) + '</td><td>￥' + Number(m.amount_due || 0).toFixed(2) + '</td><td><span class="badge ' + stBadge + '">' + escapeHtml(st) + '</span></td><td>' + ops + '</td></tr>';
         }).join('');
       }
       document.getElementById('logisticsDetailModal').classList.add('active');
