@@ -1111,6 +1111,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     <button class="tab-btn" onclick="switchTab('tabDispatch')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-package" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" /><path d="M12 22V12" /><path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7" /><path d="m7.5 4.27 9 5.15" /></svg> 排发工作台 (applications)</button>
     <div class="nav-group-label">算账</div>
     <button class="tab-btn" onclick="switchTab('tabCalc')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-calculator" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="16" height="20" x="4" y="2" rx="2" /><line x1="8" x2="16" y1="6" y2="6" /><line x1="16" x2="16" y1="14" y2="18" /><path d="M16 10h.01" /><path d="M12 10h.01" /><path d="M8 10h.01" /><path d="M12 14h.01" /><path d="M8 14h.01" /><path d="M12 18h.01" /><path d="M8 18h.01" /></svg> 算账中心</button>
+    <button class="tab-btn" onclick="switchTab('tabPayStats')"><svg class="lucide-ic ic-wallet" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3v4a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5"/></svg> 收款对账 (group_data)</button>
     <div class="nav-group-label">团务</div>
     <button class="tab-btn" onclick="switchTab('tabFeedback')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-inbox" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></svg> 反馈与团务 (feedback)</button>
     <div class="nav-deco">O2</div>
@@ -1241,38 +1242,6 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         </form>
       </div>
 
-      <!-- 💰 收款对账统计（普通订单 group_data） -->
-      <div class="card">
-        <div class="card-title">
-          <span>💰 收款对账统计 (group_data)</span>
-          <div class="btn-group">
-            <label style="display:flex; align-items:center; gap:4px; font-size:0.82rem; color:var(--text-muted); white-space:nowrap; cursor:pointer;" title="勾选后一并统计状态为「已完全全部收款」的归档批次">
-              <input type="checkbox" id="payStatsIncludeArchived" onchange="onPayStatsToggleArchived()"> 包含已收款完结批次
-            </label>
-            <button class="btn btn-secondary" onclick="renderPayStats()">🔄 刷新</button>
-          </div>
-        </div>
-        <div id="payStatsSummary" style="font-size:0.9rem; margin-bottom:12px; line-height:2; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px 12px;"></div>
-        <div class="table-container desktop-table-view">
-          <table>
-            <thead>
-              <tr>
-                <th>批次</th>
-                <th>笔数</th>
-                <th>人数</th>
-                <th>应收 (元)</th>
-                <th>实收 (元)</th>
-                <th>未收 (元)</th>
-                <th>未付款</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="payStatsTableBody"></tbody>
-          </table>
-        </div>
-        <div class="mobile-cards-view" id="payStatsMobileCardsView"></div>
-      </div>
-
       <!-- 数据表格与批量操作 -->
       <div class="card">
         <div class="card-title">
@@ -1348,6 +1317,40 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         <!-- 手机端卡片列表视图 -->
         <div class="mobile-cards-view" id="adminMobileCardsView"></div>
         <div id="tablePagination" class="pagination-container"></div>
+      </div>
+    </div>
+
+    <!-- 标签页 1.6：收款对账（2026-09-12 从「排表管理」页拆出，独立一页） -->
+    <div class="tab-content" id="tabPayStats">
+      <div class="card">
+        <div class="card-title">
+          <span>💰 收款对账统计 (group_data)</span>
+          <div class="btn-group">
+            <label style="display:flex; align-items:center; gap:4px; font-size:0.82rem; color:var(--text-muted); white-space:nowrap; cursor:pointer;" title="勾选后一并统计状态为「已完全全部收款」的归档批次">
+              <input type="checkbox" id="payStatsIncludeArchived" onchange="onPayStatsToggleArchived()"> 包含已收款完结批次
+            </label>
+            <button class="btn btn-secondary" onclick="renderPayStats()">🔄 刷新</button>
+          </div>
+        </div>
+        <div id="payStatsSummary" style="font-size:0.9rem; margin-bottom:12px; line-height:2; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px 12px;"></div>
+        <div class="table-container desktop-table-view">
+          <table>
+            <thead>
+              <tr>
+                <th>批次</th>
+                <th>笔数</th>
+                <th>人数</th>
+                <th>应收 (元)</th>
+                <th>实收 (元)</th>
+                <th>未收 (元)</th>
+                <th>未付款</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="payStatsTableBody"></tbody>
+          </table>
+        </div>
+        <div class="mobile-cards-view" id="payStatsMobileCardsView"></div>
       </div>
     </div>
 
@@ -1943,6 +1946,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (tabId === 'tabDispatch') renderDispatchWorkbench();
       if (tabId === 'tabLogs') renderTransferLogs();
       if (tabId === 'tabFeedback') renderFeedbackList();
+      if (tabId === 'tabPayStats') renderPayStats();
     }
     window.switchTab = switchTab;
 
