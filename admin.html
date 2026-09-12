@@ -1338,7 +1338,6 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
             <thead>
               <tr>
                 <th>批次</th>
-                <th>笔数</th>
                 <th>人数</th>
                 <th>应收 (元)</th>
                 <th>实收 (元)</th>
@@ -1523,7 +1522,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:8px;">应收=该批次全部订单金额；实收=已标记付款（非「未付款」）的订单金额；未收=差额。付款方式来自团员 /已付 上报。</p>
       <div class="table-container" style="max-height:60vh; overflow:auto;">
         <table>
-          <thead><tr><th>CN</th><th>支付方式</th><th>笔数</th><th>应收 (元)</th><th>已付 (元)</th><th>未付 (元)</th></tr></thead>
+          <thead><tr><th>CN</th><th>支付方式</th><th>应收 (元)</th><th>已付 (元)</th><th>未付 (元)</th></tr></thead>
           <tbody id="payDetailBody"></tbody>
         </table>
       </div>
@@ -2466,7 +2465,6 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       PAY_STATS_CACHE = s.list;
       if (sumEl) {
         sumEl.innerHTML =
-          '<span class="badge badge-batch">共 ' + o.cnt + ' 笔</span> ' +
           '<span class="badge badge-country">' + o.members + ' 人</span><br>' +
           '应收 <strong style="font-size:1.05rem;">￥' + o.due.toFixed(2) + '</strong> ｜ ' +
           '实收 <strong style="color:#16a34a; font-size:1.05rem;">￥' + o.recv.toFixed(2) + '</strong> ｜ ' +
@@ -2480,7 +2478,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           (o.methods['未注明'] > 0.0000001 ? '<br><span style="font-size:0.78rem; color:var(--text-muted);">「未注明」= 早期订单或团长手动改的状态，没记支付方式；团员用 /已付 上报后会自动归类到微信/支付宝。</span>' : '');
       }
       if (s.list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:var(--text-muted);">暂无订单数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--text-muted);">暂无订单数据</td></tr>';
         if (mobileView) mobileView.innerHTML = '';
         return;
       }
@@ -2489,14 +2487,14 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const needCls = b.unpaid > 0.0000001 ? 'badge-status-未付款' : 'badge-status-可排发';
         html += '<tr>' +
           '<td style="font-weight:600;">' + escapeHtml(b.name) + (b.archived ? ' <span class="badge badge-status-custom" style="font-size:0.7rem;">已完结</span>' : '') + '</td>' +
-          '<td>' + b.cnt + '</td><td>' + b.members + '</td>' +
+          '<td>' + b.members + '</td>' +
           '<td>￥' + b.due.toFixed(2) + '</td>' +
           '<td style="color:#16a34a; font-weight:600;">￥' + b.recv.toFixed(2) + '</td>' +
           '<td style="color:' + (b.unpaid > 0.0000001 ? '#dc2626' : '#64748b') + '; font-weight:600;">￥' + b.unpaid.toFixed(2) + '</td>' +
           '<td>' + (b.unpaidCnt ? '<span class="badge ' + needCls + '">' + b.unpaidCnt + ' 笔</span>' : '0') + '</td>' +
           '<td><button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem;" onclick="openPayDetail(' + i + ')">明细</button></td>' +
           '</tr>';
-        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(b.name) + '</span><span class="badge ' + needCls + '">未付款 ' + b.unpaidCnt + '</span></div><div style="font-size:0.9rem; padding:6px 0;">共 ' + b.cnt + ' 笔 | ' + b.members + ' 人 | 应收 ￥' + b.due.toFixed(2) + '<br>实收 ￥' + b.recv.toFixed(2) + ' | 未收 ￥' + b.unpaid.toFixed(2) + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openPayDetail(' + i + ')">📋 明细</button></div></div>';
+        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(b.name) + '</span><span class="badge ' + needCls + '">未付款 ' + b.unpaidCnt + '</span></div><div style="font-size:0.9rem; padding:6px 0;">' + b.members + ' 人 | 应收 ￥' + b.due.toFixed(2) + '<br>实收 ￥' + b.recv.toFixed(2) + ' | 未收 ￥' + b.unpaid.toFixed(2) + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openPayDetail(' + i + ')">📋 明细</button></div></div>';
       });
       tbody.innerHTML = html;
       if (mobileView) mobileView.innerHTML = cardsHtml;
@@ -2537,13 +2535,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         '共 ' + rows.length + ' 人 | 未付款 ' + unpaidPeople + ' 人 | 应收 ￥' + totalDue.toFixed(2) + ' | 实收 ￥' + totalRecv.toFixed(2) + ' | 未收 ￥' + (totalDue - totalRecv).toFixed(2);
       const tbody = document.getElementById('payDetailBody');
       if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">该批次暂无订单</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">该批次暂无订单</td></tr>';
       } else {
         tbody.innerHTML = rows.map(function (r) {
           const pmKeys = Object.keys(r.methods).sort(function (a, b) { return r.methods[b] - r.methods[a]; });
           const pmHtml = pmKeys.length ? pmKeys.map(function (k) { return getPayMethodBadge(k) + (r.methods[k] > 1 ? '<span style="font-size:0.72rem;color:var(--text-muted);">×' + r.methods[k] + '</span>' : ''); }).join(' ') : '<span style="color:var(--text-muted);font-size:0.8rem;">—</span>';
           const un = r.unpaid > 0.0000001;
-          return '<tr><td><strong>' + escapeHtml(r.cn) + '</strong></td><td>' + pmHtml + '</td><td>' + r.cnt + '</td><td>￥' + r.due.toFixed(2) + '</td><td style="color:#16a34a;">￥' + r.recv.toFixed(2) + '</td><td style="color:' + (un ? '#dc2626' : '#64748b') + '; font-weight:' + (un ? '700' : '400') + ';">￥' + r.unpaid.toFixed(2) + '</td></tr>';
+          return '<tr><td><strong>' + escapeHtml(r.cn) + '</strong></td><td>' + pmHtml + '</td><td>￥' + r.due.toFixed(2) + '</td><td style="color:#16a34a;">￥' + r.recv.toFixed(2) + '</td><td style="color:' + (un ? '#dc2626' : '#64748b') + '; font-weight:' + (un ? '700' : '400') + ';">￥' + r.unpaid.toFixed(2) + '</td></tr>';
         }).join('');
       }
       document.getElementById('payDetailModal').classList.add('active');
