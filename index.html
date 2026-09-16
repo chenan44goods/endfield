@@ -1357,22 +1357,43 @@
       return legacy[s] || 'st-custom';
     }
 
-    function applyDispatchItem(idx){
+    async function applyDispatchItem(idx){
       const items = window.CURRENT_VIEW_ITEMS || [];
       const it = items[idx];
       if (!it) return showToast('获取谷子信息失败');
-      const note = prompt('申请排发「'+(it.name||'未命名')+'」\n如需特殊打包（加厚/分开装/备注卡等），请在此留言：\n（不需要可直接点确定）');
+      const itemName = it.name || '未命名';
+      const note = await askNote({
+        title: '申请排发「' + itemName + '」',
+        desc: '如需特殊打包（加厚／分开装／备注卡等），可在下方留言。<br>不需要备注也可以直接提交。',
+        placeholder: '例如：加厚包装、和上一单一起发…',
+        okText: '提交申请'
+      });
       if (note === null) return;
-      if (!confirm('确定申请排发「'+(it.name||'未命名')+'」吗？提交后该谷子状态将变为【待发货】。')) return;
+      const ok = await askConfirm({
+        title: '确认提交排发申请？',
+        desc: '「' + itemName + '」提交后状态将变为【待发货】' + (String(note).trim() ? '，备注将同步给团长。' : '。'),
+        okText: '确认提交'
+      });
+      if (!ok) return;
       submitApply([it], note);
     }
-    function applyAllDispatchable(){
+    async function applyAllDispatchable(){
       // 只对当前分类筛选下的可排发项操作，避免"选了分类却全量提交"的误操作
       const items = (window.CURRENT_VIEW_ITEMS || window.CURRENT_ITEMS || []).filter(i=>String(i.status||'').trim()==='可排发');
       if (!items.length) return showToast('没有可排发的谷子');
-      const note = prompt('一键提交 '+items.length+' 件谷子的排发申请。\n如需统一备注（打包需求等），请在此留言：\n（不需要可直接点确定）');
+      const note = await askNote({
+        title: '一键提交 ' + items.length + ' 件排发申请',
+        desc: '这几件谷子会合并成一条申请提交给团长。<br>如需统一的打包备注，可在下方留言。',
+        placeholder: '例如：全部加厚包装…',
+        okText: '提交申请'
+      });
       if (note === null) return;
-      if (!confirm('确定对当前筛选下的 '+items.length+' 件谷子一键提交排发申请吗？提交后这些谷子状态将变为【待发货】。')) return;
+      const ok = await askConfirm({
+        title: '确认一键提交？',
+        desc: '将对当前筛选下的 ' + items.length + ' 件谷子提交排发申请，提交后状态变为【待发货】。',
+        okText: '确认提交'
+      });
+      if (!ok) return;
       submitApply(items, note);
     }
     async function submitApply(items, note){
@@ -1491,6 +1512,133 @@
       m.onclick = closeLb;
       document.addEventListener('keydown', onLbKey);
       document.body.appendChild(m);
+    }
+
+    // ===== 📱 自定义弹窗（手机端 prompt/confirm 会被浏览器屏蔽，必须自绘）=====
+    // 微信/QQ 内置浏览器、iOS Safari 会静默屏蔽原生 prompt()/confirm()，
+    // 表现为"点了没反应、页面卡住"。排发申请要填备注，因此全部改为自绘 UI。
+    function askNote(opts){
+      opts = opts || {};
+      return new Promise(function(resolve){
+        let done = false;
+        const mask = document.createElement('div');
+        mask.className = 'qmodal-mask';
+        const box = document.createElement('div');
+        box.className = 'qmodal';
+        box.innerHTML =
+          '<div class="qmodal-title">' + (opts.title || '填写备注') + '</div>' +
+          '<div class="qmodal-desc">' + (opts.desc || '') + '</div>' +
+          '<textarea class="qmodal-input" rows="3" maxlength="200" placeholder="' +
+            (opts.placeholder || '（不需要可直接点「提交申请」）') + '"></textarea>' +
+          '<div class="qmodal-btns">' +
+            '<button type="button" class="qmodal-btn qmodal-cancel">取消</button>' +
+            '<button type="button" class="qmodal-btn qmodal-ok">' + (opts.okText || '提交申请') + '</button>' +
+          '</div>';
+        mask.appendChild(box);
+        document.body.appendChild(mask);
+        const ta = box.querySelector('.qmodal-input');
+        // 手机上自动聚焦会顶起键盘遮挡按钮，改为不自动聚焦；桌面端才聚焦
+        if (window.innerWidth > 900) { try { ta.focus(); } catch(e){} }
+        function finish(val){
+          if (done) return; done = true;
+          document.removeEventListener('keydown', onKey);
+          if (mask.parentNode) mask.parentNode.removeChild(mask);
+          resolve(val);
+        }
+        function onKey(e){ if (e.key === 'Escape') finish(null); }
+        box.querySelector('.qmodal-cancel').onclick = function(){ finish(null); };
+        box.querySelector('.qmodal-ok').onclick = function(){ finish(ta.value || ''); };
+        mask.onclick = function(e){ if (e.target === mask) finish(null); };
+        document.addEventListener('keydown', onKey);
+      });
+    }
+    function askConfirm(opts){
+      opts = opts || {};
+      return new Promise(function(resolve){
+        let done = false;
+        const mask = document.createElement('div');
+        mask.className = 'qmodal-mask';
+        const box = document.createElement('div');
+        box.className = 'qmodal';
+        box.innerHTML =
+          '<div class="qmodal-title">' + (opts.title || '请确认') + '</div>' +
+          '<div class="qmodal-desc">' + String(opts.desc || '').replace(/\n/g, '<br>') + '</div>' +
+          '<div class="qmodal-btns">' +
+            '<button type="button" class="qmodal-btn qmodal-cancel">' + (opts.cancelText || '取消') + '</button>' +
+            '<button type="button" class="qmodal-btn qmodal-ok">' + (opts.okText || '确定') + '</button>' +
+          '</div>';
+        mask.appendChild(box);
+        document.body.appendChild(mask);
+        function finish(val){
+          if (done) return; done = true;
+          document.removeEventListener('keydown', onKey);
+          if (mask.parentNode) mask.parentNode.removeChild(mask);
+          resolve(val);
+        }
+        function onKey(e){ if (e.key === 'Escape') finish(false); }
+        box.querySelector('.qmodal-cancel').onclick = function(){ finish(false); };
+        box.querySelector('.qmodal-ok').onclick = function(){ finish(true); };
+        mask.onclick = function(e){ if (e.target === mask) finish(false); };
+        document.addEventListener('keydown', onKey);
+      });
+    }
+    window.askNote = askNote;
+    window.askConfirm = askConfirm;
+
+    /* ===== 📱 自定义弹窗样式（替代原生 prompt/confirm）===== */
+    .qmodal-mask {
+      position: fixed; inset: 0; z-index: 2100;
+      background: rgba(20, 18, 16, 0.55);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+      -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+      animation: qmodalFade 0.16s ease-out;
+    }
+    @keyframes qmodalFade { from { opacity: 0; } to { opacity: 1; } }
+    .qmodal {
+      width: 100%; max-width: 420px;
+      background: #fffdf7;
+      border: 2px solid var(--ink, #212121);
+      border-radius: 14px;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+      padding: 18px 18px 14px;
+      animation: qmodalPop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+      max-height: 86vh; overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    @keyframes qmodalPop { from { transform: scale(0.94) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+    .qmodal-title { font-size: 16px; font-weight: 800; color: var(--ink, #212121); margin-bottom: 8px; letter-spacing: 0.01em; }
+    .qmodal-desc { font-size: 13px; line-height: 1.6; color: var(--ink-soft, #555); margin-bottom: 12px; word-break: break-word; }
+    .qmodal-input {
+      width: 100%; box-sizing: border-box;
+      font-family: var(--sans, system-ui, sans-serif); font-size: 16px;  /* 16px 防止 iOS 聚焦时自动放大 */
+      line-height: 1.55;
+      padding: 10px 12px;
+      border: 1.5px solid rgba(33,33,33,0.28);
+      border-radius: 10px;
+      background: #fff; color: var(--ink, #212121);
+      resize: vertical; outline: none;
+      -webkit-appearance: none; appearance: none;
+    }
+    .qmodal-input:focus { border-color: var(--accent, #e0a92b); box-shadow: 0 0 0 3px rgba(224,169,43,0.18); }
+    .qmodal-btns { display: flex; gap: 10px; margin-top: 14px; }
+    .qmodal-btn {
+      flex: 1; padding: 11px 10px;
+      font-family: var(--sans, system-ui, sans-serif); font-size: 14px; font-weight: 700;
+      border-radius: 10px; cursor: pointer;
+      border: 1.5px solid rgba(33,33,33,0.3); background: #fff; color: var(--ink, #212121);
+      transition: background 0.15s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .qmodal-btn:active { transform: scale(0.98); }
+    .qmodal-cancel { background: #f3f1ec; }
+    .qmodal-ok { background: var(--accent, #e0a92b); border-color: rgba(33,33,33,0.35); color: #1a1a1a; }
+    @media (max-width: 600px) {
+      .qmodal-mask { padding: 0; align-items: flex-end; }          /* 手机端从底部弹出，便于单手操作 */
+      .qmodal { max-width: none; width: 100%; border-radius: 16px 16px 0 0; border-bottom: none;
+                padding: 18px 16px calc(16px + env(safe-area-inset-bottom, 0px)); max-height: 88vh; }
+      .qmodal-title { font-size: 17px; }
+      .qmodal-btn { padding: 13px 10px; font-size: 15px; }          /* 加大点击区，避免误触 */
     }
 
     function showToast(msg){
