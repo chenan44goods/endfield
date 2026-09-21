@@ -1112,6 +1112,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     <div class="nav-group-label">算账</div>
     <button class="tab-btn" onclick="switchTab('tabCalc')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-calculator" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="16" height="20" x="4" y="2" rx="2" /><line x1="8" x2="16" y1="6" y2="6" /><line x1="16" x2="16" y1="14" y2="18" /><path d="M16 10h.01" /><path d="M12 10h.01" /><path d="M8 10h.01" /><path d="M12 14h.01" /><path d="M8 14h.01" /><path d="M12 18h.01" /><path d="M8 18h.01" /></svg> 算账中心</button>
     <button class="tab-btn" onclick="switchTab('tabPayStats')"><svg class="lucide-ic ic-wallet" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3v4a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5"/></svg> 收款对账 (group_data)</button>
+    <button class="tab-btn" onclick="switchTab('tabPayReview')"><svg class="lucide-ic ic-check-circle" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> 交款审核</button>
     <div class="nav-group-label">团务</div>
     <button class="tab-btn" onclick="switchTab('tabFeedback')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-inbox" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></svg> 反馈与团务 (feedback)</button>
     <div class="nav-deco">O2</div>
@@ -1350,6 +1351,20 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           </table>
         </div>
         <div class="mobile-cards-view" id="payStatsMobileCardsView"></div>
+      </div>
+    </div>
+
+    <!-- 标签页 1.7：交款审核（团员在自查页上传的付款凭证，2026-09-22 新增） -->
+    <div class="tab-content" id="tabPayReview">
+      <div class="card">
+        <div class="card-title">
+          <span>💳 交款审核（团员上传的付款凭证）</span>
+          <div class="btn-group">
+            <button class="btn btn-secondary" onclick="renderPayReview()">🔄 刷新</button>
+          </div>
+        </div>
+        <div id="payReviewSummary" style="font-size:0.9rem; margin-bottom:12px; line-height:2; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px 12px;"></div>
+        <div id="payReviewList" style="display:flex; flex-direction:column; gap:12px;"></div>
       </div>
     </div>
 
@@ -1795,6 +1810,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     let RAW_LOGS = [];
     let RAW_FEEDBACK = [];
     let RAW_LOGISTICS = [];
+    let RAW_PAY_PROOFS = [];        // 💳 团员在自查页上传的付款凭证（image_data.pay_proofs）
+    let PAY_PROOF_URLS = {};        // 凭证缩略图的签名链接缓存（private 桶，一小时有效）
     let LOGISTICS_DELETED_BATCHES = new Set();
     let LOGISTICS_DETAIL_INDEX = -1;
     let RAW_BATCHES = [];
@@ -1946,6 +1963,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (tabId === 'tabLogs') renderTransferLogs();
       if (tabId === 'tabFeedback') renderFeedbackList();
       if (tabId === 'tabPayStats') renderPayStats();
+      if (tabId === 'tabPayReview') renderPayReview();
     }
     window.switchTab = switchTab;
 
@@ -1960,7 +1978,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const { data, error } = await supabaseClient.from('leader_data').select('*').eq('query_key', CURRENT_QUERY_KEY);
         if (error) return showToast('读取失败: ' + error.message);
         if (!data || data.length === 0) {
-          CURRENT_RECORD_ID = null; CURRENT_VERSION = null; RAW_ITEMS = []; RAW_ARCHIVED = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = []; RAW_LOGISTICS = [];
+          CURRENT_RECORD_ID = null; CURRENT_VERSION = null; RAW_ITEMS = []; RAW_ARCHIVED = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = []; RAW_LOGISTICS = []; RAW_PAY_PROOFS = [];
           LOGISTICS_DELETED_BATCHES.clear();
           renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
           alert('该密钥暂无数据！'); return;
@@ -1980,6 +1998,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         // 老反馈没有取件码：按 id 推导补一个，下次保存时自动写回数据库
         RAW_FEEDBACK.forEach(function (f) { if (f && !f.code) f.code = fbCodeOf(f); });
         RAW_LOGISTICS = Array.isArray(iData.logistics_data) ? iData.logistics_data : [];
+        RAW_PAY_PROOFS = Array.isArray(iData.pay_proofs) ? iData.pay_proofs : [];
         RAW_ARCHIVED = Array.isArray(iData.archived_items) ? iData.archived_items : [];
         showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)`);
         CURRENT_PAGE = 1;
@@ -2043,7 +2062,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         if (Array.isArray(RAW_ITEMS)) sanitizeStockDates(RAW_ITEMS, DIRTY_ITEM_IDS);
         const payload = {
           group_data: RAW_ITEMS,
-          image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK, logistics_data: RAW_LOGISTICS, archived_items: mergedArch }
+          // ⚠️ 下面每个字段都是「后台整份回写」的：
+          //    以后往 image_data 里加新字段，必须同步加进这一行，
+          //    否则后台一保存就会把它抹掉（2026-09-22 pay_proofs 踩过一次）。
+          image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK, logistics_data: RAW_LOGISTICS, archived_items: mergedArch, pay_proofs: RAW_PAY_PROOFS }
         };
         if (CURRENT_VERSION !== null) {
           const nextVersion = (Number(CURRENT_VERSION) || 0) + 1;
@@ -2085,6 +2107,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               const freshLogistics = Array.isArray(freshImg2.logistics_data) ? freshImg2.logistics_data : [];
               freshImg2.logistics_data = mergeLogisticsData(freshLogistics, RAW_LOGISTICS, LOGISTICS_DELETED_BATCHES);
               freshImg2.archived_items = mergedArch;
+              // 交款凭证按 id 合并：我这边的优先（含刚审核过的状态），服务器上多出来的照样保留
+              const freshProofs = Array.isArray(freshImg2.pay_proofs) ? freshImg2.pay_proofs : [];
+              const myProofIds = {};
+              RAW_PAY_PROOFS.forEach(function (p) { myProofIds[String(p.id)] = true; });
+              const mergedProofs = RAW_PAY_PROOFS.slice();
+              freshProofs.forEach(function (p) { if (!myProofIds[String(p.id)]) mergedProofs.push(p); });
+              freshImg2.pay_proofs = mergedProofs;
               const retry = await supabaseClient.from('leader_data')
                 .update({ group_data: merged, image_data: freshImg2, version: freshVersion + 1 })
                 .eq('id', freshRec.id).eq('version', freshVersion).select('id');
@@ -2093,7 +2122,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
                 continue;
               }
               mergedApplied = true;
-              mergeResult = { freshRec: freshRec, freshVersion: freshVersion, merged: merged, mergedLogistics: freshImg2.logistics_data, myNewCount: myNewCount };
+              mergeResult = { freshRec: freshRec, freshVersion: freshVersion, merged: merged, mergedLogistics: freshImg2.logistics_data, mergedProofs: freshImg2.pay_proofs, myNewCount: myNewCount };
               break;
             }
             if (!mergedApplied || !mergeResult) {
@@ -2114,6 +2143,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             CURRENT_VERSION = freshVersion + 1;
             RAW_ITEMS = merged;
             RAW_LOGISTICS = mergeResult.mergedLogistics || RAW_LOGISTICS;
+            if (Array.isArray(mergeResult.mergedProofs)) RAW_PAY_PROOFS = mergeResult.mergedProofs;
             LOGISTICS_DELETED_BATCHES.clear();
             DELETED_ITEM_IDS.clear();
             DIRTY_ITEM_IDS.clear();
@@ -2548,6 +2578,216 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     window.openPayDetail = openPayDetail;
 
     function closePayDetail() { document.getElementById('payDetailModal').classList.remove('active'); }
+
+    // ==========================================
+    // 💳 交款审核（2026-09-22 新增）
+    //    团员在自查页「交肾核算」上传付款截图 → 这里审核。
+    //    点「确认收款」会把这些订单从「未付款」改成「已下单」并记下支付方式。
+    //    ⚠️ 图片存在 private 桶 pay-proofs，只能用签名链接读，不能直接拼 URL。
+    // ==========================================
+    async function _payProofSignedUrl(path) {
+      if (!path) return '';
+      if (PAY_PROOF_URLS[path]) return PAY_PROOF_URLS[path];
+      try {
+        const { data, error } = await supabaseClient.storage.from('pay-proofs').createSignedUrl(path, 3600);
+        if (error || !data || !data.signedUrl) return '';
+        PAY_PROOF_URLS[path] = data.signedUrl;
+        return data.signedUrl;
+      } catch (e) { return ''; }
+    }
+
+    function _payReviewMethodBadge(pm) {
+      const s = String(pm || '').trim();
+      if (!s) return '<span class="badge" style="color:var(--text-muted);">未注明</span>';
+      const cls = s.indexOf('微信') >= 0 ? 'badge-pay-微信' : (s.indexOf('支付宝') >= 0 ? 'badge-pay-支付宝' : 'badge-pay-其他');
+      return '<span class="badge ' + cls + '">' + escapeHtml(s) + '</span>';
+    }
+
+    function _payProofStatusBadge(st) {
+      const s = String(st || '待审核');
+      const color = s === '已通过' ? '#16a34a' : (s === '已驳回' ? '#dc2626' : '#a16207');
+      const bg = s === '已通过' ? '#dcfce7' : (s === '已驳回' ? '#fee2e2' : '#fef3c7');
+      return '<span class="badge" style="background:' + bg + '; color:' + color + '; border:1px solid ' + color + '44;">' + escapeHtml(s) + '</span>';
+    }
+
+    function _payProofCardHtml(p) {
+      const id = String(p.id || '');
+      const names = Array.isArray(p.batch_names) ? p.batch_names.join('、') : String(p.batch_names || '');
+      const st = String(p.status || '待审核');
+      const canAct = (st === '待审核');
+      const ids = Array.isArray(p.item_ids) ? p.item_ids : [];
+      let actions = '';
+      if (canAct) {
+        actions =
+          '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">' +
+            '<button class="btn btn-primary" id="approveBtn_' + id + '" style="padding:6px 14px; font-size:0.85rem;" onclick="approvePayProof(\'' + id + '\')">✅ 确认收款</button>' +
+            '<button class="btn btn-danger" style="padding:6px 14px; font-size:0.85rem;" onclick="showRejectBox(\'' + id + '\')">❌ 驳回</button>' +
+            '<span style="font-size:0.78rem; color:var(--text-muted);">确认后 ' + ids.length + ' 条订单变为「已下单」</span>' +
+          '</div>' +
+          '<div id="rejectBox_' + id + '" style="display:none; margin-top:10px;">' +
+            '<input id="rejectReason_' + id + '" placeholder="驳回原因（团员能看到）" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; box-sizing:border-box;">' +
+            '<div style="margin-top:8px; display:flex; gap:8px;">' +
+              '<button class="btn btn-danger" style="padding:5px 12px; font-size:0.82rem;" onclick="rejectPayProof(\'' + id + '\')">确认驳回</button>' +
+              '<button class="btn btn-secondary" style="padding:5px 12px; font-size:0.82rem;" onclick="hideRejectBox(\'' + id + '\')">取消</button>' +
+            '</div>' +
+          '</div>';
+      } else if (p.reject_reason) {
+        actions = '<div style="margin-top:8px; font-size:0.85rem; color:#dc2626;">驳回原因：' + escapeHtml(p.reject_reason) + '</div>';
+      }
+
+      return '' +
+      '<div style="display:flex; gap:14px; align-items:flex-start; padding:12px; border:1px solid var(--border); border-radius:10px; background:#fff; flex-wrap:wrap;">' +
+        '<div id="proofThumb_' + id + '" style="width:112px; height:112px; flex:0 0 112px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9; display:flex; align-items:center; justify-content:center; overflow:hidden; font-size:0.72rem; color:var(--text-muted); text-align:center;">加载中…</div>' +
+        '<div style="flex:1 1 260px; min-width:220px;">' +
+          '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+            '<strong style="font-size:0.95rem;">' + escapeHtml(p.cn || '(未填CN)') + '</strong>' +
+            _payProofStatusBadge(st) + _payReviewMethodBadge(p.pay_method) +
+          '</div>' +
+          '<div style="margin-top:6px; font-size:0.85rem; line-height:1.9; color:var(--text-muted);">' +
+            '批次：' + escapeHtml(names || '—') + '<br>' +
+            '金额：<strong style="color:#dc2626; font-size:0.95rem;">￥' + Number(p.amount || 0).toFixed(2) + '</strong>' +
+            ' ｜ 覆盖 ' + ids.length + ' 条订单<br>' +
+            (p.note ? ('备注：' + escapeHtml(p.note) + '<br>') : '') +
+            '提交：' + escapeHtml(p.created_at || '') +
+            (p.reviewed_at ? (' ｜ 处理：' + escapeHtml(p.reviewed_at)) : '') +
+          '</div>' +
+          actions +
+        '</div>' +
+      '</div>';
+    }
+
+    async function _loadProofThumb(p) {
+      const el = document.getElementById('proofThumb_' + String(p.id || ''));
+      if (!el) return;
+      const url = await _payProofSignedUrl(p.img_path);
+      if (!url) {
+        el.innerHTML = '<span style="padding:6px;">图片读不到<br>检查 pay-proofs 桶</span>';
+        return;
+      }
+      el.innerHTML = '<img src="' + url + '" style="width:100%; height:100%; object-fit:cover; cursor:zoom-in;" onclick="window.open(this.src,\'_blank\')">';
+    }
+
+    function renderPayReview() {
+      const listEl = document.getElementById('payReviewList');
+      const sumEl = document.getElementById('payReviewSummary');
+      if (!listEl) return;
+      const all = Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : [];
+      const pending = all.filter(function (p) { return String(p.status || '待审核') === '待审核'; });
+      const passed = all.filter(function (p) { return String(p.status || '') === '已通过'; });
+      const pendAmt = pending.reduce(function (a, p) { return a + (Number(p.amount) || 0); }, 0);
+      const passAmt = passed.reduce(function (a, p) { return a + (Number(p.amount) || 0); }, 0);
+
+      if (sumEl) {
+        sumEl.innerHTML =
+          '待审核 <strong style="color:' + (pending.length ? '#dc2626' : '#16a34a') + '; font-size:1.05rem;">' + pending.length + '</strong> 笔 · ￥' + pendAmt.toFixed(2) +
+          ' ｜ 已通过 <strong style="color:#16a34a;">' + passed.length + '</strong> 笔 · ￥' + passAmt.toFixed(2) +
+          '<br><span style="font-size:0.82rem; color:var(--text-muted);">「确认收款」= 对应订单改为「已下单」并记下支付方式；点两次才生效（防误触）。</span>';
+      }
+
+      if (!all.length) {
+        listEl.innerHTML = '<div style="padding:24px; text-align:center; color:var(--text-muted);">还没有团员提交付款凭证。<br><span style="font-size:0.85rem;">团员在自查页「交肾核算」里上传后会出现在这里。</span></div>';
+        return;
+      }
+
+      const rest = all.filter(function (p) { return String(p.status || '待审核') !== '待审核'; }).slice(0, 20);
+      const show = pending.concat(rest);
+      listEl.innerHTML = show.map(_payProofCardHtml).join('');
+      show.forEach(function (p) { _loadProofThumb(p); });
+    }
+    window.renderPayReview = renderPayReview;
+
+    let _payApproveArmed = {};
+    async function approvePayProof(proofId) {
+      const id = String(proofId);
+      const btn = document.getElementById('approveBtn_' + id);
+      if (!_payApproveArmed[id]) {
+        _payApproveArmed[id] = true;
+        if (btn) btn.innerText = '⚠️ 再点一次确认';
+        setTimeout(function () {
+          _payApproveArmed[id] = false;
+          const b = document.getElementById('approveBtn_' + id);
+          if (b) b.innerText = '✅ 确认收款';
+        }, 4000);
+        return;
+      }
+      _payApproveArmed[id] = false;
+
+      const proof = RAW_PAY_PROOFS.filter(function (p) { return String(p.id) === id; })[0];
+      if (!proof) return showToast('找不到这条凭证，请刷新');
+      if (String(proof.status || '') === '已通过') return showToast('这条已经确认过了');
+
+      const ids = (proof.item_ids || []).map(String);
+      let changed = 0, alreadyPaid = 0, notFound = 0;
+      RAW_ITEMS.forEach(function (it) {
+        const iid = String(it.item_id || it.id);
+        if (ids.indexOf(iid) < 0) return;
+        const st = String(it.status || '').trim();
+        if (st === '未付款' || st === '未交') {
+          it.status = '已下单';
+          it.pay_method = proof.pay_method || '';
+          it.paid_at = new Date().toLocaleString('zh-CN');
+          DIRTY_ITEM_IDS.add(iid);
+          changed++;
+        } else {
+          alreadyPaid++;
+        }
+      });
+      ids.forEach(function (iid) {
+        const hit = RAW_ITEMS.some(function (it) { return String(it.item_id || it.id) === iid; });
+        if (!hit) notFound++;
+      });
+
+      const prevStatus = proof.status, prevReviewed = proof.reviewed_at;
+      proof.status = '已通过';
+      proof.reviewed_at = new Date().toLocaleString('zh-CN');
+
+      const ok = await saveDataToSupabase();
+      if (!ok) {
+        proof.status = prevStatus;
+        proof.reviewed_at = prevReviewed;
+        return;
+      }
+      let msg = changed ? ('✅ 已确认收款，' + changed + ' 条订单改为「已下单」') : '✅ 已标记通过';
+      if (alreadyPaid) msg += '（' + alreadyPaid + ' 条原本就不是未付款，跳过）';
+      if (notFound) msg += '（' + notFound + ' 条订单在表里找不到）';
+      showToast(msg);
+      renderPayReview();
+      renderPayStats();
+    }
+    window.approvePayProof = approvePayProof;
+
+    function showRejectBox(id) {
+      const b = document.getElementById('rejectBox_' + id);
+      if (b) b.style.display = 'block';
+    }
+    function hideRejectBox(id) {
+      const b = document.getElementById('rejectBox_' + id);
+      if (b) b.style.display = 'none';
+    }
+    window.showRejectBox = showRejectBox;
+    window.hideRejectBox = hideRejectBox;
+
+    async function rejectPayProof(proofId) {
+      const id = String(proofId);
+      const inp = document.getElementById('rejectReason_' + id);
+      const reason = inp ? String(inp.value || '').trim() : '';
+      const proof = RAW_PAY_PROOFS.filter(function (p) { return String(p.id) === id; })[0];
+      if (!proof) return showToast('找不到这条凭证，请刷新');
+      const prevStatus = proof.status, prevReason = proof.reject_reason, prevReviewed = proof.reviewed_at;
+      proof.status = '已驳回';
+      proof.reject_reason = reason || '团长未说明原因';
+      proof.reviewed_at = new Date().toLocaleString('zh-CN');
+      const ok = await saveDataToSupabase();
+      if (!ok) {
+        proof.status = prevStatus;
+        proof.reject_reason = prevReason;
+        proof.reviewed_at = prevReviewed;
+        return;
+      }
+      showToast('已驳回，团员重新查询时会看到原因');
+      renderPayReview();
+    }
+    window.rejectPayProof = rejectPayProof;
     window.closePayDetail = closePayDetail;
 
     function renderTable() {

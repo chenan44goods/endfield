@@ -1155,6 +1155,8 @@
             <button id="applyAllBtn" onclick="applyAllDispatchable()" style="display:none; padding:8px 16px; border-radius:8px; border:1px solid rgba(21,128,61,0.35); background:#d6f5df; color:#15803d; font-weight:700; font-size:13px; cursor:pointer; font-family:var(--sans); transition:background 0.2s;">⚡ 一键排发</button>
           </div>
         </div>
+        <!-- 交款区：仅在「交肾核算」查到未付款时出现（收款码 / 上传付款截图） -->
+        <div id="payBox" style="display:none;"></div>
         <div id="resultList" class="result-carousel"></div>
       </div>
     </div>
@@ -1270,6 +1272,7 @@
       try {
         const data = await fetchLeaderData(key);
         if (!data || !data.length) return showToast('未找到该密钥数据');
+        window.__LAST_ROW = data[0];
         const gd = data[0].group_data || [];
         const active = Array.isArray(gd) ? gd : (typeof gd==='string' ? JSON.parse(gd) : []);
         let arc = (data[0].image_data && data[0].image_data.archived_items) || [];
@@ -1338,12 +1341,14 @@
         if (!items.length) {
           const emptyText = mode==='fee' ? '没有待交款项，感谢配合' : (mode==='dispatch' ? '暂无待排发的谷子' : '未找到「' + cn + '」的记录\n请确认 CN 拼写是否正确，或联系团长确认是否已登记');
           list.innerHTML = '<div class="result-empty">' + emptyText + '</div>';
+          if (mode === 'fee') renderPayBox(items, key, cn); else hidePayBox();
           const foldBtn = document.getElementById('foldFormBtn');
           if (foldBtn) { foldBtn.style.display = 'none'; }
           return;
         }
         filterByBatch();
         showFormFold();
+        if (mode === 'fee') renderPayBox(items, key, cn); else hidePayBox();
       } catch(e){ showToast('查询异常: '+e.message); }
       finally { if (typeof _qbtn !== 'undefined' && _qbtn) _qbtn.disabled = false; }
     }
@@ -1492,6 +1497,238 @@
         showToast('提交失败: ' + e.message);
       } finally {
         window.__APPLY_SUBMITTING = false;
+      }
+    }
+
+    /* ===== 交款凭证：团员自助上传付款截图，团长审核后自动改状态 =====
+       设计要点：
+         · 图片先压到最长边 1400 / JPEG 0.82 再传，省流量也避免超限；
+         · 先传图、再写记录 —— 反过来会出现「有记录没图」的死链；
+         · 只写 image_data.pay_proofs，不动订单状态（改状态必须团长审核过才算）；
+         · 绝不使用原生 prompt/confirm/alert（微信/QQ 内置浏览器会静默屏蔽）。 */
+    const PAY_BUCKET = 'pay-proofs';
+
+    function parseImgData(row){
+      let d = row && row.image_data;
+      if (typeof d === 'string') { try { d = JSON.parse(d); } catch(e){ d = {}; } }
+      return (d && typeof d === 'object') ? d : {};
+    }
+    function hidePayBox(){
+      const box = document.getElementById('payBox');
+      if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+      window.__PAY_CTX = null;
+    }
+    function _payBadge(status){
+      const s = String(status || '待审核');
+      let bg='rgba(161,98,7,0.12)', bd='rgba(161,98,7,0.35)', fg='#a16207';
+      if (s === '已通过') { bg='rgba(21,128,61,0.10)'; bd='rgba(21,128,61,0.35)'; fg='#15803d'; }
+      if (s === '已驳回') { bg='rgba(220,38,38,0.10)'; bd='rgba(220,38,38,0.35)'; fg='#dc2626'; }
+      return '<span style="font-size:11px; padding:2px 8px; border-radius:20px; border:1px solid '+bd+'; background:'+bg+'; color:'+fg+';">'+esc(s)+'</span>';
+    }
+    function renderPayBox(items, key, cn){
+      const box = document.getElementById('payBox');
+      if (!box) return;
+      const myCn = String(cn || '').trim();
+      const imgData = parseImgData(window.__LAST_ROW);
+      const allProofs = Array.isArray(imgData.pay_proofs) ? imgData.pay_proofs : [];
+      const mine = allProofs.filter(function(p){ return String(p.cn || '').trim().toLowerCase() === myCn.toLowerCase(); });
+      const live = mine.filter(function(p){ return String(p.status || '') !== '已驳回'; });
+      const rejected = mine.filter(function(p){ return String(p.status || '') === '已驳回'; });
+
+      const rows = Array.isArray(items) ? items : [];
+      const total = rows.reduce(function(a, i){ return a + (Number(i.quantity) || 1) * (Number(i.price) || 0); }, 0);
+      const byBatch = {};
+      rows.forEach(function(i){
+        const b = String(i.batch_name || '默认批次').trim();
+        byBatch[b] = (byBatch[b] || 0) + (Number(i.quantity) || 1) * (Number(i.price) || 0);
+      });
+
+      let html = '';
+      if (live.length || rejected.length) {
+        html += '<div style="margin:14px 0; padding:14px 16px; border-radius:12px; border:1px solid rgba(21,128,61,0.35); background:rgba(250,250,246,0.94);">';
+        html += '<div style="font-size:13px; font-weight:600; color:#15803d; margin-bottom:8px;">📮 你提交的付款凭证</div>';
+        live.slice(0, 4).forEach(function(p){
+          const names = Array.isArray(p.batch_names) ? p.batch_names.join('、') : (p.batch_names || '');
+          const when = String(p.created_at || '').replace(/^(\d+)\/(\d+)\/(\d+)\s*/, '$1-$2-$3 ');
+          html += '<div style="font-size:12.5px; line-height:1.9; color:var(--ink-soft);">· ' + esc(names) +
+                  ' ￥' + Number(p.amount || 0).toFixed(2) + ' ' + _payBadge(p.status) +
+                  ' <span style="font-size:11px; opacity:.75;">' + esc(when) + '</span></div>';
+        });
+        rejected.slice(0, 2).forEach(function(p){
+          html += '<div style="font-size:12.5px; line-height:1.9; color:#dc2626;">· 有 1 条被驳回' +
+                  (p.reject_reason ? ('：' + esc(p.reject_reason)) : '') + '，请重新上传</div>';
+        });
+        html += '<div style="font-size:11.5px; color:var(--ink-soft); margin-top:6px; line-height:1.7;">团长核对到账后订单状态会自动更新，重新查询即可看到。</div>';
+        html += '</div>';
+      }
+
+      if (!rows.length) {
+        box.innerHTML = html;
+        box.style.display = html ? 'block' : 'none';
+        return;
+      }
+
+      const batchHtml = Object.keys(byBatch).map(function(b){
+        return '<span style="display:inline-block; margin:3px 10px 3px 0; font-size:12px; color:var(--ink-soft);">' +
+               esc(b) + ' ￥' + byBatch[b].toFixed(2) + '</span>';
+      }).join('');
+      const hasLive = live.some(function(p){ return String(p.status || '') === '待审核'; });
+
+      html += '<div style="margin:14px 0; padding:16px; border-radius:12px; border:1px solid rgba(220,38,38,0.35); background:rgba(250,250,246,0.94);">';
+      html += '<div style="font-size:14px; font-weight:600; color:#b91c1c;">💰 待交款 ' + rows.length + ' 条 · ￥' + total.toFixed(2) + '</div>';
+      html += '<div style="margin-top:6px; line-height:1.9;">' + batchHtml + '</div>';
+      html += '<div style="margin-top:10px; font-size:12px; color:var(--ink-soft); line-height:1.8;">付款时备注里写上你的 CN，方便团长核对。<br>付完后把截图传上来，团长确认到账后会自动把你的订单改成「已下单」。</div>';
+      if (hasLive) {
+        html += '<div style="margin-top:12px; font-size:12.5px; color:#a16207;">⏳ 你还有凭证在等团长审核，先不用重复提交。</div>';
+      } else {
+        html += '<button type="button" onclick="openPayForm()" style="margin-top:12px; padding:10px 18px; border-radius:9px; border:1px solid rgba(220,38,38,0.4); background:#fff; color:#b91c1c; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">📤 我已交款，上传截图</button>';
+      }
+      html += '<div id="payFormSlot"></div>';
+      html += '</div>';
+
+      window.__PAY_CTX = { items: rows, total: total, key: key, cn: myCn, batchNames: Object.keys(byBatch) };
+      box.innerHTML = html;
+      box.style.display = 'block';
+    }
+
+    function openPayForm(){
+      const ctx = window.__PAY_CTX;
+      const slot = document.getElementById('payFormSlot');
+      if (!ctx || !slot) return;
+      slot.innerHTML =
+        '<div style="margin-top:14px; padding-top:14px; border-top:1px dashed rgba(33,33,33,0.2);">' +
+          '<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:6px;">付款截图 *</div>' +
+          '<input id="payFile" type="file" accept="image/*" style="display:none;" onchange="onPayFilePicked(this)">' +
+          '<button type="button" onclick="var e=document.getElementById(\'payFile\'); if(e) e.click();" style="padding:10px 16px; border-radius:9px; border:1px dashed rgba(33,33,33,0.3); background:rgba(33,33,33,0.03); color:var(--ink); font-size:13px; cursor:pointer; font-family:var(--sans);">📎 选择截图</button>' +
+          '<div id="payPreview" style="margin-top:10px;"></div>' +
+          '<div style="font-size:12.5px; color:var(--ink-soft); margin:14px 0 6px;">支付方式 *</div>' +
+          '<select id="payMethod" style="width:100%; padding:10px; border-radius:9px; border:1px solid rgba(33,33,33,0.2); background:#fff; color:var(--ink); font-size:14px; font-family:var(--sans); outline:none;">' +
+            '<option value="微信">微信</option><option value="支付宝">支付宝</option>' +
+          '</select>' +
+          '<div style="font-size:12.5px; color:var(--ink-soft); margin:14px 0 6px;">备注（可选）</div>' +
+          '<input id="payNote" placeholder="例如：转账尾号 1234 / 昨天下午付的" style="width:100%; padding:10px; border-radius:9px; border:1px solid rgba(33,33,33,0.2); background:#fff; color:var(--ink); font-size:14px; font-family:var(--sans); outline:none; box-sizing:border-box;">' +
+          '<div style="margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">' +
+            '<button type="button" id="paySubmitBtn" onclick="submitPayProof()" style="padding:11px 20px; border-radius:9px; border:none; background:#b91c1c; color:#fff; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">提交给团长审核</button>' +
+            '<button type="button" onclick="cancelPayForm()" style="padding:11px 16px; border-radius:9px; border:1px solid rgba(33,33,33,0.2); background:transparent; color:var(--ink-soft); font-size:13px; cursor:pointer; font-family:var(--sans);">取消</button>' +
+          '</div>' +
+        '</div>';
+      window.__PAY_FILE = null;
+    }
+    function cancelPayForm(){
+      const slot = document.getElementById('payFormSlot');
+      if (slot) slot.innerHTML = '';
+      window.__PAY_FILE = null;
+    }
+    function compressImage(file, maxSide, quality){
+      return new Promise(function(resolve, reject){
+        let url = null;
+        try { url = URL.createObjectURL(file); } catch(e){ return reject(new Error('无法读取该文件')); }
+        const img = new Image();
+        img.onload = function(){
+          try {
+            URL.revokeObjectURL(url);
+            let w = img.naturalWidth || 0, h = img.naturalHeight || 0;
+            if (!w || !h) return reject(new Error('图片尺寸读取失败'));
+            const scale = Math.min(1, maxSide / Math.max(w, h));
+            w = Math.max(1, Math.round(w * scale));
+            h = Math.max(1, Math.round(h * scale));
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+            c.toBlob(function(blob){ blob ? resolve(blob) : reject(new Error('图片压缩失败')); }, 'image/jpeg', quality);
+          } catch(e){ reject(new Error('图片处理失败')); }
+        };
+        img.onerror = function(){ try { URL.revokeObjectURL(url); } catch(e){} reject(new Error('这不是一张能识别的图片，请换一张')); };
+        img.src = url;
+      });
+    }
+    async function onPayFilePicked(input){
+      const f = input && input.files && input.files[0];
+      if (!f) return;
+      const pv = document.getElementById('payPreview');
+      if (pv) pv.innerHTML = '<div style="font-size:12px; color:var(--ink-soft);">正在压缩图片…</div>';
+      try {
+        const blob = await compressImage(f, 1400, 0.82);
+        window.__PAY_FILE = blob;
+        const url = URL.createObjectURL(blob);
+        if (pv) pv.innerHTML =
+          '<img src="' + url + '" style="max-width:180px; max-height:180px; border-radius:8px; border:1px solid rgba(33,33,33,0.15); display:block;">' +
+          '<div style="font-size:11.5px; color:var(--ink-soft); margin-top:5px;">已压到 ' + Math.round(blob.size / 1024) + ' KB</div>';
+      } catch(e){
+        window.__PAY_FILE = null;
+        if (pv) pv.innerHTML = '<div style="font-size:12px; color:#dc2626;">' + esc(e.message) + '</div>';
+      }
+    }
+    async function submitPayProof(){
+      const ctx = window.__PAY_CTX;
+      if (!ctx) return showToast('请先查询待交款');
+      if (window.__PAY_SUBMITTING) return showToast('正在提交，请稍候…');
+      const blob = window.__PAY_FILE;
+      if (!blob) return showToast('请先选择付款截图');
+      const methodEl = document.getElementById('payMethod');
+      const noteEl = document.getElementById('payNote');
+      const method = methodEl ? methodEl.value : '微信';
+      const note = noteEl ? String(noteEl.value || '').trim() : '';
+      const btn = document.getElementById('paySubmitBtn');
+      window.__PAY_SUBMITTING = true;
+      if (btn) { btn.disabled = true; btn.innerText = '上传中…'; }
+      try {
+        const proofId = 'pp_' + Date.now() + '_' + Math.floor(Math.random() * 9000 + 1000);
+        const ext = (blob.type && blob.type.indexOf('png') >= 0) ? 'png' : 'jpg';
+        const objPath = proofId + '.' + ext;
+
+        const upRes = await fetch(SUPABASE_URL + '/storage/v1/object/' + PAY_BUCKET + '/' + encodeURIComponent(objPath), {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_ANON,
+            'Authorization': 'Bearer ' + SUPABASE_ANON,
+            'Content-Type': blob.type || 'image/jpeg',
+            'x-upsert': 'false'
+          },
+          body: blob
+        });
+        if (!upRes.ok) {
+          let t = ''; try { t = await upRes.text(); } catch(e){}
+          throw new Error('截图上传失败（' + upRes.status + '）' + (t ? ' ' + String(t).slice(0, 120) : ''));
+        }
+
+        const fresh = await fetchLeaderData(ctx.key);
+        if (!fresh || !fresh.length) throw new Error('读取档案失败');
+        const row = fresh[0];
+        const imgData = parseImgData(row);
+        if (!Array.isArray(imgData.pay_proofs)) imgData.pay_proofs = [];
+        imgData.pay_proofs.unshift({
+          id: proofId,
+          cn: ctx.cn,
+          batch_names: ctx.batchNames,
+          item_ids: ctx.items.map(function(i){ return String(i.item_id || i.id || ''); }).filter(Boolean),
+          amount: Number(ctx.total.toFixed(2)),
+          pay_method: method,
+          note: note,
+          img_path: objPath,
+          status: '待审核',
+          created_at: new Date().toLocaleString('zh-CN'),
+          reviewed_at: '',
+          reject_reason: ''
+        });
+        const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
+        const res = await fetch(SUPABASE_URL + '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(ctx.key),
+          { method: 'PATCH', headers: h, body: JSON.stringify({ image_data: imgData }) });
+        if (!res.ok) throw new Error('登记失败（HTTP ' + res.status + '）');
+
+        window.__LAST_ROW = row;
+        showToast('✅ 已提交！团长核对到账后会更新你的订单状态');
+        cancelPayForm();
+        doQuery('fee');
+      } catch(e){
+        showToast(String(e.message || e).slice(0, 120));
+      } finally {
+        window.__PAY_SUBMITTING = false;
+        const b = document.getElementById('paySubmitBtn');
+        if (b) { b.disabled = false; b.innerText = '提交给团长审核'; }
       }
     }
 
@@ -1708,6 +1945,7 @@
       if (overlay) { overlay.style.display = 'none'; }
       const rList = document.getElementById('resultList');
       if (rList) { rList.innerHTML = ''; }
+      hidePayBox();
       const rStat = document.getElementById('resultStat');
       if (rStat) { rStat.innerText = ''; }
 
@@ -1896,6 +2134,7 @@
       if (overlay) overlay.style.display = 'none';
       const rList = document.getElementById('resultList');
       if (rList) rList.innerHTML = '';
+      hidePayBox();
       document.getElementById('queryPanel').classList.remove('open');
       const foldBtn = document.getElementById('foldFormBtn');
       if (foldBtn) { foldBtn.style.display = 'none'; }
