@@ -1031,20 +1031,20 @@
       <div class="topo" id="topo"></div>
       <div class="network" id="network"></div>
 
-      <div class="entry" onclick="openPanel('query')">
-        <div class="entry-icon"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-search" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg></div>
-        <div class="entry-meta">
-          <div class="entry-sub">AS / INQUIRY</div>
-          <div class="entry-name">自助查询</div>
-        </div>
-        <div class="entry-line"></div>
-      </div>
-
       <div class="entry" onclick="openPanel('fee')">
         <div class="entry-icon"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-japanese-yen" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 9.5V21m0-11.5L6 3m6 6.5L18 3" /><path d="M6 15h12" /><path d="M6 11h12" /></svg></div>
         <div class="entry-meta">
           <div class="entry-sub">AS / PAYMENT</div>
           <div class="entry-name">交肾核算</div>
+        </div>
+        <div class="entry-line"></div>
+      </div>
+
+      <div class="entry" onclick="openPanel('query')">
+        <div class="entry-icon"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-search" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg></div>
+        <div class="entry-meta">
+          <div class="entry-sub">AS / INQUIRY</div>
+          <div class="entry-name">自助查询</div>
         </div>
         <div class="entry-line"></div>
       </div>
@@ -1077,7 +1077,7 @@
       </div>
 
     </div>
-    <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243</div>
+    <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243 · 版本 09-22</div>
   </div>
 
   <!-- 自助查询面板 -->
@@ -1086,8 +1086,8 @@
       <div class="qp-left-inner" id="qpLeftInner">
       <span class="qp-back" onclick="closePanel()">← 返回</span>
       <div>
-        <div class="qp-sub">AS / INQUIRY · QUERY</div>
-        <div class="qp-title" id="panelTitle">自助查询</div>
+        <div class="qp-sub" id="panelSub">AS / PAYMENT · FEE</div>
+        <div class="qp-title" id="panelTitle">交肾核算</div>
 
         <div class="field" style="margin-top: 34px;">
           <label for="panelKey">Query Key · 查询密钥</label>
@@ -2086,13 +2086,21 @@
       feedback: '匿名反馈',
       fbreply: '查反馈回复'
     };
+    const PANEL_SUBS = {
+      query: 'AS / INQUIRY · QUERY',
+      fee: 'AS / PAYMENT · FEE',
+      dispatch: 'AS / SHIPPING · DISPATCH',
+      feedback: 'AS / FEEDBACK',
+      fbreply: 'AS / FEEDBACK · REPLY'
+    };
     const PANEL_ACTIONS = {
       query: () => doQuery('query'),
       fee: () => doQuery('fee'),
       dispatch: () => doQuery('dispatch')
     };
 
-    let currentPanel = 'query';
+    // 默认面板 = 交肾核算：团员一进来就能看到待交款（含国际运费），不用自己找入口
+    let currentPanel = 'fee';
     // 查询表单折叠 / 展开（仅在有查询结果时显示）
     function toggleFormFold(){
       const panel = document.getElementById('queryPanel');
@@ -2145,6 +2153,8 @@
 
       currentPanel = type;
       document.getElementById('panelTitle').innerText = PANEL_TITLES[type] || '自助查询';
+      const _psub = document.getElementById('panelSub');
+      if (_psub) _psub.innerText = PANEL_SUBS[type] || 'AS / PAYMENT · FEE';
       const q = document.getElementById('panelKey');
       const cn = document.getElementById('panelCn');
       const qBtn = document.getElementById('queryBtn');
@@ -2411,6 +2421,8 @@
           if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); el.click(); }
         });
       });
+      // 打开网站直接进「交肾核算」：团员不用自己找入口就能看到待交款（含国际运费）
+      try { openPanel('fee'); } catch(e){}
     })();
   </script>
 </body>
