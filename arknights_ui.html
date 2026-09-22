@@ -2597,11 +2597,30 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
 
     /* 系统算出的「本批次应付金额」——用来和团员自填金额比对。
-       ① 普通订单：把凭证覆盖到的订单价格加起来；
-       ② 国际运费批次：取该批次该 CN 的 amount_due（logistics_data 是 dict，不是数组）；
+       ① 国际运费凭证：按 item_ids（intl:<fee_members.id>）精确匹配求和 ——
+          一个 CN 在同一批次可能有多条，**不能只取最后一条**；
+       ② 普通订单：把凭证覆盖到的订单价格加起来；
        都算不出来时 source='none'，审核页会明确标「未能核对」而不是假装通过。 */
     function _payProofDueAmount(p) {
       const ids = (Array.isArray(p.item_ids) ? p.item_ids : []).map(String);
+
+      // ① 国际运费：order_type='国际'，或 item_ids 带 intl: 前缀
+      if (String(p.order_type || '') === '国际' || ids.some(function (x) { return x.indexOf('intl:') === 0; })) {
+        let isum = 0, ifound = 0;
+        (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+          if (!b || typeof b !== 'object') return;
+          (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
+            if (!m || typeof m !== 'object') return;
+            if (ids.indexOf('intl:' + String(m.id || '')) < 0) return;
+            ifound++;
+            isum += Number(m.amount_due) || 0;
+          });
+        });
+        if (ifound) return { amount: Math.round(isum * 100) / 100, source: 'logistics', matched: ifound };
+        return { amount: null, source: 'none', matched: 0 };
+      }
+
+      // ② 普通订单
       let sum = 0, found = 0;
       RAW_ITEMS.concat(RAW_ARCHIVED || []).forEach(function (it) {
         if (!it) return;
@@ -2611,20 +2630,6 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         sum += (Number(it.quantity) || 1) * (Number(it.price) || 0);
       });
       if (found) return { amount: Math.round(sum * 100) / 100, source: 'orders', matched: found };
-
-      const bkey = _normBatchKey(p.batch_key || (Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names));
-      const cn = String(p.cn || '').trim().toLowerCase();
-      let hit = null;
-      (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
-        if (!b || typeof b !== 'object') return;
-        if (_normBatchKey(b.batch_name) !== bkey) return;
-        (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
-          if (!m || typeof m !== 'object') return;
-          if (String(m.cn || '').trim().toLowerCase() !== cn) return;
-          hit = Number(m.amount_due) || 0;
-        });
-      });
-      if (hit !== null) return { amount: Math.round(hit * 100) / 100, source: 'logistics', matched: 1 };
       return { amount: null, source: 'none', matched: 0 };
     }
 
@@ -2683,6 +2688,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const ids = Array.isArray(p.item_ids) ? p.item_ids : [];
       const chk = _payProofCheck(p);
       const blocked = (chk.state === 'mismatch');
+      const isIntl = String(p.order_type || '') === '国际' ||
+                     ids.some(function (x) { return String(x).indexOf('intl:') === 0; });
 
       let amtHtml = '';
       if (chk.state === 'ok') {
@@ -2709,7 +2716,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">' +
             approveBtn +
             '<button class="btn btn-danger" style="padding:6px 14px; font-size:0.85rem;" onclick="showRejectBox(\'' + id + '\')">❌ 驳回</button>' +
-            '<span style="font-size:0.78rem; color:var(--text-muted);">确认后 ' + ids.length + ' 条订单变为「已下单」</span>' +
+            '<span style="font-size:0.78rem; color:var(--text-muted);">确认后 ' + ids.length + (isIntl ? ' 项国际运费标为「已交」' : ' 条订单变为「已下单」') + '</span>' +
           '</div>' +
           '<div id="rejectBox_' + id + '" style="display:none; margin-top:10px;">' +
             '<input id="rejectReason_' + id + '" placeholder="驳回原因（团员能看到，例如：金额不符，还差 60 元）" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; box-sizing:border-box;">' +
@@ -2734,12 +2741,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         '<div style="flex:1 1 260px; min-width:220px;">' +
           '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
             '<strong style="font-size:0.95rem;">' + escapeHtml(p.cn || '(未填CN)') + '</strong>' +
+            (isIntl ? '<span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #0369a144;">🌍 国际运费</span>' : '') +
             _payProofStatusBadge(st) + _payReviewMethodBadge(p.pay_method) +
           '</div>' +
           '<div style="margin-top:6px; font-size:0.85rem; line-height:1.9; color:var(--text-muted);">' +
             '批次：' + escapeHtml(names || '—') + '<br>' +
             amtHtml + '<br>' +
-            '覆盖 ' + ids.length + ' 条订单' +
+            '覆盖 ' + ids.length + (isIntl ? ' 项国际运费' : ' 条订单') +
             (p.purged_at ? (' ｜ <span style="color:#64748b;">原图已于 ' + escapeHtml(p.purged_at) + ' 清理</span>') : '') + '<br>' +
             (p.note ? ('备注：' + escapeHtml(p.note) + '<br>') : '') +
             '提交：' + escapeHtml(p.created_at || '') +
@@ -2780,7 +2788,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           ' ｜ 已通过 <strong style="color:#16a34a;">' + passed.length + '</strong> 笔 · ￥' + passAmt.toFixed(2) +
           ' ｜ 已撤回 ' + withdrawn.length + ' 笔' +
           (mismatch.length ? '<br><strong style="color:#dc2626;">⚠️ 有 ' + mismatch.length + ' 笔金额与应付不符，已锁住「确认收款」，只能驳回。</strong>' : '') +
-          '<br><span style="font-size:0.82rem; color:var(--text-muted);">「确认收款」= 该批次订单改为「已下单」并记下支付方式，同时按规则<b>清掉截图原图</b>（只留款项记录）；点两次才生效（防误触）。</span>';
+          '<br><span style="font-size:0.82rem; color:var(--text-muted);">「确认收款」= 该批次订单改为「已下单」（国际运费则把该项标为「已交」）并记下支付方式，同时按规则<b>清掉截图原图</b>（只留款项记录）；点两次才生效（防误触）。</span>';
       }
 
       if (!all.length) {
@@ -2825,25 +2833,61 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       }
 
       const ids = (proof.item_ids || []).map(String);
+      const isIntl = String(proof.order_type || '') === '国际' ||
+                     ids.some(function (x) { return x.indexOf('intl:') === 0; });
       let changed = 0, alreadyPaid = 0, notFound = 0;
-      RAW_ITEMS.forEach(function (it) {
-        const iid = String(it.item_id || it.id);
-        if (ids.indexOf(iid) < 0) return;
-        const st = String(it.status || '').trim();
-        if (st === '未付款' || st === '未交') {
-          it.status = '已下单';
-          it.pay_method = proof.pay_method || '';
-          it.paid_at = new Date().toLocaleString('zh-CN');
-          DIRTY_ITEM_IDS.add(iid);
-          changed++;
-        } else {
-          alreadyPaid++;
-        }
-      });
-      ids.forEach(function (iid) {
-        const hit = RAW_ITEMS.some(function (it) { return String(it.item_id || it.id) === iid; });
-        if (!hit) notFound++;
-      });
+      const nowStr = new Date().toLocaleString('zh-CN');
+      let intlPrev = [];   // 国际条目改动前的值：保存失败必须回滚，否则重试会被误判成「已经改过」
+
+      if (isIntl) {
+        // 国际运费：改 image_data.logistics_data 里对应条目的状态 → 已交
+        // （改的是机器人 /已付国际 同一份数据，两边不会打架）
+        (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+          if (!b || typeof b !== 'object') return;
+          (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
+            if (!m || typeof m !== 'object') return;
+            if (ids.indexOf('intl:' + String(m.id || '')) < 0) return;
+            const st = String(m.status || '').trim();
+            if (st === '未交') {
+              intlPrev.push({ m: m, status: m.status, pay_method: m.pay_method,
+                              paid_at: m.paid_at, amount_paid: m.amount_paid });
+              m.status = '已交';
+              m.pay_method = proof.pay_method || '';
+              m.paid_at = nowStr;
+              m.amount_paid = Number(m.amount_due) || 0;
+              changed++;
+            } else {
+              alreadyPaid++;
+            }
+          });
+        });
+        ids.forEach(function (iid) {
+          const hit = (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).some(function (b) {
+            return b && Array.isArray(b.fee_members) &&
+                   b.fee_members.some(function (m) { return m && ('intl:' + String(m.id || '')) === iid; });
+          });
+          if (!hit) notFound++;
+        });
+      } else {
+        RAW_ITEMS.forEach(function (it) {
+          const iid = String(it.item_id || it.id);
+          if (ids.indexOf(iid) < 0) return;
+          const st = String(it.status || '').trim();
+          if (st === '未付款' || st === '未交') {
+            it.status = '已下单';
+            it.pay_method = proof.pay_method || '';
+            it.paid_at = nowStr;
+            DIRTY_ITEM_IDS.add(iid);
+            changed++;
+          } else {
+            alreadyPaid++;
+          }
+        });
+        ids.forEach(function (iid) {
+          const hit = RAW_ITEMS.some(function (it) { return String(it.item_id || it.id) === iid; });
+          if (!hit) notFound++;
+        });
+      }
 
       // ② 记录侧：本条置为已通过；同批次的其他「非通过」凭证也一并停止引用原图
       //    （团长定的规则：被驳回/被撤回的旧图，等该批次最终通过时一起清）
@@ -2879,6 +2923,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         prevRefs.forEach(function (r) {
           r.obj.img_path = r.img_path; r.obj.purged_path = r.purged_path; r.obj.purged_at = r.purged_at;
         });
+        intlPrev.forEach(function (r) {
+          r.m.status = r.status; r.m.pay_method = r.pay_method;
+          r.m.paid_at = r.paid_at; r.m.amount_paid = r.amount_paid;
+        });
         return;
       }
 
@@ -2887,9 +2935,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const removed = await _purgeProofObjects(toPurge);
       toPurge.forEach(function (p) { delete PAY_PROOF_URLS[p]; });
 
-      let msg = changed ? ('✅ 已确认收款，' + changed + ' 条订单改为「已下单」') : '✅ 已标记通过';
-      if (alreadyPaid) msg += '（' + alreadyPaid + ' 条原本就不是未付款，跳过）';
-      if (notFound) msg += '（' + notFound + ' 条订单在表里找不到）';
+      let msg = changed
+        ? ('✅ 已确认收款，' + changed + (isIntl ? ' 项国际运费标为「已交」' : ' 条订单改为「已下单」'))
+        : '✅ 已标记通过';
+      if (alreadyPaid) msg += '（' + alreadyPaid + (isIntl ? ' 项原本就不是未交' : ' 条原本就不是未付款') + '，跳过）';
+      if (notFound) msg += '（' + notFound + (isIntl ? ' 项在表里找不到' : ' 条订单在表里找不到') + '）';
       if (removed) msg += '（已清理 ' + removed + ' 张截图原图）';
       showToast(msg);
       renderPayReview();
@@ -2967,7 +3017,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         lines.push('· ' + b + '：' + names.join('、') + '（￥' + amt.toFixed(2) + '）');
       });
       lines.push('');
-      lines.push('上面这些同学的订单状态已改成「已下单」，可以到自查终端核对：' + location.origin + '/');
+      lines.push('上面这些款项已确认到账，可以到自查终端核对：' + location.origin + '/');
       const text = lines.join('\n');
       fresh.forEach(function (p) { _payNoticeDone[String(p.id || '')] = true; });
 

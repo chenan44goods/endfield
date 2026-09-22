@@ -1301,6 +1301,10 @@
             return c === lower;
           });
         }
+        if (mode === 'fee') {
+          // 国际运费不在普通订单表里，必须单独并进来，否则这类欠款团员永远看不到
+          items = items.concat(collectIntlUnpaid(data[0], lower));
+        }
         resBox.style.display = 'block';
         // 保存完整结果供名称筛选复用
         window.CURRENT_ITEMS = items;
@@ -1330,7 +1334,7 @@
           batchSel.value = '';
         }
         const totalQty = items.reduce((a,i)=>a+(Number(i.quantity)||1),0);
-        const totalAmt = items.reduce((a,i)=>a+(Number(i.quantity)||1)*(Number(i.price)||0),0);
+        const totalAmt = items.reduce((a,i)=>a+itemAmount(i),0);
         if (mode === 'fee') {
           stat.innerText = '未交 ' + items.length + ' 条，应交 ￥' + totalAmt.toFixed(2);
         } else if (mode === 'dispatch') {
@@ -1364,7 +1368,7 @@
       const stat = document.getElementById('resultStat');
       const applyAllBtn = document.getElementById('applyAllBtn');
       const totalQty = filter.reduce((a,i)=>a+(Number(i.quantity)||1),0);
-      const totalAmt = filter.reduce((a,i)=>a+(Number(i.quantity)||1)*(Number(i.price)||0),0);
+      const totalAmt = filter.reduce((a,i)=>a+itemAmount(i),0);
       if (currentPanel === 'fee') {
         if (stat) stat.innerText = '未交 ' + filter.length + ' 条，应交 ￥' + totalAmt.toFixed(2);
       } else if (currentPanel === 'dispatch') {
@@ -1380,7 +1384,7 @@
       }
       if (applyAllBtn) applyAllBtn.style.display = (currentPanel === 'dispatch') ? 'inline-block' : 'none';
       if (list) list.innerHTML = filter.map((it, idx)=>{
-        const q=Number(it.quantity)||1, pr=Number(it.price)||0;
+        const q=Number(it.quantity)||1;
         const showStatus = currentPanel !== 'fee';
         const isDispatch = currentPanel === 'dispatch';
         const imgUrl = it.image_url ? String(it.image_url).trim() : '';
@@ -1393,7 +1397,7 @@
           '<div class="r-meta">'+(it.country||'日本')+' ×'+q+'</div>'+
           batchHtml+'</div>'+
           '<div class="r-side" style="display:flex; align-items:center; gap:12px;">'+
-          '<span class="r-price">￥'+(pr*q).toFixed(2)+'</span>'+
+          '<span class="r-price">￥'+itemAmount(it).toFixed(2)+'</span>'+
           (showStatus ? '<span class="r-badge '+getStatusBadgeClass(it.status)+'">'+escapeHtml(it.status||'未出荷')+'</span>' : '')+
           applyBtn+
           '</div></div>';
@@ -1549,6 +1553,55 @@
       if (typeof d === 'string') { try { d = JSON.parse(d); } catch(e){ d = {}; } }
       return (d && typeof d === 'object') ? d : {};
     }
+
+    /* 国际运费（image_data.logistics_data）里的待交条目 —— 它是独立的一份数据，
+       普通订单表里根本没有，所以「交肾核算」必须单独把它并进来，否则团员看不到。
+       口径必须与机器人 logistics_fee.unpaid_logistics_members 完全一致：
+         · 只取 status === '未交'（「已交」「免交」都不算欠款）；
+         · amount_due 本身就是该条的应收总额，**不再乘数量**；
+         · amount_due <= 0 视为不欠（机器人那边会跳过）。 */
+    function collectIntlUnpaid(row, lowerCn){
+      const img = parseImgData(row);
+      let logi = img.logistics_data;
+      if (typeof logi === 'string') { try { logi = JSON.parse(logi); } catch(e){ logi = []; } }
+      const out = [];
+      if (!Array.isArray(logi)) return out;
+      logi.forEach(function(b){
+        if (!b || typeof b !== 'object') return;
+        const bn = String(b.batch_name || '').trim();
+        if (!bn) return;
+        const fm = Array.isArray(b.fee_members) ? b.fee_members : [];
+        fm.forEach(function(m){
+          if (!m || typeof m !== 'object') return;
+          if (String(m.cn || '').trim().toLowerCase() !== lowerCn) return;
+          if (String(m.status || '').trim() !== '未交') return;
+          const amt = Number(m.amount_due) || 0;
+          if (amt <= 0) return;
+          const mid = String(m.id || '').trim();
+          out.push({
+            __intl: true,
+            batch_name: bn,
+            cn: String(m.cn || '').trim(),
+            // 前缀 intl: 保证不会和普通订单的 item_id 撞车，后台靠它分辨改哪份数据
+            item_id: 'intl:' + (mid || (_normBatch(bn) + ':' + String(m.cn || '').trim())),
+            name: String(m.item_name || '国际运费').trim() || '国际运费',
+            country: '国际运费',
+            quantity: Number(m.quantity) || 1,
+            price: Math.round(amt * 100) / 100,
+            status: '未付款'
+          });
+        });
+      });
+      return out;
+    }
+
+    /* 一条该收多少钱：国际条目用 amount_due（已是总额），普通订单用 单价×数量。
+       金额一律走这个函数，避免哪一处漏判 __intl 就把钱算错、团员交不了款。 */
+    function itemAmount(i){
+      if (!i) return 0;
+      if (i.__intl) return Math.round((Number(i.price) || 0) * 100) / 100;
+      return (Number(i.quantity) || 1) * (Number(i.price) || 0);
+    }
     function hidePayBox(){
       const box = document.getElementById('payBox');
       if (box) { box.style.display = 'none'; box.innerHTML = ''; }
@@ -1587,9 +1640,10 @@
       (Array.isArray(items) ? items : []).forEach(function(i){
         const b = String(i.batch_name || '默认批次').trim();
         const k = _normBatch(b);
-        if (!groups[k]) { groups[k] = { key: k, name: b, items: [], total: 0 }; order.push(k); }
+        if (!groups[k]) { groups[k] = { key: k, name: b, items: [], total: 0, intl: false }; order.push(k); }
         groups[k].items.push(i);
-        groups[k].total += (Number(i.quantity) || 1) * (Number(i.price) || 0);
+        groups[k].total += itemAmount(i);
+        if (i.__intl) groups[k].intl = true;
       });
       // ② 账已清、但仍要留个回执的批次（待审核 / 已通过）也补进来
       mine.forEach(function(p){
@@ -1598,7 +1652,8 @@
         const k = proofKey(p);
         if (!k || groups[k]) return;
         const bn = Array.isArray(p.batch_names) ? (p.batch_names[0] || '') : (p.batch_names || '');
-        groups[k] = { key: k, name: String(bn || '默认批次'), items: [], total: Number(p.amount || 0) };
+        groups[k] = { key: k, name: String(bn || '默认批次'), items: [], total: Number(p.amount || 0),
+                      intl: String(p.order_type || '') === '国际' };
         order.push(k);
       });
 
@@ -1622,12 +1677,12 @@
 
         html += '<div style="margin:14px 0; padding:16px; border-radius:12px; border:1px solid ' + bd + '; background:rgba(250,250,246,0.94);">';
         html += '<div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap;">';
-        html += '<div style="font-size:14px; font-weight:600; color:' + fg + ';">' + esc(g.name) + '</div>';
+        html += '<div style="font-size:14px; font-weight:600; color:' + fg + ';">' + (g.intl ? '🌍 ' : '') + esc(g.name) + '</div>';
         html += '<div style="font-size:14px; font-weight:600; color:' + fg + ';">' + (due ? ('￥' + g.total.toFixed(2)) : '已结清') + '</div>';
         html += '</div>';
 
         if (due) {
-          html += '<div style="margin-top:4px; font-size:12px; color:var(--ink-soft);">待交款 ' + due + ' 条 · 应付 ￥' + g.total.toFixed(2) + '</div>';
+          html += '<div style="margin-top:4px; font-size:12px; color:var(--ink-soft);">待交款 ' + due + (g.intl ? ' 项' : ' 条') + ' · 应付 ￥' + g.total.toFixed(2) + '</div>';
           if (qr) {
             html += '<div style="margin-top:12px; text-align:center;">';
             html += '<img src="' + esc(qr) + '" alt="收款码" onclick="toggleQr(this)" style="width:150px; max-width:60%; border-radius:8px; border:1px solid rgba(33,33,33,0.12); background:#fff; cursor:zoom-in;">';
@@ -1683,7 +1738,8 @@
       batches.forEach(function(_, i){ if (i !== idx) cancelPayForm(i); });
       window.__PAY_CTX_BATCH = {
         key: base.key, cn: base.cn,
-        batchKey: g.key, batchName: g.name, total: g.total, items: g.items
+        batchKey: g.key, batchName: g.name, total: g.total, items: g.items,
+        orderType: g.intl ? '国际' : '普通'
       };
       slot.innerHTML =
         '<div style="margin-top:14px; padding-top:14px; border-top:1px dashed rgba(33,33,33,0.2);">' +
@@ -1798,6 +1854,7 @@
         imgData.pay_proofs.unshift({
           id: proofId,
           cn: ctx.cn,
+          order_type: ctx.orderType || '普通',   // ← 国际运费走另一份数据，后台靠它分辨改哪里
           batch_key: ctx.batchKey,               // ← v2：一条凭证只对一个批次
           batch_names: [ctx.batchName],
           item_ids: ctx.items.map(function(i){ return String(i.item_id || i.id || ''); }).filter(Boolean),
