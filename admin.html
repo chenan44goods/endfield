@@ -1361,9 +1361,12 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           <span>💳 交款审核（团员上传的付款凭证）</span>
           <div class="btn-group">
             <button class="btn btn-secondary" onclick="renderPayReview()">🔄 刷新</button>
+            <button class="btn btn-secondary" onclick="generateGroupNotice()">📢 生成群通知</button>
+            <button class="btn btn-secondary" onclick="cleanupOrphanProofImages()">🧹 清理无引用旧图</button>
           </div>
         </div>
         <div id="payReviewSummary" style="font-size:0.9rem; margin-bottom:12px; line-height:2; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px 12px;"></div>
+        <div id="payNoticeBox" style="display:none; margin-bottom:12px; border:1px solid #bbf7d0; background:#f0fdf4; border-radius:8px; padding:10px 12px;"></div>
         <div id="payReviewList" style="display:flex; flex-direction:column; gap:12px;"></div>
       </div>
     </div>
@@ -2584,6 +2587,68 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     //    团员在自查页「交肾核算」上传付款截图 → 这里审核。
     //    点「确认收款」会把这些订单从「未付款」改成「已下单」并记下支付方式。
     //    ⚠️ 图片存在 private 桶 pay-proofs，只能用签名链接读，不能直接拼 URL。
+    /* 批次名归一化：必须与机器人 batch_payment._batch_key() 完全一致 */
+    function _normBatchKey(s) {
+      return String(s == null ? '' : s).trim()
+        .replace(/\u3000/g, '')
+        .replace(/[\u00b7\u30fb\u2022\u3002\uff0e]/g, '.')
+        .toLowerCase()
+        .replace(/\s+/g, '');
+    }
+
+    /* 系统算出的「本批次应付金额」——用来和团员自填金额比对。
+       ① 普通订单：把凭证覆盖到的订单价格加起来；
+       ② 国际运费批次：取该批次该 CN 的 amount_due（logistics_data 是 dict，不是数组）；
+       都算不出来时 source='none'，审核页会明确标「未能核对」而不是假装通过。 */
+    function _payProofDueAmount(p) {
+      const ids = (Array.isArray(p.item_ids) ? p.item_ids : []).map(String);
+      let sum = 0, found = 0;
+      RAW_ITEMS.concat(RAW_ARCHIVED || []).forEach(function (it) {
+        if (!it) return;
+        const iid = String(it.item_id || it.id || '');
+        if (!iid || ids.indexOf(iid) < 0) return;
+        found++;
+        sum += (Number(it.quantity) || 1) * (Number(it.price) || 0);
+      });
+      if (found) return { amount: Math.round(sum * 100) / 100, source: 'orders', matched: found };
+
+      const bkey = _normBatchKey(p.batch_key || (Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names));
+      const cn = String(p.cn || '').trim().toLowerCase();
+      let hit = null;
+      (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+        if (!b || typeof b !== 'object') return;
+        if (_normBatchKey(b.batch_name) !== bkey) return;
+        (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
+          if (!m || typeof m !== 'object') return;
+          if (String(m.cn || '').trim().toLowerCase() !== cn) return;
+          hit = Number(m.amount_due) || 0;
+        });
+      });
+      if (hit !== null) return { amount: Math.round(hit * 100) / 100, source: 'logistics', matched: 1 };
+      return { amount: null, source: 'none', matched: 0 };
+    }
+
+    /* 金额比对结果：ok（一致）/ mismatch（不一致，禁止通过）/ unknown（算不出应付） */
+    function _payProofCheck(p) {
+      const due = _payProofDueAmount(p);
+      const got = Math.round((Number(p.amount) || 0) * 100) / 100;
+      if (due.amount === null) return { state: 'unknown', due: null, got: got, source: due.source };
+      if (Math.abs(due.amount - got) < 0.005) return { state: 'ok', due: due.amount, got: got, source: due.source };
+      return { state: 'mismatch', due: due.amount, got: got, source: due.source };
+    }
+
+    /* 删除存储里的凭证原图。失败只记录、不抛错 —— 记录侧已经标记为不再引用，
+       漏删掉的文件由「清理无引用旧图」兜底。 */
+    async function _purgeProofObjects(paths) {
+      const list = (paths || []).filter(Boolean).map(String);
+      if (!list.length) return 0;
+      try {
+        const { error } = await supabaseClient.storage.from('pay-proofs').remove(list);
+        if (error) { console.warn('清理凭证原图失败:', error); return 0; }
+        return list.length;
+      } catch (e) { console.warn('清理凭证原图异常:', e); return 0; }
+    }
+
     // ==========================================
     async function _payProofSignedUrl(path) {
       if (!path) return '';
@@ -2605,8 +2670,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
 
     function _payProofStatusBadge(st) {
       const s = String(st || '待审核');
-      const color = s === '已通过' ? '#16a34a' : (s === '已驳回' ? '#dc2626' : '#a16207');
-      const bg = s === '已通过' ? '#dcfce7' : (s === '已驳回' ? '#fee2e2' : '#fef3c7');
+      const color = s === '已通过' ? '#16a34a' : (s === '已驳回' ? '#dc2626' : (s === '已撤回' ? '#64748b' : '#a16207'));
+      const bg = s === '已通过' ? '#dcfce7' : (s === '已驳回' ? '#fee2e2' : (s === '已撤回' ? '#e2e8f0' : '#fef3c7'));
       return '<span class="badge" style="background:' + bg + '; color:' + color + '; border:1px solid ' + color + '44;">' + escapeHtml(s) + '</span>';
     }
 
@@ -2616,28 +2681,56 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const st = String(p.status || '待审核');
       const canAct = (st === '待审核');
       const ids = Array.isArray(p.item_ids) ? p.item_ids : [];
+      const chk = _payProofCheck(p);
+      const blocked = (chk.state === 'mismatch');
+
+      let amtHtml = '';
+      if (chk.state === 'ok') {
+        amtHtml = '金额：<strong style="color:#16a34a; font-size:0.95rem;">￥' + chk.got.toFixed(2) + '</strong>' +
+                  '<span style="color:#16a34a; font-size:0.82rem;"> ✓ 与应付一致</span>';
+      } else if (chk.state === 'mismatch') {
+        const diff = Math.round((chk.due - chk.got) * 100) / 100;
+        amtHtml = '金额：<strong style="color:#dc2626; font-size:0.95rem;">他填 ￥' + chk.got.toFixed(2) + '</strong>' +
+                  ' ｜ 应付 <strong style="color:#dc2626;">￥' + chk.due.toFixed(2) + '</strong>' +
+                  '<br><span style="color:#dc2626; font-weight:700; font-size:0.85rem;">✗ 金额不符' +
+                  (diff > 0 ? ('：还差 ￥' + diff.toFixed(2)) : ('：多付 ￥' + Math.abs(diff).toFixed(2))) +
+                  ' —— 不能通过，只能驳回</span>';
+      } else {
+        amtHtml = '金额：<strong style="color:#dc2626; font-size:0.95rem;">￥' + chk.got.toFixed(2) + '</strong>' +
+                  '<br><span style="color:#a16207; font-size:0.82rem;">⚠️ 算不出这一笔的应付金额（订单可能已归档或找不到），无法自动核对，请自行确认后再通过。</span>';
+      }
+
       let actions = '';
       if (canAct) {
+        const approveBtn = blocked
+          ? '<button class="btn btn-primary" id="approveBtn_' + id + '" style="padding:6px 14px; font-size:0.85rem; opacity:0.45; cursor:not-allowed;" disabled title="金额与应付不符，请驳回让团员重新提交">🚫 金额不符·不能通过</button>'
+          : '<button class="btn btn-primary" id="approveBtn_' + id + '" style="padding:6px 14px; font-size:0.85rem;" onclick="approvePayProof(\'' + id + '\')">✅ 确认收款</button>';
         actions =
           '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">' +
-            '<button class="btn btn-primary" id="approveBtn_' + id + '" style="padding:6px 14px; font-size:0.85rem;" onclick="approvePayProof(\'' + id + '\')">✅ 确认收款</button>' +
+            approveBtn +
             '<button class="btn btn-danger" style="padding:6px 14px; font-size:0.85rem;" onclick="showRejectBox(\'' + id + '\')">❌ 驳回</button>' +
             '<span style="font-size:0.78rem; color:var(--text-muted);">确认后 ' + ids.length + ' 条订单变为「已下单」</span>' +
           '</div>' +
           '<div id="rejectBox_' + id + '" style="display:none; margin-top:10px;">' +
-            '<input id="rejectReason_' + id + '" placeholder="驳回原因（团员能看到）" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; box-sizing:border-box;">' +
+            '<input id="rejectReason_' + id + '" placeholder="驳回原因（团员能看到，例如：金额不符，还差 60 元）" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; box-sizing:border-box;">' +
             '<div style="margin-top:8px; display:flex; gap:8px;">' +
               '<button class="btn btn-danger" style="padding:5px 12px; font-size:0.82rem;" onclick="rejectPayProof(\'' + id + '\')">确认驳回</button>' +
               '<button class="btn btn-secondary" style="padding:5px 12px; font-size:0.82rem;" onclick="hideRejectBox(\'' + id + '\')">取消</button>' +
             '</div>' +
           '</div>';
+      } else if (st === '已撤回') {
+        actions = '<div style="margin-top:8px; font-size:0.85rem; color:#64748b;">团员已自行撤销这次提交' +
+                  (p.withdrawn_at ? ('（' + escapeHtml(p.withdrawn_at) + '）') : '') + '。</div>';
       } else if (p.reject_reason) {
         actions = '<div style="margin-top:8px; font-size:0.85rem; color:#dc2626;">驳回原因：' + escapeHtml(p.reject_reason) + '</div>';
       }
 
+      const thumbInner = p.img_path ? '加载中…'
+        : '<span style="padding:6px;">原图已清理<br><span style="font-size:0.68rem;">只保留款项记录</span></span>';
+
       return '' +
       '<div style="display:flex; gap:14px; align-items:flex-start; padding:12px; border:1px solid var(--border); border-radius:10px; background:#fff; flex-wrap:wrap;">' +
-        '<div id="proofThumb_' + id + '" style="width:112px; height:112px; flex:0 0 112px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9; display:flex; align-items:center; justify-content:center; overflow:hidden; font-size:0.72rem; color:var(--text-muted); text-align:center;">加载中…</div>' +
+        '<div id="proofThumb_' + id + '" style="width:112px; height:112px; flex:0 0 112px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9; display:flex; align-items:center; justify-content:center; overflow:hidden; font-size:0.72rem; color:var(--text-muted); text-align:center;">' + thumbInner + '</div>' +
         '<div style="flex:1 1 260px; min-width:220px;">' +
           '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
             '<strong style="font-size:0.95rem;">' + escapeHtml(p.cn || '(未填CN)') + '</strong>' +
@@ -2645,8 +2738,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           '</div>' +
           '<div style="margin-top:6px; font-size:0.85rem; line-height:1.9; color:var(--text-muted);">' +
             '批次：' + escapeHtml(names || '—') + '<br>' +
-            '金额：<strong style="color:#dc2626; font-size:0.95rem;">￥' + Number(p.amount || 0).toFixed(2) + '</strong>' +
-            ' ｜ 覆盖 ' + ids.length + ' 条订单<br>' +
+            amtHtml + '<br>' +
+            '覆盖 ' + ids.length + ' 条订单' +
+            (p.purged_at ? (' ｜ <span style="color:#64748b;">原图已于 ' + escapeHtml(p.purged_at) + ' 清理</span>') : '') + '<br>' +
             (p.note ? ('备注：' + escapeHtml(p.note) + '<br>') : '') +
             '提交：' + escapeHtml(p.created_at || '') +
             (p.reviewed_at ? (' ｜ 处理：' + escapeHtml(p.reviewed_at)) : '') +
@@ -2657,6 +2751,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
 
     async function _loadProofThumb(p) {
+      if (!p || !p.img_path) return;   // 已通过/已撤回的凭证原图已被清理，不留碎图
       const el = document.getElementById('proofThumb_' + String(p.id || ''));
       if (!el) return;
       const url = await _payProofSignedUrl(p.img_path);
@@ -2674,14 +2769,18 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const all = Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : [];
       const pending = all.filter(function (p) { return String(p.status || '待审核') === '待审核'; });
       const passed = all.filter(function (p) { return String(p.status || '') === '已通过'; });
+      const withdrawn = all.filter(function (p) { return String(p.status || '') === '已撤回'; });
       const pendAmt = pending.reduce(function (a, p) { return a + (Number(p.amount) || 0); }, 0);
       const passAmt = passed.reduce(function (a, p) { return a + (Number(p.amount) || 0); }, 0);
+      const mismatch = pending.filter(function (p) { return _payProofCheck(p).state === 'mismatch'; });
 
       if (sumEl) {
         sumEl.innerHTML =
           '待审核 <strong style="color:' + (pending.length ? '#dc2626' : '#16a34a') + '; font-size:1.05rem;">' + pending.length + '</strong> 笔 · ￥' + pendAmt.toFixed(2) +
           ' ｜ 已通过 <strong style="color:#16a34a;">' + passed.length + '</strong> 笔 · ￥' + passAmt.toFixed(2) +
-          '<br><span style="font-size:0.82rem; color:var(--text-muted);">「确认收款」= 对应订单改为「已下单」并记下支付方式；点两次才生效（防误触）。</span>';
+          ' ｜ 已撤回 ' + withdrawn.length + ' 笔' +
+          (mismatch.length ? '<br><strong style="color:#dc2626;">⚠️ 有 ' + mismatch.length + ' 笔金额与应付不符，已锁住「确认收款」，只能驳回。</strong>' : '') +
+          '<br><span style="font-size:0.82rem; color:var(--text-muted);">「确认收款」= 该批次订单改为「已下单」并记下支付方式，同时按规则<b>清掉截图原图</b>（只留款项记录）；点两次才生效（防误触）。</span>';
       }
 
       if (!all.length) {
@@ -2716,6 +2815,15 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (!proof) return showToast('找不到这条凭证，请刷新');
       if (String(proof.status || '') === '已通过') return showToast('这条已经确认过了');
 
+      // ① 金额必须与系统算出的应付一致 —— 不一致直接不给过（团长定的规矩：没有逃生门）
+      const chk = _payProofCheck(proof);
+      if (chk.state === 'mismatch') {
+        const diff = Math.round((chk.due - chk.got) * 100) / 100;
+        return showToast('❌ 金额不符：应付 ￥' + chk.due.toFixed(2) + '，他填 ￥' + chk.got.toFixed(2) +
+          (diff > 0 ? ('，还差 ￥' + diff.toFixed(2)) : ('，多付 ￥' + Math.abs(diff).toFixed(2))) +
+          '。请驳回让团员重新提交。');
+      }
+
       const ids = (proof.item_ids || []).map(String);
       let changed = 0, alreadyPaid = 0, notFound = 0;
       RAW_ITEMS.forEach(function (it) {
@@ -2737,19 +2845,52 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         if (!hit) notFound++;
       });
 
+      // ② 记录侧：本条置为已通过；同批次的其他「非通过」凭证也一并停止引用原图
+      //    （团长定的规则：被驳回/被撤回的旧图，等该批次最终通过时一起清）
+      const prevRefs = [];
+      const toPurge = [];
+      function stopRef(x) {
+        if (!x || !x.img_path) return;
+        prevRefs.push({ obj: x, img_path: x.img_path, purged_path: x.purged_path, purged_at: x.purged_at });
+        toPurge.push(x.img_path);
+        x.purged_path = x.img_path;
+        x.img_path = '';
+        x.purged_at = new Date().toLocaleString('zh-CN');
+      }
       const prevStatus = proof.status, prevReviewed = proof.reviewed_at;
       proof.status = '已通过';
       proof.reviewed_at = new Date().toLocaleString('zh-CN');
+
+      const bkey = _normBatchKey(proof.batch_key || (Array.isArray(proof.batch_names) ? proof.batch_names[0] : proof.batch_names));
+      stopRef(proof);
+      RAW_PAY_PROOFS.forEach(function (p) {
+        if (p === proof) return;
+        const st2 = String(p.status || '');
+        if (st2 === '待审核' || st2 === '已通过') return;
+        const k = _normBatchKey(p.batch_key || (Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names));
+        if (k !== bkey) return;
+        stopRef(p);
+      });
 
       const ok = await saveDataToSupabase();
       if (!ok) {
         proof.status = prevStatus;
         proof.reviewed_at = prevReviewed;
+        prevRefs.forEach(function (r) {
+          r.obj.img_path = r.img_path; r.obj.purged_path = r.purged_path; r.obj.purged_at = r.purged_at;
+        });
         return;
       }
+
+      // ③ 记录已经落库，再删对象。删失败不回滚状态（记录侧已声明不再引用），
+      //    漏掉的孤儿文件由「🧹 清理无引用旧图」兜底。
+      const removed = await _purgeProofObjects(toPurge);
+      toPurge.forEach(function (p) { delete PAY_PROOF_URLS[p]; });
+
       let msg = changed ? ('✅ 已确认收款，' + changed + ' 条订单改为「已下单」') : '✅ 已标记通过';
       if (alreadyPaid) msg += '（' + alreadyPaid + ' 条原本就不是未付款，跳过）';
       if (notFound) msg += '（' + notFound + ' 条订单在表里找不到）';
+      if (removed) msg += '（已清理 ' + removed + ' 张截图原图）';
       showToast(msg);
       renderPayReview();
       renderPayStats();
@@ -2788,6 +2929,118 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       renderPayReview();
     }
     window.rejectPayProof = rejectPayProof;
+
+    // ==========================================
+    // 📢 生成群通知文案（团长自己决定发不发；绝不自动群发、绝不私聊 —— 私聊会被风控）
+    // ==========================================
+    let _payNoticeDone = {};   // 本次会话内已生成过的凭证 id，避免重复通知同一批人
+    function _payProofBatchLabel(p) {
+      const n = Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names;
+      return String(n || '');
+    }
+    function _payNoticeSay(html) {
+      const box = document.getElementById('payNoticeBox');
+      if (!box) return;
+      box.style.display = 'block';
+      box.innerHTML = html;
+    }
+    function generateGroupNotice() {
+      const all = Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : [];
+      const fresh = all.filter(function (p) {
+        return String(p.status || '') === '已通过' && !_payNoticeDone[String(p.id || '')];
+      });
+      if (!fresh.length) {
+        _payNoticeSay('<div style="font-size:0.88rem; color:#64748b;">目前没有新的「已通过」记录需要通知。<br>' +
+          '<span style="font-size:0.8rem;">（本次会话里已经生成过的不会重复出现；刷新页面后可重新生成。）</span></div>');
+        return;
+      }
+      const byBatch = {};
+      fresh.forEach(function (p) {
+        const b = _payProofBatchLabel(p) || '未注明批次';
+        if (!byBatch[b]) byBatch[b] = [];
+        byBatch[b].push(p);
+      });
+      const lines = ['✅ 已确认收款（团长核对完毕）'];
+      Object.keys(byBatch).forEach(function (b) {
+        const names = byBatch[b].map(function (p) { return String(p.cn || '（未填CN）'); });
+        const amt = byBatch[b].reduce(function (a, p) { return a + (Number(p.amount) || 0); }, 0);
+        lines.push('· ' + b + '：' + names.join('、') + '（￥' + amt.toFixed(2) + '）');
+      });
+      lines.push('');
+      lines.push('上面这些同学的订单状态已改成「已下单」，可以到自查终端核对：' + location.origin + '/');
+      const text = lines.join('\n');
+      fresh.forEach(function (p) { _payNoticeDone[String(p.id || '')] = true; });
+
+      _payNoticeSay(
+        '<div style="font-size:0.88rem; font-weight:600; color:#15803d; margin-bottom:6px;">📢 群通知文案（复制到群里发就行，系统不会自动发）</div>' +
+        '<textarea id="payNoticeText" readonly style="width:100%; height:140px; padding:9px; border:1px solid var(--border); border-radius:7px; font-size:0.85rem; line-height:1.7; box-sizing:border-box; background:#fff; color:var(--text);">' + escapeHtml(text) + '</textarea>' +
+        '<div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">' +
+          '<button class="btn btn-primary" style="padding:5px 14px; font-size:0.83rem;" onclick="copyPayNotice()">📋 复制文案</button>' +
+          '<button class="btn btn-secondary" style="padding:5px 14px; font-size:0.83rem;" onclick="document.getElementById(\'payNoticeBox\').style.display=\'none\'">关闭</button>' +
+        '</div>');
+    }
+    window.generateGroupNotice = generateGroupNotice;
+
+    function copyPayNotice() {
+      const ta = document.getElementById('payNoticeText');
+      if (!ta) return;
+      try {
+        ta.removeAttribute('readonly');
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, 99999);
+        const ok = document.execCommand('copy');
+        ta.setAttribute('readonly', 'readonly');
+        if (ok) { showToast('✅ 文案已复制，去群里粘贴吧'); return; }
+      } catch (e) {}
+      showToast('请手动框选上面的文字复制');
+    }
+    window.copyPayNotice = copyPayNotice;
+
+    // ==========================================
+    // 🧹 清理无引用旧图：比对桶里的文件与 pay_proofs 还引用着的路径，删掉没人引用的。
+    //    两段式：第一次点只报数量，再点一次才真删（删除必须团长亲自确认）。
+    // ==========================================
+    let _orphanArmed = false;
+    let _orphanSig = '';
+    async function cleanupOrphanProofImages() {
+      let objs = [], offset = 0;
+      while (true) {
+        const r = await supabaseClient.storage.from('pay-proofs').list('', { limit: 100, offset: offset });
+        if (r.error) return showToast('读不到桶里的文件：' + (r.error.message || '未知错误'));
+        const got = (r.data || []).filter(function (o) { return o && o.name; });
+        objs = objs.concat(got.map(function (o) { return o.name; }));
+        if (got.length < 100) break;
+        offset += 100;
+        if (offset > 5000) break;
+      }
+      const used = {};
+      (Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : []).forEach(function (p) {
+        if (p && p.img_path) used[String(p.img_path)] = true;
+      });
+      const orphans = objs.filter(function (n) { return !used[n]; });
+
+      if (!orphans.length) {
+        _orphanArmed = false; _orphanSig = '';
+        return _payNoticeSay('<div style="font-size:0.88rem; color:#15803d;">🧹 桶里共 ' + objs.length +
+          ' 个文件，全都有记录引用，没有多余旧图。</div>');
+      }
+      const sig = orphans.join('|');
+      if (!_orphanArmed || _orphanSig !== sig) {
+        _orphanArmed = true; _orphanSig = sig;
+        return _payNoticeSay('<div style="font-size:0.88rem; color:#b45309;">🧹 桶里共 ' + objs.length +
+          ' 个文件，其中 <b>' + orphans.length + '</b> 个已经没有记录引用了（多半是通过/撤回后没删干净的残留）。<br>' +
+          '<span style="font-size:0.8rem; color:var(--text-muted);">确认要删的话，再点一次「🧹 清理无引用旧图」才会真的删。</span></div>');
+      }
+      _orphanArmed = false; _orphanSig = '';
+      const n = await _purgeProofObjects(orphans);
+      PAY_PROOF_URLS = {};
+      _payNoticeSay('<div style="font-size:0.88rem; color:#15803d;">🧹 已清理 ' + n +
+        ' 个无引用旧图，现在桶里剩 ' + (objs.length - n) + ' 个文件。</div>');
+      showToast('已清理 ' + n + ' 个无引用旧图');
+    }
+    window.cleanupOrphanProofImages = cleanupOrphanProofImages;
+
     window.closePayDetail = closePayDetail;
 
     function renderTable() {
