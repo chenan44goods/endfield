@@ -2719,7 +2719,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             '<span style="font-size:0.78rem; color:var(--text-muted);">确认后 ' + ids.length + (isIntl ? ' 项国际运费标为「已交」' : ' 条订单变为「已下单」') + '</span>' +
           '</div>' +
           '<div id="rejectBox_' + id + '" style="display:none; margin-top:10px;">' +
-            '<input id="rejectReason_' + id + '" placeholder="驳回原因（团员能看到，例如：金额不符，还差 60 元）" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; box-sizing:border-box;">' +
+            '<input id="rejectReason_' + id + '" placeholder="驳回原因（必填，团员能看到。例如：金额不符，截图只付了 20，还差 10 元）" oninput="this.style.borderColor=\'\'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();rejectPayProof(\'' + id + '\');}" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; box-sizing:border-box;">' +
+            '<div style="margin-top:6px; font-size:0.76rem; color:var(--text-muted); line-height:1.6;">⚠️ 必填 —— 这段话会<strong>原样</strong>显示给团员，系统不会替你编任何理由（只在末尾补一句「请重新上传」）。直接回车 = 确认驳回。</div>' +
             '<div style="margin-top:8px; display:flex; gap:8px;">' +
               '<button class="btn btn-danger" style="padding:5px 12px; font-size:0.82rem;" onclick="rejectPayProof(\'' + id + '\')">确认驳回</button>' +
               '<button class="btn btn-secondary" style="padding:5px 12px; font-size:0.82rem;" onclick="hideRejectBox(\'' + id + '\')">取消</button>' +
@@ -2950,6 +2951,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     function showRejectBox(id) {
       const b = document.getElementById('rejectBox_' + id);
       if (b) b.style.display = 'block';
+      const inp = document.getElementById('rejectReason_' + id);
+      if (inp) {
+        inp.style.borderColor = '';
+        setTimeout(function () { try { inp.focus(); } catch (e) {} }, 30);
+      }
     }
     function hideRejectBox(id) {
       const b = document.getElementById('rejectBox_' + id);
@@ -2962,11 +2968,17 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const id = String(proofId);
       const inp = document.getElementById('rejectReason_' + id);
       const reason = inp ? String(inp.value || '').trim() : '';
+      // 团长定的规矩：驳回原因必须由团长自己写，系统不替他编。
+      if (!reason) {
+        showToast('请先填写驳回原因 —— 这段话团员会看到');
+        if (inp) { try { inp.focus(); inp.style.borderColor = '#dc2626'; } catch (e) {} }
+        return;
+      }
       const proof = RAW_PAY_PROOFS.filter(function (p) { return String(p.id) === id; })[0];
       if (!proof) return showToast('找不到这条凭证，请刷新');
       const prevStatus = proof.status, prevReason = proof.reject_reason, prevReviewed = proof.reviewed_at;
       proof.status = '已驳回';
-      proof.reject_reason = reason || '团长未说明原因';
+      proof.reject_reason = reason;
       proof.reviewed_at = new Date().toLocaleString('zh-CN');
       const ok = await saveDataToSupabase();
       if (!ok) {
@@ -2975,6 +2987,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         proof.reviewed_at = prevReviewed;
         return;
       }
+      hideRejectBox(id);
       showToast('已驳回，团员重新查询时会看到原因');
       renderPayReview();
     }

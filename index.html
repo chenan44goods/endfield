@@ -1089,7 +1089,7 @@
       </div>
 
     </div>
-    <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243 · 版本 09-23b</div>
+    <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243 · 版本 09-23c</div>
   </div>
 
   <!-- 自助查询面板 -->
@@ -1746,7 +1746,10 @@
           html += '<div style="margin-top:3px; font-size:11px; color:rgba(21,128,61,0.7);">这条回执保存 7 天，到期后自动从页面收起（账目不受影响）</div></div>';
         });
         rejected.slice(0, 2).forEach(function(p){
-          html += '<div style="margin-top:12px; padding:9px 11px; border-radius:9px; background:rgba(220,38,38,0.07); border:1px solid rgba(220,38,38,0.28); font-size:12.5px; color:#dc2626; line-height:1.7;">❌ 上次提交被驳回' + (p.reject_reason ? ('：' + esc(p.reject_reason)) : '') + '，请重新上传。</div>';
+          // 驳回原因由团长亲手填写、原样展示（系统不编任何理由）。
+          // 末尾统一补「请重新上传」；团长写的句子若自带句号，先剥掉尾部标点，免得出现「。。，请重新上传。」
+          const why = String(p.reject_reason || '').replace(/[\s。．.,，、；;！!？?]+$/, '');
+          html += '<div style="margin-top:12px; padding:9px 11px; border-radius:9px; background:rgba(220,38,38,0.07); border:1px solid rgba(220,38,38,0.28); font-size:12.5px; color:#dc2626; line-height:1.7;">❌ 上次提交被驳回' + (why ? ('：' + esc(why)) : '') + '，请重新上传。</div>';
         });
 
         if (due && !hasPending) {
