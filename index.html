@@ -564,14 +564,21 @@
     }
     .panel-btn span { position: relative; z-index: 2; }
 
+    /* ⚠️ 结果区必须能滚：内容（交款卡 + 订单轮播）经常比一屏高。
+       原来 overflow:hidden + align-items:center 会把超出的顶部直接裁到屏幕外
+       （收款码整个看不见，而且滚不动）—— 2026-09-23 修。 */
     .qp-right {
       position: relative;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
-      overflow: hidden;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
       padding: 6vh 3vw;
     }
+    /* 内容少 → 垂直居中；内容多 → 自动从顶部开始并可滚动（auto margin 的经典用法） */
+    #queryResultOverlay { margin-top: auto; margin-bottom: auto; }
     .toast {
       position: fixed;
       left: 50%;
@@ -877,6 +884,11 @@
       scrollbar-width: none;
     }
     .result-carousel::-webkit-scrollbar { display: none; }
+    /* 桌面端：鼠标滚轮在卡片区滚到头后，要能继续带动外层结果区滚动。
+       contain 会把滚轮"卡"在卡片上，看起来就像整页滚不动。 */
+    @media (min-width: 901px) {
+      .result-carousel { overscroll-behavior: auto; }
+    }
     .result-carousel .result-item {
       scroll-snap-align: center;
       margin: 0 auto 22px;
@@ -1352,6 +1364,8 @@
         }
         filterByBatch();
         showFormFold();
+        // 手机端：出结果后自动收起查询表单，首屏直接让给收款码（桌面端表单在左栏，不折叠）
+        autoFoldFormOnMobile();
         if (mode === 'fee') await renderPayBox(items, key, cn); else hidePayBox();
       } catch(e){ showToast('查询异常: '+e.message); }
       finally { if (typeof _qbtn !== 'undefined' && _qbtn) _qbtn.disabled = false; }
@@ -2110,11 +2124,11 @@
       const folded = panel.classList.toggle('folded');
       if (folded) {
         inner.style.maxHeight = '0px';
-        btn.textContent = '▼';
+        btn.textContent = '▼ 展开查询';
         btn.title = '展开查询表单';
       } else {
         inner.style.maxHeight = inner.scrollHeight + 'px';
-        btn.textContent = '▲';
+        btn.textContent = '▲ 收起表单';
         btn.title = '折叠查询表单';
       }
     }
@@ -2128,10 +2142,27 @@
       btn.style.display = 'flex';
       panel.classList.remove('folded');
       inner.style.maxHeight = inner.scrollHeight + 'px';
-      btn.textContent = '▲';
+      btn.textContent = '▲ 收起表单';
       btn.title = '折叠查询表单';
     }
     window.showFormFold = showFormFold;
+
+    // 手机端专用：出结果后自动收起查询表单，让收款码直接出现在第一屏。
+    // 想改 CN 重新查时，点按钮上的「▼ 展开查询」即可（桌面端不折叠）。
+    function autoFoldFormOnMobile(){
+      try {
+        if (window.innerWidth > 900) return;
+        const panel = document.getElementById('queryPanel');
+        const inner = document.getElementById('qpLeftInner');
+        const btn = document.getElementById('foldFormBtn');
+        if (!panel || !inner || !btn) return;
+        if (panel.classList.contains('folded')) return;
+        panel.classList.add('folded');
+        inner.style.maxHeight = '0px';
+        btn.textContent = '▼ 展开查询';
+      } catch(e){}
+    }
+    window.autoFoldFormOnMobile = autoFoldFormOnMobile;
 
     window.addEventListener('resize', function(){
       const panel = document.getElementById('queryPanel');
