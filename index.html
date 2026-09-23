@@ -1089,7 +1089,7 @@
       </div>
 
     </div>
-    <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243 · 版本 09-22</div>
+    <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243 · 版本 09-23b</div>
   </div>
 
   <!-- 自助查询面板 -->
@@ -1649,6 +1649,32 @@
         return String(p.created_at || '').replace(/^(\d+)\/(\d+)\/(\d+)\s*/, '$1-$2-$3 ');
       }
 
+      /* 「已通过」回执只在页面上展示 7 天 —— 记录本身仍留在库里，只是不再显示。
+         时间取审核通过的时刻（v1 老数据没有 reviewed_at，退回 created_at）；
+         解析失败一律当作「未过期」，宁可多显示也不能把团员的交款凭证藏掉。 */
+      const RECEIPT_KEEP_DAYS = 7;
+      const RECEIPT_KEEP_MS = RECEIPT_KEEP_DAYS * 24 * 60 * 60 * 1000;
+      function proofTime(p){
+        const raw = String((p && (p.reviewed_at || p.created_at)) || '');
+        const n = raw.match(/\d+/g);
+        if (!n || n.length < 3) return null;
+        let y, mo, d;
+        if (String(n[0]).length === 4) { y = +n[0]; mo = +n[1]; d = +n[2]; }        // 2026/9/23
+        else if (String(n[2]).length === 4) { y = +n[2]; mo = +n[0]; d = +n[1]; }   // 9/23/2026
+        else return null;
+        let hh = +n[3] || 0, mi = +n[4] || 0, ss = +n[5] || 0;
+        if (/pm/i.test(raw) && hh < 12) hh += 12;
+        if (/am/i.test(raw) && hh === 12) hh = 0;
+        const t = new Date(y, mo - 1, d, hh, mi, ss).getTime();
+        return isNaN(t) ? null : t;
+      }
+      function receiptExpired(p){
+        const t = proofTime(p);
+        if (t === null) return false;
+        return (Date.now() - t) > RECEIPT_KEEP_MS;
+      }
+      function isApproved(p){ return String((p && p.status) || '') === '已通过'; }
+
       // ① 按批次把「待交款」分组：一个批次一笔账
       const order = [], groups = {};
       (Array.isArray(items) ? items : []).forEach(function(i){
@@ -1663,6 +1689,7 @@
       mine.forEach(function(p){
         const st = String(p.status || '待审核');
         if (st !== '待审核' && st !== '已通过') return;
+        if (st === '已通过' && receiptExpired(p)) return;   // 超过 7 天的回执不再单独占一张卡
         const k = proofKey(p);
         if (!k || groups[k]) return;
         const bn = Array.isArray(p.batch_names) ? (p.batch_names[0] || '') : (p.batch_names || '');
@@ -1680,7 +1707,7 @@
         const g = groups[k];
         const proofs = mine.filter(function(p){ return proofKey(p) === k; });
         const pending  = proofs.filter(function(p){ return String(p.status || '待审核') === '待审核'; });
-        const approved = proofs.filter(function(p){ return String(p.status || '') === '已通过'; });
+        const approved = proofs.filter(function(p){ return isApproved(p) && !receiptExpired(p); });
         const rejected = proofs.filter(function(p){ return String(p.status || '') === '已驳回'; });
         const due = g.items.length;
         const hasPending = pending.length > 0;
@@ -1715,7 +1742,8 @@
           html += '</div>';
         });
         approved.forEach(function(p){
-          html += '<div style="margin-top:12px; padding:9px 11px; border-radius:9px; background:rgba(21,128,61,0.08); border:1px solid rgba(21,128,61,0.25); font-size:12.5px; color:#15803d; line-height:1.7;">✅ 你交的 ￥' + Number(p.amount || 0).toFixed(2) + ' 已确认收款（' + esc(when(p)) + '）</div>';
+          html += '<div style="margin-top:12px; padding:9px 11px; border-radius:9px; background:rgba(21,128,61,0.08); border:1px solid rgba(21,128,61,0.25); font-size:12.5px; color:#15803d; line-height:1.7;">✅ 你交的 ￥' + Number(p.amount || 0).toFixed(2) + ' 已确认收款（' + esc(when(p)) + '）';
+          html += '<div style="margin-top:3px; font-size:11px; color:rgba(21,128,61,0.7);">这条回执保存 7 天，到期后自动从页面收起（账目不受影响）</div></div>';
         });
         rejected.slice(0, 2).forEach(function(p){
           html += '<div style="margin-top:12px; padding:9px 11px; border-radius:9px; background:rgba(220,38,38,0.07); border:1px solid rgba(220,38,38,0.28); font-size:12.5px; color:#dc2626; line-height:1.7;">❌ 上次提交被驳回' + (p.reject_reason ? ('：' + esc(p.reject_reason)) : '') + '，请重新上传。</div>';
