@@ -1427,10 +1427,14 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
             <div style="font-size: 1.8rem; font-weight: 700; color: var(--success);" id="statCompletedCount">0</div>
           </div>
         </div>
-        <div class="btn-group" style="margin-bottom: 16px;">
+        <div class="btn-group" style="margin-bottom: 16px; align-items: center;">
           <button class="btn btn-primary" id="btnSubPending" onclick="switchDispatchSubTab('pending')">待处理申请列表</button>
           <button class="btn btn-secondary" id="btnSubCompleted" onclick="switchDispatchSubTab('completed')">已完成记录列表</button>
           <button class="btn btn-secondary" id="btnSubLogs" onclick="showDispatchLogs()">🔄 转单日志</button>
+          <button class="btn btn-success" id="btnDispatchAll" onclick="openDispatchAllConfirm()" style="display:none;">🚀 全部一键派发</button>
+        </div>
+        <div id="dispatchMergeHint" style="display:none; margin-bottom: 12px; padding: 10px 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; font-size: 0.84rem; color: #166534;">
+          🔗 同一 CN 的多条待处理申请已自动合并为一张卡，点卡片右下角「🚀 一键派发」可一次发完这人的全部。
         </div>
         <div id="dispatchSubContent"></div>
         <div id="dispatchLogsHost" style="display: none;">
@@ -1661,6 +1665,23 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <button class="btn btn-success" onclick="setModalFbStatus('已处理')">标为已处理</button>
         <button class="btn btn-primary" onclick="saveModalFbReply()">保存回复</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🚀 合并派发确认弹窗
+       ⚠️ 必须放在 .container 外面：.container 带 transform（加载推入动画残留）会让
+          position:fixed 失效、弹窗被推到页面下方（2026-09-24 实测 y=1830 看不见） -->
+  <div class="modal-overlay" id="dispatchConfirmModal">
+    <div class="modal" style="max-width: 560px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="font-size:1.1rem; font-weight:700; margin:0;" id="dispatchConfirmTitle">确认派发</h3>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeDispatchConfirm()">✕</button>
+      </div>
+      <div id="dispatchConfirmBody" style="max-height:52vh; overflow-y:auto; font-size:0.88rem; line-height:1.6;"></div>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+        <button class="btn btn-secondary" onclick="closeDispatchConfirm()">取消</button>
+        <button class="btn btn-success" id="dispatchConfirmOk" onclick="doDispatchConfirm()">确认派发</button>
       </div>
     </div>
   </div>
@@ -2037,6 +2058,19 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
     window.archiveShippedItems = archiveShippedItems;
 
+    // 按 id 合并：我这边的优先（含刚做的修改），服务器上多出来的照样保留
+    function mergeById(mine, theirs) {
+      const myIds = {};
+      const out = (mine || []).slice();
+      (mine || []).forEach(function (x) { myIds[String(x && x.id)] = true; });
+      (theirs || []).forEach(function (x) {
+        if (!x) return;
+        const k = String(x.id);
+        if (!myIds[k]) { myIds[k] = true; out.push(x); }
+      });
+      return out;
+    }
+
     // 🗄️ 保存前与数据库归档区做并集合并，防止旧页面保存时覆盖归档数据
     async function _mergedArchivedItems() {
       try {
@@ -2110,13 +2144,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               const freshLogistics = Array.isArray(freshImg2.logistics_data) ? freshImg2.logistics_data : [];
               freshImg2.logistics_data = mergeLogisticsData(freshLogistics, RAW_LOGISTICS, LOGISTICS_DELETED_BATCHES);
               freshImg2.archived_items = mergedArch;
-              // 交款凭证按 id 合并：我这边的优先（含刚审核过的状态），服务器上多出来的照样保留
-              const freshProofs = Array.isArray(freshImg2.pay_proofs) ? freshImg2.pay_proofs : [];
-              const myProofIds = {};
-              RAW_PAY_PROOFS.forEach(function (p) { myProofIds[String(p.id)] = true; });
-              const mergedProofs = RAW_PAY_PROOFS.slice();
-              freshProofs.forEach(function (p) { if (!myProofIds[String(p.id)]) mergedProofs.push(p); });
-              freshImg2.pay_proofs = mergedProofs;
+              // ⚠️ 下面几类都按 id 合并「我这边的优先 + 服务器多出来的保留」。
+              //    不合并的话，冲突分支会用服务器旧数据把刚做的修改冲掉 ——
+              //    2026-09-24 踩到：派发后申请被冲回「待处理」，谷子却已「已排发」→ 两边状态不一致。
+              freshImg2.pay_proofs = mergeById(RAW_PAY_PROOFS, freshImg2.pay_proofs);
+              freshImg2.applications = mergeById(RAW_APPLICATIONS, freshImg2.applications);
+              freshImg2.transfer_logs = mergeById(RAW_LOGS, freshImg2.transfer_logs);
+              freshImg2.feedback = mergeById(RAW_FEEDBACK, freshImg2.feedback);
               const retry = await supabaseClient.from('leader_data')
                 .update({ group_data: merged, image_data: freshImg2, version: freshVersion + 1 })
                 .eq('id', freshRec.id).eq('version', freshVersion).select('id');
@@ -4042,6 +4076,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       document.getElementById('btnSubLogs').classList.add('btn-primary');
       document.getElementById('dispatchSubContent').style.display = 'none';
       document.getElementById('dispatchLogsHost').style.display = '';
+      const _b = document.getElementById('btnDispatchAll'); if (_b) _b.style.display = 'none';
+      const _h = document.getElementById('dispatchMergeHint'); if (_h) _h.style.display = 'none';
       renderTransferLogs();
     }
     window.showDispatchLogs = showDispatchLogs;
@@ -4052,20 +4088,131 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return results;
     }
 
+    // 🔗 物品汇总：同一 item_id（没有则退回 name）合并数量
+    function mergeAppItems(apps) {
+      const map = new Map();
+      (apps || []).forEach(app => {
+        (app.items || []).forEach(it => {
+          const key = String(it.item_id || it.id || ('n:' + (it.name || '')));
+          if (!map.has(key)) map.set(key, { name: it.name || '(未命名)', quantity: 0 });
+          map.get(key).quantity += (Number(it.quantity) || 1);
+        });
+      });
+      return Array.from(map.values());
+    }
+
+    function renderItemsGrid(items) {
+      let html = '';
+      chunkArray(items, 10).forEach(chunk => {
+        html += '<div class="items-grid-10">';
+        chunk.forEach(it => {
+          html += `<div class="grid-item-chip"><div style="font-weight:600;">${escapeHtml(it.name)}</div><div style="color:var(--primary); font-weight:700;">x ${it.quantity || 1}</div></div>`;
+        });
+        html += '</div>';
+      });
+      return html;
+    }
+
+    // 🔗 待处理模式：同一 CN 的多条申请合并成一张卡（保持首次出现的顺序）
+    function renderPendingGrouped(pendingApps) {
+      const groups = [];
+      const pos = new Map();
+      pendingApps.forEach(app => {
+        const cn = String(app.cn || '').trim() || '(未署名)';
+        if (!pos.has(cn)) { pos.set(cn, groups.length); groups.push({ cn: cn, apps: [] }); }
+        groups[pos.get(cn)].apps.push(app);
+      });
+      window.APP_GROUPS = groups;
+
+      let html = '';
+      groups.forEach((g, gi) => {
+        const merged = mergeAppItems(g.apps);
+        const totalQty = merged.reduce((s, x) => s + (x.quantity || 0), 0);
+        const times = g.apps.map(a => String(a.time || '').trim()).filter(Boolean);
+        let timeText = '';
+        if (times.length === 1) { timeText = times[0]; }
+        else if (times.length > 1) {
+          // 申请数组未必按时间排列，取真正的最早 ~ 最晚
+          const parsable = times.map(t => ({ t: t, v: Date.parse(t.replace(/\//g, '-')) }));
+          if (parsable.every(x => !isNaN(x.v))) {
+            parsable.sort((a, b) => a.v - b.v);
+            timeText = parsable[0].t + ' ~ ' + parsable[parsable.length - 1].t;
+          } else {
+            timeText = times[0] + ' ~ ' + times[times.length - 1];
+          }
+        }
+        const notes = Array.from(new Set(g.apps.map(a => String(a.note || '').trim()).filter(Boolean)));
+        const noteText = notes.length ? notes.join(' / ') : '无';
+        const multi = g.apps.length > 1;
+
+        let detailHtml = '';
+        if (multi) {
+          detailHtml += `<details style="margin-top:10px;">
+            <summary style="cursor:pointer; font-size:0.82rem; color:var(--text-muted);">分条明细（${g.apps.length} 条，点开核对每条的提交时间 / 备注）</summary>
+            <div style="margin-top:8px;">`;
+          g.apps.forEach((a, ai) => {
+            const oneItems = (a.items || []).map(it => escapeHtml(it.name || '') + ' x' + (it.quantity || 1)).join('、');
+            detailHtml += `<div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start; padding:7px 0; border-bottom:1px dashed var(--border); font-size:0.82rem;">
+              <div style="flex:1; min-width:0;">
+                <div style="color:var(--text-muted); font-size:0.78rem;">${escapeHtml(a.time || '')}${a.note ? ' · 📝 ' + escapeHtml(a.note) : ''}</div>
+                <div>${oneItems}</div>
+              </div>
+              <div style="white-space:nowrap;">
+                <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.76rem;" onclick="confirmDispatchOneFromGroup(${gi}, ${ai})">确认这条</button>
+                <button class="btn btn-danger" style="padding:2px 8px; font-size:0.76rem;" onclick="deleteAppFromGroup(${gi}, ${ai})">删除</button>
+              </div>
+            </div>`;
+          });
+          detailHtml += `</div></details>`;
+        }
+
+        html += `
+          <div class="app-card">
+            <div class="app-header" style="flex-wrap: wrap; gap: 4px;">
+              <div style="min-width:0; flex:1 1 auto;">
+                <strong>CN: ${escapeHtml(g.cn)}</strong>
+                ${multi ? `<span class="badge" style="background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; margin-left:8px;">${g.apps.length} 条合并</span>` : ''}
+                <span style="font-size:0.8rem; color:var(--text-muted); margin-left:12px;">⏰ ${escapeHtml(timeText)}</span>
+              </div>
+              <span class="badge badge-status-待发货" style="flex:0 0 auto; white-space:nowrap;">待处理</span>
+            </div>
+            <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:6px;">📝 备注: ${escapeHtml(noteText)}</div>
+            <div style="font-size:0.82rem; color:var(--text-muted); margin-bottom:2px;">合计 ${g.apps.length} 条申请 · ${merged.length} 个品项 · ${totalQty} 件</div>
+            <div>${renderItemsGrid(merged)}</div>
+            ${detailHtml}
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
+              <button class="btn btn-success" onclick="confirmDispatchCn(${gi})">🚀 一键派发${multi ? '该 CN 全部' : ''}（${g.apps.length} 条）</button>
+            </div>
+          </div>
+        `;
+      });
+      return html;
+    }
+
     function renderDispatchWorkbench() {
       const pendingApps = RAW_APPLICATIONS.filter(a => a.status === '待处理');
       const completedApps = RAW_APPLICATIONS.filter(a => a.status === '已完成');
       document.getElementById('statPendingCount').innerText = pendingApps.length;
       document.getElementById('statCompletedCount').innerText = completedApps.length;
       const container = document.getElementById('dispatchSubContent');
-      const targetList = CURRENT_DISPATCH_SUBTAB === 'pending' ? pendingApps : completedApps;
+      const isPending = CURRENT_DISPATCH_SUBTAB === 'pending';
+      const targetList = isPending ? pendingApps : completedApps;
       window.APP_CACHE = targetList;
+
+      const btnAll = document.getElementById('btnDispatchAll');
+      if (btnAll) btnAll.style.display = (isPending && pendingApps.length > 1) ? '' : 'none';
+      const hint = document.getElementById('dispatchMergeHint');
+      if (hint) hint.style.display = (isPending && pendingApps.length > 0) ? '' : 'none';
+
       if (targetList.length === 0) {
+        window.APP_GROUPS = [];   // 清掉陈旧分组，避免空列表时被误用
         container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);">暂无记录</div>`;
         return;
       }
+      if (isPending) { container.innerHTML = renderPendingGrouped(pendingApps); return; }
+
       let html = '';
-      targetList.forEach((app, appIndex) => {
+      completedApps.forEach((app, appIndex) => {
         const items = app.items || [];
         const itemChunks = chunkArray(items, 10);
         let itemsGridHtml = '';
@@ -4081,17 +4228,12 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           <div class="app-card">
             <div class="app-header">
               <div><strong>CN: ${escapeHtml(app.cn)}</strong><span style="font-size:0.8rem; color:var(--text-muted); margin-left:12px;">⏰ ${escapeHtml(app.time || '')}</span></div>
-              <span class="badge ${app.status === '待处理' ? 'badge-status-待发货' : 'badge-status-已排发'}">${escapeHtml(app.status)}</span>
+              <span class="badge badge-status-已排发">${escapeHtml(app.status)}</span>
             </div>
             <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:6px;">📝 备注: ${escapeHtml(app.note || '无')}</div>
             <div>${itemsGridHtml}</div>
             <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
-              ${app.status === '待处理' ? `
-                <button class="btn btn-success" onclick="confirmDispatchAppByIndex(${appIndex})">确认发货</button>
-                <button class="btn btn-danger" onclick="deleteAppByIndex(${appIndex})">删除申请</button>
-              ` : `
-                <button class="btn btn-danger" onclick="deleteCompletedAppByIndex(${appIndex})">删除记录 (联动删除谷子)</button>
-              `}
+              <button class="btn btn-danger" onclick="deleteCompletedAppByIndex(${appIndex})">删除记录 (联动删除谷子)</button>
             </div>
           </div>
         `;
@@ -4099,21 +4241,147 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       container.innerHTML = html;
     }
 
+    /* --- 🚀 合并派发：确认弹窗（自绘，规避微信/QQ 内置浏览器屏蔽原生 confirm） --- */
+    let _dispatchAction = null;
+
+    function _closeDispatchModal() {
+      _dispatchAction = null;
+      document.getElementById('dispatchConfirmModal').classList.remove('active');
+    }
+    function closeDispatchConfirm() { _closeDispatchModal(); }
+    window.closeDispatchConfirm = closeDispatchConfirm;
+
+    function _showDispatchModal(title, bodyHtml, okText, okClass, action) {
+      _dispatchAction = action;
+      document.getElementById('dispatchConfirmTitle').innerText = title;
+      document.getElementById('dispatchConfirmBody').innerHTML = bodyHtml;
+      const ok = document.getElementById('dispatchConfirmOk');
+      ok.innerText = okText;
+      ok.className = 'btn ' + okClass;
+      document.getElementById('dispatchConfirmModal').classList.add('active');
+    }
+
+    async function doDispatchConfirm() {
+      const fn = _dispatchAction;
+      _dispatchAction = null;
+      document.getElementById('dispatchConfirmModal').classList.remove('active');
+      if (typeof fn !== 'function') return;
+      try { await fn(); } catch (e) { showToast('❌ 操作失败：' + (e && e.message ? e.message : e)); }
+    }
+    window.doDispatchConfirm = doDispatchConfirm;
+
+    // 真正写库：申请标记「已完成」+ 对应谷子状态改「已排发」
+    async function _applyDispatchApps(apps) {
+      const targetItemIds = new Set();
+      apps.forEach(app => {
+        app.status = '已完成';
+        (app.items || []).forEach(i => targetItemIds.add(String(i.item_id || i.id)));
+      });
+      RAW_ITEMS.forEach(item => {
+        const k = String(item.item_id || item.id);
+        if (targetItemIds.has(k)) {
+          const _prevStatus = item.status;
+          item.status = '已排发';
+          ensureStockDate(item, _prevStatus);
+          DIRTY_ITEM_IDS.add(k);
+        }
+      });
+      await saveDataToSupabase();
+      renderDispatchWorkbench();
+      renderTable();
+    }
+
+    function _dispatchConfirmBody(groups) {
+      let totalApps = 0, totalQty = 0;
+      const blocks = groups.map(g => {
+        const merged = mergeAppItems(g.apps);
+        const qty = merged.reduce((s, x) => s + (x.quantity || 0), 0);
+        totalApps += g.apps.length; totalQty += qty;
+        return `<div style="margin-bottom:10px; padding:10px 12px; border:1px solid var(--border); border-radius:8px;">
+          <div style="font-weight:700; margin-bottom:4px;">CN: ${escapeHtml(g.cn)}
+            <span style="font-weight:400; color:var(--text-muted); font-size:0.82rem;">（${g.apps.length} 条 · ${qty} 件）</span></div>
+          <div style="font-size:0.84rem;">${merged.map(x => '· ' + escapeHtml(x.name) + ' <span style="color:var(--primary); font-weight:700;">x' + (x.quantity || 1) + '</span>').join('<br>')}</div>
+        </div>`;
+      }).join('');
+      return `<div style="margin-bottom:12px; padding:10px 12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
+          <div style="font-weight:700; color:#166534; font-size:1rem;">共 ${totalApps} 条申请 · ${totalQty} 件物品</div>
+          <div style="font-size:0.82rem; color:#166534; margin-top:2px;">确认后：这些申请标记为「已完成」，对应谷子状态改为「已排发」。</div>
+        </div>` + blocks;
+    }
+
+    // 🚀 一键派发某个 CN 的全部申请
+    function confirmDispatchCn(gi) {
+      const g = (window.APP_GROUPS || [])[gi];
+      if (!g || !g.apps.length) return;
+      _showDispatchModal('派发 CN「' + g.cn + '」的全部申请', _dispatchConfirmBody([g]), '确认派发（' + g.apps.length + ' 条）', 'btn-success',
+        async () => { await _applyDispatchApps(g.apps); showToast('🚀 已派发 ' + g.cn + ' 的 ' + g.apps.length + ' 条申请'); });
+    }
+    window.confirmDispatchCn = confirmDispatchCn;
+
+    // 合并卡内：只确认其中一条
+    function confirmDispatchOneFromGroup(gi, ai) {
+      const g = (window.APP_GROUPS || [])[gi];
+      const app = g && g.apps[ai];
+      if (!app) return;
+      _showDispatchModal('派发「' + g.cn + '」的这 1 条申请', _dispatchConfirmBody([{ cn: g.cn, apps: [app] }]), '确认派发（1 条）', 'btn-success',
+        async () => { await _applyDispatchApps([app]); showToast('🚀 已派发 1 条申请'); });
+    }
+    window.confirmDispatchOneFromGroup = confirmDispatchOneFromGroup;
+
+    // 合并卡内：删除其中一条（二次确认）
+    function deleteAppFromGroup(gi, ai) {
+      const g = (window.APP_GROUPS || [])[gi];
+      const app = g && g.apps[ai];
+      if (!app) return;
+      const items = (app.items || []).map(it => escapeHtml(it.name || '') + ' x' + (it.quantity || 1)).join('、');
+      _showDispatchModal('删除这条申请记录？',
+        `<div style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:0.86rem;">
+          <div style="font-weight:700; margin-bottom:4px;">CN: ${escapeHtml(g.cn)} · ${escapeHtml(String(app.time || ''))}</div>
+          <div>${items}</div>
+          <div style="margin-top:8px; color:#991b1b;">删除后不可恢复，但谷子本身的状态不受影响。</div>
+        </div>`, '确认删除', 'btn-danger',
+        async () => {
+          RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
+          await saveDataToSupabase(); renderDispatchWorkbench(); showToast('已删除这条申请');
+        });
+    }
+    window.deleteAppFromGroup = deleteAppFromGroup;
+
+    // 🚀 全部一键派发（所有待处理申请，按 CN 分组展示）
+    function openDispatchAllConfirm() {
+      const groups = (window.APP_GROUPS || []).filter(g => g.apps.length);
+      if (!groups.length) { showToast('当前没有待处理的排发申请'); return; }
+      const total = groups.reduce((s, g) => s + g.apps.length, 0);
+      _showDispatchModal('全部一键派发（' + groups.length + ' 位 CN）', _dispatchConfirmBody(groups), '全部确认派发（' + total + ' 条）', 'btn-success',
+        async () => {
+          await _applyDispatchApps(groups.reduce((acc, g) => acc.concat(g.apps), []));
+          showToast('🚀 已派发全部 ' + total + ' 条申请');
+        });
+    }
+    window.openDispatchAllConfirm = openDispatchAllConfirm;
+
     async function confirmDispatchAppByIndex(appIndex) {
       const app = window.APP_CACHE[appIndex];
       if (!app) return;
-      app.status = '已完成';
-      const targetItemIds = new Set((app.items || []).map(i => String(i.item_id || i.id)));
-      RAW_ITEMS.forEach(item => { if (targetItemIds.has(String(item.item_id || item.id))) { const _prevStatus = item.status; item.status = '已排发'; ensureStockDate(item, _prevStatus); DIRTY_ITEM_IDS.add(String(item.item_id || item.id)); } });
-      await saveDataToSupabase(); renderDispatchWorkbench(); renderTable(); showToast('已确认发货！');
+      _showDispatchModal('派发「' + (app.cn || '') + '」的申请', _dispatchConfirmBody([{ cn: app.cn || '(未署名)', apps: [app] }]), '确认派发（1 条）', 'btn-success',
+        async () => { await _applyDispatchApps([app]); showToast('已确认发货！'); });
     }
     window.confirmDispatchAppByIndex = confirmDispatchAppByIndex;
 
     async function deleteAppByIndex(appIndex) {
       const app = window.APP_CACHE[appIndex];
-      if (!app || !confirm('确定删除此申请记录吗？')) return;
-      RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
-      await saveDataToSupabase(); renderDispatchWorkbench(); showToast('已删除申请！');
+      if (!app) return;
+      const items = (app.items || []).map(it => escapeHtml(it.name || '') + ' x' + (it.quantity || 1)).join('、');
+      _showDispatchModal('删除这条申请记录？',
+        `<div style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:0.86rem;">
+          <div style="font-weight:700; margin-bottom:4px;">CN: ${escapeHtml(app.cn || '')} · ${escapeHtml(String(app.time || ''))}</div>
+          <div>${items}</div>
+          <div style="margin-top:8px; color:#991b1b;">删除后不可恢复。</div>
+        </div>`, '确认删除', 'btn-danger',
+        async () => {
+          RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
+          await saveDataToSupabase(); renderDispatchWorkbench(); showToast('已删除申请！');
+        });
     }
     window.deleteAppByIndex = deleteAppByIndex;
 
