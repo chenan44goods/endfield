@@ -1089,7 +1089,7 @@
       </div>
 
     </div>
-    <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243 · 版本 09-24a</div>
+    <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243 · 版本 09-24b</div>
   </div>
 
   <!-- 自助查询面板 -->
@@ -1536,6 +1536,23 @@
          · 绝不使用原生 prompt/confirm/alert（微信/QQ 内置浏览器会静默屏蔽）。 */
     const PAY_BUCKET = 'pay-proofs';
     const QR_BUCKET = 'pay-qr';
+
+    /* 🗂️ 随机对象名（2026-09-24）：付款截图靠「路径不可猜」保护 ——
+       凭证桶对外是「知道确切链接才能取」，所以名字必须随机、不能带时间戳/序号那样的规律。
+       优先用浏览器加密级随机数；取不到时降级到 Math.random（仍然足够长）。 */
+    function randObjName(){
+      try {
+        const a = new Uint8Array(16);
+        (window.crypto || window.msCrypto).getRandomValues(a);
+        let s = '';
+        for (let i = 0; i < a.length; i++) s += (a[i] < 16 ? '0' : '') + a[i].toString(16);
+        return s;
+      } catch (e) {
+        let s = '';
+        for (let i = 0; i < 4; i++) s += Math.random().toString(16).slice(2, 11);
+        return (s + '00000000000000000000000000000000').slice(0, 32);
+      }
+    }
     let QR_MAP = null;   // batch_key -> 存储里的对象路径
 
     /* 批次名归一化：必须与机器人 batch_payment._batch_key() 完全一致，
@@ -1882,7 +1899,8 @@
       try {
         const proofId = 'pp_' + Date.now() + '_' + Math.floor(Math.random() * 9000 + 1000);
         const ext = (blob.type && blob.type.indexOf('png') >= 0) ? 'png' : 'jpg';
-        const objPath = proofId + '.' + ext;
+        // 🗂️ 存储路径与记录 id 解耦：路径用随机长串（猜不到），记录 id 仍用可读前缀方便排查
+        const objPath = randObjName() + '.' + ext;
 
         const upRes = await fetch(SUPABASE_URL + '/storage/v1/object/' + PAY_BUCKET + '/' + encodeURIComponent(objPath), {
           method: 'POST',

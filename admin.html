@@ -1862,7 +1862,6 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     let RAW_FEEDBACK = [];
     let RAW_LOGISTICS = [];
     let RAW_PAY_PROOFS = [];        // 💳 团员在自查页上传的付款凭证（image_data.pay_proofs）
-    let PAY_PROOF_URLS = {};        // 凭证缩略图的签名链接缓存（private 桶，一小时有效）
     let LOGISTICS_DELETED_BATCHES = new Set();
     let LOGISTICS_DETAIL_INDEX = -1;
     let RAW_BATCHES = [];
@@ -2649,7 +2648,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     // 💳 交款审核（2026-09-22 新增）
     //    团员在自查页「交肾核算」上传付款截图 → 这里审核。
     //    点「确认收款」会把这些订单从「未付款」改成「已下单」并记下支付方式。
-    //    ⚠️ 图片存在 private 桶 pay-proofs，只能用签名链接读，不能直接拼 URL。
+    //    ⚠️ 图片存在 pay-proofs 桶。2026-09-24 修：该桶原先没给网页「读」的权限，
+    //       签名接口一律回 Object not found → 后台从上线起就看不到任何凭证图（只显示
+    //       「图片读不到 检查 pay-proofs 桶」）。现改为「知道确切链接才能取」：
+    //       直接拼公开下载地址即可显示，而桶内容仍**列不出来**（匿名密钥 list 返回空），
+    //       外人拿不到文件清单、也无从猜路径。
     /* 批次名归一化：必须与机器人 batch_payment._batch_key() 完全一致 */
     function _normBatchKey(s) {
       return String(s == null ? '' : s).trim()
@@ -2718,14 +2721,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
 
     // ==========================================
-    async function _payProofSignedUrl(path) {
+    /* 凭证图的公开下载地址。不再走签名（签名需要先读到对象行，匿名密钥读不到）。
+       路径本身是上传时随机生成的长串，猜不到；桶内容也列不出来。 */
+    function _payProofPublicUrl(path) {
       if (!path) return '';
-      if (PAY_PROOF_URLS[path]) return PAY_PROOF_URLS[path];
       try {
-        const { data, error } = await supabaseClient.storage.from('pay-proofs').createSignedUrl(path, 3600);
-        if (error || !data || !data.signedUrl) return '';
-        PAY_PROOF_URLS[path] = data.signedUrl;
-        return data.signedUrl;
+        const safe = String(path).split('/').filter(Boolean).map(encodeURIComponent).join('/');
+        return SUPABASE_URL + '/storage/v1/object/public/pay-proofs/' + safe;
       } catch (e) { return ''; }
     }
 
@@ -2826,7 +2828,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (!p || !p.img_path) return;   // 已通过/已撤回的凭证原图已被清理，不留碎图
       const el = document.getElementById('proofThumb_' + String(p.id || ''));
       if (!el) return;
-      const url = await _payProofSignedUrl(p.img_path);
+      const url = _payProofPublicUrl(p.img_path);
       if (!url) {
         el.innerHTML = '<span style="padding:6px;">图片读不到<br>检查 pay-proofs 桶</span>';
         return;
@@ -2997,7 +2999,6 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       // ③ 记录已经落库，再删对象。删失败不回滚状态（记录侧已声明不再引用），
       //    漏掉的孤儿文件由「🧹 清理无引用旧图」兜底。
       const removed = await _purgeProofObjects(toPurge);
-      toPurge.forEach(function (p) { delete PAY_PROOF_URLS[p]; });
 
       let msg = changed
         ? ('✅ 已确认收款，' + changed + (isIntl ? ' 项国际运费标为「已交」' : ' 条订单改为「已下单」'))
@@ -3124,46 +3125,37 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     window.copyPayNotice = copyPayNotice;
 
     // ==========================================
-    // 🧹 清理无引用旧图：比对桶里的文件与 pay_proofs 还引用着的路径，删掉没人引用的。
+    // 🧹 清理旧原图：把「已标记为可删、但当时没删成功」的凭证原图再删一遍。
+    //    2026-09-24 改：原先靠「列桶里所有文件 → 与记录比对」找孤儿，但匿名密钥
+    //    根本没有列出桶内容的权限（list 恒为空），所以它永远报「没有多余旧图」，等于空转。
+    //    现改为按记录里留下的 purged_path 重试 —— 那才是漏删的真实来源。
     //    两段式：第一次点只报数量，再点一次才真删（删除必须团长亲自确认）。
     // ==========================================
     let _orphanArmed = false;
     let _orphanSig = '';
     async function cleanupOrphanProofImages() {
-      let objs = [], offset = 0;
-      while (true) {
-        const r = await supabaseClient.storage.from('pay-proofs').list('', { limit: 100, offset: offset });
-        if (r.error) return showToast('读不到桶里的文件：' + (r.error.message || '未知错误'));
-        const got = (r.data || []).filter(function (o) { return o && o.name; });
-        objs = objs.concat(got.map(function (o) { return o.name; }));
-        if (got.length < 100) break;
-        offset += 100;
-        if (offset > 5000) break;
-      }
-      const used = {};
+      const cand = [], seen = {};
       (Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : []).forEach(function (p) {
-        if (p && p.img_path) used[String(p.img_path)] = true;
+        const pp = (p && p.purged_path) ? String(p.purged_path) : '';
+        if (pp && !seen[pp]) { seen[pp] = true; cand.push(pp); }
       });
-      const orphans = objs.filter(function (n) { return !used[n]; });
 
-      if (!orphans.length) {
+      if (!cand.length) {
         _orphanArmed = false; _orphanSig = '';
-        return _payNoticeSay('<div style="font-size:0.88rem; color:#15803d;">🧹 桶里共 ' + objs.length +
-          ' 个文件，全都有记录引用，没有多余旧图。</div>');
+        return _payNoticeSay('<div style="font-size:0.88rem; color:#15803d;">🧹 没有待清理的旧原图（标记过要删的都已经删干净了）。</div>');
       }
-      const sig = orphans.join('|');
+      const sig = cand.join('|');
       if (!_orphanArmed || _orphanSig !== sig) {
         _orphanArmed = true; _orphanSig = sig;
-        return _payNoticeSay('<div style="font-size:0.88rem; color:#b45309;">🧹 桶里共 ' + objs.length +
-          ' 个文件，其中 <b>' + orphans.length + '</b> 个已经没有记录引用了（多半是通过/撤回后没删干净的残留）。<br>' +
-          '<span style="font-size:0.8rem; color:var(--text-muted);">确认要删的话，再点一次「🧹 清理无引用旧图」才会真的删。</span></div>');
+        return _payNoticeSay('<div style="font-size:0.88rem; color:#b45309;">🧹 有 <b>' + cand.length +
+          '</b> 张旧原图是「通过 / 驳回 / 撤回」后应该删掉的。<br>' +
+          '<span style="font-size:0.8rem; color:var(--text-muted);">确认要再删一次的话，再点一次「🧹 清理无引用旧图」才会真的删（已经不存在的会自动跳过）。</span></div>');
       }
       _orphanArmed = false; _orphanSig = '';
-      const n = await _purgeProofObjects(orphans);
-      PAY_PROOF_URLS = {};
-      _payNoticeSay('<div style="font-size:0.88rem; color:#15803d;">🧹 已清理 ' + n +
-        ' 个无引用旧图，现在桶里剩 ' + (objs.length - n) + ' 个文件。</div>');
-      showToast('已清理 ' + n + ' 个无引用旧图');
+      const n = await _purgeProofObjects(cand);
+      _payNoticeSay('<div style="font-size:0.88rem; color:#15803d;">🧹 已对 ' + n +
+        ' 张旧原图发起删除（本来就不存在的会被直接跳过）。桶里只会留下还有记录引用的图。</div>');
+      showToast('已重试清理旧原图');
     }
     window.cleanupOrphanProofImages = cleanupOrphanProofImages;
 
