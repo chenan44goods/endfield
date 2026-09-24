@@ -1089,7 +1089,7 @@
       </div>
 
     </div>
-    <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243 · 版本 09-23c</div>
+    <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243 · 版本 09-24a</div>
   </div>
 
   <!-- 自助查询面板 -->
@@ -1406,10 +1406,18 @@
         const applyBtn = (isDispatch && String(it.status||'').trim()==='可排发') ? '<button class="r-apply" onclick="applyDispatchItem('+idx+')">申请排发</button>' : '';
         const _bn=String(it.batch_name||'').trim();
         const batchHtml=(_bn&&_bn!=='默认批次')?'<div class="r-batch">\ud83d\udce6 '+escapeHtml(_bn)+'</div>':'';
+        // 📅 下单日期 + 下单平台（2026-09-24）：散货批次用，让大家看清自己的谷子哪天下单、从哪买
+        //   老数据没有这两个字段 → 不显示，不影响任何原有展示
+        const _od=String(it.order_date||'').trim();
+        const _op=String(it.order_platform||'').trim();
+        let _odTxt='';
+        if(_od){ const _m=_od.match(/^(\d{4})-(\d{2})-(\d{2})$/); _odTxt=_m?(parseInt(_m[2],10)+'/'+parseInt(_m[3],10)):_od; }
+        const _opParts=[]; if(_odTxt) _opParts.push(_odTxt); if(_op) _opParts.push(_op);
+        const orderHtml=_opParts.length?'<div class="r-batch">\ud83d\uded2 '+escapeHtml(_opParts.join(' · '))+'</div>':'';
         return '<div class="result-item">'+imgHtml+
           '<div class="r-info"><div class="r-name">'+escapeHtml(it.name||'未命名')+'</div>'+
           '<div class="r-meta">'+(it.country||'日本')+' ×'+q+'</div>'+
-          batchHtml+'</div>'+
+          batchHtml+orderHtml+'</div>'+
           '<div class="r-side" style="display:flex; align-items:center; gap:12px;">'+
           '<span class="r-price">￥'+itemAmount(it).toFixed(2)+'</span>'+
           (showStatus ? '<span class="r-badge '+getStatusBadgeClass(it.status)+'">'+escapeHtml(it.status||'未出荷')+'</span>' : '')+

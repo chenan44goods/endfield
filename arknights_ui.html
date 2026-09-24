@@ -1190,6 +1190,31 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
               </select>
             </div>
 
+            <!-- 📅 下单日期 + 下单平台（2026-09-24 新增）
+                 用途：散货 / 常驻批次（如「单独切非盘」）要记清是哪天下单、从哪个平台买的，
+                 团员端也会显示，方便大家核对自己谷子的下单日。
+                 老数据没有这两个字段，留空即可，不影响任何现有逻辑。 -->
+            <div class="form-group">
+              <label for="inputOrderDate">下单日期</label>
+              <input type="date" id="inputOrderDate">
+            </div>
+            <div class="form-group">
+              <label for="inputOrderPlatform">下单平台</label>
+              <input type="text" id="inputOrderPlatform" list="platformPresets" placeholder="如：淘宝 / 闲鱼 / 微店">
+              <datalist id="platformPresets">
+                <option value="淘宝"></option>
+                <option value="闲鱼"></option>
+                <option value="微店"></option>
+                <option value="拼多多"></option>
+                <option value="京东"></option>
+                <option value="日亚"></option>
+                <option value="煤炉"></option>
+                <option value="代购"></option>
+                <option value="线下"></option>
+                <option value="其他"></option>
+              </datalist>
+            </div>
+
             <!-- 图片上传区域 -->
             <div class="form-group" style="grid-column: 1 / -1;">
               <label>谷子图片</label>
@@ -1306,6 +1331,8 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
                 <th>数量</th>
                 <th>地区 (country)</th>
                 <th>状态</th>
+                <th>下单日期</th>
+                <th>下单平台</th>
                 <th>支付方式</th>
                 <th>囤货有效期</th>
                 <th>操作</th>
@@ -1874,6 +1901,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             .then(function () {
               document.body.classList.add('loaded');
               initGlobalOptions();
+              // 📅 录入表单的「下单日期」默认填今天（页面打开就是今天，省得每次手选）
+              try { if (typeof window.setDefaultOrderDate === 'function') window.setDefaultOrderDate(); } catch (e) {}
               const savedKey = localStorage.getItem('ADMIN_QUERY_KEY');
               if (savedKey) {
                 CURRENT_QUERY_KEY = savedKey;
@@ -3184,7 +3213,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       window.ITEM_CACHE = pageItems;
 
       if (totalItems === 0) {
-        tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="14" style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</td></tr>`;
         if (mobileView) mobileView.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配数据</div>`;
         document.getElementById('tablePagination').innerHTML = '';
         renderPayStats();
@@ -3199,6 +3228,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const countryStr = item.country || '日本';
         const statusStr = item.status || '未出荷';
         const statusBadgeClass = getStatusBadgeClass(statusStr);
+        // 📅 下单日期 / 下单平台（老数据没有 → 显示破折号）
+        const orderDateStr = String(item.order_date || '').trim();
+        const orderPlatformStr = String(item.order_platform || '').trim();
+        const orderDateTd = orderDateStr ? escapeHtml(orderDateStr) : '<span style="color:#cbd5e1;">—</span>';
+        const orderPlatformTd = orderPlatformStr ? escapeHtml(orderPlatformStr) : '<span style="color:#cbd5e1;">—</span>';
 
         html += `
           <tr>
@@ -3211,6 +3245,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             <td>${item.quantity || 1}</td>
             <td><span class="badge badge-country">${escapeHtml(countryStr)}</span></td>
             <td><span class="badge ${statusBadgeClass}">${escapeHtml(statusStr)}</span></td>
+            <td>${orderDateTd}</td>
+            <td>${orderPlatformTd}</td>
             <td>${getPayMethodBadge(item.pay_method)}</td>
             <td>${stockCellHtml(item)}</td>
             <td>
@@ -3241,6 +3277,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
                   <span>x${item.quantity || 1}</span>
                 </div>
                 <div style="margin-top:4px; font-size:0.8rem;">支付方式: ${getPayMethodBadge(item.pay_method)}</div>
+                <div style="margin-top:4px; font-size:0.8rem; color:var(--text-muted);">📅 下单: ${orderDateTd}${orderPlatformStr ? ' · ' + escapeHtml(orderPlatformStr) : ''}</div>
               </div>
             </div>
             <div class="admin-card-mobile-actions">
@@ -3297,6 +3334,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const country = document.getElementById('inputCountry').value;
       const status = document.getElementById('inputStatus').value.trim() || '未出荷';
       const imageUrl = (document.getElementById('inputImageUrl')?.value || '').trim();
+      // 📅 下单日期 / 下单平台（散货批次用，允许留空）
+      const orderDate = (document.getElementById('inputOrderDate')?.value || '').trim();
+      const orderPlatform = (document.getElementById('inputOrderPlatform')?.value || '').trim();
 
       if (!name || !cn) return showToast('请填写谷子名称和 CN！');
 
@@ -3304,7 +3344,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const idx = RAW_ITEMS.findIndex(i => String(i.item_id || i.id) === String(editId));
         if (idx !== -1) {
           const prevStatus = RAW_ITEMS[idx].status;
-          const patch = { name, cn, batch_name, price, quantity, country, status, image_url: imageUrl };
+          const patch = { name, cn, batch_name, price, quantity, country, status, image_url: imageUrl, order_date: orderDate, order_platform: orderPlatform };
           if (batch_id) { patch.batch_id = batch_id; patch.open_date = open_date; }
           RAW_ITEMS[idx] = { ...RAW_ITEMS[idx], ...patch };
           ensureStockDate(RAW_ITEMS[idx], prevStatus);
@@ -3314,6 +3354,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const newItem = {
           item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random()*1000),
           name, cn, batch_name, price, quantity, country, status, image_url: imageUrl,
+          order_date: orderDate, order_platform: orderPlatform,
           created_at: new Date().toISOString()
         };
         if (batch_id) { newItem.batch_id = batch_id; newItem.open_date = open_date; }
@@ -3348,6 +3389,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       ensureSelectOption('inputCountry', item.country || '日本');
       ensureSelectOption('inputStatus', item.status || '未出荷');
       document.getElementById('inputImageUrl').value = item.image_url || '';
+      document.getElementById('inputOrderDate').value = item.order_date || '';
+      document.getElementById('inputOrderPlatform').value = item.order_platform || '';
       updateImagePreview(item.image_url || '');
       document.getElementById('formTitle').innerText = '✏️ 修改谷子信息';
       document.getElementById('btnClearForm').style.display = 'inline-block';
@@ -3363,6 +3406,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       document.getElementById('inputCountry').value = '日本';
       document.getElementById('inputStatus').value = '未出荷';
       document.getElementById('inputImageUrl').value = '';
+      setDefaultOrderDate();
+      document.getElementById('inputOrderPlatform').value = '';
       updateImagePreview('');
       document.getElementById('uploadStatusText').innerText = '自动上传到 Supabase 图床';
       IS_IMAGE_UPLOADING = false;
@@ -3370,6 +3415,18 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       document.getElementById('btnClearForm').style.display = 'none';
     }
     window.clearForm = clearForm;
+
+    // 📅 把「下单日期」默认填成今天。
+    // ⚠️ 必须用本地时区手拼 YYYY-MM-DD，不能 toISOString().slice(0,10)
+    //    —— 那个是 UTC，北京时间晚上 8 点后会算成"明天"，日期直接错一天。
+    function setDefaultOrderDate() {
+      const el = document.getElementById('inputOrderDate');
+      if (!el || el.value) return;
+      const d = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      el.value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    }
+    window.setDefaultOrderDate = setDefaultOrderDate;
 
     // 单条转单（支持部分数量转单）
     async function transferSingleByIndex(index) {
