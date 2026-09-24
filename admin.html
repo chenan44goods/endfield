@@ -1357,7 +1357,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
             <label style="display:flex; align-items:center; gap:4px; font-size:0.82rem; color:var(--text-muted); white-space:nowrap; cursor:pointer;" title="勾选后一并统计状态为「已完全全部收款」的归档批次">
               <input type="checkbox" id="payStatsIncludeArchived" onchange="onPayStatsToggleArchived()"> 包含已收款完结批次
             </label>
-            <button class="btn btn-secondary" onclick="renderPayStats()">🔄 刷新</button>
+            <button class="btn btn-secondary" id="payStatsRefreshBtn" onclick="reloadAllData(this)">🔄 刷新</button>
           </div>
         </div>
         <div id="payStatsSummary" style="font-size:0.9rem; margin-bottom:12px; line-height:2; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px 12px;"></div>
@@ -1387,7 +1387,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         <div class="card-title">
           <span>💳 交款审核（团员上传的付款凭证）</span>
           <div class="btn-group">
-            <button class="btn btn-secondary" onclick="renderPayReview()">🔄 刷新</button>
+            <button class="btn btn-secondary" id="payReviewRefreshBtn" onclick="reloadAllData(this)">🔄 刷新</button>
             <button class="btn btn-secondary" onclick="generateGroupNotice()">📢 生成群通知</button>
             <button class="btn btn-secondary" onclick="cleanupOrphanProofImages()">🧹 清理无引用旧图</button>
           </div>
@@ -2033,6 +2033,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           CURRENT_RECORD_ID = null; CURRENT_VERSION = null; RAW_ITEMS = []; RAW_ARCHIVED = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = []; RAW_LOGISTICS = []; RAW_PAY_PROOFS = [];
           LOGISTICS_DELETED_BATCHES.clear();
           renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
+          renderPayReview(); renderPayStats();
           alert('该密钥暂无数据！'); return;
         }
         const rec = data[0];
@@ -2056,10 +2057,31 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         CURRENT_PAGE = 1;
         updateBatchDropdownOptions();
         renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
+        renderPayReview(); renderPayStats();
         loadBatches();
       } catch (err) { showToast('数据加载网络异常'); }
     }
     window.loadDataByQueryKey = loadDataByQueryKey;
+
+    // 🔄 真·刷新（2026-09-24 修）：从数据库重新拉一份数据再渲染。
+    // 原先两个「🔄 刷新」按钮只调用 renderPayStats()/renderPayReview()，它们只重画内存里的旧数据，
+    // 从不访问网络 → 别人（团员）新提交的交款凭证永远刷不出来，必须整页 Ctrl+F5 才能看到。
+    async function reloadAllData(btn) {
+      if (DIRTY_ITEM_IDS.size > 0 &&
+          !confirm('还有 ' + DIRTY_ITEM_IDS.size + ' 条改动正在写入数据库，现在刷新可能丢掉它们。\n\n确定要刷新吗？')) {
+        return;
+      }
+      const old = btn ? btn.innerHTML : '';
+      if (btn) { btn.disabled = true; btn.innerHTML = '⏳ 拉取中…'; }
+      try {
+        const inp = document.getElementById('adminQueryKey');
+        if (inp && !inp.value.trim() && CURRENT_QUERY_KEY) inp.value = CURRENT_QUERY_KEY;
+        await loadDataByQueryKey();
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = old; }
+      }
+    }
+    window.reloadAllData = reloadAllData;
 
     // 🗄️ 归档已排发：从 group_data 移入 image_data.archived_items（数据保留，三端可查）
     async function archiveShippedItems() {
