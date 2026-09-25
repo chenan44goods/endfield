@@ -1269,12 +1269,37 @@
 
     const toast = document.getElementById('toast');
     let toastTimer = null;
-    const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
+    /* ── 数据通道（2026-09-25）────────────────────────────────────────────
+       *.supabase.co 在国内部分网络被按域名(SNI)阻断：DNS 正常、TCP 能连，
+       但 TLS 握手一带上该域名就被 RST → 浏览器报 "Failed to fetch"。
+       对策：优先走本站同源反代 /sb/*（Cloudflare Pages Function → Supabase），
+       探不通就自动回退直连 —— 两条路任一可用都能查询。 */
+    const SUPABASE_DIRECT = 'https://oknhlfhdqbsukskdxqre.supabase.co';
+    const SB_PROXY = '/sb';
+    let SB_BASE = null;
+    let _sbProbing = null;
+    async function sbBase(){
+      if (SB_BASE) return SB_BASE;
+      if (_sbProbing) return await _sbProbing;
+      _sbProbing = (async function(){
+        try {
+          const r = await fetch(SB_PROXY + '/__health', { cache: 'no-store' });
+          if (r.ok) { const j = await r.json(); if (j && j.ok) { SB_BASE = SB_PROXY; return SB_BASE; } }
+        } catch (e) {}
+        SB_BASE = SUPABASE_DIRECT;
+        return SB_BASE;
+      })();
+      return await _sbProbing;
+    }
+    // 所有数据请求的统一入口：自动选择「同源反代」或「直连」
+    async function sbFetch(path, opts){ return fetch((await sbBase()) + path, opts); }
+    // 给 img.src 等用的地址拼接（进入页面后通道一般已探测完成）
+    function sbUrl(path){ return (SB_BASE || SB_PROXY) + path; }
     const SUPABASE_ANON = 'sb_publishable_UW9cgyBOeV6zIZCicI2SlQ_bqm0MeJa';
     // 直接用原生 fetch 调 Supabase REST API，不依赖外部 CDN 脚本
     async function fetchLeaderData(key){
       const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer '+SUPABASE_ANON };
-      const res = await fetch(SUPABASE_URL + '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key) + '&select=*', { headers: h });
+      const res = await sbFetch('/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key) + '&select=*', { headers: h });
       if (!res.ok) { throw new Error('HTTP ' + res.status); }
       return await res.json();
     }
@@ -1528,7 +1553,7 @@
           status: '待处理'
         });
         const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
-        const res = await fetch(SUPABASE_URL + '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key), { method: 'PATCH', headers: h, body: JSON.stringify({ group_data: groupData, image_data: imgData }) });
+        const res = await sbFetch('/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key), { method: 'PATCH', headers: h, body: JSON.stringify({ group_data: groupData, image_data: imgData }) });
         if (!res.ok) { throw new Error('HTTP ' + res.status); }
         showToast('🎉 排发申请提交成功！谷子已标记为【待发货】' + (String(note||'').trim() ? '，备注已同步' : ''));
         doQuery('dispatch');
@@ -1582,7 +1607,7 @@
       QR_MAP = {};
       try {
         const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON };
-        const res = await fetch(SUPABASE_URL + '/rest/v1/qr_codes?select=batch_key,object_path', { headers: h });
+        const res = await sbFetch('/rest/v1/qr_codes?select=batch_key,object_path', { headers: h });
         if (res.ok) {
           const rows = await res.json();
           (Array.isArray(rows) ? rows : []).forEach(function(r){
@@ -1597,7 +1622,7 @@
       const p = QR_MAP[_normBatch(batchName)];
       if (!p) return '';
       const safe = String(p).split('/').map(encodeURIComponent).join('/');
-      return SUPABASE_URL + '/storage/v1/object/public/' + QR_BUCKET + '/' + safe;
+      return sbUrl('/storage/v1/object/public/' + QR_BUCKET + '/' + safe);
     }
 
     function parseImgData(row){
@@ -1915,7 +1940,7 @@
         // 🗂️ 存储路径与记录 id 解耦：路径用随机长串（猜不到），记录 id 仍用可读前缀方便排查
         const objPath = randObjName() + '.' + ext;
 
-        const upRes = await fetch(SUPABASE_URL + '/storage/v1/object/' + PAY_BUCKET + '/' + encodeURIComponent(objPath), {
+        const upRes = await sbFetch('/storage/v1/object/' + PAY_BUCKET + '/' + encodeURIComponent(objPath), {
           method: 'POST',
           headers: {
             'apikey': SUPABASE_ANON,
@@ -1953,7 +1978,7 @@
           withdrawn_at: ''
         });
         const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
-        const res = await fetch(SUPABASE_URL + '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(ctx.key),
+        const res = await sbFetch('/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(ctx.key),
           { method: 'PATCH', headers: h, body: JSON.stringify({ image_data: imgData }) });
         if (!res.ok) throw new Error('登记失败（HTTP ' + res.status + '）');
 
@@ -1997,7 +2022,7 @@
         hit.status = '已撤回';
         hit.withdrawn_at = new Date().toLocaleString('zh-CN');
         const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
-        const res = await fetch(SUPABASE_URL + '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key),
+        const res = await sbFetch('/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key),
           { method: 'PATCH', headers: h, body: JSON.stringify({ image_data: imgData }) });
         if (!res.ok) throw new Error('撤销失败（' + res.status + '），请重试');
         showToast('已撤销，可以重新上传');
@@ -2307,7 +2332,7 @@
           reply: ''
         });
         const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
-        const res = await fetch(SUPABASE_URL + '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key), { method: 'PATCH', headers: h, body: JSON.stringify({ image_data: imgData }) });
+        const res = await sbFetch('/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key), { method: 'PATCH', headers: h, body: JSON.stringify({ image_data: imgData }) });
         if (!res.ok) { throw new Error('HTTP ' + res.status); }
         saveMyFbCode(key, newCode);
         showFbSubmitResult(newCode);
