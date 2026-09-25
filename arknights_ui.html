@@ -2963,6 +2963,63 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
     window.togglePayReviewExpand = togglePayReviewExpand;
 
+    // ── ✕「收起这组」：核完了的批次从列表里拿走，**不删任何记录**（2026-09-25 团长要的） ──
+    //    只写本机记忆（localStorage，跟页面上「移除批次选项」同一套路），
+    //    换电脑/清缓存会重新出现 —— 但记录一条都没少，随时能「↺」恢复。
+    //    ⚠️ 有待审核的组不给收（否则等于把没干完的活藏起来）。
+    let PAY_REVIEW_HIDDEN = (function () {
+      try {
+        const raw = JSON.parse(localStorage.getItem('ADMIN_PAY_REVIEW_HIDDEN') || '[]');
+        const o = {};
+        (Array.isArray(raw) ? raw : []).forEach(function (n) { if (n) o[String(n)] = true; });
+        return o;
+      } catch (e) { return {}; }
+    })();
+
+    function _payReviewHiddenSave() {
+      try {
+        localStorage.setItem('ADMIN_PAY_REVIEW_HIDDEN',
+          JSON.stringify(Object.keys(PAY_REVIEW_HIDDEN).filter(function (k) { return PAY_REVIEW_HIDDEN[k]; })));
+      } catch (e) {}
+    }
+
+    let _payGroupHideArmed = {};
+    function hidePayReviewGroup(idx) {
+      const name = (window.__PR_GROUPS || [])[idx];
+      if (!name) return;
+      const pend = (Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : [])
+        .filter(function (p) { return _proofGroupName(p) === name && _proofIsPending(p); }).length;
+      if (pend) return showToast('这组还有 ' + pend + ' 笔待审核 —— 先处理完（或驳回）再收起');
+      const btn = document.querySelector('[data-hidegrp="' + idx + '"]');
+      if (!_payGroupHideArmed[name]) {   // 两段式，防误触（同「确认收款」的规矩）
+        _payGroupHideArmed[name] = true;
+        if (btn) btn.innerText = '⚠️ 再点一次收起';
+        setTimeout(function () {
+          _payGroupHideArmed[name] = false;
+          const b2 = document.querySelector('[data-hidegrp="' + idx + '"]');
+          if (b2) b2.innerText = '✕ 收起这组';
+        }, 4000);
+        return;
+      }
+      _payGroupHideArmed[name] = false;
+      PAY_REVIEW_HIDDEN[name] = true;
+      _payReviewHiddenSave();
+      if (PAY_REVIEW_GROUP_FILTER === name) PAY_REVIEW_GROUP_FILTER = '';
+      renderPayReview();
+      showToast('已收起「' + name + '」—— 记录还在，想再看点顶部那个「↺」');
+    }
+    window.hidePayReviewGroup = hidePayReviewGroup;
+
+    function restorePayReviewGroup(idx) {
+      const name = (window.__PR_GROUPS || [])[idx];
+      if (!name) return;
+      delete PAY_REVIEW_HIDDEN[name];
+      _payReviewHiddenSave();
+      renderPayReview();
+      showToast('已恢复显示「' + name + '」');
+    }
+    window.restorePayReviewGroup = restorePayReviewGroup;
+
     /* 一个批次 = 一张折叠卡（头部分组小计 + 操作，下面挂凭证卡） */
     function _payReviewGroupHtml(g, idx) {
       const pending = g.items.filter(_proofIsPending);
@@ -2990,9 +3047,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             ' ｜ 已通过 ' + passed.length + ' 笔 ￥' + _proofSum(passed).toFixed(2) +
             ' ｜ 共 ' + Object.keys(who).length + ' 人' +
           '</div>' +
-          '<div style="display:flex; gap:6px; flex-wrap:wrap;">' +
+          '<div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">' +
             '<button class="btn btn-secondary" style="padding:5px 11px; font-size:0.8rem;" onclick="copyBatchProofList(window.__PR_GROUPS[' + idx + '])">📋 复制本批次清单</button>' +
             '<button class="btn btn-secondary" style="padding:5px 11px; font-size:0.8rem;" onclick="setPayReviewGroup(window.__PR_GROUPS[' + idx + '])">' + (active ? '👁 恢复显示全部' : '👁 只看这组') + '</button>' +
+            (pending.length ? '' :
+              '<button class="btn btn-secondary" data-hidegrp="' + idx + '" style="padding:5px 11px; font-size:0.8rem;" title="这组已经核完了，从列表里拿走（记录不会删，随时能恢复）" onclick="hidePayReviewGroup(' + idx + ')">✕ 收起这组</button>') +
           '</div>' +
         '</div>' +
         '<div style="display:flex; flex-direction:column; gap:10px; padding:12px;">' +
@@ -3045,6 +3104,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         return a.localeCompare(b, 'zh');
       });
       window.__PR_GROUPS = keys;   // onclick 里按索引取名字（避免批次名带引号时拼坏 HTML）
+      const visibleKeys = keys.filter(function (k) { return !PAY_REVIEW_HIDDEN[k]; });   // 被「✕ 收起」的组不显示
+      const hiddenKeys = keys.filter(function (k) { return !!PAY_REVIEW_HIDDEN[k]; });
 
       if (filterEl) {
         const chip = function (labelHtml, active, onclickJs, tail) {
@@ -3053,15 +3114,33 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         };
         filterEl.innerHTML =
           chip('全部批次', !PAY_REVIEW_GROUP_FILTER, "setPayReviewGroup('')", '（' + all.length + ' 笔）') +
-          keys.map(function (k, i) {
+          visibleKeys.map(function (k) {
             const pd = gmap[k].items.filter(_proofIsPending).length;
             return chip(escapeHtml(k), PAY_REVIEW_GROUP_FILTER === k,
-                        'setPayReviewGroup(window.__PR_GROUPS[' + i + '])',
+                        'setPayReviewGroup(window.__PR_GROUPS[' + keys.indexOf(k) + '])',
                         '（' + (pd ? ('待审 ' + pd) : (gmap[k].items.length + ' 笔')) + '）');
-          }).join('');
+          }).join('') +
+          (hiddenKeys.length
+            ? '<span style="font-size:0.78rem; color:var(--text-muted); align-self:center; margin-left:4px;">👁 已收起：</span>' +
+              hiddenKeys.map(function (k) {
+                return '<button class="btn btn-secondary" style="padding:4px 10px; font-size:0.78rem; opacity:0.8;" title="点一下恢复显示（记录一直都在，没删）" onclick="restorePayReviewGroup(' + keys.indexOf(k) + ')">' +
+                       escapeHtml(k) + ' ↺</button>';
+              }).join('')
+            : '');
       }
 
-      const shown = PAY_REVIEW_GROUP_FILTER ? keys.filter(function (k) { return k === PAY_REVIEW_GROUP_FILTER; }) : keys;
+      const shown = PAY_REVIEW_GROUP_FILTER
+        ? visibleKeys.filter(function (k) { return k === PAY_REVIEW_GROUP_FILTER; })
+        : visibleKeys;
+      if (!shown.length) {
+        listEl.innerHTML = '<div style="padding:24px; text-align:center; color:var(--text-muted);">' +
+          (visibleKeys.length
+            ? '这个批次已经被收起了 —— 点顶部的批次名「↺」就能恢复显示。'
+            : '所有批次都收起来了 —— <strong>' + all.length + ' 笔记录一条都没删</strong>，点顶部的批次名「↺」随点随回来。<br>' +
+              '<span style="font-size:0.85rem;">（收起只影响这台电脑的显示，不动任何数据。）</span>') +
+          '</div>';
+        return;
+      }
       listEl.innerHTML = shown.map(function (k) { return _payReviewGroupHtml(gmap[k], keys.indexOf(k)); }).join('');
       shown.forEach(function (k) {
         _payReviewCardsOf(gmap[k]).forEach(function (p) { _loadProofThumb(p); });
