@@ -1859,9 +1859,39 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
 
     const COUNTRY_OPTIONS = ['日本', '台湾', '印尼', '泰国', '美国', '韩国', '闲鱼', '淘宝店', '其它'];
 
-    const SUPABASE_URL = 'https://oknhlfhdqbsukskdxqre.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_UW9cgyBOeV6zIZCicI2SlQ_bqm0MeJa';
-    const supabaseClient = (window.supabase || supabase).createClient(SUPABASE_URL, SUPABASE_KEY);
+    /* ── 数据通道（2026-09-25）────────────────────────────────────────────
+       *.supabase.co 在国内部分网络被按域名(SNI)阻断：DNS 正常、TCP 能连，
+       但 TLS 握手一带上该域名就被 RST（团员端实测「查询异常: Failed to fetch」）。
+       后台同样改走本站同源反代 /sb/*（Cloudflare Pages Function → Supabase）。
+       supabase-js 需要绝对地址，故用 location.origin 拼。
+       ⚠️ 显式指定 auth.storageKey：否则键名会跟着 hostname 变，
+          团长已登录的会话会丢失（实测原键为 sb-oknhlfhdqbsukskdxqre-auth-token）。
+       反代探不通（未部署/异常）→ 自动重建客户端指回直连，后台不会因此瘫痪。 */
+    const SUPABASE_DIRECT = 'https://oknhlfhdqbsukskdxqre.supabase.co';
+    const SB_AUTH_STORAGE_KEY = 'sb-oknhlfhdqbsukskdxqre-auth-token';
+    function sbPageBase(){
+      try {
+        if (location.protocol === 'http:' || location.protocol === 'https:') return location.origin + '/sb';
+      } catch (e) {}
+      return SUPABASE_DIRECT;
+    }
+    function sbNewClient(base){
+      return (window.supabase || supabase).createClient(base, SUPABASE_KEY, {
+        auth: { storageKey: SB_AUTH_STORAGE_KEY, persistSession: true, autoRefreshToken: true },
+      });
+    }
+    let SB_ACTIVE_BASE = sbPageBase();
+    let supabaseClient = sbNewClient(SB_ACTIVE_BASE);
+    (async function(){
+      try {
+        const r = await fetch('/sb/__health', { cache: 'no-store' });
+        if (r.ok) { const j = await r.json(); if (j && j.ok) return; }
+      } catch (e) {}
+      SB_ACTIVE_BASE = SUPABASE_DIRECT;
+      supabaseClient = sbNewClient(SUPABASE_DIRECT);
+      console.warn('[数据通道] 同源反代不可用，已回退直连 Supabase');
+    })();
 
     let CURRENT_RECORD_ID = null;
     let CURRENT_VERSION = null;
@@ -2773,7 +2803,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (!path) return '';
       try {
         const safe = String(path).split('/').filter(Boolean).map(encodeURIComponent).join('/');
-        return SUPABASE_URL + '/storage/v1/object/public/pay-proofs/' + safe;
+        return SB_ACTIVE_BASE + '/storage/v1/object/public/pay-proofs/' + safe;
       } catch (e) { return ''; }
     }
 
