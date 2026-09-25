@@ -3,6 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+  /* 🛡️ 快照地址保险（2026-09-25）
+     背景：Cloudflare Pages 每部署一次，都会额外产生一个**永久**快照地址
+           <8位16进制>.<项目>.pages.dev，它会永远停留在生成那天的版本。
+     对策：只针对这种快照地址自动跳回正式域名；正式域名本身、本地 file:// 预览一律不受影响。 */
+  (function () {
+    var h = (location.hostname || '').toLowerCase();
+    if (/^[0-9a-f]{8}\.endfield-av3\.pages\.dev$/.test(h)) {
+      location.replace('https://endfield-av3.pages.dev' + location.pathname + location.search + location.hash);
+    }
+  })();
+  </script>
   <title>山团团管理组 · 团长后台管理系统（试用版）</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
