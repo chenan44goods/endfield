@@ -1405,6 +1405,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           </div>
         </div>
         <div id="payReviewSummary" style="font-size:0.9rem; margin-bottom:12px; line-height:2; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px 12px;"></div>
+        <div id="payReviewFilters" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;"></div>
         <div id="payNoticeBox" style="display:none; margin-bottom:12px; border:1px solid #bbf7d0; background:#f0fdf4; border-radius:8px; padding:10px 12px;"></div>
         <div id="payReviewList" style="display:flex; flex-direction:column; gap:12px;"></div>
       </div>
@@ -2870,16 +2871,149 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       el.innerHTML = '<img src="' + url + '" style="width:100%; height:100%; object-fit:cover; cursor:zoom-in;" onclick="window.open(this.src,\'_blank\')">';
     }
 
+    // ==========================================
+    // 📦 交款审核：按批次分组（2026-09-25 新增）
+    //    团长诉求：「团里收钱是不同的人在收，方便各自核对」
+    //    —— 一个批次通常由一位负责人收款，所以按批次拆开、各自小计，
+    //       并可一键复制该批次清单，直接发给那位收款人对账。
+    //    ⚠️ 分组只是"显示层"，底层数据仍是同一个 pay_proofs 数组（不新增字段、不改团员端）。
+    // ==========================================
+    let PAY_REVIEW_GROUP_FILTER = '';   // '' = 显示全部批次；否则只显示该批次
+    let PAY_REVIEW_EXPANDED = {};       // 批次名 -> true（该组"已处理"记录全展开）
+
+    /* 一条凭证属于哪个批次（分组键）。空批次名归入「未注明批次」，避免整组消失。 */
+    function _proofGroupName(p) {
+      const n = Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names;
+      const s = String(n == null ? '' : n).trim();
+      return s || '未注明批次';
+    }
+    function _proofIsPending(p) { return String(p.status || '待审核') === '待审核'; }
+    function _proofSum(arr) { return arr.reduce(function (a, p) { return a + (Number(p.amount) || 0); }, 0); }
+
+    /* 该组当前要显示的卡片：待审核全显示 + 已处理的前 3 条（可手动展开全部） */
+    function _payReviewCardsOf(g) {
+      const pending = g.items.filter(_proofIsPending);
+      const done = g.items.filter(function (p) { return !_proofIsPending(p); });
+      const showDone = PAY_REVIEW_EXPANDED[g.name] ? done : done.slice(0, 3);
+      return pending.concat(showDone);
+    }
+
+    /* 该批次的核对清单文案（发给对应收款人用；只含姓名/金额/方式/时间，不含截图链接） */
+    function buildBatchProofList(batchName) {
+      const all = (Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : [])
+        .filter(function (p) { return _proofGroupName(p) === batchName; });
+      const pending = all.filter(_proofIsPending);
+      const passed = all.filter(function (p) { return String(p.status || '') === '已通过'; });
+      const other = all.filter(function (p) {
+        const s = String(p.status || '待审核');
+        return !_proofIsPending(p) && s !== '已通过';
+      });
+      const one = function (p) {
+        const m = String(p.pay_method || '').trim();
+        return '· ' + String(p.cn || '（未填CN）') + ' ￥' + (Number(p.amount) || 0).toFixed(2) +
+               (m ? '（' + m + '）' : '') + (p.created_at ? ' ' + String(p.created_at) : '');
+      };
+      const out = ['📋 ' + batchName + ' · 交款核对清单'];
+      out.push('待审核 ' + pending.length + ' 笔 ￥' + _proofSum(pending).toFixed(2) +
+               ' ｜ 已通过 ' + passed.length + ' 笔 ￥' + _proofSum(passed).toFixed(2));
+      if (pending.length) { out.push(''); out.push('【待审核 ' + pending.length + ' 笔】'); pending.forEach(function (p) { out.push(one(p)); }); }
+      if (passed.length) { out.push(''); out.push('【已通过 ' + passed.length + ' 笔】'); passed.forEach(function (p) { out.push(one(p)); }); }
+      if (other.length) { out.push(''); out.push('【已驳回 / 已撤回 ' + other.length + ' 笔】'); other.forEach(function (p) { out.push(one(p)); }); }
+      return out.join('\n');
+    }
+
+    /* 复制文本（后台在电脑上打开，但沿用项目里那套 textarea + execCommand，兼容性最稳） */
+    function _copyTextToClipboard(text, okMsg) {
+      const ta = document.createElement('textarea');
+      ta.value = String(text || '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      try {
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, 99999);
+        const ok = document.execCommand('copy');
+        showToast(ok ? (okMsg || '✅ 已复制') : '请手动复制');
+        return ok;
+      } catch (e) {
+        showToast('复制失败，请手动复制');
+        return false;
+      } finally {
+        if (ta.parentNode) ta.parentNode.removeChild(ta);
+      }
+    }
+
+    function copyBatchProofList(batchName) {
+      _copyTextToClipboard(buildBatchProofList(batchName),
+        '✅ 「' + batchName + '」清单已复制，发给这位收款人核对就行');
+    }
+    window.copyBatchProofList = copyBatchProofList;
+
+    /* 只看某一组（再点一次 = 恢复全部） */
+    function setPayReviewGroup(name) {
+      PAY_REVIEW_GROUP_FILTER = (PAY_REVIEW_GROUP_FILTER === name) ? '' : name;
+      renderPayReview();
+    }
+    window.setPayReviewGroup = setPayReviewGroup;
+
+    function togglePayReviewExpand(name) {
+      PAY_REVIEW_EXPANDED[name] = !PAY_REVIEW_EXPANDED[name];
+      renderPayReview();
+    }
+    window.togglePayReviewExpand = togglePayReviewExpand;
+
+    /* 一个批次 = 一张折叠卡（头部分组小计 + 操作，下面挂凭证卡） */
+    function _payReviewGroupHtml(g, idx) {
+      const pending = g.items.filter(_proofIsPending);
+      const done = g.items.filter(function (p) { return !_proofIsPending(p); });
+      const passed = done.filter(function (p) { return String(p.status || '') === '已通过'; });
+      const expanded = !!PAY_REVIEW_EXPANDED[g.name];
+      const showDone = expanded ? done : done.slice(0, 3);
+      const cards = pending.concat(showDone);
+      const who = {};
+      g.items.forEach(function (p) { who[String(p.cn || '?')] = 1; });
+      const active = (PAY_REVIEW_GROUP_FILTER === g.name);
+      const moreBtn = (done.length > showDone.length)
+        ? '<div style="text-align:center;"><button class="btn btn-secondary" style="padding:5px 12px; font-size:0.8rem;" onclick="togglePayReviewExpand(window.__PR_GROUPS[' + idx + '])">▾ 展开其余 ' + (done.length - showDone.length) + ' 条已处理记录</button></div>'
+        : ((expanded && done.length > 3)
+          ? '<div style="text-align:center;"><button class="btn btn-secondary" style="padding:5px 12px; font-size:0.8rem;" onclick="togglePayReviewExpand(window.__PR_GROUPS[' + idx + '])">▴ 收起已处理记录</button></div>'
+          : '');
+
+      return '<div style="border:1px solid ' + (pending.length ? '#fcd34d' : 'var(--border)') + '; border-radius:12px; background:#fbfdff; overflow:hidden;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 12px; background:' + (pending.length ? '#fffbeb' : '#f8fafc') + '; border-bottom:1px solid var(--border);">' +
+          '<div style="font-weight:800; font-size:0.95rem;">📦 ' + escapeHtml(g.name) +
+            (active ? ' <span style="font-size:0.72rem; font-weight:600; color:#0369a1;">（正在只看这一组）</span>' : '') +
+          '</div>' +
+          '<div style="font-size:0.82rem; color:var(--text-muted); line-height:1.7;">' +
+            '待审核 <strong style="color:' + (pending.length ? '#dc2626' : '#16a34a') + ';">' + pending.length + '</strong> 笔 ￥' + _proofSum(pending).toFixed(2) +
+            ' ｜ 已通过 ' + passed.length + ' 笔 ￥' + _proofSum(passed).toFixed(2) +
+            ' ｜ 共 ' + Object.keys(who).length + ' 人' +
+          '</div>' +
+          '<div style="display:flex; gap:6px; flex-wrap:wrap;">' +
+            '<button class="btn btn-secondary" style="padding:5px 11px; font-size:0.8rem;" onclick="copyBatchProofList(window.__PR_GROUPS[' + idx + '])">📋 复制本批次清单</button>' +
+            '<button class="btn btn-secondary" style="padding:5px 11px; font-size:0.8rem;" onclick="setPayReviewGroup(window.__PR_GROUPS[' + idx + '])">' + (active ? '👁 恢复显示全部' : '👁 只看这组') + '</button>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex; flex-direction:column; gap:10px; padding:12px;">' +
+          (cards.length ? cards.map(_payProofCardHtml).join('')
+                        : '<div style="padding:10px; text-align:center; color:var(--text-muted); font-size:0.85rem;">这一批暂无凭证。</div>') +
+          moreBtn +
+        '</div>' +
+      '</div>';
+    }
+
     function renderPayReview() {
       const listEl = document.getElementById('payReviewList');
       const sumEl = document.getElementById('payReviewSummary');
+      const filterEl = document.getElementById('payReviewFilters');
       if (!listEl) return;
       const all = Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : [];
-      const pending = all.filter(function (p) { return String(p.status || '待审核') === '待审核'; });
+      const pending = all.filter(_proofIsPending);
       const passed = all.filter(function (p) { return String(p.status || '') === '已通过'; });
       const withdrawn = all.filter(function (p) { return String(p.status || '') === '已撤回'; });
-      const pendAmt = pending.reduce(function (a, p) { return a + (Number(p.amount) || 0); }, 0);
-      const passAmt = passed.reduce(function (a, p) { return a + (Number(p.amount) || 0); }, 0);
+      const pendAmt = _proofSum(pending);
+      const passAmt = _proofSum(passed);
       const mismatch = pending.filter(function (p) { return _payProofCheck(p).state === 'mismatch'; });
 
       if (sumEl) {
@@ -2892,14 +3026,46 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       }
 
       if (!all.length) {
+        if (filterEl) filterEl.innerHTML = '';
         listEl.innerHTML = '<div style="padding:24px; text-align:center; color:var(--text-muted);">还没有团员提交付款凭证。<br><span style="font-size:0.85rem;">团员在自查页「交肾核算」里上传后会出现在这里。</span></div>';
         return;
       }
 
-      const rest = all.filter(function (p) { return String(p.status || '待审核') !== '待审核'; }).slice(0, 20);
-      const show = pending.concat(rest);
-      listEl.innerHTML = show.map(_payProofCardHtml).join('');
-      show.forEach(function (p) { _loadProofThumb(p); });
+      // 按批次归组；有「待审核」的组排前面（收钱的人先看到自己那摊没核完的）
+      const gmap = {};
+      all.forEach(function (p) {
+        const k = _proofGroupName(p);
+        if (!gmap[k]) gmap[k] = { name: k, items: [] };
+        gmap[k].items.push(p);
+      });
+      const keys = Object.keys(gmap).sort(function (a, b) {
+        const pa = gmap[a].items.filter(_proofIsPending).length;
+        const pb = gmap[b].items.filter(_proofIsPending).length;
+        if (pa !== pb) return pb - pa;
+        return a.localeCompare(b, 'zh');
+      });
+      window.__PR_GROUPS = keys;   // onclick 里按索引取名字（避免批次名带引号时拼坏 HTML）
+
+      if (filterEl) {
+        const chip = function (labelHtml, active, onclickJs, tail) {
+          return '<button class="btn ' + (active ? 'btn-primary' : 'btn-secondary') + '" style="padding:5px 11px; font-size:0.8rem;" onclick="' + onclickJs + '">' +
+                 labelHtml + (tail ? ' ' + tail : '') + '</button>';
+        };
+        filterEl.innerHTML =
+          chip('全部批次', !PAY_REVIEW_GROUP_FILTER, "setPayReviewGroup('')", '（' + all.length + ' 笔）') +
+          keys.map(function (k, i) {
+            const pd = gmap[k].items.filter(_proofIsPending).length;
+            return chip(escapeHtml(k), PAY_REVIEW_GROUP_FILTER === k,
+                        'setPayReviewGroup(window.__PR_GROUPS[' + i + '])',
+                        '（' + (pd ? ('待审 ' + pd) : (gmap[k].items.length + ' 笔')) + '）');
+          }).join('');
+      }
+
+      const shown = PAY_REVIEW_GROUP_FILTER ? keys.filter(function (k) { return k === PAY_REVIEW_GROUP_FILTER; }) : keys;
+      listEl.innerHTML = shown.map(function (k) { return _payReviewGroupHtml(gmap[k], keys.indexOf(k)); }).join('');
+      shown.forEach(function (k) {
+        _payReviewCardsOf(gmap[k]).forEach(function (p) { _loadProofThumb(p); });
+      });
     }
     window.renderPayReview = renderPayReview;
 
