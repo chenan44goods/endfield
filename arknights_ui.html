@@ -1366,6 +1366,13 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         <div class="card-title">
           <span>💰 收款对账统计 (group_data)</span>
           <div class="btn-group">
+            <label style="display:flex; align-items:center; gap:4px; font-size:0.82rem; color:var(--text-muted); white-space:nowrap;">
+              排序
+              <select id="payStatsSortMode" onchange="onPayStatsSortChange()" style="font-size:0.82rem; padding:3px 6px; border-radius:6px;" title="「最近录入」= 你最近往哪个批次录过东西，它就排最上面">
+                <option value="time" selected>最近录入优先</option>
+                <option value="due">应收金额优先</option>
+              </select>
+            </label>
             <label style="display:flex; align-items:center; gap:4px; font-size:0.82rem; color:var(--text-muted); white-space:nowrap; cursor:pointer;" title="勾选后一并统计状态为「已完全全部收款」的归档批次">
               <input type="checkbox" id="payStatsIncludeArchived" onchange="onPayStatsToggleArchived()"> 包含已收款完结批次
             </label>
@@ -2664,8 +2671,28 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     // ==========================================
     let PAY_STATS_INCLUDE_ARCHIVED = false;
     let PAY_STATS_CACHE = [];
+    // 🔽 排序口径（2026-09-27 团长要求）：默认「最近录入优先」——
+    //    原先固定按「应收金额」降序，跟录入时间无关，团长要找今天刚录的批次得一行行翻。
+    //    'time' = 每个批次取「最近一次录入时间」(max created_at) 倒序；'due' = 老口径（应收金额降序）。
+    let PAY_STATS_SORT = 'time';
 
     function isOrderPaid(it) { return String((it && it.status) || '').trim() !== '未付款'; }
+
+    /* 把 created_at（ISO 串，老数据也可能是别的写法）转成毫秒时间戳；解析不了 → 0 */
+    function _payTs(v) {
+      const s = String(v == null ? '' : v).trim();
+      if (!s) return 0;
+      const t = Date.parse(s);
+      return isNaN(t) ? 0 : t;
+    }
+
+    /* 时间戳 → 「MM-DD HH:mm」显示 */
+    function _fmtPayTs(ts) {
+      if (!ts) return '';
+      const d = new Date(ts);
+      const p = function (n) { return (n < 10 ? '0' : '') + n; };
+      return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+    }
 
     function _payMethodKey(pm) {
       const s = String(pm || '').trim();
@@ -2686,7 +2713,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         if (!includeArchived && bn !== '默认批次' && isArchivedBatchName(bn)) return;
         const amt = (Number(it.price) || 0) * (Number(it.quantity) || 1);
         let b = batches[bn];
-        if (!b) { b = { name: bn, due: 0, recv: 0, cnt: 0, unpaidCnt: 0, members: new Set(), methods: { '微信': 0, '支付宝': 0, '其他': 0, '未注明': 0 } }; batches[bn] = b; }
+        if (!b) { b = { name: bn, due: 0, recv: 0, cnt: 0, unpaidCnt: 0, firstTs: 0, lastTs: 0, members: new Set(), methods: { '微信': 0, '支付宝': 0, '其他': 0, '未注明': 0 } }; batches[bn] = b; }
+        // 📅 录入时间：firstTs = 该批次最早一条的录入时间；lastTs = 最近一条（团长要的排序依据）
+        const _ts = _payTs(it.created_at);
+        if (_ts) {
+          if (!b.firstTs || _ts < b.firstTs) b.firstTs = _ts;
+          if (_ts > b.lastTs) b.lastTs = _ts;
+        }
         b.due += amt; b.cnt += 1; b.members.add(String(it.cn || ''));
         due += amt; cnt += 1; overallMembers.add(String(it.cn || ''));
         if (isOrderPaid(it)) {
@@ -2699,8 +2732,14 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       });
       const list = Object.keys(batches).map(function (k) {
         const b = batches[k];
-        return { name: b.name, cnt: b.cnt, members: b.members.size, due: r2(b.due), recv: r2(b.recv), unpaid: r2(b.due - b.recv), unpaidCnt: b.unpaidCnt, methods: b.methods, archived: isArchivedBatchName(b.name) };
-      }).sort(function (a, b) { return b.due - a.due || b.unpaid - a.unpaid; });
+        return { name: b.name, cnt: b.cnt, members: b.members.size, due: r2(b.due), recv: r2(b.recv), unpaid: r2(b.due - b.recv), unpaidCnt: b.unpaidCnt, methods: b.methods, archived: isArchivedBatchName(b.name), firstTs: b.firstTs, lastTs: b.lastTs };
+      }).sort(function (a, b) {
+        // 主排序：按团长选的模式；并列时一律用「未收多的靠前」兜底，保证顺序稳定可预期
+        if (PAY_STATS_SORT === 'time') {
+          return (b.lastTs - a.lastTs) || (b.due - a.due) || (b.unpaid - a.unpaid);
+        }
+        return (b.due - a.due) || (b.unpaid - a.unpaid);
+      });
       Object.keys(methods).forEach(function (k) { methods[k] = r2(methods[k]); });
       return { list: list, overall: { cnt: cnt, members: overallMembers.size, due: r2(due), recv: r2(recv), unpaid: r2(due - recv), unpaidCnt: unpaidCnt, methods: methods } };
     }
@@ -2734,8 +2773,12 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       let html = '', cardsHtml = '';
       s.list.forEach(function (b, i) {
         const needCls = b.unpaid > 0.0000001 ? 'badge-status-未付款' : 'badge-status-可排发';
+        const lastTxt = b.lastTs ? _fmtPayTs(b.lastTs) : '';
+        const timeLine = lastTxt
+          ? '<div style="font-size:0.72rem; color:var(--text-muted); font-weight:400;">最近录入 ' + lastTxt + '</div>'
+          : '<div style="font-size:0.72rem; color:var(--text-muted); font-weight:400;">无录入时间</div>';
         html += '<tr>' +
-          '<td style="font-weight:600;">' + escapeHtml(b.name) + (b.archived ? ' <span class="badge badge-status-custom" style="font-size:0.7rem;">已完结</span>' : '') + '</td>' +
+          '<td style="font-weight:600;">' + escapeHtml(b.name) + (b.archived ? ' <span class="badge badge-status-custom" style="font-size:0.7rem;">已完结</span>' : '') + timeLine + '</td>' +
           '<td>' + b.members + '</td>' +
           '<td>￥' + b.due.toFixed(2) + '</td>' +
           '<td style="color:#16a34a; font-weight:600;">￥' + b.recv.toFixed(2) + '</td>' +
@@ -2743,7 +2786,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           '<td>' + (b.unpaidCnt ? '<span class="badge ' + needCls + '">' + b.unpaidCnt + '</span>' : '<span style="color:var(--text-muted);">—</span>') + '</td>' +
           '<td><button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem;" onclick="openPayDetail(' + i + ')">明细</button></td>' +
           '</tr>';
-        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(b.name) + '</span><span class="badge ' + needCls + '">未付款 ' + b.unpaidCnt + '</span></div><div style="font-size:0.9rem; padding:6px 0;">' + b.members + ' 人 | 应收 ￥' + b.due.toFixed(2) + '<br>实收 ￥' + b.recv.toFixed(2) + ' | 未收 ￥' + b.unpaid.toFixed(2) + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openPayDetail(' + i + ')">📋 明细</button></div></div>';
+        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(b.name) + '</span><span class="badge ' + needCls + '">未付款 ' + b.unpaidCnt + '</span></div><div style="font-size:0.9rem; padding:6px 0;">' + b.members + ' 人 | 应收 ￥' + b.due.toFixed(2) + '<br>实收 ￥' + b.recv.toFixed(2) + ' | 未收 ￥' + b.unpaid.toFixed(2) + '<br><span style="font-size:0.78rem; color:var(--text-muted);">最近录入 ' + (lastTxt || '—') + '</span></div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openPayDetail(' + i + ')">📋 明细</button></div></div>';
       });
       tbody.innerHTML = html;
       if (mobileView) mobileView.innerHTML = cardsHtml;
@@ -2756,6 +2799,14 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       renderPayStats();
     }
     window.onPayStatsToggleArchived = onPayStatsToggleArchived;
+
+    /* 🔽 切换排序口径（纯显示层，不动任何数据） */
+    function onPayStatsSortChange() {
+      const sel = document.getElementById('payStatsSortMode');
+      PAY_STATS_SORT = (sel && sel.value) === 'due' ? 'due' : 'time';
+      renderPayStats();
+    }
+    window.onPayStatsSortChange = onPayStatsSortChange;
 
     function openPayDetail(idx) {
       const batch = PAY_STATS_CACHE[idx];
