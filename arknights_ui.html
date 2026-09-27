@@ -1428,42 +1428,81 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         </div>
       </div>
 
-      <!-- 🧮 计算岛内运费（2026-09-27 团长要求）：按件数占比均摊 → 给每人新增一条「岛内运费」 -->
+      <!-- 🧮 岛内运费（2026-09-27 团长要求）：数据源＝「排表管理」group_data 里的批次，
+           不是国际运费 logistics_data 的批次（2026-09-27 团长指正后改正） -->
       <div class="card">
         <div class="card-title">
-          <span>🧮 计算岛内运费（按件数均摊）</span>
+          <span>🧮 岛内运费</span>
+          <span style="font-size:0.82rem; color:var(--text-muted);">名单取自「排表管理」的批次</span>
         </div>
-        <div style="display:flex; flex-direction:column; gap:12px;">
-          <div style="font-size:0.82rem; color:var(--text-muted); line-height:1.7;">
-            填这一批的岛内运费总额（人民币），按每个人在这批里的<b>件数</b>占比分摊，算好后给每人<b>新增一条「岛内运费」</b>，
-            原来的「国际运费」那条不动。<br>
-            例：总额 ￥100.00，全批 20 件，你有 3 件 → 你分摊 ￥15.00。<b>标了「免交」的人不参与</b>。
+        <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+          <button class="btn btn-primary" id="islandModeBtn_auto" onclick="switchIslandMode('auto')">① 按件数自动均摊</button>
+          <button class="btn btn-secondary" id="islandModeBtn_import" onclick="switchIslandMode('import')">② 自己粘贴导入</button>
+        </div>
+
+        <!-- 模式 ①：按件数自动均摊 -->
+        <div id="islandMode_auto">
+          <div style="font-size:0.82rem; color:var(--text-muted); line-height:1.7; margin-bottom:10px;">
+            选一个排表批次 + 填这次岛内的总运费（人民币），按每个人在这批里的<b>件数</b>占比摊下去。
+            算好后给每人<b>新增一条「岛内运费」</b>，原先的国际运费那条一个字不动。<br>
+            例：总额 ￥100.00，全批 20 件，你有 3 件 → 你分摊 ￥15.00。
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
-            <div style="flex:1; min-width:240px;">
-              <label style="font-size:0.82rem; color:var(--text-muted); font-weight:600; display:block; margin-bottom:4px;">选择批次</label>
+            <div style="flex:1; min-width:220px;">
+              <label style="font-size:0.82rem; color:var(--text-muted); font-weight:600; display:block; margin-bottom:4px;">排表批次</label>
               <select id="islandBatchSelect" style="width:100%;"></select>
             </div>
-            <div style="width:180px;">
+            <div style="width:170px;">
               <label style="font-size:0.82rem; color:var(--text-muted); font-weight:600; display:block; margin-bottom:4px;">岛内总额（元）</label>
               <input type="number" id="islandTotalInput" step="0.01" min="0" placeholder="例如 120.00" style="width:100%;">
             </div>
             <button class="btn btn-primary" onclick="previewIslandAllocation()">开始计算</button>
           </div>
-          <div id="islandPreviewBox" style="display:none;">
-            <div id="islandPreviewSummary" style="font-size:0.85rem; line-height:1.8; margin-bottom:10px; padding:10px 12px; background:var(--bg-subtle, #f1f5f9); border-radius:8px;"></div>
-            <div class="table-container" style="max-height:380px; overflow:auto;">
-              <table>
-                <thead>
-                  <tr><th>圈名</th><th>件数</th><th>占比</th><th>应分摊（元·可改）</th></tr>
-                </thead>
-                <tbody id="islandPreviewBody"></tbody>
-              </table>
+          <label style="display:flex; align-items:center; gap:6px; font-size:0.8rem; color:var(--text-muted); margin-top:8px; cursor:pointer;">
+            <input type="checkbox" id="islandSkipFree" checked> 跳过在国际运费里已标「免交」的人
+          </label>
+        </div>
+
+        <!-- 模式 ②：自己粘贴导入 -->
+        <div id="islandMode_import" style="display:none;">
+          <div style="font-size:0.82rem; color:var(--text-muted); line-height:1.7; margin-bottom:10px;">
+            你已经自己算好每人该交多少时用这条路：粘贴下面的格式，
+            <b>那个金额就是这个人这次要交的钱</b>，页面不再重新分摊（照样能逐格手改）。
+          </div>
+          <pre style="margin:0 0 10px; padding:8px 12px; background:var(--bg-subtle, #f1f5f9); border-radius:6px; font-size:0.8rem; line-height:1.6; white-space:pre-wrap;">该次岛内名称
+cn 点数 金额
+某某 1 0.5</pre>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+            <div style="flex:1; min-width:200px;">
+              <label style="font-size:0.82rem; color:var(--text-muted); font-weight:600; display:block; margin-bottom:4px;">这次岛内叫什么（留空就用粘贴的第一行）</label>
+              <input type="text" id="islandImportName" placeholder="例如 7月台湾岛内" style="width:100%;">
             </div>
-            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
-              <button class="btn btn-secondary" onclick="cancelIslandPreview()">取消</button>
-              <button class="btn btn-success" id="islandApplyBtn" onclick="applyIslandAllocation()">写入账目</button>
+            <div style="flex:1; min-width:200px;">
+              <label style="font-size:0.82rem; color:var(--text-muted); font-weight:600; display:block; margin-bottom:4px;">这笔账挂到哪个批次</label>
+              <select id="islandImportBatchSelect" style="width:100%;"></select>
             </div>
+          </div>
+          <textarea id="islandImportText" rows="7" placeholder="该次岛内名称&#10;cn 点数 金额&#10;某某 1 0.5" style="width:100%; font-family:inherit; font-size:0.85rem; line-height:1.7; padding:10px; border:1px solid var(--border-color, #cbd5e1); border-radius:6px; resize:vertical;"></textarea>
+          <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+            <button class="btn btn-primary" onclick="previewIslandImport()">解析预览</button>
+          </div>
+        </div>
+
+        <!-- 预览（两种模式共用） -->
+        <div id="islandPreviewBox" style="display:none; margin-top:14px;">
+          <div id="islandPreviewSummary" style="font-size:0.85rem; line-height:1.8; margin-bottom:10px; padding:10px 12px; background:var(--bg-subtle, #f1f5f9); border-radius:8px;"></div>
+          <div class="table-container" style="max-height:380px; overflow:auto;">
+            <table style="width:100%; table-layout:fixed; min-width:0;">
+              <colgroup><col><col style="width:58px;"><col style="width:132px;"></colgroup>
+              <thead>
+                <tr><th>圈名</th><th>件数</th><th>应分摊（元）</th></tr>
+              </thead>
+              <tbody id="islandPreviewBody"></tbody>
+            </table>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+            <button class="btn btn-secondary" onclick="cancelIslandPreview()">取消</button>
+            <button class="btn btn-success" id="islandApplyBtn" onclick="applyIslandAllocation()">写入账目</button>
           </div>
         </div>
       </div>
@@ -5206,105 +5245,268 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
     window.deleteLogisticsBatch = deleteLogisticsBatch;
 
-    /* ─────────────── 🧮 计算岛内运费（2026-09-27 团长要求） ───────────────
-       口径（团长拍板）：
-         ① 结果怎么落地 = 给每人**新增一条独立记录**（item_name='岛内运费'），原「国际运费」那条不动；
-         ② 输入的是**人民币总额**（他自己换算好）；
-         ③ 标了「免交」的人**不参与**（既不摊钱、也不算分母）；
-         ④ 除不尽时**各自四舍五入到分** → 合计可能与输入总额差几分钱，页面上把差额明写出来。
+    /* ─────────────── 🧮 岛内运费（2026-09-27 团长要求） ───────────────
+       数据源：**「排表管理」group_data 里的批次**（2026-09-27 团长指正后改正 ——
+       不是国际运费 logistics_data 里的批次；批次名 = 排表谷子的 batch_name）。
+       两种用法：
+         ① 按件数自动均摊：选排表批次 + 填岛内总额 → 按每人件数占比摊到分；
+         ② 自己粘贴导入：第一行＝这次岛内名称，之后每行 `cn 点数 金额`，
+            金额就是那个人该交的钱，页面不再重算（= 团长要的「自主导入」）。
+       两条路都写进 image_data.logistics_data（挂到同名批次，没有就新建），
+       团员在自查网站「交肾核算」里就能看到这条费用。
        ⚠️ 岛内记录带 fee_type='island' 标记：合并键靠它和「国际运费」区分开
           （`_logiMemberKey`），否则同一个人两条会被并成一条、岛内那笔凭空消失。 */
     const ISLAND_ITEM_NAME = '岛内运费';
     const ISLAND_FEE_TYPE = 'island';
 
     function _islandRound(x) { return Math.round((Number(x) || 0) * 100) / 100; }
+    function _islandNum(s) {          // 允许「￥12.5」「12.5元」这种写法
+      const t = String(s == null ? '' : s).replace(/[^\d.\-]/g, '');
+      if (!t) return NaN;
+      const v = Number(t);
+      return isFinite(v) ? v : NaN;
+    }
+
+    /* 排表里的批次名（与「排表管理」的批次筛选同源，排除已归档 / 被手动隐藏的）。 */
+    function buildIslandBatchList() {
+      const removed = (typeof getRemovedBatchOptions === 'function') ? getRemovedBatchOptions() : [];
+      const set = new Set();
+      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it) {
+        const bn = String((it && it.batch_name) || '').trim();
+        if (bn) set.add(bn);
+      });
+      return Array.from(set).filter(function (b) {
+        if (removed.indexOf(b) !== -1) return false;
+        return !(typeof isArchivedBatchName === 'function' && isArchivedBatchName(b));
+      });
+    }
+    window.buildIslandBatchList = buildIslandBatchList;
+
+    /* 排表某批次：按 CN 汇总件数（同一个人多条谷子会相加）。 */
+    function islandQtyByCn(batchName) {
+      const byCn = {};
+      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        if (String(it.batch_name || '').trim() !== batchName) return;
+        const cn = String(it.cn || '').trim();
+        if (!cn) return;
+        let q = Number(it.quantity);
+        if (!isFinite(q) || q <= 0) q = 1;
+        byCn[cn] = (byCn[cn] || 0) + q;
+      });
+      return byCn;
+    }
+    window.islandQtyByCn = islandQtyByCn;
+
+    /* 取（必要时新建）logistics_data 里的批次对象；落库统一交给 saveDataToSupabase。 */
+    function _ensureLogisticsBatch(batchName) {
+      const bn = String(batchName || '').trim();
+      if (!bn) return null;
+      let b = (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : [])
+        .find(function (x) { return x && String(x.batch_name || '').trim() === bn; });
+      if (!b) {
+        b = { batch_name: bn, fee_members: [], updated_at: new Date().toISOString() };
+        if (!Array.isArray(RAW_LOGISTICS)) RAW_LOGISTICS = [];
+        RAW_LOGISTICS.push(b);
+      }
+      if (!Array.isArray(b.fee_members)) b.fee_members = [];
+      LOGISTICS_DELETED_BATCHES.delete(bn);   // 同名批次以前被删过 → 取消墓碑，否则会被合并逻辑过滤掉
+      return b;
+    }
+
     function _islandOldRecords(batch) {
       return (Array.isArray(batch && batch.fee_members) ? batch.fee_members : [])
         .filter(function (m) { return m && String(m.fee_type || '').trim() === ISLAND_FEE_TYPE; });
     }
 
-    /* 纯计算，不碰任何数据。返回 {list,totalQty,sum,diff} 或 {error}。 */
-    function calcIslandAllocation(batchName, totalAmount) {
-      const total = Number(totalAmount);
-      if (!isFinite(total) || total <= 0) return { error: '岛内总额要填一个大于 0 的数字' };
-      const batch = (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : [])
-        .find(function (b) { return b && b.batch_name === batchName; });
-      if (!batch) return { error: '找不到批次「' + batchName + '」，请刷新页面' };
-      const byCn = {};
-      (Array.isArray(batch.fee_members) ? batch.fee_members : []).forEach(function (m) {
-        if (!m || typeof m !== 'object') return;
-        if (String(m.status || '').trim() === '免交') return;              // ③ 免交不参与
-        if (String(m.fee_type || '').trim() === ISLAND_FEE_TYPE) return;   // 岛内自己不能再被摊一次
-        const cn = String(m.cn || '').trim();
-        if (!cn) return;
-        if (!byCn[cn]) byCn[cn] = { cn: cn, qty: 0 };
-        byCn[cn].qty += Math.max(1, Number(m.quantity) || 1);
+    /* 该批次里被标「免交」的 CN（读国际运费那份数据）。 */
+    function _islandFreeCnSet(batchName) {
+      const b = (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : [])
+        .find(function (x) { return x && String(x.batch_name || '').trim() === batchName; });
+      const s = {};
+      if (b) (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
+        if (m && String(m.status || '').trim() === '免交') s[String(m.cn || '').trim()] = true;
       });
-      const list = Object.keys(byCn).map(function (k) { return byCn[k]; });
-      const totalQty = list.reduce(function (s, x) { return s + x.qty; }, 0);
-      if (!totalQty) return { error: '这批里没有可分摊的人（是不是所有人都标了「免交」？）' };
-      list.forEach(function (x) {
-        x.ratio = x.qty / totalQty;
-        x.amount = _islandRound(total * x.ratio);            // ④ 各自四舍五入到分
-      });
-      list.sort(function (a, b) { return (b.amount - a.amount) || a.cn.localeCompare(b.cn, 'zh'); });
-      const sum = _islandRound(list.reduce(function (s, x) { return s + x.amount; }, 0));
-      return { batchName: batchName, list: list, totalQty: totalQty, total: _islandRound(total),
-               sum: sum, diff: _islandRound(sum - total) };
+      return s;
     }
-    window.calcIslandAllocation = calcIslandAllocation;
 
-    let ISLAND_PREVIEW = null;
+    /* 模式切换（自动均摊 / 粘贴导入） */
+    function switchIslandMode(mode) {
+      const isAuto = mode !== 'import';
+      const a = document.getElementById('islandMode_auto');
+      const b = document.getElementById('islandMode_import');
+      const ba = document.getElementById('islandModeBtn_auto');
+      const bb = document.getElementById('islandModeBtn_import');
+      if (a) a.style.display = isAuto ? '' : 'none';
+      if (b) b.style.display = isAuto ? 'none' : '';
+      if (ba) ba.className = 'btn ' + (isAuto ? 'btn-primary' : 'btn-secondary');
+      if (bb) bb.className = 'btn ' + (isAuto ? 'btn-secondary' : 'btn-primary');
+      cancelIslandPreview();
+    }
+    window.switchIslandMode = switchIslandMode;
 
+    /* 两个下拉都填「排表批次」 */
     function renderIslandBatchOptions() {
-      const sel = document.getElementById('islandBatchSelect');
-      if (!sel) return;
-      const cur = sel.value;
-      const all = Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : [];
-      sel.innerHTML = all.map(function (b, i) {
-        return '<option value="' + i + '">' + escapeHtml(b && b.batch_name ? b.batch_name : '未命名批次') + '</option>';
-      }).join('');
-      all.forEach(function (b, i) {           // 已算过岛内的批次标一下，方便认
-        const n = _islandOldRecords(b).length;
-        if (n && sel.options[i]) sel.options[i].text += '（已有岛内 ' + n + ' 条）';
+      const list = buildIslandBatchList();
+      [document.getElementById('islandBatchSelect'),
+       document.getElementById('islandImportBatchSelect')].forEach(function (sel) {
+        if (!sel) return;
+        const cur = sel.value;
+        sel.innerHTML = list.length
+          ? list.map(function (bn) {
+              return '<option value="' + escapeHtml(bn) + '">' + escapeHtml(bn) + '</option>';
+            }).join('')
+          : '<option value="">（排表里还没有批次）</option>';
+        if (cur && list.indexOf(cur) !== -1) sel.value = cur;
       });
-      if (cur !== '' && sel.options[Number(cur)]) sel.value = cur;
     }
     window.renderIslandBatchOptions = renderIslandBatchOptions;
 
+    let ISLAND_PREVIEW = null;
+
+    /* ① 自动均摊（纯计算，不碰数据）。 */
+    function calcIslandAllocation(batchName, totalAmount, skipFree) {
+      const total = Number(totalAmount);
+      if (!isFinite(total) || total <= 0) return { error: '岛内总额要填一个大于 0 的数字' };
+      const qtyByCn = islandQtyByCn(batchName);
+      const freeSet = skipFree ? _islandFreeCnSet(batchName) : {};
+      const list = [];
+      Object.keys(qtyByCn).forEach(function (cn) {
+        if (freeSet[cn]) return;                       // 已标免交 → 不参与（不算分母、不摊钱）
+        list.push({ cn: cn, qty: qtyByCn[cn], amount: 0 });
+      });
+      if (!list.length) return { error: '这个批次在排表里没有可分摊的人（是不是都标了「免交」？）' };
+      const totalQty = list.reduce(function (s, x) { return s + x.qty; }, 0);
+      if (!totalQty) return { error: '这批总件数是 0，没法摊' };
+      list.forEach(function (x) {
+        x.ratio = x.qty / totalQty;
+        x.amount = _islandRound(total * x.ratio);      // ④ 各自四舍五入到分
+      });
+      list.sort(function (a, b) { return (b.amount - a.amount) || a.cn.localeCompare(b.cn, 'zh'); });
+      const sum = _islandRound(list.reduce(function (s, x) { return s + x.amount; }, 0));
+      return { batchName: batchName, itemName: ISLAND_ITEM_NAME, list: list, totalQty: totalQty,
+               total: _islandRound(total), sum: sum, diff: _islandRound(sum - total), source: 'auto' };
+    }
+    window.calcIslandAllocation = calcIslandAllocation;
+
     function previewIslandAllocation() {
       const sel = document.getElementById('islandBatchSelect');
-      const batch = (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : [])[sel ? Number(sel.value) : NaN];
-      if (!batch) return showToast('请先选择批次');
-      const r = calcIslandAllocation(batch.batch_name, document.getElementById('islandTotalInput').value);
+      const batchName = sel ? String(sel.value || '').trim() : '';
+      if (!batchName) return showToast('请先选一个排表批次');
+      const freeBox = document.getElementById('islandSkipFree');
+      const r = calcIslandAllocation(batchName, document.getElementById('islandTotalInput').value,
+                                     freeBox ? !!freeBox.checked : true);
       if (r.error) return showToast('⚠️ ' + r.error);
       ISLAND_PREVIEW = r;
-      const oldN = _islandOldRecords(batch).length;
+      renderIslandPreview();
+    }
+    window.previewIslandAllocation = previewIslandAllocation;
+
+    /* ② 粘贴导入：解析文本。第一行（不是数据行的第一行）当名称，其余每行 `cn 点数 金额`。 */
+    function parseIslandImportText(raw) {
+      const lines = String(raw || '').split(/\r?\n/);
+      let name = '';
+      const rows = [], bad = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = String(lines[i] || '').trim();
+        if (!line) continue;
+        if (/^cn\b/i.test(line)) continue;                                      // 表头行
+        if (line.indexOf('点数') >= 0 && line.indexOf('金额') >= 0) continue;     // 表头行
+        const parts = line.split(/[\s\u3000]+/).filter(Boolean);
+        let cn = '', qty = NaN, amt = NaN;
+        if (parts.length >= 3) {
+          amt = _islandNum(parts[parts.length - 1]);
+          qty = _islandNum(parts[parts.length - 2]);
+          cn = parts.slice(0, parts.length - 2).join(' ').trim();
+        } else if (parts.length === 2) {
+          amt = _islandNum(parts[1]);
+          cn = parts[0];
+        }
+        if (parts.length >= 2 && cn && isFinite(amt)) {
+          rows.push({ cn: cn, qty: (isFinite(qty) && qty > 0) ? qty : 1, amount: _islandRound(amt) });
+        } else if (!name) {
+          name = line;                                        // 第一行 = 这次岛内名称
+        } else {
+          bad.push(i + 1);                                    // 中间冒出来的怪行 → 报出来
+        }
+      }
+      return { name: name, rows: rows, bad: bad };
+    }
+    window.parseIslandImportText = parseIslandImportText;
+
+    function previewIslandImport() {
+      const rawEl = document.getElementById('islandImportText');
+      const p = parseIslandImportText(rawEl ? rawEl.value : '');
+      if (!p.rows.length) return showToast('没解析到数据行，格式要像「某某 1 0.5」');
+      if (p.bad.length) return showToast('第 ' + p.bad.join('、') + ' 行看不懂，请检查');
+      const nameEl = document.getElementById('islandImportName');
+      if (nameEl && !String(nameEl.value || '').trim() && p.name) nameEl.value = p.name;
+      const itemName = String((nameEl && nameEl.value) || p.name || ISLAND_ITEM_NAME).trim() || ISLAND_ITEM_NAME;
+      const sel = document.getElementById('islandImportBatchSelect');
+      const batchName = sel ? String(sel.value || '').trim() : '';
+      if (!batchName) return showToast('请选这笔账要挂到哪个排表批次');
+      // 同一个 CN 出现多行 → 金额累加（宁可算多也不丢钱）
+      const seen = {};
+      const list = [];
+      p.rows.forEach(function (row) {
+        if (seen[row.cn]) {
+          seen[row.cn].amount = _islandRound(seen[row.cn].amount + row.amount);
+          seen[row.cn].qty += row.qty;
+          return;
+        }
+        seen[row.cn] = { cn: row.cn, qty: row.qty, amount: row.amount };
+        list.push(seen[row.cn]);
+      });
+      list.sort(function (a, b) { return (b.amount - a.amount) || a.cn.localeCompare(b.cn, 'zh'); });
+      const total = _islandRound(list.reduce(function (s, x) { return s + x.amount; }, 0));
+      const totalQty = list.reduce(function (s, x) { return s + x.qty; }, 0);
+      ISLAND_PREVIEW = { batchName: batchName, itemName: itemName, list: list, totalQty: totalQty,
+                         total: total, sum: total, diff: 0, source: 'import' };
+      renderIslandPreview();
+    }
+    window.previewIslandImport = previewIslandImport;
+
+    /* 预览渲染（两种模式共用） */
+    function renderIslandPreview() {
+      const r = ISLAND_PREVIEW;
+      if (!r) return;
+      const oldBatch = (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : [])
+        .find(function (b) { return b && String(b.batch_name || '').trim() === r.batchName; });
+      const oldN = oldBatch ? _islandOldRecords(oldBatch).length : 0;
       const off = Math.abs(r.diff) > 0.004;
-      document.getElementById('islandPreviewSummary').innerHTML =
-        '批次「<b>' + escapeHtml(r.batchName) + '</b>」：可分摊 <b>' + r.list.length + '</b> 人 / 共 <b>'
-        + r.totalQty + '</b> 件（「免交」的没算进来）<br>'
-        + '分摊合计 <b>￥' + r.sum.toFixed(2) + '</b>　|　你输入的总额 ￥' + r.total.toFixed(2)
-        + '　|　差额 <b style="color:' + (off ? '#dc2626' : '#16a34a') + ';">'
-        + (r.diff >= 0 ? '+' : '') + r.diff.toFixed(2) + '</b>'
-        + (off ? '（<span style="color:#dc2626;">四舍五入的零头，属正常</span>）' : '')
-        + (oldN ? '<br><span style="color:#a16207;">⚠️ 这个批次已有 ' + oldN
-                + ' 条「岛内运费」：写入时按圈名<b>覆盖金额</b>（不新增、不会重复收钱）。</span>' : '');
-      // 金额做成输入框：不想按均摊来的，直接改数就行（＝团长要的「自主导入」）
+      const src = (r.source === 'import')
+        ? '自己粘贴导入（金额照你给的写，不重算）'
+        : '按件数自动均摊';
+      let html = '批次「<b>' + escapeHtml(r.batchName) + '</b>」· 费用名「<b>' + escapeHtml(r.itemName) + '</b>」<br>'
+        + '方式：' + src + '　|　<b>' + r.list.length + '</b> 人 / 共 <b>' + r.totalQty + '</b> 件<br>'
+        + '合计 <b>￥' + r.sum.toFixed(2) + '</b>';
+      if (r.source === 'import') {
+        html += '（= 你粘贴的金额总和）';
+      } else {
+        html += '　|　你输入的总额 ￥' + r.total.toFixed(2)
+          + '　|　差额 <b style="color:' + (off ? '#dc2626' : '#16a34a') + ';">'
+          + (r.diff >= 0 ? '+' : '') + r.diff.toFixed(2) + '</b>'
+          + (off ? '（<span style="color:#dc2626;">四舍五入的零头，属正常</span>）' : '');
+      }
+      if (oldN) {
+        html += '<br><span style="color:#a16207;">⚠️ 这个批次已有 ' + oldN
+          + ' 条「岛内运费」：写入时按圈名<b>覆盖金额</b>（不新增、不会重复收钱）。</span>';
+      }
+      document.getElementById('islandPreviewSummary').innerHTML = html;
       document.getElementById('islandPreviewBody').innerHTML = r.list.map(function (x, i) {
-        return '<tr><td><strong>' + escapeHtml(x.cn) + '</strong></td><td>' + x.qty + '</td><td>'
-          + (x.ratio * 100).toFixed(2) + '%</td>'
+        return '<tr><td style="white-space:normal; word-break:break-word;"><strong>' + escapeHtml(x.cn)
+          + '</strong></td><td>' + x.qty + '</td>'
           + '<td><input type="number" step="0.01" min="0" data-island-idx="' + i + '" value="'
-          + x.amount.toFixed(2) + '" style="width:120px;"></td></tr>';
+          + Number(x.amount).toFixed(2) + '" style="width:100%;"></td></tr>';
       }).join('');
       document.getElementById('islandPreviewBox').style.display = '';
       const btn = document.getElementById('islandApplyBtn');
       btn.dataset.confirming = '';
       btn.innerText = oldN
-        ? '覆盖写入 ' + r.list.length + ' 条「岛内运费」'
-        : '写入账目（新增 ' + r.list.length + ' 条「岛内运费」）';
+        ? '覆盖写入 ' + r.list.length + ' 条「' + r.itemName + '」'
+        : '写入账目（新增 ' + r.list.length + ' 条「' + r.itemName + '」）';
     }
-    window.previewIslandAllocation = previewIslandAllocation;
+    window.renderIslandPreview = renderIslandPreview;
 
     function cancelIslandPreview() {
       ISLAND_PREVIEW = null;
@@ -5317,7 +5519,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
        不用原生 confirm（微信/QQ 内置浏览器会静默屏蔽原生弹窗）。 */
     async function applyIslandAllocation() {
       const btn = document.getElementById('islandApplyBtn');
-      if (!ISLAND_PREVIEW) return showToast('请先点「开始计算」');
+      if (!ISLAND_PREVIEW) return showToast('请先算一次或解析一次');
       const r = ISLAND_PREVIEW;
       const inputs = document.querySelectorAll('#islandPreviewBody input[data-island-idx]');
       if (inputs.length !== r.list.length) return showToast('预览已失效，请重新计算');
@@ -5333,10 +5535,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         return;
       }
       btn.dataset.confirming = '';
-      const batch = (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : [])
-        .find(function (b) { return b && b.batch_name === r.batchName; });
-      if (!batch) return showToast('批次已不存在，请刷新后重试');
-      if (!Array.isArray(batch.fee_members)) batch.fee_members = [];
+      const batch = _ensureLogisticsBatch(r.batchName);
+      if (!batch) return showToast('批次名不对，请刷新后重试');
 
       const oldByCn = {};
       _islandOldRecords(batch).forEach(function (m) {
@@ -5353,7 +5553,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         if (old) {
           // ⚠️ 原地改金额、**id 保持不变** —— 团员端与后台审核按 `intl:<id>` 认这条，
           //    换 id 会让团员已提交的付款凭证对不上账。
-          old.item_name = ISLAND_ITEM_NAME;
+          old.item_name = r.itemName;
           old.fee_type = ISLAND_FEE_TYPE;
           old.quantity = x.qty;
           old.amount_due = amt;
@@ -5363,7 +5563,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           batch.fee_members.push({
             id: 'log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
             cn: x.cn,
-            item_name: ISLAND_ITEM_NAME,
+            item_name: r.itemName,
             fee_type: ISLAND_FEE_TYPE,
             quantity: x.qty,
             amount_due: amt,
@@ -5391,7 +5591,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       ISLAND_PREVIEW = null;
       document.getElementById('islandPreviewBox').style.display = 'none';
       renderLogistics();
-      showToast('✅ 岛内运费已写入：新增 ' + added + ' 条、覆盖 ' + updated + ' 条'
+      showToast('✅ 已写入：新增 ' + added + ' 条、覆盖 ' + updated + ' 条'
                 + (voided ? '、作废 ' + voided + ' 条（不在本次名单里）' : ''));
     }
     window.applyIslandAllocation = applyIslandAllocation;
