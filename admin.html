@@ -2873,6 +2873,25 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           一个 CN 在同一批次可能有多条，**不能只取最后一条**；
        ② 普通订单：把凭证覆盖到的订单价格加起来；
        都算不出来时 source='none'，审核页会明确标「未能核对」而不是假装通过。 */
+    /* 🏝️ 这张凭证对应的是不是「岛内运费」（fee_type='island'，日本国内那一段）？
+       凭证本身只记了 order_type='国际'（岛内走同一套金额口径，见 _payProofDueAmount），
+       所以拿 item_ids 里的 `intl:<id>` 回 logistics_data 查那条记录的 fee_type。
+       ⚠️ 纯显示用（决定徽章文字）；金额与状态判定一律走 order_type，绝不拿它改数据。 */
+    function _proofFeeIsIsland(p) {
+      const ids = (Array.isArray(p && p.item_ids) ? p.item_ids : []).map(String);
+      if (!ids.length) return false;
+      let hit = false;
+      (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+        if (!b || typeof b !== 'object') return;
+        (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
+          if (!m || typeof m !== 'object') return;
+          if (ids.indexOf('intl:' + String(m.id || '')) < 0) return;
+          if (String(m.fee_type || '').trim() === 'island') hit = true;
+        });
+      });
+      return hit;
+    }
+
     function _payProofDueAmount(p) {
       const ids = (Array.isArray(p.item_ids) ? p.item_ids : []).map(String);
 
@@ -2961,6 +2980,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const blocked = (chk.state === 'mismatch');
       const isIntl = String(p.order_type || '') === '国际' ||
                      ids.some(function (x) { return String(x).indexOf('intl:') === 0; });
+      // 🏝️ 岛内那笔（日本国内段）单独标出来，别让团长也看成「国际运费」
+      const isIsland = isIntl && _proofFeeIsIsland(p);
 
       let amtHtml = '';
       if (chk.state === 'ok') {
@@ -3013,13 +3034,15 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         '<div style="flex:1 1 260px; min-width:220px;">' +
           '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
             '<strong style="font-size:0.95rem;">' + escapeHtml(p.cn || '(未填CN)') + '</strong>' +
-            (isIntl ? '<span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #0369a144;">🌍 国际运费</span>' : '') +
+            (isIsland
+              ? '<span class="badge" style="background:#ccfbf1; color:#0f766e; border:1px solid #0f766e44;">🏝️ 岛内运费</span>'
+              : (isIntl ? '<span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #0369a144;">🌍 国际运费</span>' : '')) +
             _payProofStatusBadge(st) + _payReviewMethodBadge(p.pay_method) +
           '</div>' +
           '<div style="margin-top:6px; font-size:0.85rem; line-height:1.9; color:var(--text-muted);">' +
             '批次：' + escapeHtml(names || '—') + '<br>' +
             amtHtml + '<br>' +
-            '覆盖 ' + ids.length + (isIntl ? ' 项国际运费' : ' 条订单') +
+            '覆盖 ' + ids.length + (isIsland ? ' 项岛内运费' : (isIntl ? ' 项国际运费' : ' 条订单')) +
             (p.purged_at ? (' ｜ <span style="color:#64748b;">原图已于 ' + escapeHtml(p.purged_at) + ' 清理</span>') : '') + '<br>' +
             (p.note ? ('备注：' + escapeHtml(p.note) + '<br>') : '') +
             '提交：' + escapeHtml(p.created_at || '') +

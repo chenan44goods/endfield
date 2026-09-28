@@ -1631,12 +1631,17 @@
       return (d && typeof d === 'object') ? d : {};
     }
 
-    /* 国际运费（image_data.logistics_data）里的待交条目 —— 它是独立的一份数据，
+    /* 物流费用（image_data.logistics_data）里的待交条目 —— 它是独立的一份数据，
        普通订单表里根本没有，所以「交肾核算」必须单独把它并进来，否则团员看不到。
        口径必须与机器人 logistics_fee.unpaid_logistics_members 完全一致：
          · 只取 status === '未交'（「已交」「免交」都不算欠款）；
          · amount_due 本身就是该条的应收总额，**不再乘数量**；
-         · amount_due <= 0 视为不欠（机器人那边会跳过）。 */
+         · amount_due <= 0 视为不欠（机器人那边会跳过）。
+       🏝️ 2026-09-28 团长要求：这份数据里有两种费用 ——
+         · fee_type 不是 'island' → 国际运费（货在回国路上）
+         · fee_type === 'island'   → **岛内运费**（日本国内那一段，货才刚下单）
+         两者在团员端必须一眼分得开，岛内的**绝不能出现「国际运费」字样**，
+         否则团员会以为货已经在回国路上。 */
     function collectIntlUnpaid(row, lowerCn){
       const img = parseImgData(row);
       let logi = img.logistics_data;
@@ -1655,14 +1660,16 @@
           const amt = Number(m.amount_due) || 0;
           if (amt <= 0) return;
           const mid = String(m.id || '').trim();
+          const _isIsland = String(m.fee_type || '').trim() === 'island';
           out.push({
-            __intl: true,
+            __intl: true,                 // ⚠️ 别改：后台靠它按 amount_due 算应付（不是 单价×数量）
+            __island: _isIsland,          // 只用于显示（文字 / 图标），不参与任何金额判断
             batch_name: bn,
             cn: String(m.cn || '').trim(),
             // 前缀 intl: 保证不会和普通订单的 item_id 撞车，后台靠它分辨改哪份数据
             item_id: 'intl:' + (mid || (_normBatch(bn) + ':' + String(m.cn || '').trim())),
-            name: String(m.item_name || '国际运费').trim() || '国际运费',
-            country: '国际运费',
+            name: _isIsland ? '岛内运费' : (String(m.item_name || '国际运费').trim() || '国际运费'),
+            country: _isIsland ? '岛内运费' : '国际运费',
             quantity: Number(m.quantity) || 1,
             price: Math.round(amt * 100) / 100,
             status: '未付款'
@@ -1670,6 +1677,29 @@
         });
       });
       return out;
+    }
+
+    /* 🏝️ 这张付款凭证对应的是不是「岛内运费」？
+       凭证本身只记了 order_type='国际'（岛内也走这套金额口径，后台靠它按 amount_due 核对），
+       所以这里拿 item_ids 里的 `intl:<id>` 回当前的 logistics_data 里查那条记录的 fee_type。
+       ⚠️ 纯显示用（决定卡片图标/标签）；金额与状态一律走 order_type，绝不拿它改数据。 */
+    function proofIsIsland(p){
+      const ids = (Array.isArray(p && p.item_ids) ? p.item_ids : []).map(String);
+      if (!ids.length) return false;
+      const img = parseImgData(window.__LAST_ROW);
+      let logi = img.logistics_data;
+      if (typeof logi === 'string') { try { logi = JSON.parse(logi); } catch(e){ logi = []; } }
+      if (!Array.isArray(logi)) return false;
+      let hit = false;
+      logi.forEach(function(b){
+        if (!b || typeof b !== 'object') return;
+        (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function(m){
+          if (!m || typeof m !== 'object') return;
+          if (ids.indexOf('intl:' + String(m.id || '')) < 0) return;
+          if (String(m.fee_type || '').trim() === 'island') hit = true;
+        });
+      });
+      return hit;
     }
 
     /* 一条该收多少钱：国际条目用 amount_due（已是总额），普通订单用 单价×数量。
@@ -1739,14 +1769,21 @@
       function isApproved(p){ return String((p && p.status) || '') === '已通过'; }
 
       // ① 按批次把「待交款」分组：一个批次一笔账
+      //    🏝️ 三种标记各管一件事，别混：
+      //      intl    = 这笔走物流数据的金额口径（orderType='国际'，后台按 amount_due 核对）
+      //      hasIntl = 这一组里**确实有**国际运费 → 卡片用 🌍
+      //      island  = 这一组里**确实有**岛内运费 → 卡片用 🏝️ + 打「岛内运费」标签
       const order = [], groups = {};
       (Array.isArray(items) ? items : []).forEach(function(i){
         const b = String(i.batch_name || '默认批次').trim();
         const k = _normBatch(b);
-        if (!groups[k]) { groups[k] = { key: k, name: b, items: [], total: 0, intl: false }; order.push(k); }
+        if (!groups[k]) { groups[k] = { key: k, name: b, items: [], total: 0, intl: false, hasIntl: false, island: false }; order.push(k); }
         groups[k].items.push(i);
         groups[k].total += itemAmount(i);
-        if (i.__intl) groups[k].intl = true;
+        if (i.__intl) {
+          groups[k].intl = true;
+          if (i.__island) groups[k].island = true; else groups[k].hasIntl = true;
+        }
       });
       // ② 账已清、但仍要留个回执的批次（待审核 / 已通过）也补进来
       mine.forEach(function(p){
@@ -1756,8 +1793,10 @@
         const k = proofKey(p);
         if (!k || groups[k]) return;
         const bn = Array.isArray(p.batch_names) ? (p.batch_names[0] || '') : (p.batch_names || '');
+        const _isIntl = String(p.order_type || '') === '国际';
+        const _isIslandProof = _isIntl && proofIsIsland(p);
         groups[k] = { key: k, name: String(bn || '默认批次'), items: [], total: Number(p.amount || 0),
-                      intl: String(p.order_type || '') === '国际' };
+                      intl: _isIntl, hasIntl: _isIntl && !_isIslandProof, island: _isIslandProof };
         order.push(k);
       });
 
@@ -1781,12 +1820,21 @@
 
         html += '<div style="margin:14px 0; padding:16px; border-radius:12px; border:1px solid ' + bd + '; background:rgba(250,250,246,0.94);">';
         html += '<div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap;">';
-        html += '<div style="font-size:14px; font-weight:600; color:' + fg + ';">' + (g.intl ? '🌍 ' : '') + esc(g.name) + '</div>';
+        // 🏝️ 岛内那笔要一眼看得出不是国际运费（2026-09-28 团长要求）
+        const _kindEmoji = g.hasIntl ? '🌍 ' : (g.island ? '🏝️ ' : '');
+        const _kindTag = g.island
+          ? '<span style="font-size:11px; padding:2px 8px; border-radius:20px; border:1px solid rgba(13,148,136,0.35); background:rgba(13,148,136,0.10); color:#0f766e; margin-left:6px; white-space:nowrap;">'
+            + (g.hasIntl ? '含岛内运费' : '岛内运费') + '</span>'
+          : '';
+        html += '<div style="font-size:14px; font-weight:600; color:' + fg + ';">' + _kindEmoji + esc(g.name) + _kindTag + '</div>';
         html += '<div style="font-size:14px; font-weight:600; color:' + fg + ';">' + (due ? ('￥' + g.total.toFixed(2)) : '已结清') + '</div>';
         html += '</div>';
 
         if (due) {
           html += '<div style="margin-top:4px; font-size:12px; color:var(--ink-soft);">待交款 ' + due + (g.intl ? ' 项' : ' 条') + ' · 应付 ￥' + g.total.toFixed(2) + '</div>';
+          if (g.island) {
+            html += '<div style="margin-top:5px; font-size:11.5px; line-height:1.7; color:#0f766e;">🏝️ 岛内运费＝日本国内那一段的运费，东西<b>还没出发回国</b>（不是回国的国际段）。</div>';
+          }
           if (qr) {
             html += '<div style="margin-top:12px; text-align:center;">';
             html += '<img src="' + esc(qr) + '" alt="收款码" onclick="toggleQr(this)" style="width:150px; max-width:60%; border-radius:8px; border:1px solid rgba(33,33,33,0.12); background:#fff; cursor:zoom-in;">';
