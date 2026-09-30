@@ -796,6 +796,9 @@
     .result-item .r-name { font-weight: 700; font-size: 15px; color: var(--ink); }
     .result-item .r-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
     .result-item .r-price { font-weight: 700; font-size: 15px; color: #b0651a; white-space: nowrap; }
+    /* 右侧一栏改成竖排靠右：第一行「金额 + 状态」，第二行「📦 囤货至 …」（2026-09-30 团长要求） */
+    .result-item .r-side { display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0; }
+    .result-item .r-side-top { display:flex; align-items:center; gap:12px; }
     .result-item .r-badge {
       font-size: 11px; padding: 3px 10px; border-radius: 999px; white-space: nowrap;
       letter-spacing: 0.04em; font-weight: 600; border: 1px solid transparent;
@@ -820,11 +823,13 @@
     .batch-label-pill { display:inline-block; background:rgba(22,24,28,0.72); color:#f5f4ec; padding:8px 12px; border-radius:999px; font-size:11px; letter-spacing:0.12em; backdrop-filter:blur(3px); }
     .r-batch { font-size:11px; color:#7a756a; margin-top:3px; letter-spacing:0.02em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
     /* 📦 囤货到期时间（2026-09-30 团长要求）：团员原来完全看不到自己囤到什么时候。
-       一行小字，允许换行（带到期提示时略长）；正常灰、30 天内黄、已过期红。 */
-    .r-stock { font-size:11px; margin-top:3px; letter-spacing:0.02em; color:#7a756a; line-height:1.5; }
-    .r-stock .rs-date { font-weight:700; color:#5b6470; }
+       09-30 二次调整：从左侧信息区挪到右侧「金额 + 状态徽章」正下方 —— 那里才是
+       团员看状态时视线停留的地方，红字更醒目（原来的灰色太容易被忽略）。
+       配色按团长口径：正常红 / 30 天内橙黄 / 已过期深红加粗，越紧急越呛眼。 */
+    .r-stock { font-size:11px; letter-spacing:0.02em; color:#c81e1e; line-height:1.5; text-align:right; max-width:300px; }
+    .r-stock .rs-date { font-weight:800; }
     .r-stock.rs-soon, .r-stock.rs-soon .rs-date { color:#b45309; }
-    .r-stock.rs-exp, .r-stock.rs-exp .rs-date { color:#b91c1c; }
+    .r-stock.rs-exp, .r-stock.rs-exp .rs-date { color:#991b1b; font-weight:800; }
     .qspin { display:inline-block; width:14px; height:14px; border:2px solid rgba(22,24,28,0.2); border-top-color:var(--ink); border-radius:50%; animation:qspin 0.8s linear infinite; vertical-align:-2px; margin-right:8px; }
     @keyframes qspin { to { transform:rotate(360deg); } }
 
@@ -944,7 +949,8 @@
       .result-item .r-info { flex: 1 1 calc(100% - 96px); min-width: 0; }
       .result-item .r-name { font-size: 15px; }
       .result-item .r-price { font-size: 14px; }
-      .result-item .r-side { flex: 1 1 100%; justify-content: flex-end; margin-top: 4px; }
+      /* 手机端右侧掉到卡片最后一行、整行靠右；囤货日期跟着一起往下排（竖排靠右） */
+      .result-item .r-side { flex: 1 1 100%; align-items: flex-end; margin-top: 4px; }
       .result-header { flex-wrap: wrap; gap: 8px; }
       .result-header > div { flex-wrap: wrap; }
     }
@@ -1458,13 +1464,18 @@
         if(_od){ const _m=_od.match(/^(\d{4})-(\d{2})-(\d{2})$/); _odTxt=_m?(parseInt(_m[2],10)+'/'+parseInt(_m[3],10)):_od; }
         const _opParts=[]; if(_odTxt) _opParts.push(_odTxt); if(_op) _opParts.push(_op);
         const orderHtml=_opParts.length?'<div class="r-batch">\ud83d\uded2 '+escapeHtml(_opParts.join(' · '))+'</div>':'';
+        // 囤货到期行放在「金额 + 状态」下面（2026-09-30 团长要求：红字 + 贴着状态更醒目），
+        // 不再挂在左侧信息区的批次/下单日期下面。
         return '<div class="result-item">'+imgHtml+
           '<div class="r-info"><div class="r-name">'+escapeHtml(it.name||'未命名')+'</div>'+
           '<div class="r-meta">'+(it.country||'日本')+' ×'+q+'</div>'+
-          batchHtml+orderHtml+stockLineHtml(it)+'</div>'+
-          '<div class="r-side" style="display:flex; align-items:center; gap:12px;">'+
+          batchHtml+orderHtml+'</div>'+
+          '<div class="r-side">'+
+          '<div class="r-side-top">'+
           '<span class="r-price">￥'+itemAmount(it).toFixed(2)+'</span>'+
           (showStatus ? '<span class="r-badge '+getStatusBadgeClass(it.status)+'">'+escapeHtml(it.status||'未出荷')+'</span>' : '')+
+          '</div>'+
+          stockLineHtml(it)+
           applyBtn+
           '</div></div>';
       }).join('');
@@ -1476,7 +1487,8 @@
        数据与后台同源（group_data 的 stock_date / stock_expiry），日期算法与后台
        stockCellHtml() 保持一字不差，避免两端显示成不同日期。
        只有「已入库在囤」的条目才有这两个字段 → 待发货/已排发自然不显示（团长口径）。
-       口径：正常灰色；30 天内到期变黄 + 提示尽快申请排发；已过期变红 + 提示联系团长。 */
+       口径（09-30 团长二次调整）：正常红字；30 天内到期橙黄 + 提示尽快申请排发；
+       已过期深红加粗 + 提示联系团长。位置：右侧「金额 + 状态」正下方（贴住状态，不再放左侧信息区）。 */
     function _fmtStockDate(d){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0'); return y+'-'+m+'-'+dd; }
     function _addMonthsStr(dateStr, months){ if(!dateStr) return ''; const p=String(dateStr).split('-').map(Number); if(p.length<3) return dateStr; const dt=new Date(p[0], (p[1]||1)-1, p[2]||1); dt.setMonth(dt.getMonth()+months); return _fmtStockDate(dt); }
     function stockLineHtml(it){
