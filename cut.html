@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<script>
+/* 🛡️ 快照地址保险（与 index.html / admin.html 同一套）
+   背景：Cloudflare Pages 每部署一次都会额外产生一个**永久**快照地址
+        <8位16进制>.<项目>.pages.dev，它永远停留在生成那天的版本。
+   对策：只针对这种快照地址自动跳回正式域名。 */
+(function () {
+  var h = (location.hostname || '').toLowerCase();
+  if (/^[0-9a-f]{8}\.endfield-av3\.pages\.dev$/.test(h)) {
+    location.replace('https://endfield-av3.pages.dev' + location.pathname + location.search + location.hash);
+  }
+})();
+</script>
+<title>插画集切页录入</title>
+<style>
+:root{ --ink:#1f2328; --soft:#6b7280; --line:#e5e7eb; --bg:#f5f6f8; --card:#fff;
+       --acc:#2563eb; --ok:#059669; --bad:#dc2626; --warn:#b45309; }
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body{ margin:0; background:var(--bg); color:var(--ink);
+      font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
+.wrap{ max-width:840px; margin:0 auto; padding:16px 14px 70px; }
+h1{ font-size:19px; margin:4px 0 4px; }
+.sub{ color:var(--soft); font-size:13px; margin-bottom:14px; }
+.card{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px; }
+.card h2{ font-size:15px; margin:0 0 10px; }
+label{ display:block; font-size:13px; color:var(--soft); margin-bottom:4px; }
+input[type=text],input[type=number],textarea{
+  width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px;
+  font-size:15px; font-family:inherit; background:#fff; color:var(--ink); }
+textarea{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px; word-break:break-all; }
+.btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px;
+      padding:11px 16px; border-radius:11px; border:1px solid var(--line); background:#fff;
+      color:var(--ink); font-size:14px; font-weight:600; cursor:pointer; }
+.btn.primary{ background:var(--acc); border-color:var(--acc); color:#fff; }
+.btn.ok{ background:var(--ok); border-color:var(--ok); color:#fff; }
+.btn.sm{ padding:7px 11px; font-size:13px; }
+.btn:disabled{ opacity:.45; cursor:not-allowed; }
+input[type=file]{ display:none; }
+.toolbar{ display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; }
+.toolbar .f{ width:96px; }
+.hint{ font-size:12.5px; color:var(--soft); margin-top:8px; }
+.hint b{ color:var(--ink); }
+.row{ display:flex; gap:10px; align-items:center; padding:8px; border:1px solid var(--line);
+      border-radius:12px; margin-bottom:8px; background:#fff; }
+.row .no{ width:78px; flex:0 0 auto; }
+.row .no input{ padding:8px 9px; font-size:14px; text-align:center; }
+.thumb{ width:54px; height:54px; flex:0 0 auto; border-radius:9px; border:1px solid var(--line);
+        background:#f2f4f7; object-fit:cover; display:block; cursor:pointer; }
+.thumb.ph{ display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--soft); }
+.row .info{ flex:1 1 auto; min-width:0; font-size:12px; color:var(--soft); line-height:1.45; }
+.row .info b{ display:block; color:var(--ink); font-size:13px; font-weight:600;
+              overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.row .del{ flex:0 0 auto; width:34px; height:34px; border-radius:9px; border:1px solid var(--line);
+           background:#fff; color:var(--bad); font-size:15px; cursor:pointer; }
+.stat{ font-size:13px; color:var(--soft); margin:6px 0 2px; }
+.stat b{ color:var(--ink); }
+.ok{ color:var(--ok); } .bad{ color:var(--bad); } .warn{ color:var(--warn); }
+.out{ display:none; margin-top:10px; }
+.out input[readonly]{ font-size:12.5px; }
+.thumbstrip{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+.thumbstrip img{ width:44px; height:44px; object-fit:cover; border-radius:8px; border:1px solid var(--line); }
+details{ margin-top:8px; }
+summary{ cursor:pointer; font-size:13px; color:var(--soft); }
+.toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
+        background:rgba(31,35,40,.94); color:#fff; padding:10px 16px; border-radius:10px;
+        font-size:13.5px; max-width:86vw; opacity:0; pointer-events:none; transition:opacity .18s; z-index:99; }
+.toast.show{ opacity:1; }
+.warnbox{ background:#fffbeb; border:1px solid #fde68a; color:#92400e; border-radius:10px;
+          padding:9px 11px; font-size:13px; margin-top:8px; }
+@media (max-width:480px){
+  .row .no{ width:64px; }
+  .thumb{ width:48px; height:48px; }
+  .toolbar .f{ width:80px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>✂️ 插画集切页录入</h1>
+  <div class="sub">给管理用的：把每一页的图传上来、填上序号，生成一条「目录链接」发给团长。<br>
+    团长在后台「排表管理 → 插画集切页导入」里粘这条链接，就能一键把切好的页导进排表。</div>
+
+  <div class="card">
+    <h2>① 这本画集叫什么</h2>
+    <label>画集名称（会拼进每条谷子的名字，如「26国插-洛茜画集」）</label>
+    <input type="text" id="album" placeholder="例：26国插-XX画集">
+  </div>
+
+  <div class="card">
+    <h2>② 传图 + 填序号</h2>
+    <div class="toolbar">
+      <div class="f">
+        <label>起始序号</label>
+        <input type="number" id="startNo" value="1" min="0">
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button class="btn primary" id="btnPick">📁 批量选图（自动编号）</button>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button class="btn" id="btnAdd">＋ 加一行（只填序号）</button>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button class="btn" id="btnClear">🗑️ 清空</button>
+      </div>
+    </div>
+    <label style="margin-top:10px; display:flex; align-items:center; gap:6px; color:var(--ink);">
+      <input type="checkbox" id="useFileNo" style="width:auto; padding:0;"> 按文件名里的数字当序号（文件名没有数字就顺延）
+    </label>
+    <input type="file" id="filePick" accept="image/*" multiple>
+    <input type="file" id="fileOne" accept="image/*">
+
+    <div class="stat" id="stat">还没有内容。点「批量选图」把这一本的页一次选进来。</div>
+    <div id="rows"></div>
+    <div class="hint">序号可以随时改（图片不会变）；点缩略图可以给这一行换张图。</div>
+  </div>
+
+  <div class="card">
+    <h2>③ 生成目录链接</h2>
+    <button class="btn ok" id="btnPub">📤 生成目录并上传</button>
+    <div class="hint">生成后把链接发给团长，他粘到后台就能直接导入。</div>
+    <div class="warnbox" id="warnbox" style="display:none;"></div>
+
+    <div class="out" id="out">
+      <label style="margin-top:12px;">目录链接（发给团长）</label>
+      <input type="text" id="link" readonly onclick="this.select()">
+      <div class="toolbar" style="margin-top:8px;">
+        <button class="btn primary sm" id="btnCopy">📋 复制链接</button>
+        <button class="btn sm" id="btnDl">⬇️ 下载目录文件</button>
+      </div>
+      <div class="thumbstrip" id="strip"></div>
+      <details>
+        <summary>备用：目录文本（链接发不出去时，把这段整个复制给团长）</summary>
+        <textarea id="json" rows="6" readonly style="margin-top:6px;"></textarea>
+      </details>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ══════════ 通道（与团员端同一套） ══════════
+     *.supabase.co 在部分手机网络被按域名(SNI)阻断 → 优先走本站同源反代 /sb/*，
+     反代探不通就回退直连。上传图片时用 sbFetch（反代），写进目录的却是**直连**地址：
+     因为目录里的图会被后台/团员端长期引用，直连地址不占用 Pages Functions 额度。 */
+  var SUPABASE_DIRECT = 'https://oknhlfhdqbsukskdxqre.supabase.co';
+  var SUPABASE_ANON = 'sb_publishable_UW9cgyBOeV6zIZCicI2SlQ_bqm0MeJa';
+  var SB_PROXY = '/sb';
+  var SB_BASE = '', _probe = null;
+
+  function sbBase(){
+    if (SB_BASE) return Promise.resolve(SB_BASE);
+    if (_probe) return _probe;
+    _probe = (function(){
+      var c = new AbortController();
+      var t = setTimeout(function(){ c.abort(); }, 4000);
+      return fetch(SB_PROXY + '/__health', { cache: 'no-store', signal: c.signal })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){ SB_BASE = (j && j.ok) ? SB_PROXY : SUPABASE_DIRECT; return SB_BASE; })
+        .catch(function(){ SB_BASE = SUPABASE_DIRECT; return SB_BASE; })
+        .then(function(v){ clearTimeout(t); return v; });
+    })();
+    return _probe;
+  }
+  function sbFetch(path, opts){ return sbBase().then(function(b){ return fetch(b + path, opts); }); }
+  function sbUrl(path){ return (SB_BASE || SB_PROXY) + path; }
+
+  /* ══════════ 图片压缩（与团员端 compressImage 一字不差，避免同一张图两端表现不同） ══════════ */
+  function compressImage(file, maxSide, quality){
+    return new Promise(function(resolve, reject){
+      var url = null;
+      try { url = URL.createObjectURL(file); } catch(e){ return reject(new Error('无法读取该文件')); }
+      var img = new Image();
+      img.onload = function(){
+        try {
+          URL.revokeObjectURL(url);
+          var w = img.naturalWidth || 0, h = img.naturalHeight || 0;
+          if (!w || !h) return reject(new Error('图片尺寸读取失败'));
+          var scale = Math.min(1, maxSide / Math.max(w, h));
+          w = Math.max(1, Math.round(w * scale));
+          h = Math.max(1, Math.round(h * scale));
+          var c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          var ctx = c.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          c.toBlob(function(blob){ blob ? resolve(blob) : reject(new Error('图片压缩失败')); }, 'image/jpeg', quality);
+        } catch(e){ reject(new Error('图片处理失败')); }
+      };
+      img.onerror = function(){ try { URL.revokeObjectURL(url); } catch(e){} reject(new Error('这不是一张能识别的图片，请换一张')); };
+      img.src = url;
+    });
+  }
+
+  function randObjName(){
+    try {
+      var a = new Uint8Array(16);
+      (window.crypto || window.msCrypto).getRandomValues(a);
+      var s = '';
+      for (var i = 0; i < a.length; i++) s += (a[i] < 16 ? '0' : '') + a[i].toString(16);
+      return s;
+    } catch (e) {
+      return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+    }
+  }
+
+  /* ══════════ 上传 ══════════
+     两道桶依次试：goods-images 是后台正式图床（匿名可能没开写入权限），
+     pay-proofs 是团员端一直在用的、确定允许匿名上传的桶。第一个成功就记住。 */
+  var BUCKETS = ['goods-images', 'pay-proofs'];
+  var OK_BUCKET = '';
+  try { OK_BUCKET = localStorage.getItem('gtbot_cut_bucket') || ''; } catch(e){}
+  if (OK_BUCKET) BUCKETS = [OK_BUCKET].concat(BUCKETS.filter(function(b){ return b !== OK_BUCKET; }));
+
+  function putObject(bucket, path, blob, ctype){
+    return sbFetch('/storage/v1/object/' + bucket + '/' + encodeURIComponent(path), {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_ANON,
+        'Authorization': 'Bearer ' + SUPABASE_ANON,
+        'Content-Type': ctype,
+        'x-upsert': 'false'
+      },
+      body: blob
+    });
+  }
+
+  function uploadBlob(blob, ext, ctype){
+    var path = 'cut_' + randObjName() + '.' + ext;
+    var lastErr = '';
+    function tryAt(i){
+      if (i >= BUCKETS.length) return Promise.reject(new Error(lastErr || '上传失败'));
+      var b = BUCKETS[i];
+      return putObject(b, path, blob, ctype).then(function(res){
+        if (res.ok) {
+          OK_BUCKET = b;
+          try { localStorage.setItem('gtbot_cut_bucket', b); } catch(e){}
+          return { bucket: b, path: path, url: SUPABASE_DIRECT + '/storage/v1/object/public/' + b + '/' + path };
+        }
+        return res.text().then(function(t){
+          lastErr = b + ' → ' + res.status + (t ? ' ' + String(t).slice(0, 120) : '');
+          if (res.status === 413) return Promise.reject(new Error('图太大了（' + b + '）'));
+          return tryAt(i + 1);
+        });
+      }, function(e){
+        lastErr = b + ' → ' + (e && e.message ? e.message : String(e));
+        return tryAt(i + 1);
+      });
+    }
+    return tryAt(0);
+  }
+
+  /* ══════════ 状态 ══════════ */
+  var ROWS = [];           // {id, no, img, name, status:'empty'|'wait'|'up'|'fail', msg}
+  var SEQ = 1;
+  var LS = 'gtbot_cut_draft_v1';
+
+  function $(id){ return document.getElementById(id); }
+  function uid(){ return 'r' + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36); }
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                     .replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  var toastT = null;
+  function toast(msg){
+    var el = $('toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(function(){ el.classList.remove('show'); }, 2600);
+  }
+
+  function nextNo(){
+    var mx = 0, has = false;
+    ROWS.forEach(function(r){
+      var n = parseInt(String(r.no).replace(/[^\d]/g, ''), 10);
+      if (!isNaN(n) && String(r.no).trim() !== '' && /^\d+$/.test(String(r.no).trim())) { mx = Math.max(mx, n); has = true; }
+    });
+    if (!has) return String(parseInt($('startNo').value, 10) || 1);
+    return String(mx + 1);
+  }
+
+  // 文件名里的序号：只认「结尾附近 1~3 位数字」，避免把 IMG_20260930_1234 里的长数字当序号
+  function noFromName(fname){
+    var base = String(fname || '').replace(/\.[^.]+$/, '');
+    var m = base.match(/(?:^|\D)(\d{1,3})(?=\D*$)/);
+    return m ? m[1] : '';
+  }
+
+  /* ══════════ 渲染 ══════════ */
+  function render(){
+    var box = $('rows');
+    if (!ROWS.length) { box.innerHTML = ''; }
+    else {
+      box.innerHTML = ROWS.map(function(r){
+        var thumb;
+        if (r.img) thumb = '<img class="thumb" src="' + esc(displaySrc(r)) + '" alt="">';
+        else thumb = '<div class="thumb ph">无图</div>';
+        var st = '';
+        if (r.status === 'wait') st = '<span class="warn">排队中…</span>';
+        else if (r.status === 'up') st = '<span class="warn">上传中…</span>';
+        else if (r.status === 'fail') st = '<span class="bad">' + esc(r.msg || '上传失败') + '</span>';
+        else if (r.status === 'empty') st = '<span>只填了序号，还没选图</span>';
+        else st = '<span class="ok">已上传</span>';
+        return '<div class="row" data-id="' + r.id + '">' +
+          '<div class="no"><input type="text" value="' + esc(r.no) + '" data-act="no" placeholder="序号"></div>' +
+          thumb +
+          '<div class="info"><b>' + esc(r.name || '（未命名）') + '</b>' + st + '</div>' +
+          '<button class="del" data-act="del" title="删除这行">✕</button>' +
+        '</div>';
+      }).join('');
+    }
+    var ok = ROWS.filter(function(r){ return r.img; }).length;
+    var up = ROWS.filter(function(r){ return r.status === 'wait' || r.status === 'up'; }).length;
+    var bad = ROWS.filter(function(r){ return r.status === 'fail'; }).length;
+    var txt = '共 <b>' + ROWS.length + '</b> 页';
+    if (ok) txt += ' · 已上传 <b>' + ok + '</b>';
+    if (up) txt += ' · <span class="warn">处理中 ' + up + '</span>';
+    if (bad) txt += ' · <span class="bad">失败 ' + bad + '</span>';
+    $('stat').innerHTML = ROWS.length ? txt : '还没有内容。点「批量选图」把这一本的页一次选进来。';
+    $('btnPub').disabled = !(ROWS.filter(function(r){ return r.img && r.status === 'ok'; }).length);
+    saveDraft();
+  }
+
+  /* 显示用地址：目录里存的是**直连**地址（不占 Pages 额度），
+     但页面上显示时换成反代地址 —— 管理自己那台网络可能恰好是被阻断的那批。 */
+  function proxyify(url){
+    var s = String(url || '');
+    return s.indexOf(SUPABASE_DIRECT) === 0 ? sbUrl('') + s.slice(SUPABASE_DIRECT.length) : s;
+  }
+  function displaySrc(r){ return proxyify(r.img); }
+
+  function saveDraft(){
+    try {
+      localStorage.setItem(LS, JSON.stringify({
+        album: $('album').value,
+        rows: ROWS.map(function(r){ return { no: r.no, img: r.img, name: r.name, bucket: r.bucket, path: r.path, status: r.status }; })
+      }));
+    } catch(e){}
+  }
+  function loadDraft(){
+    try {
+      var raw = localStorage.getItem(LS);
+      if (!raw) return;
+      var d = JSON.parse(raw);
+      if (d && d.album) $('album').value = d.album;
+      if (d && Array.isArray(d.rows)) {
+        ROWS = d.rows.map(function(r){
+          return { id: uid(), no: r.no || '', img: r.img || '', name: r.name || '', bucket: r.bucket || '',
+                   path: r.path || '', status: r.img ? 'ok' : 'empty', msg: '' };
+        });
+      }
+    } catch(e){}
+  }
+
+  /* ══════════ 上传队列（最多 3 张并发，手机上一次选几十张也不会卡死） ══════════ */
+  var pending = [];
+  var running = 0;
+
+  function enqueue(row, file){
+    row.status = 'wait'; pending.push({ row: row, file: file }); pump();
+  }
+  function pump(){
+    while (running < 3 && pending.length) {
+      var job = pending.shift();
+      running++;
+      doUpload(job).then(function(){ running--; pump(); render(); });
+    }
+  }
+  function doUpload(job){
+    var row = job.row;
+    row.status = 'up'; render();
+    return compressImage(job.file, 1400, 0.82)
+      .then(function(blob){ return uploadBlob(blob, 'jpg', 'image/jpeg'); })
+      .then(function(r){
+        row.img = r.url; row.bucket = r.bucket; row.path = r.path;
+        row.status = 'ok'; row.msg = '';
+      })
+      .catch(function(e){
+        row.status = 'fail'; row.msg = (e && e.message) ? e.message : '上传失败';
+      });
+  }
+
+  function onFiles(files){
+    var list = Array.prototype.slice.call(files || []);
+    if (!list.length) return;
+    var useName = $('useFileNo').checked;
+    var counter = parseInt(nextNo(), 10) || 1;
+    list.forEach(function(f){
+      var no = useName ? (noFromName(f.name) || String(counter)) : String(counter);
+      counter++;
+      var row = { id: uid(), no: no, img: '', name: f.name, bucket: '', path: '', status: 'empty', msg: '' };
+      ROWS.push(row);
+      enqueue(row, f);
+    });
+    render();
+  }
+
+  /* ══════════ 生成目录 ══════════ */
+  function buildCatalog(){
+    var album = $('album').value.trim();
+    var pages = ROWS.filter(function(r){ return r.img && r.status === 'ok'; }).map(function(r){
+      return { no: String(r.no).trim(), img: r.img, name: r.name || '' };
+    });
+    return { type: 'cut_catalog', v: 1, album: album, created_at: new Date().toISOString(), count: pages.length, pages: pages };
+  }
+
+  function publish(){
+    var album = $('album').value.trim();
+    if (!album) return toast('先填「画集名称」');
+    var cat = buildCatalog();
+    if (!cat.pages.length) return toast('还没有上传成功的图');
+    if (ROWS.some(function(r){ return r.status === 'wait' || r.status === 'up'; })) return toast('还有图片在上传，等一下');
+    var noSet = {}, dup = [];
+    cat.pages.forEach(function(p){
+      if (!p.no) return;
+      if (noSet[p.no]) dup.push(p.no); else noSet[p.no] = 1;
+    });
+    $('warnbox').style.display = 'none';
+    if (dup.length) {
+      $('warnbox').style.display = '';
+      $('warnbox').innerHTML = '⚠️ 序号重复：' + esc(dup.join('、')) + '。<br>团长导入时会按序号找图，重复的序号只会认第一个。建议回去改一下再生成。';
+    }
+    var btn = $('btnPub'); btn.disabled = true; btn.textContent = '⏳ 上传目录中…';
+    var blob = new Blob([JSON.stringify(cat, null, 1)], { type: 'application/json' });
+    uploadBlob(blob, 'json', 'application/json').then(function(r){
+      var url = r.url;
+      $('link').value = url;
+      $('json').value = JSON.stringify(cat);
+      $('out').style.display = '';
+      $('strip').innerHTML = cat.pages.slice(0, 12).map(function(p){
+        return '<img src="' + esc(proxyify(p.img)) + '" alt="">';
+      }).join('');
+      toast('✅ 目录已生成（' + cat.pages.length + ' 页）');
+      btn.disabled = false; btn.textContent = '📤 生成目录并上传';
+      cat.__file = 'cut_catalog_' + album.replace(/[\\/:*?"<>|\s]+/g, '_') + '.json';
+      CAT_LAST = cat;
+    }).catch(function(e){
+      btn.disabled = false; btn.textContent = '📤 生成目录并上传';
+      $('warnbox').style.display = '';
+      $('warnbox').innerHTML = '❌ 上传失败：' + esc((e && e.message) || e) + '<br>可以把这一页的内容截图发给团长处理。';
+      toast('上传失败');
+    });
+  }
+
+  var CAT_LAST = null;
+
+  function copyLink(){
+    var el = $('link');
+    if (!el.value) return;
+    var done = function(){ toast('已复制，发给团长就行'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(el.value).then(done, function(){ el.select(); document.execCommand('copy'); done(); });
+    } else { el.select(); try { document.execCommand('copy'); done(); } catch(e){ toast('请长按链接手动复制'); } }
+  }
+
+  function download(){
+    if (!CAT_LAST) return toast('先生成目录');
+    var blob = new Blob([JSON.stringify(CAT_LAST, null, 1)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = CAT_LAST.__file || 'cut_catalog.json';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  }
+
+  /* ══════════ 事件 ══════════ */
+  $('btnPick').onclick = function(){ $('filePick').click(); };
+  $('filePick').onchange = function(e){ onFiles(e.target.files); e.target.value = ''; };
+  $('fileOne').onchange = function(e){
+    var f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    var id = $('fileOne').getAttribute('data-row');
+    var row = ROWS.filter(function(r){ return r.id === id; })[0];
+    if (!row) return;
+    row.name = f.name; row.status = 'empty'; row.msg = '';
+    enqueue(row, f); render();
+  };
+  $('btnAdd').onclick = function(){
+    ROWS.push({ id: uid(), no: nextNo(), img: '', name: '', bucket: '', path: '', status: 'empty', msg: '' });
+    render();
+  };
+  /* 清空用「两段式」而不是原生 confirm —— 管理多半是在 QQ / 微信内置浏览器里打开，
+     原生 confirm 在那两种浏览器里会被静默屏蔽（点了没反应，比不提示更糟）。 */
+  var clearArmT = null;
+  $('btnClear').onclick = function(){
+    var b = $('btnClear');
+    if (!ROWS.length) return toast('已经是空的');
+    if (b.getAttribute('data-armed') !== '1') {
+      b.setAttribute('data-armed', '1');
+      b.textContent = '⚠️ 再点一次确认清空 ' + ROWS.length + ' 页';
+      b.style.color = 'var(--bad)';
+      clearArmT = setTimeout(function(){
+        b.removeAttribute('data-armed'); b.textContent = '🗑️ 清空'; b.style.color = '';
+      }, 5000);
+      return;
+    }
+    clearTimeout(clearArmT);
+    b.removeAttribute('data-armed'); b.textContent = '🗑️ 清空'; b.style.color = '';
+    ROWS = []; pending = []; render(); toast('已清空');
+  };
+  $('btnPub').onclick = publish;
+  $('btnCopy').onclick = copyLink;
+  $('btnDl').onclick = download;
+  $('album').oninput = saveDraft;
+
+  $('rows').addEventListener('click', function(e){
+    var t = e.target;
+    var rowEl = t.closest ? t.closest('.row') : null;
+    if (!rowEl) return;
+    var id = rowEl.getAttribute('data-id');
+    var row = ROWS.filter(function(r){ return r.id === id; })[0];
+    if (!row) return;
+    var act = t.getAttribute && t.getAttribute('data-act');
+    if (act === 'del') { ROWS = ROWS.filter(function(r){ return r.id !== id; }); render(); return; }
+    if (t.classList && t.classList.contains('thumb')) { $('fileOne').setAttribute('data-row', id); $('fileOne').click(); }
+  });
+  $('rows').addEventListener('input', function(e){
+    var t = e.target;
+    if (!t.getAttribute || t.getAttribute('data-act') !== 'no') return;
+    var rowEl = t.closest('.row');
+    var row = ROWS.filter(function(r){ return r.id === rowEl.getAttribute('data-id'); })[0];
+    if (row) { row.no = t.value; saveDraft(); }
+  });
+
+  // 关页面时提示还有图在上传
+  window.addEventListener('beforeunload', function(e){
+    if (running > 0 || pending.length > 0) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  loadDraft();
+  render();
+})();
+</script>
+</body>
+</html>

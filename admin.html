@@ -1262,6 +1262,67 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
             </div>
           </details>
 
+          <!-- ✂️ 插画集切页导入（2026-09-30 团长要求）
+               场景：终末地这个 IP 常出国内插画集，开团后要「切页分发」——
+               管理在独立页面（/cut）把每页的图+序号录好、生成一条目录链接；
+               团长在这里粘链接 + 粘自己安排好的「CN + 序号」名单 → 一键生成排表。
+               图直接从目录里带进来，不用一条条手传。
+               ⚠️ 这里只做「读目录 + 生成条目」，不改任何原有字段结构。 -->
+          <details id="cutImportBox" style="margin-bottom: 12px; border: 1px dashed rgba(0,0,0,.18); border-radius: 16px; padding: 10px 14px;">
+            <summary style="cursor: pointer; font-size: 0.88rem; font-weight: 600;">✂️ 插画集切页导入（管理传图+序号 → 你配对 → 一键进排表）</summary>
+            <div style="margin-top: 10px;">
+              <div class="form-group">
+                <label for="cutCatalogUrl">① 目录链接（管理给你的那条）</label>
+                <input type="text" id="cutCatalogUrl" list="cutCatalogPresets" placeholder="https://oknhlfhdqbsukskdxqre.supabase.co/storage/v1/object/public/…/cut_xxx.json">
+                <datalist id="cutCatalogPresets"></datalist>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <button type="button" class="btn btn-secondary" onclick="loadCutCatalog()">📥 读取目录</button>
+                <label class="btn btn-secondary" style="cursor: pointer; margin: 0;">📁 选目录文件
+                  <input type="file" id="cutCatalogFile" accept=".json,application/json" style="display: none;" onchange="loadCutCatalogFile(event)">
+                </label>
+                <span id="cutCatalogState" style="font-size:0.8rem; color:var(--text-muted);">还没读取目录</span>
+              </div>
+              <details style="margin-top: 8px;">
+                <summary style="cursor: pointer; font-size: 0.8rem; color: var(--text-muted);">备用：直接粘目录文本（链接发不出来时用）</summary>
+                <textarea id="cutCatalogText" rows="3" style="width:100%; font-family:monospace; font-size:0.72rem; margin-top:6px;" placeholder='{"type":"cut_catalog", "album":"…", "pages":[{"no":"12","img":"https://…"}]}'></textarea>
+                <button type="button" class="btn btn-secondary" style="margin-top:6px;" onclick="loadCutCatalogText()">用这段文本当目录</button>
+              </details>
+
+              <div id="cutCatalogStrip" style="display:none; flex-wrap:wrap; gap:5px; margin-top:8px;"></div>
+
+              <div class="form-group" style="margin-top: 12px;">
+                <label for="cutPairInput">② 你安排好的名单（每行「CN 序号」；一个人多页可写一行，用空格 / 逗号 / 顿号隔开）</label>
+                <textarea id="cutPairInput" rows="8" style="width:100%; font-family:monospace; font-size:0.82rem;" placeholder="水玉 12&#10;水玉 15&#10;烦猫 P03, P07&#10;多利 5 8 9"></textarea>
+              </div>
+
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <div class="form-group" style="flex:1; min-width:180px;">
+                  <label for="cutBatchName">批次</label>
+                  <input type="text" id="cutBatchName" list="batchPresets" placeholder="如：26国插">
+                </div>
+                <div class="form-group" style="flex:0 0 120px;">
+                  <label for="cutCountry">地区</label>
+                  <select id="cutCountry"></select>
+                </div>
+                <div class="form-group" style="flex:0 0 160px;">
+                  <label for="cutStatus">状态</label>
+                  <select id="cutStatus"></select>
+                </div>
+                <div class="form-group" style="flex:0 0 130px;">
+                  <label for="cutPrice">单价（不确定就留 0）</label>
+                  <input type="number" id="cutPrice" value="0" step="0.01">
+                </div>
+              </div>
+
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top: 6px;">
+                <button type="button" class="btn btn-secondary" onclick="previewCutImport()">🔍 预览（不会写入）</button>
+                <span style="font-size:0.78rem; color:var(--text-muted);">先预览确认无误，再点里面的「确认导入」</span>
+              </div>
+              <div id="cutPreview" style="display: none; margin-top: 10px;"></div>
+            </div>
+          </details>
+
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <button type="submit" class="btn btn-primary">保存谷子到 group_data</button>
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -4668,6 +4729,294 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const p = document.getElementById('pasteImportPreview'); if (p) { p.style.display = 'none'; p.innerHTML = ''; }
     }
     window.clearPasteImport = clearPasteImport;
+
+    /* ══════════════════ ✂️ 插画集切页导入（2026-09-30） ══════════════════
+       链路：管理在独立页 /cut 传图+序号 → 生成一份目录 JSON（图已传到图床）→ 把链接发给团长；
+             团长在这里 ①粘目录链接 ②粘自己安排好的「CN + 序号」名单 → 生成 group_data 条目，
+             图跟着目录自动带进来，不用一条条手传、也不用下载 Excel。
+       ⚠️ 只新增函数，不改任何现有字段结构 / 保存逻辑。 */
+    let CUT_CATALOG = null;         // 当前读取到的目录 {album, pages:[{no,img,name}]}
+    let CUT_IMPORT_PENDING = null;  // 预览通过、待写入的条目
+    const CUT_CATALOG_LS = 'gtbot_cut_catalog_links';
+    const CUT_SUPA_HOST = 'https://oknhlfhdqbsukskdxqre.supabase.co';
+
+    /* 目录里的图存的是直连地址；预览时换成同源反代地址，
+       免得团长这台设备恰好是被 SNI 阻断的那批、预览里全是裂图。
+       （存进库里的仍然是目录原样的直连地址，不占 Pages Functions 额度。） */
+    function _cutProxyImg(url){
+      const s = String(url || '');
+      return s.indexOf(CUT_SUPA_HOST) === 0 ? (location.origin + '/sb' + s.slice(CUT_SUPA_HOST.length)) : s;
+    }
+
+    /* 序号归一：目录里可能写 12 / P12 / 012，名单里怎么写都要能对上 */
+    function _cutNormNo(v){
+      let t = String(v == null ? '' : v).trim();
+      if (!t) return '';
+      t = t.replace(/^[Pp]\s*(?=\d)/, '');
+      if (/^\d+$/.test(t)) t = String(parseInt(t, 10));
+      return t.toLowerCase();
+    }
+
+    /* 排表里的名字：画集名 + 页号（团长口径）；纯数字页号自动补 P */
+    function _cutPageLabel(no){
+      const s = String(no == null ? '' : no).trim();
+      return /^\d+$/.test(s) ? ('P' + parseInt(s, 10)) : s;
+    }
+
+    function _cutFillSelects(){
+      const c = document.getElementById('cutCountry');
+      const s = document.getElementById('cutStatus');
+      if (!c || !s) return false;
+      if (!c.options.length) {
+        c.innerHTML = COUNTRY_OPTIONS.map(x => '<option value="' + x + '">' + x + '</option>').join('');
+        c.value = '淘宝店';                       // 国内插画集多半是淘宝买的（线上 630 条的用法）
+      }
+      if (!s.options.length) {
+        s.innerHTML = STATUS_OPTIONS.map(o => '<option value="' + o.value + '">' + o.label + '</option>').join('');
+        s.value = '已下单';                       // 团长口径：导进来先当「已下单」
+      }
+      _cutFillCatalogPresets();
+      return true;
+    }
+
+    function _cutCatalogList(){
+      try { return JSON.parse(localStorage.getItem(CUT_CATALOG_LS) || '[]') || []; } catch (e) { return []; }
+    }
+    function _cutFillCatalogPresets(){
+      const dl = document.getElementById('cutCatalogPresets');
+      if (!dl) return;
+      dl.innerHTML = _cutCatalogList().map(function(x){
+        return '<option value="' + escapeHtml(x.url) + '">' + escapeHtml((x.album || '') + ' · ' + (x.count || 0) + ' 页') + '</option>';
+      }).join('');
+    }
+    function _cutRememberCatalog(url, album, count){
+      if (!url) return;
+      const list = _cutCatalogList().filter(function(x){ return x.url !== url; });
+      list.unshift({ url: url, album: album || '', count: count || 0, at: new Date().toISOString() });
+      try { localStorage.setItem(CUT_CATALOG_LS, JSON.stringify(list.slice(0, 20))); } catch (e) {}
+      _cutFillCatalogPresets();
+    }
+
+    /* ① 读目录：链接 / 文件 / 文本 三条路都归到 _cutApplyCatalog */
+    function _cutApplyCatalog(obj, srcLabel, srcUrl){
+      if (!obj || obj.type !== 'cut_catalog' || !Array.isArray(obj.pages)) {
+        return showToast('❌ 这不是一份切页目录（内容格式不对）');
+      }
+      const pages = obj.pages.filter(p => p && p.img).map(function(p){
+        return { no: String(p.no == null ? '' : p.no).trim(), img: String(p.img), name: p.name || '' };
+      });
+      if (!pages.length) return showToast('❌ 这份目录里没有一页带图');
+      const album = String(obj.album || '').trim();
+      CUT_CATALOG = { album: album, pages: pages };
+      const st = document.getElementById('cutCatalogState');
+      if (st) st.innerHTML = '✅ <b>' + escapeHtml(album || '(画集未命名)') + '</b> · ' + pages.length + ' 页';
+      const strip = document.getElementById('cutCatalogStrip');
+      if (strip) {
+        strip.style.display = 'flex';
+        strip.innerHTML = pages.slice(0, 10).map(function(p){
+          return '<img src="' + escapeHtml(_cutProxyImg(p.img)) + '" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--border);" alt="" onerror="this.style.opacity=.25">' +
+                 '<span style="font-size:0.68rem;color:var(--text-muted);align-self:center;margin-right:4px;">' + escapeHtml(_cutPageLabel(p.no)) + '</span>';
+        }).join('');
+      }
+      CUT_IMPORT_PENDING = null;
+      const pv = document.getElementById('cutPreview'); if (pv) { pv.style.display = 'none'; pv.innerHTML = ''; }
+      _cutRememberCatalog(srcUrl, album, pages.length);
+      if (!document.getElementById('cutBatchName').value && album) {
+        document.getElementById('cutBatchName').value = album;   // 批次默认跟画集同名，团长可改
+      }
+      showToast('✅ 目录读取成功（' + pages.length + ' 页' + (srcLabel ? '，来自' + srcLabel : '') + '）');
+    }
+
+    async function _cutFetchJson(url){
+      const tries = [url];
+      if (url.indexOf(CUT_SUPA_HOST) === 0) tries.push(location.origin + '/sb' + url.slice(CUT_SUPA_HOST.length));
+      let lastErr = '';
+      for (let i = 0; i < tries.length; i++) {
+        try {
+          const r = await fetch(tries[i], { cache: 'no-store' });
+          if (!r.ok) { lastErr = 'HTTP ' + r.status; continue; }
+          return await r.json();
+        } catch (e) { lastErr = (e && e.message) || String(e); }
+      }
+      throw new Error(lastErr || '拉取失败');
+    }
+
+    async function loadCutCatalog(){
+      const el = document.getElementById('cutCatalogUrl');
+      const url = (el ? el.value : '').trim();
+      if (!url) return showToast('先把管理给你的目录链接粘进来');
+      const st = document.getElementById('cutCatalogState');
+      if (st) st.textContent = '⏳ 正在读取目录…';
+      try {
+        const obj = await _cutFetchJson(url);
+        _cutApplyCatalog(obj, '', url);
+      } catch (e) {
+        if (st) st.textContent = '❌ 读取失败：' + ((e && e.message) || e);
+        showToast('❌ 目录读取失败，也可以让管理直接把目录文件发给你');
+      }
+    }
+
+    function loadCutCatalogFile(e){
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!f) return;
+      const rd = new FileReader();
+      rd.onload = function(){
+        try { _cutApplyCatalog(JSON.parse(rd.result), '文件', ''); }
+        catch (err) { showToast('❌ 文件内容不是有效目录：' + err.message); }
+      };
+      rd.readAsText(f, 'utf-8');
+    }
+
+    function loadCutCatalogText(){
+      const t = (document.getElementById('cutCatalogText').value || '').trim();
+      if (!t) return showToast('先粘一段目录文本');
+      try { _cutApplyCatalog(JSON.parse(t), '粘贴文本', ''); }
+      catch (e) { showToast('❌ 这段文本不是有效目录：' + e.message); }
+    }
+
+    /* ② 名单解析：一行 =「CN + 一个或多个序号」
+       分隔符 Tab / 逗号 / 顿号 / 分号 / 空格都认；# 开头的行当注释；空行忽略。
+       万一有人写成「序号 CN」也认（第一个词是纯数字、第二个词不是数字时自动对调）。 */
+    function parseCutPairing(text){
+      const rows = [];
+      const lines = String(text || '').split(/\r?\n/);
+      lines.forEach(function(raw, i){
+        const line = raw.trim();
+        if (!line || line.charAt(0) === '#') return;
+        let toks = line.split(/[\s]+/).filter(function(s){ return s !== ''; });
+        if (toks.length < 2) {
+          rows.push({ ln: i + 1, line: line, cn: '', err: '至少要「CN 序号」两段' });
+          return;
+        }
+        // 「序号 CN」自动对调
+        if (/^[Pp]?\d+$/.test(toks[0]) && !/^[Pp]?\d+$/.test(toks[1])) {
+          const a = toks[0]; toks[0] = toks[1]; toks[1] = a;
+        }
+        const cn = toks.shift();
+        const rest = toks.join(',').split(/[,，、;；\/]+/).map(function(s){ return s.trim(); }).filter(function(s){ return s !== ''; });
+        if (!rest.length) { rows.push({ ln: i + 1, line: line, cn: cn, err: '只看到 CN，没看到序号' }); return; }
+        rest.forEach(function(no){ rows.push({ ln: i + 1, line: line, cn: cn, no: no, err: '' }); });
+      });
+      return rows;
+    }
+
+    /* ③ 预览：把名单里的序号对上目录里的图；对不上的单独列出来，绝不静默吞掉 */
+    function previewCutImport(){
+      if (!CUT_CATALOG) return showToast('先读取目录（① 那一步）');
+      const rows = parseCutPairing(document.getElementById('cutPairInput').value || '');
+      if (!rows.length) return showToast('名单是空的');
+
+      const idx = {};
+      CUT_CATALOG.pages.forEach(function(p){
+        const k = _cutNormNo(p.no);
+        if (k && !idx[k]) idx[k] = p;
+      });
+
+      const items = [], problems = [], seen = {};
+      rows.forEach(function(r){
+        if (r.err) { problems.push('第 ' + r.ln + ' 行「' + r.line + '」：' + r.err); return; }
+        const key = _cutNormNo(r.no);
+        const page = idx[key];
+        if (!page) { problems.push('第 ' + r.ln + ' 行：目录里没有序号「' + r.no + '」这一页'); return; }
+        const dk = r.cn + '|' + key;
+        if (seen[dk]) { problems.push('第 ' + r.ln + ' 行：' + r.cn + ' 的 ' + _cutPageLabel(page.no) + ' 重复了一次（已自动只保留一条）'); return; }
+        seen[dk] = 1;
+        items.push({
+          cn: r.cn,
+          no: page.no,
+          name: (CUT_CATALOG.album ? CUT_CATALOG.album + ' ' : '') + _cutPageLabel(page.no),
+          img: page.img
+        });
+      });
+
+      const batch = (document.getElementById('cutBatchName').value || '').trim() || '默认批次';
+      const country = document.getElementById('cutCountry').value || '淘宝店';
+      const status = document.getElementById('cutStatus').value || '已下单';
+      const price = parseFloat(document.getElementById('cutPrice').value) || 0;
+      const cns = {};
+      items.forEach(function(x){ cns[x.cn] = 1; });
+      CUT_IMPORT_PENDING = { items: items, batch: batch, country: country, status: status, price: price };
+
+      let html = '';
+      html += '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px;font-size:0.85rem;">'
+           +  '画集：<b>' + escapeHtml(CUT_CATALOG.album || '(未命名)') + '</b> · 待导入 <b>' + items.length + '</b> 条 · '
+           +  '<b>' + Object.keys(cns).length + '</b> 人 · 批次 <b>' + escapeHtml(batch) + '</b> · 地区 <b>' + escapeHtml(country) + '</b> · '
+           +  '状态 <b>' + escapeHtml(status) + '</b> · 单价 <b>￥' + price.toFixed(2) + '</b>'
+           +  (price > 0 ? ' · 合计 <b>￥' + (price * items.length).toFixed(2) + '</b>' : '')
+           +  '</div>';
+
+      if (problems.length) {
+        html += '<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:0.8rem;max-height:150px;overflow:auto;">'
+             +  '<b>⚠️ ' + problems.length + ' 处要你核对（这些不会导入）：</b><br>' + problems.map(escapeHtml).join('<br>') + '</div>';
+      }
+
+      if (items.length) {
+        html += '<div style="margin-top:8px;max-height:230px;overflow:auto;">'
+             +  items.slice(0, 40).map(function(x){
+                  return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:0.8rem;">'
+                       +   '<img src="' + escapeHtml(_cutProxyImg(x.img)) + '" style="width:34px;height:34px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" alt="" onerror="this.style.opacity=.25">'
+                       +   '<span style="flex:0 0 auto;font-weight:600;">' + escapeHtml(x.cn) + '</span>'
+                       +   '<span style="color:var(--text-muted);flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(x.name) + '</span>'
+                       + '</div>';
+                }).join('')
+             +  (items.length > 40 ? '<div style="font-size:0.78rem;color:var(--text-muted);padding:6px 0;">…… 还有 ' + (items.length - 40) + ' 条</div>' : '')
+             +  '</div>';
+        html += '<div style="display:flex;gap:8px;margin-top:10px;"><button type="button" class="btn btn-primary" onclick="confirmCutImport()">✅ 确认导入这 ' + items.length + ' 条</button>'
+             +  '<button type="button" class="btn btn-secondary" onclick="clearCutImport()">清空</button></div>';
+      } else {
+        html += '<div style="margin-top:8px;font-size:0.85rem;color:var(--danger);">没有一条能导入，先检查名单和目录对不对得上。</div>';
+      }
+      const pv = document.getElementById('cutPreview');
+      pv.style.display = '';
+      pv.innerHTML = html;
+    }
+
+    function clearCutImport(){
+      CUT_IMPORT_PENDING = null;
+      const pv = document.getElementById('cutPreview'); if (pv) { pv.style.display = 'none'; pv.innerHTML = ''; }
+    }
+
+    async function confirmCutImport(){
+      if (!CUT_IMPORT_PENDING || !CUT_IMPORT_PENDING.items.length) return showToast('请先点「预览」');
+      const cfg = CUT_IMPORT_PENDING;
+      const base = Date.now();
+      const made = [];
+      cfg.items.forEach(function(x, i){
+        const it = {
+          item_id: 'item_' + base + '_' + i + '_' + Math.floor(Math.random() * 1000),
+          name: x.name, cn: x.cn, batch_name: cfg.batch,
+          price: cfg.price, quantity: 1, country: cfg.country, status: cfg.status,
+          image_url: x.img, created_at: new Date().toISOString()
+        };
+        // 与后台其它新增路径保持一致：不在「到货组」的状态不残留囤货日期
+        ensureStockDate(it, null);
+        made.push(it);
+      });
+      RAW_ITEMS.unshift.apply(RAW_ITEMS, made);
+      const ok = await saveDataToSupabase();
+      if (!ok) {
+        // 保存失败：把刚塞进去的撤出来，免得界面看着像成功了
+        const ids = {};
+        made.forEach(function(x){ ids[x.item_id] = 1; });
+        RAW_ITEMS = RAW_ITEMS.filter(function(x){ return !ids[String(x.item_id || x.id)]; });
+        renderTable();
+        return showToast('❌ 保存失败，这批没有写进库，请重试');
+      }
+      updateBatchDropdownOptions();
+      CURRENT_PAGE = 1;
+      renderTable();
+      const n = made.length;
+      clearCutImport();
+      showToast('🎉 已导入 ' + n + ' 条切页（批次「' + cfg.batch + '」）');
+    }
+    window.loadCutCatalog = loadCutCatalog;
+    window.loadCutCatalogFile = loadCutCatalogFile;
+    window.loadCutCatalogText = loadCutCatalogText;
+    window.previewCutImport = previewCutImport;
+    window.confirmCutImport = confirmCutImport;
+    window.clearCutImport = clearCutImport;
+    if (!_cutFillSelects()) document.addEventListener('DOMContentLoaded', _cutFillSelects);
 
     /* --- 标签页 2：排发工作台 --- */
     function switchDispatchSubTab(sub) {
