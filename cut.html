@@ -37,6 +37,7 @@ textarea{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px; w
       color:var(--ink); font-size:14px; font-weight:600; cursor:pointer; }
 .btn.primary{ background:var(--acc); border-color:var(--acc); color:#fff; }
 .btn.ok{ background:var(--ok); border-color:var(--ok); color:#fff; }
+.btn.warn{ background:var(--warn); border-color:var(--warn); color:#fff; }
 .btn.sm{ padding:7px 11px; font-size:13px; }
 .btn:disabled{ opacity:.45; cursor:not-allowed; }
 input[type=file]{ display:none; }
@@ -59,7 +60,7 @@ input[type=file]{ display:none; }
 .stat{ font-size:13px; color:var(--soft); margin:6px 0 2px; }
 .stat b{ color:var(--ink); }
 .ok{ color:var(--ok); } .bad{ color:var(--bad); } .warn{ color:var(--warn); }
-.out{ display:none; margin-top:10px; }
+.out{ margin-top:10px; }
 .out input[readonly]{ font-size:12.5px; }
 .thumbstrip{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
 .thumbstrip img{ width:44px; height:44px; object-fit:cover; border-radius:8px; border:1px solid var(--line); }
@@ -81,7 +82,7 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
 <body>
 <div class="wrap">
   <h1>✂️ 插画集切页录入</h1>
-  <div class="sub">给管理用的：把每一页的图传上来、填上序号，生成一条「目录链接」发给团长。<br>
+  <div class="sub">给管理用的：把每一页的图传上来、填上编号，生成一条「目录链接」发给团长。<br>
     团长在后台「排表管理 → 插画集切页导入」里粘这条链接，就能一键把切好的页导进排表。</div>
 
   <div class="card">
@@ -91,43 +92,64 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
   </div>
 
   <div class="card">
-    <h2>② 传图 + 填序号</h2>
+    <h2>② 传图 + 填编号</h2>
     <div class="toolbar">
-      <div class="f">
-        <label>起始序号</label>
-        <input type="number" id="startNo" value="1" min="0">
+      <div>
+        <label>&nbsp;</label>
+        <button class="btn primary" id="btnPick">📁 批量选图</button>
       </div>
       <div>
         <label>&nbsp;</label>
-        <button class="btn primary" id="btnPick">📁 批量选图（自动编号）</button>
-      </div>
-      <div>
-        <label>&nbsp;</label>
-        <button class="btn" id="btnAdd">＋ 加一行（只填序号）</button>
+        <button class="btn" id="btnAdd">＋ 加一页</button>
       </div>
       <div>
         <label>&nbsp;</label>
         <button class="btn" id="btnClear">🗑️ 清空</button>
       </div>
     </div>
-    <label style="margin-top:10px; display:flex; align-items:center; gap:6px; color:var(--ink);">
-      <input type="checkbox" id="useFileNo" style="width:auto; padding:0;"> 按文件名里的数字当序号（文件名没有数字就顺延）
-    </label>
     <input type="file" id="filePick" accept="image/*" multiple>
     <input type="file" id="fileOne" accept="image/*">
 
+    <div class="hint" style="margin-top:10px;">
+      <b>编号由你们自己填</b> —— 图选进来后编号框是空的，照着画集上的号一个个打进去。
+      数字（<code>12</code>）、带字母（<code>P12</code>）、中文（<code>封面</code>、<code>跨页</code>）都行，想怎么标就怎么标。
+    </div>
+
+    <details style="margin-top:10px;">
+      <summary>🔢 嫌一页页打太慢？可以让工具先填一版，你再改</summary>
+      <div class="toolbar" style="margin-top:8px;">
+        <div class="f">
+          <label>从几号开始</label>
+          <input type="number" id="startNo" value="1" min="0">
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button class="btn sm" id="btnSeq">🔢 按顺序填（1、2、3…）</button>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button class="btn sm" id="btnNameNo">🔢 按文件名里的数字填</button>
+        </div>
+      </div>
+      <div class="hint">只填<b>还空着</b>的编号 —— 你手打过的不会被覆盖。</div>
+    </details>
+
     <div class="stat" id="stat">还没有内容。点「批量选图」把这一本的页一次选进来。</div>
     <div id="rows"></div>
-    <div class="hint">序号可以随时改（图片不会变）；点缩略图可以给这一行换张图。</div>
+    <div class="hint">编号可以随时改（图片不会变）；点缩略图可以给这一页换张图。</div>
   </div>
 
   <div class="card">
     <h2>③ 生成目录链接</h2>
     <button class="btn ok" id="btnPub">📤 生成目录并上传</button>
+    <button class="btn warn" id="btnForce" style="display:none;">⚠️ 知道了，仍然生成</button>
     <div class="hint">生成后把链接发给团长，他粘到后台就能直接导入。</div>
     <div class="warnbox" id="warnbox" style="display:none;"></div>
 
-    <div class="out" id="out">
+    <!-- ⚠️ 「藏起来靠内联 style」而不是靠 CSS 类的 display:none：
+         代码里是用 `style.display = ''` 来显示的，那只清掉内联样式，
+         压不过类选择器上的 display:none（曾导致「生成完看不到链接」）。 -->
+    <div class="out" id="out" style="display:none;">
       <label style="margin-top:12px;">目录链接（发给团长）</label>
       <input type="text" id="link" readonly onclick="this.select()">
       <div class="toolbar" style="margin-top:8px;">
@@ -281,21 +303,47 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     clearTimeout(toastT); toastT = setTimeout(function(){ el.classList.remove('show'); }, 2600);
   }
 
-  function nextNo(){
-    var mx = 0, has = false;
-    ROWS.forEach(function(r){
-      var n = parseInt(String(r.no).replace(/[^\d]/g, ''), 10);
-      if (!isNaN(n) && String(r.no).trim() !== '' && /^\d+$/.test(String(r.no).trim())) { mx = Math.max(mx, n); has = true; }
-    });
-    if (!has) return String(parseInt($('startNo').value, 10) || 1);
-    return String(mx + 1);
+  function isBlankNo(r){ return String(r.no == null ? '' : r.no).trim() === ''; }
+
+  /* ⚠️ 归一必须与后台 _cutNormNo **一字不差**：后台按归一后的编号配对，
+     所以「12 / P12 / 012 / p 12」在团长眼里是**同一个编号**（只会认第一页）。
+     这边判重复要是用原始字符串，就会出现「管理这边没报警、团长那边却撞号」的静默错。 */
+  function normNo(v){
+    var t = String(v == null ? '' : v).trim();
+    if (!t) return '';
+    t = t.replace(/^[Pp]\s*(?=\d)/, '');
+    if (/^\d+$/.test(t)) t = String(parseInt(t, 10));
+    return t.toLowerCase();
   }
 
-  // 文件名里的序号：只认「结尾附近 1~3 位数字」，避免把 IMG_20260930_1234 里的长数字当序号
+  // 文件名里的编号：只认「结尾附近 1~3 位数字」，避免把 IMG_20260930_1234 里的长数字当编号
   function noFromName(fname){
     var base = String(fname || '').replace(/\.[^.]+$/, '');
     var m = base.match(/(?:^|\D)(\d{1,3})(?=\D*$)/);
     return m ? m[1] : '';
+  }
+
+  /* 两个「帮忙填」的按钮：⚠️ 只填**还空着**的编号，管理手打过的绝不覆盖。
+     默认是留空手填（编号由管理自己定），这两个只是嫌慢时用；填完第③步还会再查一遍。 */
+  function fillBySeq(){
+    var start = parseInt($('startNo').value, 10); if (isNaN(start)) start = 1;
+    var n = start, filled = 0;
+    ROWS.forEach(function(r){ if (isBlankNo(r)) { r.no = String(n); n++; filled++; } });
+    render();
+    toast(filled ? ('按顺序填了 ' + filled + ' 个编号，扫一眼改掉不对的') : '没有空着的编号了');
+  }
+  function fillByName(){
+    var start = parseInt($('startNo').value, 10); if (isNaN(start)) start = 1;
+    var n = start, filled = 0, fell = 0;
+    ROWS.forEach(function(r){
+      if (!isBlankNo(r)) return;
+      var v = noFromName(r.name);
+      if (v) { r.no = v; } else { r.no = String(n); n++; fell++; }
+      filled++;
+    });
+    render();
+    toast(filled ? ('按文件名填了 ' + filled + ' 个' + (fell ? '（' + fell + ' 个文件名没数字，顺延了）' : ''))
+                 : '没有空着的编号了');
   }
 
   /* ══════════ 渲染 ══════════ */
@@ -311,26 +359,34 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
         if (r.status === 'wait') st = '<span class="warn">排队中…</span>';
         else if (r.status === 'up') st = '<span class="warn">上传中…</span>';
         else if (r.status === 'fail') st = '<span class="bad">' + esc(r.msg || '上传失败') + '</span>';
-        else if (r.status === 'empty') st = '<span>只填了序号，还没选图</span>';
-        else st = '<span class="ok">已上传</span>';
+        else if (r.status === 'empty') st = '<span>还没选图</span>';
+        else st = isBlankNo(r) ? '<span class="ok">已上传</span> <span class="warn">· 编号还空着</span>'
+                               : '<span class="ok">已上传</span>';
         return '<div class="row" data-id="' + r.id + '">' +
-          '<div class="no"><input type="text" value="' + esc(r.no) + '" data-act="no" placeholder="序号"></div>' +
+          '<div class="no"><input type="text" value="' + esc(r.no) + '" data-act="no" placeholder="编号"></div>' +
           thumb +
           '<div class="info"><b>' + esc(r.name || '（未命名）') + '</b>' + st + '</div>' +
           '<button class="del" data-act="del" title="删除这行">✕</button>' +
         '</div>';
       }).join('');
     }
+    updateStat();
+    saveDraft();
+  }
+
+  /* 统计行单独拆出来：改编号时只刷这行，不重画整个列表（否则输入框会丢焦点） */
+  function updateStat(){
     var ok = ROWS.filter(function(r){ return r.img; }).length;
     var up = ROWS.filter(function(r){ return r.status === 'wait' || r.status === 'up'; }).length;
     var bad = ROWS.filter(function(r){ return r.status === 'fail'; }).length;
+    var noBlank = ROWS.filter(function(r){ return r.status === 'ok' && isBlankNo(r); }).length;
     var txt = '共 <b>' + ROWS.length + '</b> 页';
     if (ok) txt += ' · 已上传 <b>' + ok + '</b>';
+    if (noBlank) txt += ' · <span class="warn">没填编号 ' + noBlank + '</span>';
     if (up) txt += ' · <span class="warn">处理中 ' + up + '</span>';
     if (bad) txt += ' · <span class="bad">失败 ' + bad + '</span>';
     $('stat').innerHTML = ROWS.length ? txt : '还没有内容。点「批量选图」把这一本的页一次选进来。';
     $('btnPub').disabled = !(ROWS.filter(function(r){ return r.img && r.status === 'ok'; }).length);
-    saveDraft();
   }
 
   /* 显示用地址：目录里存的是**直连**地址（不占 Pages 额度），
@@ -395,12 +451,9 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
   function onFiles(files){
     var list = Array.prototype.slice.call(files || []);
     if (!list.length) return;
-    var useName = $('useFileNo').checked;
-    var counter = parseInt(nextNo(), 10) || 1;
     list.forEach(function(f){
-      var no = useName ? (noFromName(f.name) || String(counter)) : String(counter);
-      counter++;
-      var row = { id: uid(), no: no, img: '', name: f.name, bucket: '', path: '', status: 'empty', msg: '' };
+      // ⚠️ 编号**留空**：编号由管理自己按画集上的号填，工具不替他们猜。
+      var row = { id: uid(), no: '', img: '', name: f.name, bucket: '', path: '', status: 'empty', msg: '' };
       ROWS.push(row);
       enqueue(row, f);
     });
@@ -416,22 +469,60 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     return { type: 'cut_catalog', v: 1, album: album, created_at: new Date().toISOString(), count: pages.length, pages: pages };
   }
 
-  function publish(){
+  /* ══════════ 生成前的体检 ══════════
+     口径（团长 2026-09-30 定）：**醒目提醒，但允许强行生成** ——
+     所以这里只把问题逐条列出来，绝不拦路；管理看清后点「仍然生成」照样能出链接。 */
+  function collectIssues(){
+    var pages = ROWS.filter(function(r){ return r.img && r.status === 'ok'; });
+    var missing = 0, seen = {}, dupMap = {};
+    pages.forEach(function(r){
+      var raw = String(r.no == null ? '' : r.no).trim();
+      if (!raw) { missing++; return; }
+      var k = normNo(raw);
+      if (!k) { missing++; return; }
+      if (!seen[k]) { seen[k] = [raw]; return; }
+      if (!dupMap[k]) dupMap[k] = seen[k].slice();
+      if (dupMap[k].indexOf(raw) < 0) dupMap[k].push(raw);
+    });
+    // 同一个编号写成两种写法（12 / P12）时，报出来让人一眼看懂
+    var dup = Object.keys(dupMap).map(function(k){
+      var v = dupMap[k];
+      return v.length > 1 ? v.join(' / ') : v[0];
+    });
+    return { pages: pages, missing: missing, dup: dup };
+  }
+  function renderIssues(iss, forced){
+    var lines = [];
+    if (iss.missing) lines.push('<b>有 ' + iss.missing + ' 页没填编号。</b>'
+      + '编号是团长那边配对用的，这些页对不上就导不进去 —— 建议回去补一下。');
+    if (iss.dup.length) lines.push('<b>有 ' + iss.dup.length + ' 个编号重复：' + esc(iss.dup.join('、')) + '。</b>'
+      + '同一个编号团长只会认第一页。');
+    if (lines.length && iss.missing > 1) lines.push('（每页的编号本来就是要你们自己填的，别漏。）');
+    if (forced) lines.push('你点了「仍然生成」，上述问题会照原样进目录 —— 团长那边也看得到。');
+    $('warnbox').style.display = '';
+    $('warnbox').setAttribute('data-iss', '1');
+    $('warnbox').innerHTML = '⚠️ ' + lines.join('<br>');
+  }
+
+  function publish(force){
     var album = $('album').value.trim();
     if (!album) return toast('先填「画集名称」');
     var cat = buildCatalog();
     if (!cat.pages.length) return toast('还没有上传成功的图');
     if (ROWS.some(function(r){ return r.status === 'wait' || r.status === 'up'; })) return toast('还有图片在上传，等一下');
-    var noSet = {}, dup = [];
-    cat.pages.forEach(function(p){
-      if (!p.no) return;
-      if (noSet[p.no]) dup.push(p.no); else noSet[p.no] = 1;
-    });
-    $('warnbox').style.display = 'none';
-    if (dup.length) {
-      $('warnbox').style.display = '';
-      $('warnbox').innerHTML = '⚠️ 序号重复：' + esc(dup.join('、')) + '。<br>团长导入时会按序号找图，重复的序号只会认第一个。建议回去改一下再生成。';
+
+    var iss = collectIssues();
+    var btnF = $('btnForce');
+    if ((iss.missing || iss.dup.length) && !force) {
+      renderIssues(iss, false);
+      btnF.style.display = '';
+      toast('先看一眼上面的提醒');
+      return;
     }
+    btnF.style.display = 'none';
+    $('warnbox').style.display = 'none';
+    $('warnbox').removeAttribute('data-iss');
+    if (iss.missing || iss.dup.length) renderIssues(iss, true);
     var btn = $('btnPub'); btn.disabled = true; btn.textContent = '⏳ 上传目录中…';
     var blob = new Blob([JSON.stringify(cat, null, 1)], { type: 'application/json' });
     // ⚠️ 目录本身是 JSON，却必须用 image/jpeg 当 Content-Type 传：
@@ -452,6 +543,7 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     }).catch(function(e){
       btn.disabled = false; btn.textContent = '📤 生成目录并上传';
       $('warnbox').style.display = '';
+      $('warnbox').removeAttribute('data-iss');
       $('warnbox').innerHTML = '❌ 上传失败：' + esc((e && e.message) || e) + '<br>可以把这一页的内容截图发给团长处理。';
       toast('上传失败');
     });
@@ -492,9 +584,11 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     enqueue(row, f); render();
   };
   $('btnAdd').onclick = function(){
-    ROWS.push({ id: uid(), no: nextNo(), img: '', name: '', bucket: '', path: '', status: 'empty', msg: '' });
+    ROWS.push({ id: uid(), no: '', img: '', name: '', bucket: '', path: '', status: 'empty', msg: '' });
     render();
   };
+  $('btnSeq').onclick = fillBySeq;
+  $('btnNameNo').onclick = fillByName;
   /* 清空用「两段式」而不是原生 confirm —— 管理多半是在 QQ / 微信内置浏览器里打开，
      原生 confirm 在那两种浏览器里会被静默屏蔽（点了没反应，比不提示更糟）。 */
   var clearArmT = null;
@@ -514,7 +608,8 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     b.removeAttribute('data-armed'); b.textContent = '🗑️ 清空'; b.style.color = '';
     ROWS = []; pending = []; render(); toast('已清空');
   };
-  $('btnPub').onclick = publish;
+  $('btnPub').onclick = function(){ publish(false); };
+  $('btnForce').onclick = function(){ publish(true); };
   $('btnCopy').onclick = copyLink;
   $('btnDl').onclick = download;
   $('album').oninput = saveDraft;
@@ -535,7 +630,16 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     if (!t.getAttribute || t.getAttribute('data-act') !== 'no') return;
     var rowEl = t.closest('.row');
     var row = ROWS.filter(function(r){ return r.id === rowEl.getAttribute('data-id'); })[0];
-    if (row) { row.no = t.value; saveDraft(); }
+    if (!row) return;
+    row.no = t.value;
+    saveDraft();
+    updateStat();
+    // 一动手改编号，上一条「没填 / 重复」的提醒就过时了 → 收起来（重新点生成才会再查一遍）
+    if ($('warnbox').getAttribute('data-iss') === '1') {
+      $('warnbox').style.display = 'none';
+      $('warnbox').removeAttribute('data-iss');
+    }
+    $('btnForce').style.display = 'none';
   });
 
   // 关页面时提示还有图在上传

@@ -1264,12 +1264,13 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
 
           <!-- ✂️ 插画集切页导入（2026-09-30 团长要求）
                场景：终末地这个 IP 常出国内插画集，开团后要「切页分发」——
-               管理在独立页面（/cut）把每页的图+序号录好、生成一条目录链接；
-               团长在这里粘链接 + 粘自己安排好的「CN + 序号」名单 → 一键生成排表。
+               管理在独立页面（/cut）把每页的图+编号录好、生成一条目录链接；
+               团长在这里粘链接 + 粘自己安排好的「CN + 编号」名单 → 一键生成排表。
                图直接从目录里带进来，不用一条条手传。
+               ⚠️ 编号由管理自己按画集上的号填（数字 / P03 / 封面 都行），工具不替他们猜。
                ⚠️ 这里只做「读目录 + 生成条目」，不改任何原有字段结构。 -->
           <details id="cutImportBox" style="margin-bottom: 12px; border: 1px dashed rgba(0,0,0,.18); border-radius: 16px; padding: 10px 14px;">
-            <summary style="cursor: pointer; font-size: 0.88rem; font-weight: 600;">✂️ 插画集切页导入（管理传图+序号 → 你配对 → 一键进排表）</summary>
+            <summary style="cursor: pointer; font-size: 0.88rem; font-weight: 600;">✂️ 插画集切页导入（管理传图+编号 → 你配对 → 一键进排表）</summary>
             <div style="margin-top: 10px;">
               <div class="form-group">
                 <label for="cutCatalogUrl">① 目录链接（管理给你的那条）</label>
@@ -1292,8 +1293,9 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
               <div id="cutCatalogStrip" style="display:none; flex-wrap:wrap; gap:5px; margin-top:8px;"></div>
 
               <div class="form-group" style="margin-top: 12px;">
-                <label for="cutPairInput">② 你安排好的名单（每行「CN 序号」；一个人多页可写一行，用空格 / 逗号 / 顿号隔开）</label>
-                <textarea id="cutPairInput" rows="8" style="width:100%; font-family:monospace; font-size:0.82rem;" placeholder="水玉 12&#10;水玉 15&#10;烦猫 P03, P07&#10;多利 5 8 9"></textarea>
+                <label for="cutPairInput">② 你安排好的名单（每行「CN 编号」；一个人多页可写一行，用空格 / 逗号 / 顿号隔开）</label>
+                <textarea id="cutPairInput" rows="8" style="width:100%; font-family:monospace; font-size:0.82rem;" placeholder="水玉 12&#10;水玉 15&#10;烦猫 P03, P07&#10;多利 5 8 9&#10;雨声 封面"></textarea>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">编号要跟管理在录入页上填的<b>一模一样</b>（纯数字、P03、封面 都行，大小写和 P 前缀会自动认）。</div>
               </div>
 
               <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -4731,9 +4733,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     window.clearPasteImport = clearPasteImport;
 
     /* ══════════════════ ✂️ 插画集切页导入（2026-09-30） ══════════════════
-       链路：管理在独立页 /cut 传图+序号 → 生成一份目录 JSON（图已传到图床）→ 把链接发给团长；
-             团长在这里 ①粘目录链接 ②粘自己安排好的「CN + 序号」名单 → 生成 group_data 条目，
+       链路：管理在独立页 /cut 传图+编号 → 生成一份目录 JSON（图已传到图床）→ 把链接发给团长；
+             团长在这里 ①粘目录链接 ②粘自己安排好的「CN + 编号」名单 → 生成 group_data 条目，
              图跟着目录自动带进来，不用一条条手传、也不用下载 Excel。
+       ⚠️ 编号由管理自己按画集填（数字 / P03 / 封面 都行），工具不替他们猜。
        ⚠️ 只新增函数，不改任何现有字段结构 / 保存逻辑。 */
     let CUT_CATALOG = null;         // 当前读取到的目录 {album, pages:[{no,img,name}]}
     let CUT_IMPORT_PENDING = null;  // 预览通过、待写入的条目
@@ -4748,7 +4751,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return s.indexOf(CUT_SUPA_HOST) === 0 ? (location.origin + '/sb' + s.slice(CUT_SUPA_HOST.length)) : s;
     }
 
-    /* 序号归一：目录里可能写 12 / P12 / 012，名单里怎么写都要能对上 */
+    /* 编号归一：目录里可能写 12 / P12 / 012 / 封面，名单里怎么写都要能对上 */
     function _cutNormNo(v){
       let t = String(v == null ? '' : v).trim();
       if (!t) return '';
@@ -4875,9 +4878,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       catch (e) { showToast('❌ 这段文本不是有效目录：' + e.message); }
     }
 
-    /* ② 名单解析：一行 =「CN + 一个或多个序号」
+    /* ② 名单解析：一行 =「CN + 一个或多个编号」
        分隔符 Tab / 逗号 / 顿号 / 分号 / 空格都认；# 开头的行当注释；空行忽略。
-       万一有人写成「序号 CN」也认（第一个词是纯数字、第二个词不是数字时自动对调）。 */
+       万一有人写成「编号 CN」也认（第一个词是纯数字/P数字、第二个词不是时自动对调）。
+       ⚠️ 编号写成中文（封面、跨页）时不会自动对调 —— 那种情况请老老实实「CN 编号」这个顺序。 */
     function parseCutPairing(text){
       const rows = [];
       const lines = String(text || '').split(/\r?\n/);
@@ -4886,22 +4890,22 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         if (!line || line.charAt(0) === '#') return;
         let toks = line.split(/[\s]+/).filter(function(s){ return s !== ''; });
         if (toks.length < 2) {
-          rows.push({ ln: i + 1, line: line, cn: '', err: '至少要「CN 序号」两段' });
+          rows.push({ ln: i + 1, line: line, cn: '', err: '至少要「CN 编号」两段' });
           return;
         }
-        // 「序号 CN」自动对调
+        // 「编号 CN」自动对调（编号是中文时不会走到这里，见上面的说明）
         if (/^[Pp]?\d+$/.test(toks[0]) && !/^[Pp]?\d+$/.test(toks[1])) {
           const a = toks[0]; toks[0] = toks[1]; toks[1] = a;
         }
         const cn = toks.shift();
         const rest = toks.join(',').split(/[,，、;；\/]+/).map(function(s){ return s.trim(); }).filter(function(s){ return s !== ''; });
-        if (!rest.length) { rows.push({ ln: i + 1, line: line, cn: cn, err: '只看到 CN，没看到序号' }); return; }
+        if (!rest.length) { rows.push({ ln: i + 1, line: line, cn: cn, err: '只看到 CN，没看到编号' }); return; }
         rest.forEach(function(no){ rows.push({ ln: i + 1, line: line, cn: cn, no: no, err: '' }); });
       });
       return rows;
     }
 
-    /* ③ 预览：把名单里的序号对上目录里的图；对不上的单独列出来，绝不静默吞掉 */
+    /* ③ 预览：把名单里的编号对上目录里的图；对不上的单独列出来，绝不静默吞掉 */
     function previewCutImport(){
       if (!CUT_CATALOG) return showToast('先读取目录（① 那一步）');
       const rows = parseCutPairing(document.getElementById('cutPairInput').value || '');
@@ -4918,7 +4922,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         if (r.err) { problems.push('第 ' + r.ln + ' 行「' + r.line + '」：' + r.err); return; }
         const key = _cutNormNo(r.no);
         const page = idx[key];
-        if (!page) { problems.push('第 ' + r.ln + ' 行：目录里没有序号「' + r.no + '」这一页'); return; }
+        if (!page) { problems.push('第 ' + r.ln + ' 行：目录里没有编号「' + r.no + '」这一页'); return; }
         const dk = r.cn + '|' + key;
         if (seen[dk]) { problems.push('第 ' + r.ln + ' 行：' + r.cn + ' 的 ' + _cutPageLabel(page.no) + ' 重复了一次（已自动只保留一条）'); return; }
         seen[dk] = 1;
@@ -4938,6 +4942,16 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       items.forEach(function(x){ cns[x.cn] = 1; });
       CUT_IMPORT_PENDING = { items: items, batch: batch, country: country, status: status, price: price };
 
+      /* 目录体检（只提醒、不拦路）：
+         ① 目录里有页**没填编号** → 一定对不上，管理那边漏填了；
+         ② 目录里有页**这份名单没用上** → 可能你漏分发了某页，也可能本来就不分，自己判。 */
+      const usedKeys = {};
+      items.forEach(function(x){ usedKeys[_cutNormNo(x.no)] = 1; });
+      const blankPages = CUT_CATALOG.pages.filter(function(p){ return !_cutNormNo(p.no); }).length;
+      const unusedPages = CUT_CATALOG.pages.filter(function(p){
+        const k = _cutNormNo(p.no); return k && !usedKeys[k];
+      }).length;
+
       let html = '';
       html += '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px;font-size:0.85rem;">'
            +  '画集：<b>' + escapeHtml(CUT_CATALOG.album || '(未命名)') + '</b> · 待导入 <b>' + items.length + '</b> 条 · '
@@ -4949,6 +4963,18 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (problems.length) {
         html += '<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:0.8rem;max-height:150px;overflow:auto;">'
              +  '<b>⚠️ ' + problems.length + ' 处要你核对（这些不会导入）：</b><br>' + problems.map(escapeHtml).join('<br>') + '</div>';
+      }
+
+      if (blankPages) {
+        html += '<div style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:0.8rem;">'
+             +  '⚠️ 这本画集的目录里还有 <b>' + blankPages + ' 页没填编号</b>（管理那边漏填了）—— 那几页没有任何编号，'
+             +  '永远对不上，也没法导入。要分发的话让管理去「插画集切页录入」补上编号再重新生成一次链接。'
+             +  '</div>';
+      }
+      if (unusedPages) {
+        html += '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:8px 11px;margin-top:8px;font-size:0.8rem;color:var(--text-muted);">'
+             +  'ℹ️ 目录里另有 <b>' + unusedPages + ' 页</b>不在这份名单里（本来就不分发的话不用管）。'
+             +  '</div>';
       }
 
       if (items.length) {
