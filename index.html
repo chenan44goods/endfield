@@ -1281,32 +1281,44 @@
 
     const toast = document.getElementById('toast');
     let toastTimer = null;
-    /* ── 数据通道（2026-09-25）────────────────────────────────────────────
+    /* ── 数据通道（2026-09-25，2026-09-30 加固）─────────────────────────────
        *.supabase.co 在国内部分网络被按域名(SNI)阻断：DNS 正常、TCP 能连，
        但 TLS 握手一带上该域名就被 RST → 浏览器报 "Failed to fetch"。
-       对策：优先走本站同源反代 /sb/*（Cloudflare Pages Function → Supabase），
-       探不通就自动回退直连 —— 两条路任一可用都能查询。 */
+       对策：**首选本站同源反代 /sb/*（Cloudflare Pages Function → Supabase）**，
+       真连不上时自动换另一条通道重试 —— 两条路任一可用都能查询。
+       ⚠️ 2026-09-30 修：原来「探测一次定终身」，且探测失败就把 SB_BASE 锁死成直连，
+          一次抖动（超时 / 被 Cloudflare 拦 / 临时 5xx）就会让整页查询全部 "Failed to fetch"。 */
     const SUPABASE_DIRECT = 'https://oknhlfhdqbsukskdxqre.supabase.co';
     const SB_PROXY = '/sb';
-    let SB_BASE = null;
+    let SB_BASE = SB_PROXY;          // 首选恒为同源反代（它不会被 SNI 阻断影响）
     let _sbProbing = null;
     async function sbBase(){
-      if (SB_BASE) return SB_BASE;
-      if (_sbProbing) return await _sbProbing;
+      if (_sbProbing) { await _sbProbing; return SB_BASE; }
       _sbProbing = (async function(){
         try {
           const r = await fetch(SB_PROXY + '/__health', { cache: 'no-store' });
-          if (r.ok) { const j = await r.json(); if (j && j.ok) { SB_BASE = SB_PROXY; return SB_BASE; } }
+          if (r.ok) { const j = await r.json(); if (j && j.ok) { SB_BASE = SB_PROXY; return; } }
         } catch (e) {}
-        SB_BASE = SUPABASE_DIRECT;
-        return SB_BASE;
+        // ⚠️ 探测失败**不改**首选：/sb 是同源，最可能通；真连不上还有 sbFetch 的第二层兜底。
       })();
-      return await _sbProbing;
+      await _sbProbing;
+      return SB_BASE;
     }
-    // 所有数据请求的统一入口：自动选择「同源反代」或「直连」
-    async function sbFetch(path, opts){ return fetch((await sbBase()) + path, opts); }
+    /* 所有数据请求的统一入口：先走首选通道；**网络层**失败（压根没连上）自动换另一条再试一次。
+       HTTP 4xx/5xx 不换通道 —— 那说明请求已经到服务端了，换通道也没用。
+       （这里的写操作都是 PATCH / 上传，重试是幂等的，不会重复下单） */
+    async function sbFetch(path, opts){
+      await sbBase();
+      const order = (SB_BASE === SUPABASE_DIRECT) ? [SUPABASE_DIRECT, SB_PROXY] : [SB_PROXY, SUPABASE_DIRECT];
+      let lastErr = null;
+      for (let i = 0; i < order.length; i++) {
+        try { return await fetch(order[i] + path, opts); }
+        catch (e) { lastErr = e; }
+      }
+      throw lastErr || new Error('网络连不上');
+    }
     // 给 img.src 等用的地址拼接（进入页面后通道一般已探测完成）
-    function sbUrl(path){ return (SB_BASE || SB_PROXY) + path; }
+    function sbUrl(path){ return SB_BASE + path; }
     const SUPABASE_ANON = 'sb_publishable_UW9cgyBOeV6zIZCicI2SlQ_bqm0MeJa';
     // 直接用原生 fetch 调 Supabase REST API，不依赖外部 CDN 脚本
     async function fetchLeaderData(key){
