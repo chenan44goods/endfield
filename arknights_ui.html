@@ -2273,14 +2273,39 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       } catch (e) { return RAW_ARCHIVED; }
     }
 
-    async function saveDataToSupabase() {
+    // 🔒 保存串行化（2026-09-30 修）：同一时刻只允许一次写库。
+    // 为什么必须这么做：并发保存时，后完成的那一次会把前一次「正在合并」用的 DIRTY 标记一并清掉，
+    // 于是冲突合并分支把刚改过的订单回退成服务器旧值；而凭证是按 id 合并（我这边的优先），
+    // 「已通过」照样保住了 → 静默产生「凭证过了、订单没动 → 机器人一直催已交的人」。
+    // 09-30 实证：多利 ￥19、橘子 ￥90，两次点击相隔 2 秒（07:33:31 / 07:33:33），正是整轮审核最密的一刻。
+    let _saveChain = Promise.resolve();
+    function saveDataToSupabase() {
+      const run = function () { return _saveDataToSupabase(); };
+      const next = _saveChain.then(run, run);
+      _saveChain = next.then(function () {}, function () {});
+      return next;
+    }
+
+    async function _saveDataToSupabase() {
       if (!CURRENT_QUERY_KEY) return showToast('未指定 Query Key');
       try {
+        // 本次保存「自己负责的」标记快照 —— 只按这份合并、也只清这份。
+        // ⚠️ 绝不能再写全局 DIRTY_ITEM_IDS.clear()：那会把并发保存的标记一起清掉（上面那个 bug 的根因）。
+        const MY_DIRTY = new Set(DIRTY_ITEM_IDS);
+        const MY_DELETED = new Set(DELETED_ITEM_IDS);
+        const MY_PROOF_DELETED = new Set(PAY_PROOF_DELETED_IDS);
+        const MY_LOGI_DELETED = new Set(LOGISTICS_DELETED_BATCHES);
+        const clearMine = function () {
+          MY_DIRTY.forEach(function (x) { DIRTY_ITEM_IDS.delete(x); });
+          MY_DELETED.forEach(function (x) { DELETED_ITEM_IDS.delete(x); });
+          MY_PROOF_DELETED.forEach(function (x) { PAY_PROOF_DELETED_IDS.delete(x); });
+          MY_LOGI_DELETED.forEach(function (x) { LOGISTICS_DELETED_BATCHES.delete(x); });
+        };
         const mergedArch = await _mergedArchivedItems();
         RAW_ARCHIVED = mergedArch;
-        // 写库前清理囤货日期，但只清「本次动过的条目」（DIRTY_ITEM_IDS），
+        // 写库前清理囤货日期，但只清「本次动过的条目」（MY_DIRTY），
         // 库里那些历史遗留的错误日期不会被顺手改掉 —— 团长没让我动的数据，一个都不动。
-        if (Array.isArray(RAW_ITEMS)) sanitizeStockDates(RAW_ITEMS, DIRTY_ITEM_IDS);
+        if (Array.isArray(RAW_ITEMS)) sanitizeStockDates(RAW_ITEMS, MY_DIRTY);
         const payload = {
           group_data: RAW_ITEMS,
           // ⚠️ 下面每个字段都是「后台整份回写」的：
@@ -2315,25 +2340,25 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               RAW_ITEMS.forEach(function(it){
                 const id = String(it.item_id || it.id);
                 if (!freshById[id]) { myNewCount++; }
-                if (!freshById[id] || DIRTY_ITEM_IDS.has(id)) { mergedArr.push(it); seenIds[id] = true; }
+                if (!freshById[id] || MY_DIRTY.has(id)) { mergedArr.push(it); seenIds[id] = true; }
               });
               freshItems.forEach(function(it){
                 const id = String(it.item_id || it.id);
                 if (!seenIds[id]) { mergedArr.push(it); seenIds[id] = true; }
               });
-              const merged = mergedArr.filter(function(it){ return !DELETED_ITEM_IDS.has(String(it.item_id || it.id)); });
+              const merged = mergedArr.filter(function(it){ return !MY_DELETED.has(String(it.item_id || it.id)); });
               let freshImg2 = freshRec.image_data;
               if (typeof freshImg2 === 'string') { try { freshImg2 = JSON.parse(freshImg2); } catch (e) { freshImg2 = {}; } }
               if (!freshImg2 || typeof freshImg2 !== 'object') freshImg2 = {};
               const freshLogistics = Array.isArray(freshImg2.logistics_data) ? freshImg2.logistics_data : [];
-              freshImg2.logistics_data = mergeLogisticsData(freshLogistics, RAW_LOGISTICS, LOGISTICS_DELETED_BATCHES);
+              freshImg2.logistics_data = mergeLogisticsData(freshLogistics, RAW_LOGISTICS, MY_LOGI_DELETED);
               freshImg2.archived_items = mergedArch;
               // ⚠️ 下面几类都按 id 合并「我这边的优先 + 服务器多出来的保留」。
               //    不合并的话，冲突分支会用服务器旧数据把刚做的修改冲掉 ——
               //    2026-09-24 踩到：派发后申请被冲回「待处理」，谷子却已「已排发」→ 两边状态不一致。
               // ⚠️ 合并后必须再剔除「本次明确删掉的」—— 否则并集会把删掉的记录复活（2026-09-25 团长要真删）
               freshImg2.pay_proofs = mergeById(RAW_PAY_PROOFS, freshImg2.pay_proofs).filter(function (p) {
-                return !PAY_PROOF_DELETED_IDS.has(String(p && p.id));
+                return !MY_PROOF_DELETED.has(String(p && p.id));
               });
               freshImg2.applications = mergeById(RAW_APPLICATIONS, freshImg2.applications);
               freshImg2.transfer_logs = mergeById(RAW_LOGS, freshImg2.transfer_logs);
@@ -2358,8 +2383,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             const freshVersion = mergeResult.freshVersion;
             const merged = mergeResult.merged;
             const myNewCount = mergeResult.myNewCount;
-            const hadDirty = DIRTY_ITEM_IDS.size > 0;
-            const hadDeleted = DELETED_ITEM_IDS.size > 0;
+            const hadDirty = MY_DIRTY.size > 0;
+            const hadDeleted = MY_DELETED.size > 0;
             let freshImg = freshRec.image_data;
             if (typeof freshImg === 'string') { try { freshImg = JSON.parse(freshImg); } catch (e) { freshImg = {}; } }
             if (!freshImg || typeof freshImg !== 'object') freshImg = {};
@@ -2368,10 +2393,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             RAW_ITEMS = merged;
             RAW_LOGISTICS = mergeResult.mergedLogistics || RAW_LOGISTICS;
             if (Array.isArray(mergeResult.mergedProofs)) RAW_PAY_PROOFS = mergeResult.mergedProofs;
-            LOGISTICS_DELETED_BATCHES.clear();
-            DELETED_ITEM_IDS.clear();
-            DIRTY_ITEM_IDS.clear();
-            PAY_PROOF_DELETED_IDS.clear();
+            clearMine();
             RAW_APPLICATIONS = Array.isArray(freshImg.applications) ? freshImg.applications : RAW_APPLICATIONS;
             RAW_LOGS = Array.isArray(freshImg.transfer_logs) ? freshImg.transfer_logs : RAW_LOGS;
             RAW_FEEDBACK = Array.isArray(freshImg.feedback) ? freshImg.feedback : RAW_FEEDBACK;
@@ -2383,22 +2405,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             else alert('⚠️ 检测到数据有更新，已刷新为最新数据，请重新操作。');
             return true;
           }
-                    CURRENT_VERSION = nextVersion;
-          DELETED_ITEM_IDS.clear();
-        DIRTY_ITEM_IDS.clear();
-          DIRTY_ITEM_IDS.clear();
-      DIRTY_ITEM_IDS.clear();
-          LOGISTICS_DELETED_BATCHES.clear();
-          PAY_PROOF_DELETED_IDS.clear();
+          CURRENT_VERSION = nextVersion;
+          clearMine();
           return true;
         }
         const { error } = await supabaseClient.from('leader_data').update(payload).eq('id', CURRENT_RECORD_ID);
         if (error) { showToast('保存失败: ' + error.message); return false; }
-        DELETED_ITEM_IDS.clear();
-        DIRTY_ITEM_IDS.clear();
-      DIRTY_ITEM_IDS.clear();
-        LOGISTICS_DELETED_BATCHES.clear();
-        PAY_PROOF_DELETED_IDS.clear();
+        clearMine();
         return true;
       } catch (err) { showToast('保存异常'); return false; }
     }
@@ -2933,6 +2946,30 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return { state: 'mismatch', due: due.amount, got: got, source: due.source };
     }
 
+    /* 🔁 落库校验（2026-09-30 新增）：回读数据库，确认这几条订单真的已经是「已下单 + 有付款方式」。
+       为什么需要：保存"成功"不等于改动进了库 —— 冲突合并分支一旦回退成服务器旧值，
+       订单会静默变回未付款，而凭证已按 id 合并保住了「已通过」，两边就错位了。
+       校验本身出错（网络抖动/读失败）返回 true，不拦团长 —— 宁可放过，也不让审核卡死。 */
+    async function _verifyPayApplied(vIds) {
+      try {
+        const { data, error } = await supabaseClient.from('leader_data')
+          .select('group_data').eq('query_key', CURRENT_QUERY_KEY);
+        if (error || !data || !data.length) return true;
+        let arr = data[0].group_data;
+        if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (e) { return true; } }
+        if (!Array.isArray(arr)) return true;
+        const byId = {};
+        arr.forEach(function (it) { if (it && typeof it === 'object') byId[String(it.item_id || it.id || '')] = it; });
+        return vIds.every(function (iid) {
+          const it = byId[iid];
+          if (!it) return false;
+          const st = String(it.status || '').trim();
+          if (st === '未付款' || st === '未交') return false;
+          return !!String(it.pay_method || '').trim();
+        });
+      } catch (e) { return true; }
+    }
+
     /* 删除存储里的凭证原图。失败只记录、不抛错 —— 记录侧已经标记为不再引用，
        漏删掉的文件由「清理无引用旧图」兜底。 */
     async function _purgeProofObjects(paths) {
@@ -3364,6 +3401,43 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const nowStr = new Date().toLocaleString('zh-CN');
       let intlPrev = [];   // 国际条目改动前的值：保存失败必须回滚，否则重试会被误判成「已经改过」
 
+      // —— 普通订单：改动 / 回滚（保存失败、落库校验不过时用得上）——
+      const ordPrev = [];      // 改动前的值（按 id 去重）
+      const ordPrevSeen = {};
+      function patchOneOrder(it, iid) {
+        const st = String(it.status || '').trim();
+        if (st !== '未付款' && st !== '未交') return false;
+        if (!ordPrevSeen[iid]) {
+          ordPrevSeen[iid] = true;
+          ordPrev.push({ iid: iid, it: it, status: it.status,
+                         pay_method: it.pay_method, paid_at: it.paid_at });
+        }
+        it.status = '已下单';
+        it.pay_method = proof.pay_method || '';
+        it.paid_at = nowStr;
+        DIRTY_ITEM_IDS.add(iid);
+        return true;
+      }
+      function applyOrderPatch() {
+        let c = 0, p = 0, nf = 0;
+        const pool = RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []);
+        const hitIds = {};
+        pool.forEach(function (it) {
+          if (!it || typeof it !== 'object') return;
+          const iid = String(it.item_id || it.id || '');
+          if (!iid || ids.indexOf(iid) < 0) return;
+          hitIds[iid] = true;
+          if (patchOneOrder(it, iid)) c++; else p++;
+        });
+        ids.forEach(function (iid) { if (!hitIds[iid]) nf++; });
+        return { changed: c, alreadyPaid: p, notFound: nf };
+      }
+      function rollbackOrderPatch() {
+        ordPrev.forEach(function (r) {
+          r.it.status = r.status; r.it.pay_method = r.pay_method; r.it.paid_at = r.paid_at;
+        });
+      }
+
       if (isIntl) {
         // 国际运费：改 image_data.logistics_data 里对应条目的状态 → 已交
         // （改的是机器人 /已付国际 同一份数据，两边不会打架）
@@ -3394,24 +3468,21 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           if (!hit) notFound++;
         });
       } else {
-        RAW_ITEMS.forEach(function (it) {
-          const iid = String(it.item_id || it.id);
-          if (ids.indexOf(iid) < 0) return;
-          const st = String(it.status || '').trim();
-          if (st === '未付款' || st === '未交') {
-            it.status = '已下单';
-            it.pay_method = proof.pay_method || '';
-            it.paid_at = nowStr;
-            DIRTY_ITEM_IDS.add(iid);
-            changed++;
-          } else {
-            alreadyPaid++;
-          }
-        });
-        ids.forEach(function (iid) {
-          const hit = RAW_ITEMS.some(function (it) { return String(it.item_id || it.id) === iid; });
-          if (!hit) notFound++;
-        });
+        // 🩺 普通订单改动（2026-09-30 重写）：
+        //   · 查条目口径与金额校验 _payProofDueAmount 完全一致（含归档区）—— 避免「算得出应付、却改不到条目」
+        //   · 记下旧值，保存失败 / 落库校验不过时要能整体回滚
+        //   · 抽成函数：落库校验不过时按 id 重新定位（合并分支会把 RAW_ITEMS 整个换成新数组）再打一次
+        const r0 = applyOrderPatch();
+        changed = r0.changed; alreadyPaid = r0.alreadyPaid; notFound = r0.notFound;
+      }
+
+      // 🚫 一条都没改到、而且还有条目在表里找不到 → 绝不把凭证标成「已通过」。
+      //    09-30 踩的就是这个坑：页面内存里的订单旧了（或根本没加载到），条目找不到，
+      //    凭证照样被标「已通过」+ 原图被清（不可逆），订单却没动 → 机器人一直催已交的人。
+      if (changed === 0 && notFound > 0) {
+        rollbackOrderPatch();
+        return showToast('❌ 这 ' + notFound + (isIntl ? ' 项运费' : ' 条订单') +
+          '在系统里找不到（页面数据可能旧了），没有确认收款。请先点「🔄 刷新」再重试。');
       }
 
       // ② 记录侧：本条置为已通过；同批次的其他「非通过」凭证也一并停止引用原图
@@ -3441,7 +3512,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         stopRef(p);
       });
 
-      const ok = await saveDataToSupabase();
+      let ok = await saveDataToSupabase();
       if (!ok) {
         proof.status = prevStatus;
         proof.reviewed_at = prevReviewed;
@@ -3452,7 +3523,39 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           r.m.status = r.status; r.m.pay_method = r.pay_method;
           r.m.paid_at = r.paid_at; r.m.amount_paid = r.amount_paid;
         });
+        rollbackOrderPatch();
         return;
+      }
+
+      // ②-b 🔁 落库校验（2026-09-30 新增，长久防错）：
+      //    「保存没报错」≠「改动真的进了库」。回读一次数据库，逐条确认这几单已经是
+      //    「已下单 + 有付款方式」。没确认到 → 按 id 重新定位再打一次、再存一次
+      //    （冲突合并分支会把 RAW_ITEMS 整个换成新数组，旧的循环变量已失效，必须重新查）。
+      //    两次都不行 → 撤销这次审核并把凭证退回「待审核」，明确报错 ——
+      //    宁可不通过，也绝不留「凭证已通过 + 原图已清 + 订单没动」这个真空。
+      let vIds = [];
+      if (!isIntl) {
+        vIds = ids.filter(function (x) { return x.indexOf('intl:') < 0; });
+      }
+      if (vIds.length) {
+        let vok = await _verifyPayApplied(vIds);
+        if (!vok) {
+          const r1 = applyOrderPatch();
+          changed = changed + r1.changed;
+          const ok2 = await saveDataToSupabase();
+          vok = ok2 && await _verifyPayApplied(vIds);
+        }
+        if (!vok) {
+          proof.status = prevStatus;
+          proof.reviewed_at = prevReviewed;
+          prevRefs.forEach(function (r) {
+            r.obj.img_path = r.img_path; r.obj.purged_path = r.purged_path; r.obj.purged_at = r.purged_at;
+          });
+          rollbackOrderPatch();
+          await saveDataToSupabase();   // 把「撤销」也落库
+          renderPayReview();
+          return showToast('❌ 订单状态没能写进数据库，这次审核已撤销（凭证退回「待审核」，截图没删）。请重试；若反复出现请找开发。');
+        }
       }
 
       // ③ 记录已经落库，再删对象。删失败不回滚状态（记录侧已声明不再引用），
@@ -3468,6 +3571,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       showToast(msg);
       renderPayReview();
       renderPayStats();
+      renderTable();   // 订单状态变了，排表那边同步重画（合并分支会把 RAW_ITEMS 整份换新）
     }
     window.approvePayProof = approvePayProof;
 
