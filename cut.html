@@ -215,9 +215,14 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
   }
 
   /* ══════════ 上传 ══════════
-     两道桶依次试：goods-images 是后台正式图床（匿名可能没开写入权限），
-     pay-proofs 是团员端一直在用的、确定允许匿名上传的桶。第一个成功就记住。 */
-  var BUCKETS = ['goods-images', 'pay-proofs'];
+     2026-09-30 真浏览器实测结论（别再凭猜）：
+       · goods-images：匿名写入被 RLS 拒（403 new row violates row-level security policy）
+         —— 那是后台登录态专用的桶，所以排在第一位的必须是下面那个。
+       · pay-proofs：团员端一直在用的桶，**确定允许匿名上传**；但它只收图片类型，
+         传 text/plain / application/octet-stream 会被 415 invalid_mime_type 拒掉，
+         而它**不校验内容**（用 image/jpeg 头传 JSON 字节照样收，读取时 fetch().json() 也正常）。
+     所以默认先试 pay-proofs；顺序可用 localStorage 记住，策略以后变了也不至于卡死。 */
+  var BUCKETS = ['pay-proofs', 'goods-images'];
   var OK_BUCKET = '';
   try { OK_BUCKET = localStorage.getItem('gtbot_cut_bucket') || ''; } catch(e){}
   if (OK_BUCKET) BUCKETS = [OK_BUCKET].concat(BUCKETS.filter(function(b){ return b !== OK_BUCKET; }));
@@ -429,7 +434,10 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     }
     var btn = $('btnPub'); btn.disabled = true; btn.textContent = '⏳ 上传目录中…';
     var blob = new Blob([JSON.stringify(cat, null, 1)], { type: 'application/json' });
-    uploadBlob(blob, 'json', 'application/json').then(function(r){
+    // ⚠️ 目录本身是 JSON，却必须用 image/jpeg 当 Content-Type 传：
+    //    桶只白名单了图片类型（实测 415 invalid_mime_type），但不校验内容字节。
+    //    团长那边是 fetch() 后 JSON.parse 的，不看 Content-Type，所以完全可用。
+    uploadBlob(blob, 'json', 'image/jpeg').then(function(r){
       var url = r.url;
       $('link').value = url;
       $('json').value = JSON.stringify(cat);
