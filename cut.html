@@ -171,30 +171,35 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
   'use strict';
 
   /* ══════════ 通道（与团员端同一套） ══════════
-     *.supabase.co 在部分手机网络被按域名(SNI)阻断 → 优先走本站同源反代 /sb/*，
-     反代探不通就回退直连。上传图片时用 sbFetch（反代），写进目录的却是**直连**地址：
-     因为目录里的图会被后台/团员端长期引用，直连地址不占用 Pages Functions 额度。 */
+     *.supabase.co 在部分网络被按域名(SNI)阻断 → 上传走本站同源反代 /sb/*（最稳的一条）。
+     写进目录的却是**直连**地址：目录里的图会被后台/团员端长期引用，
+     直连地址不占用 Pages Functions 额度。
+
+     ⚠️ 2026-09-30 修（团长实际踩到「上传图片出错」）：
+        原来这里是「探测一次定终身」，而且**探测失败就锁死直连** ——
+        只要 /sb/__health 稍微抖一下（4 秒超时 / 被 Cloudflare 拦 / 临时 5xx），
+        SB_BASE 就永久变成直连；而直连在部分网络是不通的 →
+        **之后每一张图、每一份目录全部上传失败**，管理只看到一句「上传失败」，完全无从下手。
+        现在：① 首选永远是 /sb；② 探测失败**不改**首选；③ 真正请求时还有第二层兜底（见 putObject）。 */
   var SUPABASE_DIRECT = 'https://oknhlfhdqbsukskdxqre.supabase.co';
   var SUPABASE_ANON = 'sb_publishable_UW9cgyBOeV6zIZCicI2SlQ_bqm0MeJa';
   var SB_PROXY = '/sb';
-  var SB_BASE = '', _probe = null;
+  var SB_BASE = SB_PROXY, _probe = null;
 
   function sbBase(){
-    if (SB_BASE) return Promise.resolve(SB_BASE);
     if (_probe) return _probe;
     _probe = (function(){
       var c = new AbortController();
       var t = setTimeout(function(){ c.abort(); }, 4000);
       return fetch(SB_PROXY + '/__health', { cache: 'no-store', signal: c.signal })
         .then(function(r){ return r.ok ? r.json() : null; })
-        .then(function(j){ SB_BASE = (j && j.ok) ? SB_PROXY : SUPABASE_DIRECT; return SB_BASE; })
-        .catch(function(){ SB_BASE = SUPABASE_DIRECT; return SB_BASE; })
+        .then(function(j){ if (j && j.ok) SB_BASE = SB_PROXY; return SB_BASE; })
+        .catch(function(){ return SB_BASE; })
         .then(function(v){ clearTimeout(t); return v; });
     })();
     return _probe;
   }
-  function sbFetch(path, opts){ return sbBase().then(function(b){ return fetch(b + path, opts); }); }
-  function sbUrl(path){ return (SB_BASE || SB_PROXY) + path; }
+  function sbUrl(path){ return SB_BASE + path; }
 
   /* ══════════ 图片压缩（与团员端 compressImage 一字不差，避免同一张图两端表现不同） ══════════ */
   function compressImage(file, maxSide, quality){
@@ -249,17 +254,29 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
   try { OK_BUCKET = localStorage.getItem('gtbot_cut_bucket') || ''; } catch(e){}
   if (OK_BUCKET) BUCKETS = [OK_BUCKET].concat(BUCKETS.filter(function(b){ return b !== OK_BUCKET; }));
 
+  /* 上传：先走首选通道；**网络层**失败（压根没连上）自动换另一条通道再试一次。
+     HTTP 4xx/5xx 不换通道 —— 那说明服务端收到了请求（问题在桶本身），交给上层换桶。 */
   function putObject(bucket, path, blob, ctype){
-    return sbFetch('/storage/v1/object/' + bucket + '/' + encodeURIComponent(path), {
-      method: 'POST',
-      headers: {
-        'apikey': SUPABASE_ANON,
-        'Authorization': 'Bearer ' + SUPABASE_ANON,
-        'Content-Type': ctype,
-        'x-upsert': 'false'
-      },
-      body: blob
-    });
+    var tail = '/storage/v1/object/' + bucket + '/' + encodeURIComponent(path);
+    var order = (SB_BASE === SUPABASE_DIRECT) ? [SUPABASE_DIRECT, SB_PROXY] : [SB_PROXY, SUPABASE_DIRECT];
+    function at(i){
+      if (i >= order.length) {
+        var e = new Error('网络连不上（反代和直连都试过了）');
+        e.__noRetry = true;
+        return Promise.reject(e);
+      }
+      return fetch(order[i] + tail, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_ANON,
+          'Authorization': 'Bearer ' + SUPABASE_ANON,
+          'Content-Type': ctype,
+          'x-upsert': 'false'
+        },
+        body: blob
+      }).catch(function(){ return at(i + 1); });
+    }
+    return sbBase().then(function(){ return at(0); });
   }
 
   function uploadBlob(blob, ext, ctype){
@@ -281,6 +298,8 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
         });
       }, function(e){
         lastErr = b + ' → ' + (e && e.message ? e.message : String(e));
+        // 两条通道都连不上 = 网络问题，换桶也没用，直接报错（不空转）
+        if (e && e.__noRetry) return Promise.reject(new Error(lastErr));
         return tryAt(i + 1);
       });
     }
@@ -508,7 +527,10 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     var album = $('album').value.trim();
     if (!album) return toast('先填「画集名称」');
     var cat = buildCatalog();
-    if (!cat.pages.length) return toast('还没有上传成功的图');
+    if (!cat.pages.length) {
+      var failN = ROWS.filter(function(r){ return r.status === 'fail'; }).length;
+      return toast(failN ? ('图片没传上去（' + failN + ' 张失败，看每行红字写的原因）') : '还没有上传成功的图');
+    }
     if (ROWS.some(function(r){ return r.status === 'wait' || r.status === 'up'; })) return toast('还有图片在上传，等一下');
 
     var iss = collectIssues();
