@@ -597,7 +597,7 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
       + '编号是团长那边配对用的，这些页对不上就导不进去 —— 建议回去补一下。');
     if (iss.dup.length) lines.push('<b>有 ' + iss.dup.length + ' 个编号重复：' + esc(iss.dup.join('、')) + '。</b>'
       + '同一个编号团长只会认第一页。');
-    if (lines.length && iss.missing > 1) lines.push('（每页的编号本来就是要你们自己填的，别漏。）');
+    if (lines.length && iss.missing > 1) lines.push('（编号是照着图片文件名自动填的，这几页多半是你手动清空过 —— 补一个，或者确认这页本来就不需要编号。）');
     if (forced) lines.push('你点了「仍然生成」，上述问题会照原样进目录 —— 团长那边也看得到。');
     $('warnbox').style.display = '';
     $('warnbox').setAttribute('data-iss', '1');
