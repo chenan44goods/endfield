@@ -1312,7 +1312,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
                   <select id="cutStatus"></select>
                 </div>
                 <div class="form-group" style="flex:0 0 130px;">
-                  <label for="cutPrice">单价（不确定就留 0）</label>
+                  <label for="cutPrice">兜底单价（目录里没带价的页用这个）</label>
                   <input type="number" id="cutPrice" value="0" step="0.01">
                 </div>
               </div>
@@ -4830,6 +4830,18 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return /^\d+$/.test(s) ? ('P' + parseInt(s, 10)) : s;
     }
 
+    /* 价格归一（团长口径 2026-10-01：管理在录入页一页页填、可能页页不同）：
+         空 / 认不出 → null（**没填** → 导入时用面板上的兜底单价）
+         0          → 0（真的 0 元，赠品页）
+       必须与录入页 cut.html 的 pnum **一字不差**，否则会出现「管理填了、这边当没填」。 */
+    function _cutPriceNum(v){
+      if (v === null || v === undefined || String(v).trim() === '') return null;
+      const n = parseFloat(String(v).replace(/[^\d.\-]/g, ''));
+      if (!isFinite(n) || n < 0) return null;
+      return Math.round(n * 100) / 100;
+    }
+    function _cutFmtPrice(n){ return '￥' + (Math.round(Number(n) * 100) / 100).toFixed(2); }
+
     function _cutFillSelects(){
       const c = document.getElementById('cutCountry');
       const s = document.getElementById('cutStatus');
@@ -4870,13 +4882,18 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         return showToast('❌ 这不是一份切页目录（内容格式不对）');
       }
       const pages = obj.pages.filter(p => p && p.img).map(function(p){
-        return { no: String(p.no == null ? '' : p.no).trim(), img: String(p.img), name: p.name || '' };
+        return { no: String(p.no == null ? '' : p.no).trim(), img: String(p.img), name: p.name || '',
+                 price: _cutPriceNum(p.price) };   // null = 管理没填这一页的价
       });
       if (!pages.length) return showToast('❌ 这份目录里没有一页带图');
       const album = String(obj.album || '').trim();
       CUT_CATALOG = { album: album, pages: pages };
+      const priced = pages.filter(p => p.price !== null).length;
       const st = document.getElementById('cutCatalogState');
-      if (st) st.innerHTML = '✅ <b>' + escapeHtml(album || '(画集未命名)') + '</b> · ' + pages.length + ' 页';
+      if (st) st.innerHTML = '✅ <b>' + escapeHtml(album || '(画集未命名)') + '</b> · ' + pages.length + ' 页 · '
+        + (priced === pages.length ? '每页都带价'
+           : priced ? ('<b>' + priced + '</b> 页带价、<b>' + (pages.length - priced) + '</b> 页没带价')
+                    : '<span style="color:var(--text-muted);">目录里没带价（用下面的兜底单价）</span>');
       const strip = document.getElementById('cutCatalogStrip');
       if (strip) {
         strip.style.display = 'flex';
@@ -4994,17 +5011,24 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           cn: r.cn,
           no: page.no,
           name: (CUT_CATALOG.album ? CUT_CATALOG.album + ' ' : '') + _cutPageLabel(page.no),
-          img: page.img
+          img: page.img,
+          // ⚠️ 在这里**再归一一次**，不依赖上游：目录是老格式（没 price 字段）时
+          //    page.price 会是 undefined，直接用会一路漏到落库、把价格丢掉（静默少收钱）。
+          price: _cutPriceNum(page.price)     // null = 管理没给这页定价 → 用面板上的兜底单价
         });
       });
 
       const batch = (document.getElementById('cutBatchName').value || '').trim() || '默认批次';
       const country = document.getElementById('cutCountry').value || '淘宝店';
       const status = document.getElementById('cutStatus').value || '已下单';
-      const price = parseFloat(document.getElementById('cutPrice').value) || 0;
+      const price = _cutPriceNum(document.getElementById('cutPrice').value);
+      const fallback = price === null ? 0 : price;      // 兜底单价（0 = 没设）
       const cns = {};
       items.forEach(function(x){ cns[x.cn] = 1; });
-      CUT_IMPORT_PENDING = { items: items, batch: batch, country: country, status: status, price: price };
+      // 合计：每页用管理定好的价；管理没定价的页才吃兜底单价
+      const noPriceCnt = items.filter(function(x){ return x.price === null; }).length;
+      const total = items.reduce(function(s, x){ return s + (x.price === null ? fallback : x.price); }, 0);
+      CUT_IMPORT_PENDING = { items: items, batch: batch, country: country, status: status, price: fallback };
 
       /* 目录体检（只提醒、不拦路）：
          ① 目录里有页**没填编号** → 一定对不上，管理那边漏填了；
@@ -5020,9 +5044,17 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       html += '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px;font-size:0.85rem;">'
            +  '画集：<b>' + escapeHtml(CUT_CATALOG.album || '(未命名)') + '</b> · 待导入 <b>' + items.length + '</b> 条 · '
            +  '<b>' + Object.keys(cns).length + '</b> 人 · 批次 <b>' + escapeHtml(batch) + '</b> · 地区 <b>' + escapeHtml(country) + '</b> · '
-           +  '状态 <b>' + escapeHtml(status) + '</b> · 单价 <b>￥' + price.toFixed(2) + '</b>'
-           +  (price > 0 ? ' · 合计 <b>￥' + (price * items.length).toFixed(2) + '</b>' : '')
+           +  '状态 <b>' + escapeHtml(status) + '</b> · 合计 <b>' + _cutFmtPrice(total) + '</b>'
+           +  (noPriceCnt ? '<br><span style="color:var(--text-muted);">其中 <b>' + noPriceCnt + '</b> 条目录里没带价，按兜底单价 '
+                            + _cutFmtPrice(fallback) + ' 算</span>' : '')
            +  '</div>';
+
+      if (noPriceCnt && fallback <= 0) {
+        html += '<div style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:0.8rem;">'
+             +  '⚠️ 有 <b>' + noPriceCnt + '</b> 条在目录里<b>没带价</b>、兜底单价又是 <b>￥0</b> —— 这些导入后价格会是 0。'
+             +  '要么让管理去「插画集切页录入」把价补上、重新生成目录，要么在这里填一个兜底单价。'
+             +  '</div>';
+      }
 
       if (problems.length) {
         html += '<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:0.8rem;max-height:150px;overflow:auto;">'
@@ -5048,6 +5080,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
                        +   '<img src="' + escapeHtml(_cutProxyImg(x.img)) + '" style="width:34px;height:34px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" alt="" onerror="this.style.opacity=.25">'
                        +   '<span style="flex:0 0 auto;font-weight:600;">' + escapeHtml(x.cn) + '</span>'
                        +   '<span style="color:var(--text-muted);flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(x.name) + '</span>'
+                       +   '<span style="flex:0 0 auto;font-weight:600;' + (x.price === null ? 'color:var(--text-muted);' : '') + '">'
+                       +     _cutFmtPrice(x.price === null ? fallback : x.price)
+                       +     (x.price === null ? ' 兜底' : '')
+                       +   '</span>'
                        + '</div>';
                 }).join('')
              +  (items.length > 40 ? '<div style="font-size:0.78rem;color:var(--text-muted);padding:6px 0;">…… 还有 ' + (items.length - 40) + ' 条</div>' : '')
@@ -5073,10 +5109,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const base = Date.now();
       const made = [];
       cfg.items.forEach(function(x, i){
+        const pgPrice = _cutPriceNum(x.price);   // 再兜一层（null = 这页没定价 → 用兜底单价）
         const it = {
           item_id: 'item_' + base + '_' + i + '_' + Math.floor(Math.random() * 1000),
           name: x.name, cn: x.cn, batch_name: cfg.batch,
-          price: cfg.price, quantity: 1, country: cfg.country, status: cfg.status,
+          // 每条吃**自己那一页**的价（管理在录入页定的）；只有管理没给这页定价时才用兜底单价。
+          price: (pgPrice === null ? cfg.price : pgPrice),
+          quantity: 1, country: cfg.country, status: cfg.status,
           image_url: x.img, created_at: new Date().toISOString()
         };
         // 与后台其它新增路径保持一致：不在「到货组」的状态不残留囤货日期

@@ -55,6 +55,11 @@ input[type=file]{ display:none; }
 .row .info{ flex:1 1 auto; min-width:0; font-size:12px; color:var(--soft); line-height:1.45; }
 .row .info b{ display:block; color:var(--ink); font-size:13px; font-weight:600;
               overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* 每页的价格（团长口径 2026-10-01：管理填、每页可能不一样）——
+   不占独立一列，挂在信息区第二行，免得把手机上的行挤爆。 */
+.row .prow{ display:flex; align-items:center; gap:2px; margin-top:5px; }
+.row .prow .cur{ flex:0 0 auto; font-size:12px; }
+.row .prow input{ padding:5px 8px; font-size:13px; max-width:118px; }
 .row .del{ flex:0 0 auto; width:34px; height:34px; border-radius:9px; border:1px solid var(--line);
            background:#fff; color:var(--bad); font-size:15px; cursor:pointer; }
 .stat{ font-size:13px; color:var(--soft); margin:6px 0 2px; }
@@ -84,7 +89,7 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
   <h1>✂️ 插画集切页录入</h1>
   <div class="sub">给管理用的：把每一页的图传上来（<b>编号会自动按文件名填好</b>），生成一条「目录链接」发给团长。<br>
     团长在后台「排表管理 → 插画集切页导入」里粘这条链接，就能一键把切好的页导进排表。<br>
-    <span id="verTag" style="display:inline-block;margin-top:6px;font-size:12px;color:#8a8f98;border:1px solid #3a3f47;border-radius:999px;padding:1px 9px;">工具版本 v2026-10-01b</span>
+    <span id="verTag" style="display:inline-block;margin-top:6px;font-size:12px;color:#8a8f98;border:1px solid #3a3f47;border-radius:999px;padding:1px 9px;">工具版本 v2026-10-01c</span>
     <span style="font-size:12px;color:#8a8f98;">　看不到这行 = 打开的是旧页面，请关掉重开或按 Ctrl+F5</span></div>
 
   <div class="card">
@@ -115,7 +120,8 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     <div class="hint" style="margin-top:10px;">
       <b>编号自动按文件名填好</b> —— 选图时照抄文件名（去掉 <code>.jpg</code>/<code>.png</code> 后缀）：
       <code>12.jpg</code> 的编号就是 <code>12</code>，<code>P12.jpg</code> 就是 <code>P12</code>，<code>封面.jpg</code> 就是 <code>封面</code>。<br>
-      <b>哪页不对，直接在框里改</b>：数字、带字母、中文（<code>跨页</code>）都行，想怎么标就怎么标。
+      <b>哪页不对，直接在框里改</b>：数字、带字母、中文（<code>跨页</code>）都行，想怎么标就怎么标。<br>
+      <b>价格要一页一页填</b>（每页多少钱就填多少）—— 填不了那么细的话，下面有「整本一个价」可以一键铺。
     </div>
 
     <details style="margin-top:10px;">
@@ -135,6 +141,21 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
         </div>
       </div>
       <div class="hint">两个按钮都只填<b>还空着</b>的编号 —— 你手打过的、已经自动填好的，都不会被覆盖。</div>
+    </details>
+
+    <details style="margin-top:10px;">
+      <summary>💰 整本一个价？（一键把空着的价格铺成同一个数）</summary>
+      <div class="toolbar" style="margin-top:8px;">
+        <div class="f">
+          <label>统一价</label>
+          <input type="number" id="bulkPrice" step="0.01" min="0" placeholder="如 15">
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button class="btn sm" id="btnPriceAll">💰 全部填成这个价</button>
+        </div>
+      </div>
+      <div class="hint">只填<b>还空着</b>的价格 —— 你已经单独标过价的那几页不会被覆盖（比如跨页、彩页贵一点）。</div>
     </details>
 
     <div class="stat" id="stat">还没有内容。点「批量选图」把这一本的页一次选进来。</div>
@@ -327,6 +348,20 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
 
   function isBlankNo(r){ return String(r.no == null ? '' : r.no).trim() === ''; }
 
+  /* 每页价格（团长口径 2026-10-01）：管理在录入页一页页填，可能页页不同。
+     规则：
+       · 空 → null（**没填**，目录里不带这个字段，团长导入时用他设的兜底价）
+       · 0 → 0（真的 0 元，比如赠品页）—— 跟「没填」是两回事，不能混
+       · 顺手认「￥15」「15元」这种写法，认不出来的当没填（宁可走兜底价，也不塞个错的数）
+     归一必须与后台 _cutPriceNum **一字不差**。 */
+  function pnum(v){
+    if (v === null || v === undefined || String(v).trim() === '') return null;
+    var n = parseFloat(String(v).replace(/[^\d.\-]/g, ''));
+    if (!isFinite(n) || n < 0) return null;
+    return Math.round(n * 100) / 100;
+  }
+  function fmtPrice(n){ return '￥' + (Math.round(Number(n) * 100) / 100).toFixed(2); }
+
   /* ⚠️ 归一必须与后台 _cutNormNo **一字不差**：后台按归一后的编号配对，
      所以「12 / P12 / 012 / p 12」在团长眼里是**同一个编号**（只会认第一页）。
      这边判重复要是用原始字符串，就会出现「管理这边没报警、团长那边却撞号」的静默错。 */
@@ -373,6 +408,19 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     else toast('没有空着的编号了');
   }
 
+  /* 一键把**还空着**的价格铺成同一个数（整本一个价时用；已单独标过价的绝不覆盖）。 */
+  function fillPriceAll(){
+    var raw = $('bulkPrice').value;
+    if (String(raw == null ? '' : raw).trim() === '') return toast('先在左边填一个价（比如 15）');
+    var n = pnum(raw);
+    if (n === null) return toast('这个价填得不对，重新填一个数字');
+    var filled = 0;
+    ROWS.forEach(function(r){ if (r.img && r.status === 'ok' && pnum(r.price) === null) { r.price = String(n); filled++; } });
+    render();
+    toast(filled ? ('把 ' + filled + ' 页空着的价格都填成了 ' + fmtPrice(n) + '，个别不一样的自己改')
+                 : '没有空着的价格了');
+  }
+
   /* ══════════ 渲染 ══════════ */
   function render(){
     var box = $('rows');
@@ -392,7 +440,10 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
         return '<div class="row" data-id="' + r.id + '">' +
           '<div class="no"><input type="text" value="' + esc(r.no) + '" data-act="no" placeholder="编号"></div>' +
           thumb +
-          '<div class="info"><b>' + esc(r.name || '（未命名）') + '</b>' + st + '</div>' +
+          '<div class="info"><b>' + esc(r.name || '（未命名）') + '</b>' + st +
+            '<div class="prow"><span class="cur">￥</span><input type="text" inputmode="decimal" data-act="price" value="'
+              + esc(r.price == null ? '' : r.price) + '" placeholder="每页售价"></div>' +
+          '</div>' +
           '<button class="del" data-act="del" title="删除这行">✕</button>' +
         '</div>';
       }).join('');
@@ -407,9 +458,11 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     var up = ROWS.filter(function(r){ return r.status === 'wait' || r.status === 'up'; }).length;
     var bad = ROWS.filter(function(r){ return r.status === 'fail'; }).length;
     var noBlank = ROWS.filter(function(r){ return r.status === 'ok' && isBlankNo(r); }).length;
+    var noPrice = ROWS.filter(function(r){ return r.status === 'ok' && pnum(r.price) === null; }).length;
     var txt = '共 <b>' + ROWS.length + '</b> 页';
     if (ok) txt += ' · 已上传 <b>' + ok + '</b>';
     if (noBlank) txt += ' · <span class="warn">没填编号 ' + noBlank + '</span>';
+    if (noPrice) txt += ' · <span class="warn">没填价格 ' + noPrice + '</span>';
     if (up) txt += ' · <span class="warn">处理中 ' + up + '</span>';
     if (bad) txt += ' · <span class="bad">失败 ' + bad + '</span>';
     $('stat').innerHTML = ROWS.length ? txt : '还没有内容。点「批量选图」把这一本的页一次选进来。';
@@ -428,7 +481,7 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     try {
       localStorage.setItem(LS, JSON.stringify({
         album: $('album').value,
-        rows: ROWS.map(function(r){ return { no: r.no, img: r.img, name: r.name, bucket: r.bucket, path: r.path, status: r.status }; })
+        rows: ROWS.map(function(r){ return { no: r.no, price: r.price, img: r.img, name: r.name, bucket: r.bucket, path: r.path, status: r.status }; })
       }));
     } catch(e){}
   }
@@ -440,8 +493,9 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
       if (d && d.album) $('album').value = d.album;
       if (d && Array.isArray(d.rows)) {
         ROWS = d.rows.map(function(r){
-          return { id: uid(), no: r.no || '', img: r.img || '', name: r.name || '', bucket: r.bucket || '',
-                   path: r.path || '', status: r.img ? 'ok' : 'empty', msg: '' };
+          return { id: uid(), no: r.no || '', price: (r.price == null ? '' : String(r.price)), img: r.img || '',
+                   name: r.name || '', bucket: r.bucket || '', path: r.path || '',
+                   status: r.img ? 'ok' : 'empty', msg: '' };
         });
       }
     } catch(e){}
@@ -492,7 +546,8 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     if (!list.length) return;
     list.forEach(function(f){
       // 编号**自动照文件名填**（团长口径 2026-10-01）：文件名就是页号，管理扫一眼改掉不对的就行。
-      var row = { id: uid(), no: noFromName(f.name), img: '', name: f.name, bucket: '', path: '', status: 'empty', msg: '' };
+      // 价格留空等管理自己填（每页可能不一样，工具不猜）。
+      var row = { id: uid(), no: noFromName(f.name), price: '', img: '', name: f.name, bucket: '', path: '', status: 'empty', msg: '' };
       ROWS.push(row);
       enqueue(row, f);
     });
@@ -503,9 +558,15 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
   function buildCatalog(){
     var album = $('album').value.trim();
     var pages = ROWS.filter(function(r){ return r.img && r.status === 'ok'; }).map(function(r){
-      return { no: String(r.no).trim(), img: r.img, name: r.name || '' };
+      var p = { no: String(r.no).trim(), img: r.img, name: r.name || '' };
+      // 价格（团长口径 2026-10-01）：管理一页页填，填了才写进目录。
+      // ⚠️ 「没填」→ **不带这个字段**（团长导入时用他自己设的兜底价）；
+      //    「填了 0」→ 是有效价格（赠品页），必须原样带过去，两者不能混。
+      var pr = pnum(r.price);
+      if (pr !== null) p.price = pr;
+      return p;
     });
-    return { type: 'cut_catalog', v: 1, album: album, created_at: new Date().toISOString(), count: pages.length, pages: pages };
+    return { type: 'cut_catalog', v: 2, album: album, created_at: new Date().toISOString(), count: pages.length, pages: pages };
   }
 
   /* ══════════ 生成前的体检 ══════════
@@ -622,11 +683,12 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     replaceRowImage($('fileOne').getAttribute('data-row'), f);
   };
   $('btnAdd').onclick = function(){
-    ROWS.push({ id: uid(), no: '', img: '', name: '', bucket: '', path: '', status: 'empty', msg: '' });
+    ROWS.push({ id: uid(), no: '', price: '', img: '', name: '', bucket: '', path: '', status: 'empty', msg: '' });
     render();
   };
   $('btnSeq').onclick = fillBySeq;
   $('btnNameNo').onclick = fillByName;
+  $('btnPriceAll').onclick = fillPriceAll;
   /* 清空用「两段式」而不是原生 confirm —— 管理多半是在 QQ / 微信内置浏览器里打开，
      原生 confirm 在那两种浏览器里会被静默屏蔽（点了没反应，比不提示更糟）。 */
   var clearArmT = null;
@@ -665,10 +727,14 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
   });
   $('rows').addEventListener('input', function(e){
     var t = e.target;
-    if (!t.getAttribute || t.getAttribute('data-act') !== 'no') return;
+    var act = t.getAttribute && t.getAttribute('data-act');
+    if (act !== 'no' && act !== 'price') return;
     var rowEl = t.closest('.row');
     var row = ROWS.filter(function(r){ return r.id === rowEl.getAttribute('data-id'); })[0];
     if (!row) return;
+    // 改价格：只存值 + 刷统计行，**不重画整个列表**（重画会把光标踢出输入框）；
+    //        也不动编号那套提醒（价格不是配对用的，不参与拦路）。
+    if (act === 'price') { row.price = t.value; saveDraft(); updateStat(); return; }
     row.no = t.value;
     saveDraft();
     updateStat();
