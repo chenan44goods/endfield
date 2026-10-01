@@ -1319,6 +1319,40 @@
     }
     // 给 img.src 等用的地址拼接（进入页面后通道一般已探测完成）
     function sbUrl(path){ return SB_BASE + path; }
+
+    /* ── 图片地址安全化（2026-10-01）──────────────────────────────────────
+       库里 image_url 有相当一部分存的是**直连** supabase 地址（历史数据），
+       而部分网络把 *.supabase.co 按 SNI 阻断 → 直连的图**一律裂**（实测直连返回 000）。
+       显示时统一改写成同源反代地址；万一 /sb 也取不到，onerror 会兜底换回直连再试一次。
+       ⚠️ 只影响**显示**，不动入库数据（存直连是故意的：地址稳定、不占 Pages 额度）。 */
+    function sbImg(url){
+      const s = String(url == null ? '' : url).trim();
+      if (!s) return '';
+      if (s.indexOf(SUPABASE_DIRECT) === 0) return sbUrl(s.slice(SUPABASE_DIRECT.length));
+      return s;
+    }
+    /* <img onerror="imgFallback(this)" data-orig="原地址"> 的兜底：
+       换另一条通道再试一次，再失败才认输（并留个提示，别再让人对着一片空白猜）。
+       没给 data-orig 时会自己推导反向地址（/sb ↔ 直连）。 */
+    function imgFallback(el){
+      if (!el) return;
+      const cur = el.src || '';
+      let proxyAbs = '';
+      try { proxyAbs = location.origin + SB_PROXY; } catch (e) { proxyAbs = SB_PROXY; }
+      let alt = el.getAttribute('data-orig') || '';
+      if (!alt && cur) {
+        if (cur.indexOf(proxyAbs) === 0) alt = SUPABASE_DIRECT + cur.slice(proxyAbs.length);
+        else if (cur.indexOf(SUPABASE_DIRECT) === 0) alt = proxyAbs + cur.slice(SUPABASE_DIRECT.length);
+      }
+      if (alt && el.getAttribute('data-fb') !== '1' && cur !== alt) {
+        el.setAttribute('data-fb', '1');
+        el.src = alt;
+        return;
+      }
+      el.style.opacity = '.25';
+      el.setAttribute('title', '图片加载失败（网络受限）');
+    }
+    window.imgFallback = imgFallback;
     const SUPABASE_ANON = 'sb_publishable_UW9cgyBOeV6zIZCicI2SlQ_bqm0MeJa';
     // 直接用原生 fetch 调 Supabase REST API，不依赖外部 CDN 脚本
     async function fetchLeaderData(key){
@@ -1463,8 +1497,9 @@
         const q=Number(it.quantity)||1;
         const showStatus = currentPanel !== 'fee';
         const isDispatch = currentPanel === 'dispatch';
-        const imgUrl = it.image_url ? String(it.image_url).trim() : '';
-        const imgHtml = imgUrl ? '<img class="r-img" src="'+escapeHtml(imgUrl)+'" alt="谷子" loading="lazy" onclick="openImg(this.src)">' : '<div class="r-img-empty">无图</div>';
+        const imgRaw = it.image_url ? String(it.image_url).trim() : '';
+        const imgUrl = sbImg(imgRaw);   // 直连地址 → 同源反代（见 sbImg 注释）
+        const imgHtml = imgUrl ? '<img class="r-img" src="'+escapeHtml(imgUrl)+'" data-orig="'+escapeHtml(imgRaw)+'" onerror="imgFallback(this)" alt="谷子" loading="lazy" onclick="openImg(this.src)">' : '<div class="r-img-empty">无图</div>';
         const applyBtn = (isDispatch && String(it.status||'').trim()==='可排发') ? '<button class="r-apply" onclick="applyDispatchItem('+idx+')">申请排发</button>' : '';
         const _bn=String(it.batch_name||'').trim();
         const batchHtml=(_bn&&_bn!=='默认批次')?'<div class="r-batch">\ud83d\udce6 '+escapeHtml(_bn)+'</div>':'';

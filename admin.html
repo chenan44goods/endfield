@@ -2025,9 +2025,28 @@ cn 点数 金额
       } catch (e) {}
       return SUPABASE_DIRECT;
     }
+    /* 通道兜底：请求**网络层**失败（压根没连上）时自动换另一条通道再试一次。
+       HTTP 4xx/5xx 不换 —— 那说明服务端已经收到请求了。 */
+    function sbFetchWithFallback(input, init){
+      const url = (typeof input === 'string') ? input : ((input && input.url) || '');
+      let alt = '';
+      try {
+        if (url.indexOf(SUPABASE_DIRECT) === 0) {
+          alt = '/sb' + url.slice(SUPABASE_DIRECT.length);
+        } else {
+          const m = url.match(/^https?:\/\/[^/]+(\/sb\/.*)$/);
+          if (m) alt = SUPABASE_DIRECT + m[1].slice(3);
+        }
+      } catch (e) {}
+      return fetch(input, init).catch(function(e){
+        if (!alt) throw e;
+        return fetch(alt, init);
+      });
+    }
     function sbNewClient(base){
       return (window.supabase || supabase).createClient(base, SUPABASE_KEY, {
         auth: { storageKey: SB_AUTH_STORAGE_KEY, persistSession: true, autoRefreshToken: true },
+        global: { fetch: sbFetchWithFallback },
       });
     }
     let SB_ACTIVE_BASE = sbPageBase();
@@ -2037,12 +2056,51 @@ cn 点数 金额
         const r = await fetch('/sb/__health', { cache: 'no-store' });
         if (r.ok) { const j = await r.json(); if (j && j.ok) return; }
       } catch (e) {}
-      SB_ACTIVE_BASE = SUPABASE_DIRECT;
-      supabaseClient = sbNewClient(SUPABASE_DIRECT);
-      console.warn('[数据通道] 同源反代不可用，已回退直连 Supabase');
+      /* ⚠️ 2026-10-01 修：探测失败**不再把 base 锁死成直连**。
+         探测失败 ≠ 反代不可用（超时 / 被 Cloudflare 拦 / 临时 5xx 都会失败），
+         而直连在部分网络被按域名(SNI)阻断 → 一旦锁死，后台**所有**请求全挂。
+         现在：首选恒为同源 /sb；真连不上时由 sbFetchWithFallback 兜底换直连。 */
+      console.warn('[数据通道] /sb 探针未通过，仍走同源反代（失败时自动兜底直连）');
     })();
 
     let CURRENT_RECORD_ID = null;
+
+    /* ── 图片地址安全化（2026-10-01）──────────────────────────────────────
+       库里 image_url 有相当一部分存的是**直连** supabase 地址（实测 1136 条），
+       而部分网络把 *.supabase.co 按 SNI 阻断 → 直连的图**一律裂**（本机实测直连返回 000）。
+       显示时统一改写成同源反代；万一 /sb 也取不到，onerror 兜底换回直连再试一次。
+       ⚠️ 只影响**显示**，不动入库数据（存直连是故意的：地址稳定、不占 Pages 额度）。 */
+    const SB_IMG_BASE = (function(){
+      try {
+        if (location.protocol === 'http:' || location.protocol === 'https:') return location.origin + '/sb';
+      } catch (e) {}
+      return SUPABASE_DIRECT;
+    })();
+    function sbImg(url){
+      const s = String(url == null ? '' : url).trim();
+      if (!s) return '';
+      if (s.indexOf(SUPABASE_DIRECT) === 0) return SB_IMG_BASE + s.slice(SUPABASE_DIRECT.length);
+      return s;
+    }
+    /* <img onerror="imgFallback(this)" data-orig="原地址"> 的兜底：换另一条通道再试一次。
+       没给 data-orig 时会自己推导反向地址（/sb ↔ 直连）。 */
+    function imgFallback(el){
+      if (!el) return;
+      const cur = el.src || '';
+      let alt = el.getAttribute('data-orig') || '';
+      if (!alt && cur) {
+        if (cur.indexOf(SB_IMG_BASE) === 0) alt = SUPABASE_DIRECT + cur.slice(SB_IMG_BASE.length);
+        else if (cur.indexOf(SUPABASE_DIRECT) === 0) alt = SB_IMG_BASE + cur.slice(SUPABASE_DIRECT.length);
+      }
+      if (alt && el.getAttribute('data-fb') !== '1' && cur !== alt) {
+        el.setAttribute('data-fb', '1');
+        el.src = alt;
+        return;
+      }
+      el.style.opacity = '.25';
+      el.setAttribute('title', '图片加载失败（网络受限）');
+    }
+    window.imgFallback = imgFallback;
     let CURRENT_VERSION = null;
     let DELETED_ITEM_IDS = new Set();
     let DIRTY_ITEM_IDS = new Set();
@@ -2687,8 +2745,14 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     function updateImagePreview(url) {
       const img = document.getElementById('imagePreviewImg');
       const txt = document.getElementById('imagePreviewText');
-      if (url) { img.src = url; img.style.display = 'block'; txt.style.display = 'none'; }
-      else { img.src = ''; img.style.display = 'none'; txt.style.display = 'block'; }
+      if (url) {
+        img.setAttribute('data-orig', url);
+        img.removeAttribute('data-fb');
+        img.onerror = function(){ imgFallback(img); };   // 直连裂了 → 自动换通道
+        img.src = sbImg(url);
+        img.style.display = 'block'; txt.style.display = 'none';
+      }
+      else { img.src = ''; img.removeAttribute('data-orig'); img.style.display = 'none'; txt.style.display = 'block'; }
     }
 
     async function handleImageUpload(e) {
@@ -3052,7 +3116,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (!path) return '';
       try {
         const safe = String(path).split('/').filter(Boolean).map(encodeURIComponent).join('/');
-        return SB_ACTIVE_BASE + '/storage/v1/object/public/pay-proofs/' + safe;
+        return SB_IMG_BASE + '/storage/v1/object/public/pay-proofs/' + safe;
       } catch (e) { return ''; }
     }
 
@@ -3162,7 +3226,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         el.innerHTML = '<span style="padding:6px;">图片读不到<br>检查 pay-proofs 桶</span>';
         return;
       }
-      el.innerHTML = '<img src="' + url + '" style="width:100%; height:100%; object-fit:cover; cursor:zoom-in;" onclick="window.open(this.src,\'_blank\')">';
+      el.innerHTML = '<img src="' + url + '" onerror="imgFallback(this)" style="width:100%; height:100%; object-fit:cover; cursor:zoom-in;" onclick="window.open(this.src,\'_blank\')">';
     }
 
     // ==========================================
@@ -3840,8 +3904,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
 
       let html = '', cardsHtml = '';
       pageItems.forEach((item, index) => {
-        const imgTag = item.image_url ? `<img src="${escapeHtml(item.image_url)}" class="img-preview" alt="谷子" loading="lazy">` : `<span style="color:#cbd5e1;font-size:0.75rem;">无图</span>`;
-        const mobileImgTag = item.image_url ? `<img src="${escapeHtml(item.image_url)}" class="admin-card-mobile-img" alt="谷子" loading="lazy">` : `<div class="admin-card-mobile-noimg">无图</div>`;
+        const imgTag = item.image_url ? `<img src="${escapeHtml(sbImg(item.image_url))}" data-orig="${escapeHtml(item.image_url)}" onerror="imgFallback(this)" class="img-preview" alt="谷子" loading="lazy">` : `<span style="color:#cbd5e1;font-size:0.75rem;">无图</span>`;
+        const mobileImgTag = item.image_url ? `<img src="${escapeHtml(sbImg(item.image_url))}" data-orig="${escapeHtml(item.image_url)}" onerror="imgFallback(this)" class="admin-card-mobile-img" alt="谷子" loading="lazy">` : `<div class="admin-card-mobile-noimg">无图</div>`;
         const batchStr = item.batch_name || '默认批次';
         const countryStr = item.country || '日本';
         const statusStr = item.status || '未出荷';
