@@ -82,9 +82,9 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
 <body>
 <div class="wrap">
   <h1>✂️ 插画集切页录入</h1>
-  <div class="sub">给管理用的：把每一页的图传上来、填上编号，生成一条「目录链接」发给团长。<br>
+  <div class="sub">给管理用的：把每一页的图传上来（<b>编号会自动按文件名填好</b>），生成一条「目录链接」发给团长。<br>
     团长在后台「排表管理 → 插画集切页导入」里粘这条链接，就能一键把切好的页导进排表。<br>
-    <span id="verTag" style="display:inline-block;margin-top:6px;font-size:12px;color:#8a8f98;border:1px solid #3a3f47;border-radius:999px;padding:1px 9px;">工具版本 v2026-10-01</span>
+    <span id="verTag" style="display:inline-block;margin-top:6px;font-size:12px;color:#8a8f98;border:1px solid #3a3f47;border-radius:999px;padding:1px 9px;">工具版本 v2026-10-01b</span>
     <span style="font-size:12px;color:#8a8f98;">　看不到这行 = 打开的是旧页面，请关掉重开或按 Ctrl+F5</span></div>
 
   <div class="card">
@@ -113,13 +113,18 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     <input type="file" id="fileOne" accept="image/*">
 
     <div class="hint" style="margin-top:10px;">
-      <b>编号由你们自己填</b> —— 图选进来后编号框是空的，照着画集上的号一个个打进去。
-      数字（<code>12</code>）、带字母（<code>P12</code>）、中文（<code>封面</code>、<code>跨页</code>）都行，想怎么标就怎么标。
+      <b>编号自动按文件名填好</b> —— 选图时照抄文件名（去掉 <code>.jpg</code>/<code>.png</code> 后缀）：
+      <code>12.jpg</code> 的编号就是 <code>12</code>，<code>P12.jpg</code> 就是 <code>P12</code>，<code>封面.jpg</code> 就是 <code>封面</code>。<br>
+      <b>哪页不对，直接在框里改</b>：数字、带字母、中文（<code>跨页</code>）都行，想怎么标就怎么标。
     </div>
 
     <details style="margin-top:10px;">
-      <summary>🔢 嫌一页页打太慢？可以让工具先填一版，你再改</summary>
+      <summary>🔢 编号想重来一版？（成批重填 / 按顺序顺延）</summary>
       <div class="toolbar" style="margin-top:8px;">
+        <div>
+          <label>&nbsp;</label>
+          <button class="btn sm" id="btnNameNo">🔄 按文件名重填一遍</button>
+        </div>
         <div class="f">
           <label>从几号开始</label>
           <input type="number" id="startNo" value="1" min="0">
@@ -128,12 +133,8 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
           <label>&nbsp;</label>
           <button class="btn sm" id="btnSeq">🔢 按顺序填（1、2、3…）</button>
         </div>
-        <div>
-          <label>&nbsp;</label>
-          <button class="btn sm" id="btnNameNo">🔢 按文件名里的数字填</button>
-        </div>
       </div>
-      <div class="hint">只填<b>还空着</b>的编号 —— 你手打过的不会被覆盖。</div>
+      <div class="hint">两个按钮都只填<b>还空着</b>的编号 —— 你手打过的、已经自动填好的，都不会被覆盖。</div>
     </details>
 
     <div class="stat" id="stat">还没有内容。点「批量选图」把这一本的页一次选进来。</div>
@@ -337,15 +338,19 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     return t.toLowerCase();
   }
 
-  // 文件名里的编号：只认「结尾附近 1~3 位数字」，避免把 IMG_20260930_1234 里的长数字当编号
+  /* 编号 = 文件名（去掉扩展名）。团长口径（2026-10-01）：管理导出的图**文件名就是页号** ——
+     1.jpg / 12.jpg / P12.jpg / 封面.jpg，所以选图时直接照抄文件名，管理扫一眼改掉不对的就行。
+     ⚠️ 只剥**最后一个点**后面的扩展名：`1.5.jpg` → `1.5`（名字里本来带点的不会被切掉）。
+     ⚠️ 顺手剥掉可能的路径前缀（个别浏览器/老系统给的是完整路径而不是纯文件名）。 */
   function noFromName(fname){
-    var base = String(fname || '').replace(/\.[^.]+$/, '');
-    var m = base.match(/(?:^|\D)(\d{1,3})(?=\D*$)/);
-    return m ? m[1] : '';
+    var s = String(fname == null ? '' : fname);
+    s = s.replace(/^.*[\\/]/, '');
+    s = s.replace(/\.[^.\\/]+$/, '');
+    return s.trim();
   }
 
-  /* 两个「帮忙填」的按钮：⚠️ 只填**还空着**的编号，管理手打过的绝不覆盖。
-     默认是留空手填（编号由管理自己定），这两个只是嫌慢时用；填完第③步还会再查一遍。 */
+  /* 两个「帮忙填」的按钮（**备用**）：⚠️ 只填**还空着**的编号，已经填好的、手打过的绝不覆盖。
+     选图时已经自动照文件名填过一遍了，这两个只在「想重来一版」时用；填完第③步还会再查一遍。 */
   function fillBySeq(){
     var start = parseInt($('startNo').value, 10); if (isNaN(start)) start = 1;
     var n = start, filled = 0;
@@ -354,17 +359,18 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     toast(filled ? ('按顺序填了 ' + filled + ' 个编号，扫一眼改掉不对的') : '没有空着的编号了');
   }
   function fillByName(){
-    var start = parseInt($('startNo').value, 10); if (isNaN(start)) start = 1;
-    var n = start, filled = 0, fell = 0;
+    var filled = 0, nameless = 0;
     ROWS.forEach(function(r){
       if (!isBlankNo(r)) return;
       var v = noFromName(r.name);
-      if (v) { r.no = v; } else { r.no = String(n); n++; fell++; }
-      filled++;
+      // ⚠️ 取不到（这行压根没有文件名）就**留空**，绝不顺延一个数字进去 ——
+      //    猜出来的编号在团长那边对不上，留空反而会被第③步的体检点名，可查可补。
+      if (v) { r.no = v; filled++; } else { nameless++; }
     });
     render();
-    toast(filled ? ('按文件名填了 ' + filled + ' 个' + (fell ? '（' + fell + ' 个文件名没数字，顺延了）' : ''))
-                 : '没有空着的编号了');
+    if (filled) toast('按文件名填了 ' + filled + ' 个' + (nameless ? '（' + nameless + ' 行没文件名，留空等你手填）' : ''));
+    else if (nameless) toast(nameless + ' 行没有文件名，编号留空等你手填');
+    else toast('没有空着的编号了');
   }
 
   /* ══════════ 渲染 ══════════ */
@@ -469,12 +475,24 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
       });
   }
 
+  /* 点缩略图给这一页换张图 —— 走同一套上传队列。
+     ⚠️ 编号**原则上不动**（管理可能手改过）；只有这行的编号是「自动照旧文件名抄来的」时，
+        才跟着新文件名一起更新 —— 否则自动填的编号会一直停在旧文件名上。 */
+  function replaceRowImage(id, f){
+    var row = ROWS.filter(function(r){ return r.id === id; })[0];
+    if (!row || !f) return;
+    var autoNo = isBlankNo(row) || String(row.no).trim() === noFromName(row.name);
+    row.name = f.name; row.status = 'empty'; row.msg = '';
+    if (autoNo) row.no = noFromName(f.name);
+    enqueue(row, f); render();
+  }
+
   function onFiles(files){
     var list = Array.prototype.slice.call(files || []);
     if (!list.length) return;
     list.forEach(function(f){
-      // ⚠️ 编号**留空**：编号由管理自己按画集上的号填，工具不替他们猜。
-      var row = { id: uid(), no: '', img: '', name: f.name, bucket: '', path: '', status: 'empty', msg: '' };
+      // 编号**自动照文件名填**（团长口径 2026-10-01）：文件名就是页号，管理扫一眼改掉不对的就行。
+      var row = { id: uid(), no: noFromName(f.name), img: '', name: f.name, bucket: '', path: '', status: 'empty', msg: '' };
       ROWS.push(row);
       enqueue(row, f);
     });
@@ -601,11 +619,7 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
     var f = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!f) return;
-    var id = $('fileOne').getAttribute('data-row');
-    var row = ROWS.filter(function(r){ return r.id === id; })[0];
-    if (!row) return;
-    row.name = f.name; row.status = 'empty'; row.msg = '';
-    enqueue(row, f); render();
+    replaceRowImage($('fileOne').getAttribute('data-row'), f);
   };
   $('btnAdd').onclick = function(){
     ROWS.push({ id: uid(), no: '', img: '', name: '', bucket: '', path: '', status: 'empty', msg: '' });
