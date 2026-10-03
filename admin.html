@@ -1495,6 +1495,8 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         </div>
         <div style="font-size:0.85rem; color:var(--text-muted); line-height:1.95; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:12px;">
           在这里给批次挂收款码 —— <b>传完团员自查页立刻就能看到</b>，不用再经过机器人。
+          <br>· 默认<b>只列出「还有人没交钱」的批次</b>；已经收完钱的批次自动折叠，不再催你挂码
+          <br>· 收完钱后点「🗑 删除」= 把这张码从网站上撤下来，团员立刻扫不到
           <br>· 支持 jpg / png / webp / gif，单张不超过 5MB
           <br>· 同一个批次再传一次就是「换码」，旧码会被自动替换掉（不会留垃圾文件）
           <br>· 只有登录后台的人能看到和操作这个页面
@@ -1503,6 +1505,9 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           <input type="text" id="qrSearchInput" placeholder="搜索批次名…" oninput="renderQrCodes()" style="flex:1; min-width:180px;">
           <label style="font-size:0.85rem; display:flex; align-items:center; gap:5px; white-space:nowrap; cursor:pointer;">
             <input type="checkbox" id="qrOnlyMissing" onchange="renderQrCodes()"> 只看还没挂码的
+          </label>
+          <label style="font-size:0.85rem; display:flex; align-items:center; gap:5px; white-space:nowrap; cursor:pointer;">
+            <input type="checkbox" id="qrShowAll" onchange="renderQrCodes()"> 显示全部批次（含已收完的）
           </label>
         </div>
         <div id="qrCodesSummary" style="font-size:0.88rem; margin-bottom:12px; color:var(--text-muted);"></div>
@@ -2386,6 +2391,12 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return String(s == null ? '' : s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
+    /* 「这一条还欠钱吗」—— 排表的 status 与国际运费成员的 status 用的是同一套字面量。
+       只有它返回 true 才说明这批还有人没交，需要收款码。 */
+    function _qrIsPendingStatus(s){
+      var t = String(s == null ? '' : s).trim();
+      return t === '未付款' || t === '未交';
+    }
     function _qrFmtTime(iso){
       try {
         var d = new Date(iso);
@@ -2472,13 +2483,25 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         if (!it) return;
         var bn = String(it.batch_name || '').trim() || '默认批次';
         addBatch(bn, '排表');
-        var st = String(it.status || '').trim();
-        if (st === '未付款' || st === '未交'){
+        if (_qrIsPendingStatus(it.status)){
           var k = _qrBatchKey(bn);
           if (seen[k]) seen[k].pending++;
         }
       });
-      (RAW_LOGISTICS || []).forEach(function(b){ if (b) addBatch(b.batch_name, '国际运费'); });
+      /* ⚠️ 国际运费的成员必须一起算进「还有人没交」——
+         像「26科隆场贩国际」这种只存在于 logistics_data、排表里没有条目的批次，
+         不把它们算上就会被误判成「已收完」而折叠掉（该挂的码反而不提醒了）。 */
+      (RAW_LOGISTICS || []).forEach(function(b){
+        if (!b) return;
+        var bn = String(b.batch_name || '').trim();
+        if (!bn) return;
+        addBatch(bn, '国际运费');
+        var k = _qrBatchKey(bn);
+        var mem = b.fee_members || b.members || [];
+        for (var mi = 0; mi < mem.length; mi++){
+          if (_qrIsPendingStatus(mem[mi] && mem[mi].status)){ if (seen[k]) seen[k].pending++; }
+        }
+      });
       Object.keys(map).forEach(function(k){ var r = map[k] || {}; addBatch(r.batch_name || k, '历史存档', k); });
 
       rows.sort(function(a, b){
@@ -2492,7 +2515,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       var kw = kwEl ? String(kwEl.value || '').trim().toLowerCase() : '';
       var onlyEl = document.getElementById('qrOnlyMissing');
       var onlyMissing = !!(onlyEl && onlyEl.checked);
+      var allEl = document.getElementById('qrShowAll');
+      var showAll = !!(allEl && allEl.checked);
       var list = rows.filter(function(r){
+        /* 默认只留「还有人没交」的批次 —— 收完钱的自动折叠，不再催团长挂码（10-03 团长定的口径）。 */
+        if (!showAll && !(r.pending > 0)) return false;
         if (onlyMissing && r.path) return false;
         if (kw){
           var kk = _qrBatchKey(kw);
@@ -2502,15 +2529,21 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       });
       QR_CODES_ROWS = list;
 
-      var missing = rows.filter(function(r){ return !r.path; }).length;
+      var nPending = rows.filter(function(r){ return r.pending > 0; }).length;
+      var nDone = rows.length - nPending;
+      var nNeedQr = rows.filter(function(r){ return r.pending > 0 && !r.path; }).length;
       if (sum){
-        sum.innerHTML = '共 <b>' + rows.length + '</b> 个批次，其中 ' +
-          (missing ? '<b style="color:#dc2626;">' + missing + ' 个还没挂收款码</b>' : '<b style="color:#16a34a;">全部已挂码</b>') +
-          (list.length !== rows.length ? '（当前筛选出 ' + list.length + ' 个）' : '');
+        sum.innerHTML = '共 <b>' + rows.length + '</b> 个批次：<b>' + nPending + '</b> 个还有人没交' +
+          (nDone ? '、<b style="color:#16a34a;">' + nDone + ' 个已收完</b>（' + (showAll ? '已展开' : '默认折叠') + '）' : '') +
+          (nNeedQr ? '<br><b style="color:#dc2626;">其中 ' + nNeedQr + ' 个「还有人没交」的批次还没挂收款码</b>' : '') +
+          (list.length !== rows.length ? '<br><span style="font-size:0.82rem;">当前列出 ' + list.length + ' 个</span>' : '');
       }
       if (!list.length){
-        box.innerHTML = '<div style="padding:18px; text-align:center; color:var(--text-muted);">' +
-          (rows.length ? '没有匹配的批次' : '当前还没有任何批次数据，先在上面的「切换并加载数据」里加载一个 Key') + '</div>';
+        var emptyMsg;
+        if (!rows.length) emptyMsg = '当前还没有任何批次数据，先在上面的「切换并加载数据」里加载一个 Key';
+        else if (!showAll && !onlyMissing && !kw) emptyMsg = '🎉 需要收钱的批次都挂好码了 —— 没有别的批次要管。<br>想看全部批次（含已收完的），勾上面的「显示全部批次」。';
+        else emptyMsg = '没有匹配的批次';
+        box.innerHTML = '<div style="padding:18px; text-align:center; color:var(--text-muted); line-height:1.9;">' + emptyMsg + '</div>';
         return;
       }
 
@@ -2527,19 +2560,47 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           meta = '还没挂收款码';
         }
         var src = '来源：' + r.sources.join(' · ');
-        if (r.pending > 0) src += ' ｜ 还有 ' + r.pending + ' 条待交';
-        html += '<div style="display:flex; align-items:center; gap:12px; border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:8px;' +
-            (r.path ? '' : ' background:#fffbeb;') + '">' +
-          '<div style="flex:0 0 62px; width:62px; height:62px; border-radius:6px; overflow:hidden; border:1px solid var(--border); background:#f8fafc; display:flex; align-items:center; justify-content:center;">' + thumb + '</div>' +
-          '<div style="flex:1; min-width:0;">' +
-            '<div style="font-weight:600; word-break:break-all;">' + _qrEsc(r.name) + '</div>' +
-            '<div style="font-size:0.78rem; color:var(--text-muted); margin-top:3px; word-break:break-all;">' + _qrEsc(meta) +
-              '<br>' + _qrEsc(src) + '</div>' +
-          '</div>' +
-          '<div style="flex:0 0 auto;">' +
-            '<button class="btn ' + (r.path ? 'btn-secondary' : 'btn-primary') + '" style="padding:6px 12px; font-size:0.82rem; white-space:nowrap;" ' +
-              'onclick="qrPickImageAt(' + idx + ')">' + (r.path ? '更换' : '上传收款码') + '</button>' +
-          '</div>' +
+        var badge;
+        if (r.pending > 0){
+          badge = '<span style="display:inline-block; font-size:0.72rem; background:#fee2e2; color:#b91c1c; border-radius:4px; padding:1px 6px; margin-left:6px; vertical-align:middle; white-space:nowrap;">还有 ' + r.pending + ' 人没交</span>';
+          src += ' ｜ 还有 ' + r.pending + ' 条待交';
+        } else {
+          badge = '<span style="display:inline-block; font-size:0.72rem; background:#dcfce7; color:#15803d; border-radius:4px; padding:1px 6px; margin-left:6px; vertical-align:middle; white-space:nowrap;">已收完</span>';
+          if (r.path) src += ' ｜ 已经收完钱了，这张码可以撤下';
+        }
+
+        var btns = '<button class="btn ' + (r.path ? 'btn-secondary' : 'btn-primary') + '" style="padding:6px 12px; font-size:0.82rem; white-space:nowrap;" ' +
+              'onclick="qrPickImageAt(' + idx + ')">' + (r.path ? '更换' : '上传收款码') + '</button>';
+        if (r.path){
+          btns += '<button class="btn btn-danger" style="padding:6px 12px; font-size:0.82rem; white-space:nowrap; margin-left:6px;" ' +
+              'onclick="qrAskDelete(' + idx + ')">🗑 删除</button>';
+        }
+
+        /* 删除＝把码从网站上撤下来，会直接影响团员，所以走「内联二次确认」而不是点一下就没 */
+        var delBox = '';
+        if (r.path){
+          delBox = '<div id="qrDelBox_' + idx + '" style="display:none; margin-top:10px; border:1px solid #fecaca; background:#fef2f2; border-radius:8px; padding:10px 12px;">' +
+            '<div style="font-size:0.85rem; color:#b91c1c; line-height:1.85;">确定撤下「' + _qrEsc(r.name) + '」的收款码？' +
+              '<br>撤下后 <b>团员自查页立刻看不到这张码</b>。' +
+              (r.pending > 0 ? '<br>⚠️ <b>这批还有 ' + r.pending + ' 个人没交钱，撤掉后他们就没法扫码交款了。</b>' : '') +
+            '</div>' +
+            '<div style="margin-top:9px; display:flex; gap:8px; flex-wrap:wrap;">' +
+              '<button class="btn btn-danger" style="padding:6px 14px; font-size:0.82rem;" onclick="qrConfirmDelete(' + idx + ')">确认撤下</button>' +
+              '<button class="btn btn-secondary" style="padding:6px 14px; font-size:0.82rem;" onclick="qrHideDelete(' + idx + ')">取消</button>' +
+            '</div></div>';
+        }
+
+        html += '<div style="border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:8px;' +
+            (r.path ? '' : (r.pending > 0 ? ' background:#fffbeb;' : '')) + '">' +
+          '<div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">' +
+            '<div style="flex:0 0 62px; width:62px; height:62px; border-radius:6px; overflow:hidden; border:1px solid var(--border); background:#f8fafc; display:flex; align-items:center; justify-content:center;">' + thumb + '</div>' +
+            '<div style="flex:1 1 200px; min-width:0;">' +
+              '<div style="font-weight:600; word-break:break-all;">' + _qrEsc(r.name) + badge + '</div>' +
+              '<div style="font-size:0.78rem; color:var(--text-muted); margin-top:3px; word-break:break-all;">' + _qrEsc(meta) +
+                '<br>' + _qrEsc(src) + '</div>' +
+            '</div>' +
+            '<div style="flex:0 0 auto; display:flex; align-items:center; flex-wrap:wrap; gap:6px;">' + btns + '</div>' +
+          '</div>' + delBox +
         '</div>';
       });
       box.innerHTML = html;
@@ -2567,6 +2628,56 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       await uploadQrCode(target, f);
     }
     window.qrHandleFile = qrHandleFile;
+
+    function qrAskDelete(idx){
+      var r = QR_CODES_ROWS[idx];
+      if (!r) return showToast('列表已刷新，请重新点一次');
+      var box = document.getElementById('qrDelBox_' + idx);
+      if (box) box.style.display = 'block';
+    }
+    window.qrAskDelete = qrAskDelete;
+
+    function qrHideDelete(idx){
+      var box = document.getElementById('qrDelBox_' + idx);
+      if (box) box.style.display = 'none';
+    }
+    window.qrHideDelete = qrHideDelete;
+
+    /* 🗑 撤下收款码 —— 会影响团员（码立刻从自查页消失），所以必须两步确认。
+       顺序刻意是「先删表行、再删桶图」：
+         表行是「要不要显示」的开关，删掉它团员立刻看不到；
+         万一桶图没删干净，最坏只是留一张孤儿图，不影响任何人交款。
+       反过来的话，中间失败会留下「表里有记录、图已不在」→ 团员看到裂图。 */
+    async function qrConfirmDelete(idx){
+      var r = QR_CODES_ROWS[idx];
+      if (!r || !r.path) return showToast('这条没有挂收款码');
+      var btn = document.querySelector('#qrDelBox_' + idx + ' button');
+      var objPath = String(r.path);
+      if (btn){ btn.disabled = true; btn.innerText = '正在撤下…'; }
+      try {
+        /* ① 删表行。⚠️ 必须 .select() 拿回被删的行：
+              权限不足时 PostgREST 会「静默成功」（返回空数组），不加这个判据会
+              出现「界面显示撤下了、其实码还挂在网站上」的假成功。 */
+        var dr = await supabaseClient.from('qr_codes').delete().eq('batch_key', r.key).select('batch_key');
+        if (dr.error) throw dr.error;
+        if (!dr.data || !dr.data.length) throw new Error('数据库没有真的删掉（可能是权限不足），收款码仍在线上');
+        /* ② 再清桶里的图（只是清垃圾；同名重传会被 upsert 覆盖，失败不影响团员使用） */
+        var rmErr = '';
+        try {
+          var sr = await supabaseClient.storage.from('pay-qr').remove([objPath]);
+          if (sr && sr.error) rmErr = sr.error.message || String(sr.error);
+        } catch (e2){ rmErr = (e2 && e2.message) ? e2.message : String(e2); }
+        if (QR_CODES_MAP) delete QR_CODES_MAP[r.key];
+        QR_CODES_LOADED = true;
+        renderQrCodes();
+        showToast('✅ 已撤下「' + r.name + '」的收款码' +
+          (rmErr ? '（桶里的图没删干净：' + rmErr + '，不影响使用）' : ''));
+      } catch (err){
+        if (btn){ btn.disabled = false; btn.innerText = '确认撤下'; }
+        showToast('❌ 撤下失败：' + ((err && err.message) ? err.message : err));
+      }
+    }
+    window.qrConfirmDelete = qrConfirmDelete;
 
     async function uploadQrCode(target, file){
       if (_qrUploading){ showToast('还有一张收款码正在上传，请稍候'); return; }
