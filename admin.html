@@ -1120,6 +1120,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     <button class="tab-btn active" onclick="switchTab('tabItems')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-table-2" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18" /></svg> 排表管理 (group_data)</button>
     <button class="tab-btn" onclick="switchTab('tabLogistics')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-plane" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /></svg> 国际运费 (logistics_data)</button>
     <button class="tab-btn" onclick="switchTab('tabPayReview')"><svg class="lucide-ic ic-check-circle" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> 交款审核</button>
+    <button class="tab-btn" onclick="switchTab('tabQrCodes')"><svg class="lucide-ic ic-qr-code" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg> 收款码</button>
     <div class="nav-group-label">排发</div>
     <button class="tab-btn" onclick="switchTab('tabDispatch')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-package" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" /><path d="M12 22V12" /><path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7" /><path d="m7.5 4.27 9 5.15" /></svg> 排发工作台 (applications)</button>
     <div class="nav-group-label">算账</div>
@@ -1481,6 +1482,33 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         <div id="payNoticeBox" style="display:none; margin-bottom:12px; border:1px solid #bbf7d0; background:#f0fdf4; border-radius:8px; padding:10px 12px;"></div>
         <div id="payReviewList" style="display:flex; flex-direction:column; gap:12px;"></div>
       </div>
+    </div>
+
+    <!-- 标签页 1.4：收款码管理（2026-10-03 新增，不依赖机器人） -->
+    <div class="tab-content" id="tabQrCodes">
+      <div class="card">
+        <div class="card-title">
+          <span>💳 收款码管理</span>
+          <div class="btn-group">
+            <button class="btn btn-secondary" onclick="loadQrCodes(true)">🔄 刷新</button>
+          </div>
+        </div>
+        <div style="font-size:0.85rem; color:var(--text-muted); line-height:1.95; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:12px;">
+          在这里给批次挂收款码 —— <b>传完团员自查页立刻就能看到</b>，不用再经过机器人。
+          <br>· 支持 jpg / png / webp / gif，单张不超过 5MB
+          <br>· 同一个批次再传一次就是「换码」，旧码会被自动替换掉（不会留垃圾文件）
+          <br>· 只有登录后台的人能看到和操作这个页面
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
+          <input type="text" id="qrSearchInput" placeholder="搜索批次名…" oninput="renderQrCodes()" style="flex:1; min-width:180px;">
+          <label style="font-size:0.85rem; display:flex; align-items:center; gap:5px; white-space:nowrap; cursor:pointer;">
+            <input type="checkbox" id="qrOnlyMissing" onchange="renderQrCodes()"> 只看还没挂码的
+          </label>
+        </div>
+        <div id="qrCodesSummary" style="font-size:0.88rem; margin-bottom:12px; color:var(--text-muted);"></div>
+        <div id="qrCodesList"></div>
+      </div>
+      <input type="file" id="qrFileInput" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none" onchange="qrHandleFile(event)">
     </div>
 
     <!-- 标签页 1.5：国际运费 -->
@@ -2258,6 +2286,321 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
     window.handleSignOut = handleSignOut;
 
+    /* ══════════════════════════════════════════════════════════════════════
+       💳 收款码管理（2026-10-03 新增）
+       背景：挂码原先只有机器人的三条 QQ 命令 —— 机器人一掉线，管理组就全卡住。
+       现在后台自己挂：图片传进 pay-qr 桶 + 写 qr_codes 表 → 团员自查页立刻可见。
+
+       ⚠️ 三条不能破的口径（破了就会「两个对象」或「取不到码」）：
+         1. 对象名规则与机器人 batch_payment._qr_web_name 一字不差：
+            qr_{批次名里 ASCII 片段(非字母数字→_，去首尾_，取前20) 或 'batch'}_{md5(强归一化批次名)前8位}.{ext}
+         2. 批次强归一化 _qrBatchKey 与 index.html 的 _normBatch / 机器人 _batch_key 完全一致；
+         3. qr_codes 表 batch_key 是主键 → 写入一律 upsert（覆盖同一批次，绝不新增行）。
+       ══════════════════════════════════════════════════════════════════════ */
+    var QR_CODES_MAP = null;        // batch_key -> {batch_key,batch_name,object_path,updated_at}
+    var QR_CODES_ROWS = [];         // 当前列表（渲染时存，按钮按下标取）
+    var QR_CODES_LOADED = false;
+    var QR_CODES_ERROR = '';
+    var _qrPendingTarget = null;    // 正在等选文件的批次
+    var _qrUploading = false;
+
+    /* 与机器人 clean_str 完全一致：去首尾空白 / 全角空格→空 / ·・•。．→. / 转小写 */
+    function _qrCleanStr(s){
+      return String(s == null ? '' : s).trim()
+        .replace(/\u3000/g, '')
+        .replace(/[\u00b7\u30fb\u2022\u3002\uff0e]/g, '.')
+        .toLowerCase();
+    }
+    /* 与机器人 _batch_key 完全一致：clean_str 再抹掉所有空白 */
+    function _qrBatchKey(s){ return _qrCleanStr(s).replace(/\s+/g, ''); }
+
+    /* UTF-8 编码（把 JS 字符串变成「一字符 = 一字节」，供下面的 MD5 使用） */
+    function _qrUtf8(str){
+      var out = '';
+      for (var i = 0; i < str.length; i++){
+        var c = str.charCodeAt(i);
+        if (c < 0x80) out += String.fromCharCode(c);
+        else if (c < 0x800) out += String.fromCharCode(0xC0 | (c >> 6), 0x80 | (c & 0x3F));
+        else if (c >= 0xD800 && c <= 0xDBFF && i + 1 < str.length){
+          var c2 = str.charCodeAt(++i);
+          var cp = 0x10000 + ((c - 0xD800) << 10) + (c2 - 0xDC00);
+          out += String.fromCharCode(0xF0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3F), 0x80 | ((cp >> 6) & 0x3F), 0x80 | (cp & 0x3F));
+        } else {
+          out += String.fromCharCode(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F));
+        }
+      }
+      return out;
+    }
+    /* MD5（只用来复刻机器人的对象名，结果必须与 Python hashlib.md5 一致） */
+    function _qrMd5Hex(input){
+      var str = _qrUtf8(String(input == null ? '' : input));
+      function rl(n, c){ return (n << c) | (n >>> (32 - c)); }
+      function au(x, y){ var l = (x & 0xFFFF) + (y & 0xFFFF); return (((x >> 16) + (y >> 16) + (l >> 16)) << 16) | (l & 0xFFFF); }
+      function cmn(q, a, b, x, s, t){ return au(rl(au(au(a, q), au(x, t)), s), b); }
+      function ff(a, b, c, d, x, s, t){ return cmn((b & c) | ((~b) & d), a, b, x, s, t); }
+      function gg(a, b, c, d, x, s, t){ return cmn((b & d) | (c & (~d)), a, b, x, s, t); }
+      function hh(a, b, c, d, x, s, t){ return cmn(b ^ c ^ d, a, b, x, s, t); }
+      function ii(a, b, c, d, x, s, t){ return cmn(c ^ (b | (~d)), a, b, x, s, t); }
+      function hex(n){ var s = '', j; for (j = 0; j < 4; j++) s += ('0' + ((n >> (j * 8)) & 0xFF).toString(16)).slice(-2); return s; }
+      var nblk = ((str.length + 8) >> 6) + 1, blks = [], i;
+      for (i = 0; i < nblk * 16; i++) blks[i] = 0;
+      for (i = 0; i < str.length; i++) blks[i >> 2] |= str.charCodeAt(i) << ((i % 4) * 8);
+      blks[i >> 2] |= 0x80 << ((i % 4) * 8);
+      blks[nblk * 16 - 2] = str.length * 8;
+      var a = 1732584193, b = -271733879, c = -1732584194, d = 271733878, x = blks;
+      for (i = 0; i < x.length; i += 16){
+        var oa = a, ob = b, oc = c, od = d;
+        a = ff(a, b, c, d, x[i + 0], 7, -680876936); d = ff(d, a, b, c, x[i + 1], 12, -389564586); c = ff(c, d, a, b, x[i + 2], 17, 606105819); b = ff(b, c, d, a, x[i + 3], 22, -1044525330);
+        a = ff(a, b, c, d, x[i + 4], 7, -176418897); d = ff(d, a, b, c, x[i + 5], 12, 1200080426); c = ff(c, d, a, b, x[i + 6], 17, -1473231341); b = ff(b, c, d, a, x[i + 7], 22, -45705983);
+        a = ff(a, b, c, d, x[i + 8], 7, 1770035416); d = ff(d, a, b, c, x[i + 9], 12, -1958414417); c = ff(c, d, a, b, x[i + 10], 17, -42063); b = ff(b, c, d, a, x[i + 11], 22, -1990404162);
+        a = ff(a, b, c, d, x[i + 12], 7, 1804603682); d = ff(d, a, b, c, x[i + 13], 12, -40341101); c = ff(c, d, a, b, x[i + 14], 17, -1502002290); b = ff(b, c, d, a, x[i + 15], 22, 1236535329);
+        a = gg(a, b, c, d, x[i + 1], 5, -165796510); d = gg(d, a, b, c, x[i + 6], 9, -1069501632); c = gg(c, d, a, b, x[i + 11], 14, 643717713); b = gg(b, c, d, a, x[i + 0], 20, -373897302);
+        a = gg(a, b, c, d, x[i + 5], 5, -701558691); d = gg(d, a, b, c, x[i + 10], 9, 38016083); c = gg(c, d, a, b, x[i + 15], 14, -660478335); b = gg(b, c, d, a, x[i + 4], 20, -405537848);
+        a = gg(a, b, c, d, x[i + 9], 5, 568446438); d = gg(d, a, b, c, x[i + 14], 9, -1019803690); c = gg(c, d, a, b, x[i + 3], 14, -187363961); b = gg(b, c, d, a, x[i + 8], 20, 1163531501);
+        a = gg(a, b, c, d, x[i + 13], 5, -1444681467); d = gg(d, a, b, c, x[i + 2], 9, -51403784); c = gg(c, d, a, b, x[i + 7], 14, 1735328473); b = gg(b, c, d, a, x[i + 12], 20, -1926607734);
+        a = hh(a, b, c, d, x[i + 5], 4, -378558); d = hh(d, a, b, c, x[i + 8], 11, -2022574463); c = hh(c, d, a, b, x[i + 11], 16, 1839030562); b = hh(b, c, d, a, x[i + 14], 23, -35309556);
+        a = hh(a, b, c, d, x[i + 1], 4, -1530992060); d = hh(d, a, b, c, x[i + 4], 11, 1272893353); c = hh(c, d, a, b, x[i + 7], 16, -155497632); b = hh(b, c, d, a, x[i + 10], 23, -1094730640);
+        a = hh(a, b, c, d, x[i + 13], 4, 681279174); d = hh(d, a, b, c, x[i + 0], 11, -358537222); c = hh(c, d, a, b, x[i + 3], 16, -722521979); b = hh(b, c, d, a, x[i + 6], 23, 76029189);
+        a = hh(a, b, c, d, x[i + 9], 4, -640364487); d = hh(d, a, b, c, x[i + 12], 11, -421815835); c = hh(c, d, a, b, x[i + 15], 16, 530742520); b = hh(b, c, d, a, x[i + 2], 23, -995338651);
+        a = ii(a, b, c, d, x[i + 0], 6, -198630844); d = ii(d, a, b, c, x[i + 7], 10, 1126891415); c = ii(c, d, a, b, x[i + 14], 15, -1416354905); b = ii(b, c, d, a, x[i + 5], 21, -57434055);
+        a = ii(a, b, c, d, x[i + 12], 6, 1700485571); d = ii(d, a, b, c, x[i + 3], 10, -1894986606); c = ii(c, d, a, b, x[i + 10], 15, -1051523); b = ii(b, c, d, a, x[i + 1], 21, -2054922799);
+        a = ii(a, b, c, d, x[i + 8], 6, 1873313359); d = ii(d, a, b, c, x[i + 15], 10, -30611744); c = ii(c, d, a, b, x[i + 6], 15, -1560198380); b = ii(b, c, d, a, x[i + 13], 21, 1309151649);
+        a = ii(a, b, c, d, x[i + 4], 6, -145523070); d = ii(d, a, b, c, x[i + 11], 10, -1120210379); c = ii(c, d, a, b, x[i + 2], 15, 718787259); b = ii(b, c, d, a, x[i + 9], 21, -343485551);
+        a = au(a, oa); b = au(b, ob); c = au(c, oc); d = au(d, od);
+      }
+      return hex(a) + hex(b) + hex(c) + hex(d);
+    }
+
+    /* 与机器人 _qr_web_name 完全一致 */
+    function _qrWebName(batchName, mime){
+      var bkey = _qrBatchKey(batchName);
+      var slug = String(batchName == null ? '' : batchName)
+        .replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
+      var digest = _qrMd5Hex(bkey).slice(0, 8);
+      var extMap = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
+      var ext = extMap[String(mime || '').split(';')[0].trim().toLowerCase()] || 'jpg';
+      return 'qr_' + (slug || 'batch') + '_' + digest + '.' + ext;
+    }
+
+    function _qrEsc(s){
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function _qrFmtTime(iso){
+      try {
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return String(iso);
+        var p = function(n){ return (n < 10 ? '0' : '') + n; };
+        return (d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+      } catch (e) { return String(iso); }
+    }
+    function _qrObjectUrl(objPath, updatedAt){
+      var safe = String(objPath || '').split('/').map(encodeURIComponent).join('/');
+      var direct = SUPABASE_DIRECT + '/storage/v1/object/public/pay-qr/' + safe;
+      var u = SB_IMG_BASE + '/storage/v1/object/public/pay-qr/' + safe;
+      if (updatedAt) u += '?v=' + encodeURIComponent(String(updatedAt));
+      return { url: u, orig: direct };
+    }
+
+    async function loadQrCodes(force){
+      if (QR_CODES_LOADED && !force) return;
+      if (force){
+        QR_CODES_LOADED = false; QR_CODES_MAP = null;
+        // ⚠️ 这里不能再调 renderQrCodes()：它看到 !QR_CODES_LOADED 又会去调 loadQrCodes(false)，
+        //    一个刷新会打出两次请求。直接画「读取中」即可。
+        var box0 = document.getElementById('qrCodesList');
+        if (box0) box0.innerHTML = '<div style="padding:18px; text-align:center; color:var(--text-muted);">正在读取已挂的收款码…</div>';
+        var sum0 = document.getElementById('qrCodesSummary');
+        if (sum0) sum0.innerHTML = '';
+      }
+      try {
+        var r = await supabaseClient.from('qr_codes').select('batch_key,batch_name,object_path,updated_at');
+        if (r.error) throw r.error;
+        var m = {};
+        (r.data || []).forEach(function(x){ if (x && x.batch_key) m[String(x.batch_key)] = x; });
+        QR_CODES_MAP = m; QR_CODES_ERROR = '';
+      } catch (e) {
+        QR_CODES_MAP = QR_CODES_MAP || {};
+        QR_CODES_ERROR = (e && e.message) ? e.message : String(e);
+      }
+      QR_CODES_LOADED = true;
+      renderQrCodes();
+    }
+    window.loadQrCodes = loadQrCodes;
+
+    function renderQrCodes(){
+      var box = document.getElementById('qrCodesList');
+      if (!box) return;
+      var sum = document.getElementById('qrCodesSummary');
+      if (!QR_CODES_LOADED){
+        if (sum) sum.innerHTML = '';
+        box.innerHTML = '<div style="padding:18px; text-align:center; color:var(--text-muted);">正在读取已挂的收款码…</div>';
+        loadQrCodes(false);
+        return;
+      }
+      if (QR_CODES_ERROR){
+        if (sum) sum.innerHTML = '';
+        box.innerHTML = '<div style="padding:14px; color:#dc2626;">读取收款码失败：' + _qrEsc(QR_CODES_ERROR) +
+          '<br><span style="font-size:0.82rem; color:var(--text-muted);">点右上角「🔄 刷新」重试。</span></div>';
+        return;
+      }
+      var map = QR_CODES_MAP || {};
+      var rows = [], seen = {};
+      /* keyOverride：已挂码的批次**直接用表里的 batch_key**，不要拿 batch_name 重算 ——
+         历史数据里两者可能对不上，重算会让「同一批次显示成两行 / 换了码却仍显示旧行」。 */
+      function addBatch(name, source, keyOverride){
+        var raw = String(name == null ? '' : name).trim();
+        if (!raw) return;
+        var k = keyOverride || _qrBatchKey(raw);
+        if (!k) return;
+        if (seen[k]){
+          if (seen[k].sources.indexOf(source) < 0) seen[k].sources.push(source);
+          return;
+        }
+        var rec = map[k];
+        seen[k] = {
+          key: k,
+          name: (rec && rec.batch_name) ? String(rec.batch_name) : raw,
+          sources: [source],
+          path: rec ? String(rec.object_path || '') : '',
+          updated: rec ? String(rec.updated_at || '') : '',
+          pending: 0
+        };
+        rows.push(seen[k]);
+      }
+      (RAW_ITEMS || []).forEach(function(it){
+        if (!it) return;
+        var bn = String(it.batch_name || '').trim() || '默认批次';
+        addBatch(bn, '排表');
+        var st = String(it.status || '').trim();
+        if (st === '未付款' || st === '未交'){
+          var k = _qrBatchKey(bn);
+          if (seen[k]) seen[k].pending++;
+        }
+      });
+      (RAW_LOGISTICS || []).forEach(function(b){ if (b) addBatch(b.batch_name, '国际运费'); });
+      Object.keys(map).forEach(function(k){ var r = map[k] || {}; addBatch(r.batch_name || k, '历史存档', k); });
+
+      rows.sort(function(a, b){
+        var am = a.path ? 1 : 0, bm = b.path ? 1 : 0;
+        if (am !== bm) return am - bm;                                 // 没挂码的排最前
+        if (a.pending !== b.pending) return b.pending - a.pending;     // 再按还没交的人多的排前
+        return a.name.localeCompare(b.name, 'zh');
+      });
+
+      var kwEl = document.getElementById('qrSearchInput');
+      var kw = kwEl ? String(kwEl.value || '').trim().toLowerCase() : '';
+      var onlyEl = document.getElementById('qrOnlyMissing');
+      var onlyMissing = !!(onlyEl && onlyEl.checked);
+      var list = rows.filter(function(r){
+        if (onlyMissing && r.path) return false;
+        if (kw){
+          var kk = _qrBatchKey(kw);
+          if (r.name.toLowerCase().indexOf(kw) < 0 && (!kk || r.key.indexOf(kk) < 0)) return false;
+        }
+        return true;
+      });
+      QR_CODES_ROWS = list;
+
+      var missing = rows.filter(function(r){ return !r.path; }).length;
+      if (sum){
+        sum.innerHTML = '共 <b>' + rows.length + '</b> 个批次，其中 ' +
+          (missing ? '<b style="color:#dc2626;">' + missing + ' 个还没挂收款码</b>' : '<b style="color:#16a34a;">全部已挂码</b>') +
+          (list.length !== rows.length ? '（当前筛选出 ' + list.length + ' 个）' : '');
+      }
+      if (!list.length){
+        box.innerHTML = '<div style="padding:18px; text-align:center; color:var(--text-muted);">' +
+          (rows.length ? '没有匹配的批次' : '当前还没有任何批次数据，先在上面的「切换并加载数据」里加载一个 Key') + '</div>';
+        return;
+      }
+
+      var html = '';
+      list.forEach(function(r, idx){
+        var thumb, meta;
+        if (r.path){
+          var u = _qrObjectUrl(r.path, r.updated);
+          thumb = '<img src="' + _qrEsc(u.url) + '" data-orig="' + _qrEsc(u.orig) + '" onerror="imgFallback(this)" ' +
+                  'style="width:100%; height:100%; object-fit:contain; background:#fff;" alt="收款码">';
+          meta = '已挂码' + (r.updated ? '，' + _qrFmtTime(r.updated) + ' 更新' : '');
+        } else {
+          thumb = '<span style="font-size:0.72rem; color:var(--text-muted); text-align:center; line-height:1.3;">未<br>挂码</span>';
+          meta = '还没挂收款码';
+        }
+        var src = '来源：' + r.sources.join(' · ');
+        if (r.pending > 0) src += ' ｜ 还有 ' + r.pending + ' 条待交';
+        html += '<div style="display:flex; align-items:center; gap:12px; border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:8px;' +
+            (r.path ? '' : ' background:#fffbeb;') + '">' +
+          '<div style="flex:0 0 62px; width:62px; height:62px; border-radius:6px; overflow:hidden; border:1px solid var(--border); background:#f8fafc; display:flex; align-items:center; justify-content:center;">' + thumb + '</div>' +
+          '<div style="flex:1; min-width:0;">' +
+            '<div style="font-weight:600; word-break:break-all;">' + _qrEsc(r.name) + '</div>' +
+            '<div style="font-size:0.78rem; color:var(--text-muted); margin-top:3px; word-break:break-all;">' + _qrEsc(meta) +
+              '<br>' + _qrEsc(src) + '</div>' +
+          '</div>' +
+          '<div style="flex:0 0 auto;">' +
+            '<button class="btn ' + (r.path ? 'btn-secondary' : 'btn-primary') + '" style="padding:6px 12px; font-size:0.82rem; white-space:nowrap;" ' +
+              'onclick="qrPickImageAt(' + idx + ')">' + (r.path ? '更换' : '上传收款码') + '</button>' +
+          '</div>' +
+        '</div>';
+      });
+      box.innerHTML = html;
+    }
+    window.renderQrCodes = renderQrCodes;
+
+    function qrPickImageAt(idx){
+      var r = QR_CODES_ROWS[idx];
+      if (!r) return showToast('列表已刷新，请重新点一次');
+      _qrPendingTarget = { key: r.key, name: r.name };
+      var inp = document.getElementById('qrFileInput');
+      if (!inp) return;
+      inp.value = '';
+      inp.click();
+    }
+    window.qrPickImageAt = qrPickImageAt;
+
+    async function qrHandleFile(e){
+      var inp = e && e.target;
+      var f = inp && inp.files && inp.files[0];
+      var target = _qrPendingTarget;
+      _qrPendingTarget = null;
+      if (inp) inp.value = '';
+      if (!f || !target) return;
+      await uploadQrCode(target, f);
+    }
+    window.qrHandleFile = qrHandleFile;
+
+    async function uploadQrCode(target, file){
+      if (_qrUploading){ showToast('还有一张收款码正在上传，请稍候'); return; }
+      var ct = String((file && file.type) || '').toLowerCase();
+      if (['image/png', 'image/jpeg', 'image/webp', 'image/gif'].indexOf(ct) < 0){
+        showToast('❌ 只支持 jpg / png / webp / gif 格式的图片'); return;
+      }
+      if (file.size > 5 * 1024 * 1024){ showToast('❌ 图片超过 5MB，请压缩后再传'); return; }
+      _qrUploading = true;
+      try {
+        showToast('⏳ 正在上传「' + target.name + '」的收款码…');
+        var objName = _qrWebName(target.name, ct);      // 永远用规范名（与机器人一致）
+        var prev = (QR_CODES_MAP || {})[target.key];
+        var oldPath = (prev && prev.object_path && String(prev.object_path) !== objName) ? String(prev.object_path) : '';
+        var up = await supabaseClient.storage.from('pay-qr')
+          .upload(objName, file, { contentType: ct, upsert: true, cacheControl: '0' });
+        if (up.error) throw up.error;
+        var nowIso = new Date().toISOString();
+        var wr = await supabaseClient.from('qr_codes').upsert(
+          { batch_key: target.key, batch_name: target.name, object_path: objName, updated_at: nowIso },
+          { onConflict: 'batch_key' });
+        if (wr.error) throw wr.error;
+        QR_CODES_MAP = QR_CODES_MAP || {};
+        QR_CODES_MAP[target.key] = { batch_key: target.key, batch_name: target.name, object_path: objName, updated_at: nowIso };
+        if (oldPath){ try { await supabaseClient.storage.from('pay-qr').remove([oldPath]); } catch (e2) {} }
+        QR_CODES_LOADED = true;
+        renderQrCodes();
+        showToast('✅ 「' + target.name + '」的收款码已挂上，团员自查页立刻可见');
+      } catch (err){
+        showToast('❌ 上传失败：' + ((err && err.message) ? err.message : err));
+      } finally { _qrUploading = false; }
+    }
+    window.uploadQrCode = uploadQrCode;
+
     function switchTab(tabId) {
       document.querySelectorAll('.side-nav .tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -2272,6 +2615,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (tabId === 'tabFeedback') renderFeedbackList();
       if (tabId === 'tabPayStats') renderPayStats();
       if (tabId === 'tabPayReview') renderPayReview();
+      if (tabId === 'tabQrCodes') renderQrCodes();
     }
     window.switchTab = switchTab;
 
@@ -2290,7 +2634,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           CURRENT_RECORD_ID = null; CURRENT_VERSION = null; RAW_ITEMS = []; RAW_ARCHIVED = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = []; RAW_LOGISTICS = []; RAW_PAY_PROOFS = [];
           LOGISTICS_DELETED_BATCHES.clear();
           renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
-          renderPayReview(); renderPayStats();
+          renderPayReview(); renderPayStats(); renderQrCodes();
           alert('该密钥暂无数据！'); return;
         }
         const rec = data[0];
@@ -2314,7 +2658,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         CURRENT_PAGE = 1;
         updateBatchDropdownOptions();
         renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
-        renderPayReview(); renderPayStats();
+        renderPayReview(); renderPayStats(); renderQrCodes();
         loadBatches();
       } catch (err) { showToast('数据加载网络异常'); }
     }
