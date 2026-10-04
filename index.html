@@ -1357,7 +1357,7 @@
     // 直接用原生 fetch 调 Supabase REST API，不依赖外部 CDN 脚本
     async function fetchLeaderData(key){
       const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer '+SUPABASE_ANON };
-      const res = await sbFetch('/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key) + '&select=*', { headers: h });
+      const res = await sbFetch('/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key) + '&select=*', { headers: h, cache: 'no-store' });
       if (!res.ok) { throw new Error('HTTP ' + res.status); }
       return await res.json();
     }
@@ -2092,34 +2092,55 @@
           throw new Error('截图上传失败（' + upRes.status + '）' + (t ? ' ' + String(t).slice(0, 120) : ''));
         }
 
-        const fresh = await fetchLeaderData(ctx.key);
-        if (!fresh || !fresh.length) throw new Error('读取档案失败');
-        const row = fresh[0];
-        const imgData = parseImgData(row);
-        if (!Array.isArray(imgData.pay_proofs)) imgData.pay_proofs = [];
-        imgData.pay_proofs.unshift({
-          id: proofId,
-          cn: ctx.cn,
-          order_type: ctx.orderType || '普通',   // ← 国际运费走另一份数据，后台靠它分辨改哪里
-          batch_key: ctx.batchKey,               // ← v2：一条凭证只对一个批次
-          batch_names: [ctx.batchName],
-          item_ids: ctx.items.map(function(i){ return String(i.item_id || i.id || ''); }).filter(Boolean),
-          amount: Number(ctx.total.toFixed(2)),
-          pay_method: method,
-          note: note,
-          img_path: objPath,
-          status: '待审核',
-          created_at: new Date().toLocaleString('zh-CN'),
-          reviewed_at: '',
-          reject_reason: '',
-          withdrawn_at: ''
-        });
-        const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
-        const res = await sbFetch('/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(ctx.key),
-          { method: 'PATCH', headers: h, body: JSON.stringify({ image_data: imgData }) });
-        if (!res.ok) throw new Error('登记失败（HTTP ' + res.status + '）');
-
-        window.__LAST_ROW = row;
+        // 🔒 带版本锁写入（2026-10-04 修「交了截图但团长收不到、刷新又要重交」）：
+        //    原写法是直接 PATCH { image_data }，**不带 version**。数据库版本号因此不变，
+        //    团长后台页面的版本锁察觉不到「有新人刚提交」→ 它下一次保存就用内存里的旧
+        //    pay_proofs 整份覆盖 → 刚交的凭证凭空消失（图却已经传进桶里，成了孤儿图）。
+        //    现在：读版本 → 带 version 条件写 → 空手而归说明别人刚写过 → 重读重试。
+        //    这样任何一方（后台/机器人/其他团员）同时在写，都不会再互相盖掉。
+        const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON,
+                    'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+        let written = false;
+        for (let attempt = 0; attempt < 6 && !written; attempt++) {
+          const fresh = await fetchLeaderData(ctx.key);
+          if (!fresh || !fresh.length) throw new Error('读取档案失败');
+          const row = fresh[0];
+          const ver = (row.version === undefined || row.version === null) ? null : Number(row.version);
+          const imgData = parseImgData(row);
+          if (!Array.isArray(imgData.pay_proofs)) imgData.pay_proofs = [];
+          // 幂等：上一次其实已经写成功了（只是响应没回来）→ 别再追加一遍
+          if (imgData.pay_proofs.some(function (p) { return String((p && p.id) || '') === proofId; })) {
+            window.__LAST_ROW = row; written = true; break;
+          }
+          imgData.pay_proofs.unshift({
+            id: proofId,
+            cn: ctx.cn,
+            order_type: ctx.orderType || '普通',   // ← 国际运费走另一份数据，后台靠它分辨改哪里
+            batch_key: ctx.batchKey,               // ← v2：一条凭证只对一个批次
+            batch_names: [ctx.batchName],
+            item_ids: ctx.items.map(function(i){ return String(i.item_id || i.id || ''); }).filter(Boolean),
+            amount: Number(ctx.total.toFixed(2)),
+            pay_method: method,
+            note: note,
+            img_path: objPath,
+            status: '待审核',
+            created_at: new Date().toLocaleString('zh-CN'),
+            reviewed_at: '',
+            reject_reason: '',
+            withdrawn_at: ''
+          });
+          const body = { image_data: imgData };
+          let url = '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(ctx.key);
+          if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
+          const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
+          if (!res.ok) throw new Error('登记失败（HTTP ' + res.status + '）');
+          if (ver === null) { window.__LAST_ROW = row; written = true; break; }
+          let got = [];
+          try { got = await res.json(); } catch (e) { got = []; }
+          if (Array.isArray(got) && got.length > 0) { window.__LAST_ROW = row; written = true; break; }
+          await new Promise(function (r) { setTimeout(r, 250 + Math.random() * 350); });   // 版本冲突：重读重试
+        }
+        if (!written) throw new Error('提交时正好有人在改数据，请再点一次「提交给团长审核」');
         showToast('✅ 已提交！团长核对到账后会更新你的订单状态');
         cancelPayForm();
         doQuery('fee');
@@ -2147,23 +2168,40 @@
       window.__PAY_WITHDRAWING = true;
       try {
         const key = String((window.__PAY_CTX || {}).key || (document.getElementById('panelKey').value || '')).trim();
-        const fresh = await fetchLeaderData(key);
-        if (!fresh || !fresh.length) throw new Error('读取档案失败');
-        const row = fresh[0];
-        const imgData = parseImgData(row);
-        const arr = Array.isArray(imgData.pay_proofs) ? imgData.pay_proofs : [];
-        let hit = null;
-        arr.forEach(function(p){ if (String(p.id) === String(proofId)) hit = p; });
-        if (!hit) throw new Error('这条凭证已经不在列表里，请重新查询');
-        if (String(hit.status || '待审核') !== '待审核') throw new Error('团长已经处理过了，不能撤销');
-        hit.status = '已撤回';
-        hit.withdrawn_at = new Date().toLocaleString('zh-CN');
-        const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
-        const res = await sbFetch('/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key),
-          { method: 'PATCH', headers: h, body: JSON.stringify({ image_data: imgData }) });
-        if (!res.ok) throw new Error('撤销失败（' + res.status + '），请重试');
+        // 🔒 同样带版本锁（理由见 submitPayProof 上方注释）
+        const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON,
+                    'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+        let done = false;
+        for (let attempt = 0; attempt < 6 && !done; attempt++) {
+          const fresh = await fetchLeaderData(key);
+          if (!fresh || !fresh.length) throw new Error('读取档案失败');
+          const row = fresh[0];
+          const ver = (row.version === undefined || row.version === null) ? null : Number(row.version);
+          const imgData = parseImgData(row);
+          const arr = Array.isArray(imgData.pay_proofs) ? imgData.pay_proofs : [];
+          let hit = null;
+          arr.forEach(function(p){ if (String(p.id) === String(proofId)) hit = p; });
+          if (!hit) throw new Error('这条凭证已经不在列表里，请重新查询');
+          const st = String(hit.status || '待审核');
+          if (st !== '待审核') {
+            if (st === '已撤回') { window.__LAST_ROW = row; done = true; break; }   // 幂等：上次已撤销成功
+            throw new Error('团长已经处理过了，不能撤销');
+          }
+          hit.status = '已撤回';
+          hit.withdrawn_at = new Date().toLocaleString('zh-CN');
+          const body = { image_data: imgData };
+          let url = '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key);
+          if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
+          const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
+          if (!res.ok) throw new Error('撤销失败（' + res.status + '），请重试');
+          if (ver === null) { window.__LAST_ROW = row; done = true; break; }
+          let got = [];
+          try { got = await res.json(); } catch (e) { got = []; }
+          if (Array.isArray(got) && got.length > 0) { window.__LAST_ROW = row; done = true; break; }
+          await new Promise(function (r) { setTimeout(r, 250 + Math.random() * 350); });
+        }
+        if (!done) throw new Error('撤销时正好有人在改数据，请重试');
         showToast('已撤销，可以重新上传');
-        window.__LAST_ROW = row;
         doQuery('fee');
       } catch(e){
         showToast(String(e.message || e).slice(0, 120));
