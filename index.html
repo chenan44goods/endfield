@@ -1619,31 +1619,49 @@
       if (!items || !items.length) return showToast('没有可排发的谷子');
       window.__APPLY_SUBMITTING = true;
       try {
-        const data = await fetchLeaderData(key);
-        if (!data || !data.length) return showToast('未找到该密钥数据');
-        const row = data[0];
-        let groupData = row.group_data;
-        if (typeof groupData === 'string') { try { groupData = JSON.parse(groupData); } catch(e){ groupData = []; } }
-        if (!Array.isArray(groupData)) groupData = [];
-        let imgData = row.image_data;
-        if (typeof imgData === 'string') { try { imgData = JSON.parse(imgData); } catch(e){ imgData = {}; } }
-        if (!imgData || typeof imgData !== 'object') imgData = {};
-        if (!Array.isArray(imgData.applications)) imgData.applications = [];
-        const targetIds = new Set(items.map(i=>String(i.item_id||i.id)));
-        // 状态改为「待发货」时，同步清掉囤货入库日/到期日，避免误点「可排发」留下的日期一直挂着
-        groupData.forEach(item => { if (targetIds.has(String(item.item_id||item.id))) { item.status = '待发货'; item.stock_date = null; item.stock_expiry = null; } });
-        imgData.applications.unshift({
-          id: 'app_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-          type: '排发申请',
-          cn: cn,
-          items: items.map(i=>({ item_id: i.item_id||i.id, name: i.name, quantity: i.quantity||1, country: i.country||'日本' })),
-          note: String(note||'').trim(),
-          time: new Date().toLocaleString('zh-CN'),
-          status: '待处理'
-        });
-        const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
-        const res = await sbFetch('/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key), { method: 'PATCH', headers: h, body: JSON.stringify({ group_data: groupData, image_data: imgData }) });
-        if (!res.ok) { throw new Error('HTTP ' + res.status); }
+        // 🔒 版本锁写入（2026-10-04 修）：不锁版本的话，团长后台一保存就会拿它内存里的
+        //    旧数据把这次申请 + 刚改的「待发货」状态一起盖掉（与交款凭证同一个根因）。
+        const appId = 'app_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+        const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+        let written = false;
+        for (let attempt = 0; attempt < 6 && !written; attempt++) {
+          const data = await fetchLeaderData(key);
+          if (!data || !data.length) return showToast('未找到该密钥数据');
+          const row = data[0];
+          const ver = (row.version === undefined || row.version === null) ? null : Number(row.version);
+          let groupData = row.group_data;
+          if (typeof groupData === 'string') { try { groupData = JSON.parse(groupData); } catch(e){ groupData = []; } }
+          if (!Array.isArray(groupData)) groupData = [];
+          let imgData = row.image_data;
+          if (typeof imgData === 'string') { try { imgData = JSON.parse(imgData); } catch(e){ imgData = {}; } }
+          if (!imgData || typeof imgData !== 'object') imgData = {};
+          if (!Array.isArray(imgData.applications)) imgData.applications = [];
+          // 幂等：上一次其实已经写成功了（只是响应没回来）→ 不重复提交
+          if (imgData.applications.some(function (a) { return String((a && a.id) || '') === appId; })) { written = true; break; }
+          const targetIds = new Set(items.map(i=>String(i.item_id||i.id)));
+          // 状态改为「待发货」时，同步清掉囤货入库日/到期日，避免误点「可排发」留下的日期一直挂着
+          groupData.forEach(item => { if (targetIds.has(String(item.item_id||item.id))) { item.status = '待发货'; item.stock_date = null; item.stock_expiry = null; } });
+          imgData.applications.unshift({
+            id: appId,
+            type: '排发申请',
+            cn: cn,
+            items: items.map(i=>({ item_id: i.item_id||i.id, name: i.name, quantity: i.quantity||1, country: i.country||'日本' })),
+            note: String(note||'').trim(),
+            time: new Date().toLocaleString('zh-CN'),
+            status: '待处理'
+          });
+          const body = { group_data: groupData, image_data: imgData };
+          let url = '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key);
+          if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
+          const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
+          if (!res.ok) { throw new Error('HTTP ' + res.status); }
+          if (ver === null) { written = true; break; }
+          let got = [];
+          try { got = await res.json(); } catch (e) { got = []; }
+          if (Array.isArray(got) && got.length > 0) { written = true; break; }
+          await new Promise(function (r) { setTimeout(r, 250 + Math.random() * 350); });   // 版本冲突：重读重试
+        }
+        if (!written) throw new Error('数据正被同时更新，请再点一次提交');
         showToast('🎉 排发申请提交成功！谷子已标记为【待发货】' + (String(note||'').trim() ? '，备注已同步' : ''));
         doQuery('dispatch');
       } catch(e){
@@ -2489,26 +2507,44 @@
       if (!content) return showToast('请填写反馈内容');
       window.__FEEDBACK_SUBMITTING = true;
       try {
-        const data = await fetchLeaderData(key);
-        if (!data || !data.length) return showToast('未找到该密钥数据');
-        const row = data[0];
-        let imgData = row.image_data;
-        if (typeof imgData === 'string') { try { imgData = JSON.parse(imgData); } catch(e){ imgData = {}; } }
-        if (!imgData || typeof imgData !== 'object') imgData = {};
-        if (!Array.isArray(imgData.feedback)) imgData.feedback = [];
+        // 🔒 版本锁写入（2026-10-04 修）：与交款凭证同一根因 —— 不锁版本的话，
+        //    团长后台一保存就会拿内存里的旧 image_data 把这条反馈连同取件码一起盖掉。
+        const fbId = 'fb_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
         const newCode = genFbCode();
-        imgData.feedback.unshift({
-          id: 'fb_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-          code: newCode,
-          content: content,
-          category: category,
-          status: '未读',
-          created_at: new Date().toLocaleString('zh-CN'),
-          reply: ''
-        });
-        const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
-        const res = await sbFetch('/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key), { method: 'PATCH', headers: h, body: JSON.stringify({ image_data: imgData }) });
-        if (!res.ok) { throw new Error('HTTP ' + res.status); }
+        const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+        let written = false;
+        for (let attempt = 0; attempt < 6 && !written; attempt++) {
+          const data = await fetchLeaderData(key);
+          if (!data || !data.length) return showToast('未找到该密钥数据');
+          const row = data[0];
+          const ver = (row.version === undefined || row.version === null) ? null : Number(row.version);
+          let imgData = row.image_data;
+          if (typeof imgData === 'string') { try { imgData = JSON.parse(imgData); } catch(e){ imgData = {}; } }
+          if (!imgData || typeof imgData !== 'object') imgData = {};
+          if (!Array.isArray(imgData.feedback)) imgData.feedback = [];
+          // 幂等：上一次其实已经写成功了 → 不重复提交（取件码保持一致）
+          if (imgData.feedback.some(function (f) { return String((f && f.id) || '') === fbId; })) { written = true; break; }
+          imgData.feedback.unshift({
+            id: fbId,
+            code: newCode,
+            content: content,
+            category: category,
+            status: '未读',
+            created_at: new Date().toLocaleString('zh-CN'),
+            reply: ''
+          });
+          const body = { image_data: imgData };
+          let url = '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key);
+          if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
+          const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
+          if (!res.ok) { throw new Error('HTTP ' + res.status); }
+          if (ver === null) { written = true; break; }
+          let got = [];
+          try { got = await res.json(); } catch (e) { got = []; }
+          if (Array.isArray(got) && got.length > 0) { written = true; break; }
+          await new Promise(function (r) { setTimeout(r, 250 + Math.random() * 350); });   // 版本冲突：重读重试
+        }
+        if (!written) throw new Error('数据正被同时更新，请再点一次提交');
         saveMyFbCode(key, newCode);
         showFbSubmitResult(newCode);
         document.getElementById('fbContent').value = '';
