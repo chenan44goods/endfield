@@ -748,6 +748,27 @@
     .hud-note .sep { color: var(--accent); margin: 0 10px; }
     .hud-note .contact { color: var(--ink); font-weight: 600; }
 
+    /* 📌 版本标记：必须 z-index 压过 .query-panel(fixed, z-index:20)，
+       否则「交肾核算」面板一打开就把页脚整个盖住（2026-10-04 实测发现）。
+       pointer-events:none 保证不挡任何点击。 */
+    .ver-tag {
+      position: fixed;
+      right: 10px;
+      bottom: 8px;
+      z-index: 9999;
+      font-family: var(--sans);
+      font-size: 10px;
+      line-height: 1;
+      letter-spacing: 0.06em;
+      color: rgba(33, 33, 33, 0.55);
+      background: rgba(255, 255, 255, 0.32);
+      padding: 3px 6px;
+      border-radius: 5px;
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
     /* 查询结果数据卡 */
     .result-item {
       display: flex;
@@ -1218,6 +1239,9 @@
       <div class="taotie-foot">* 统计全部谷子订单金额排行 · 数据来源：山团大观园账本</div>
     </div>
   </div>
+
+  <!-- 📌 版本标记（固定右下角，压过所有面板）：团员念一下这一行，就能判断他手上是不是缓存的旧页 -->
+  <div class="ver-tag">版本 2026-10-04</div>
 
   <script>
     // 生成终末地式等高线地形背景
