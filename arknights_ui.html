@@ -2987,8 +2987,31 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           clearMine();
           return true;
         }
-        const { error } = await supabaseClient.from('leader_data').update(payload).eq('id', CURRENT_RECORD_ID);
+        // 🛡️ 兜底分支（拿不到版本号时）：**绝不做「无版本整表覆盖」**。
+        //    老写法 update(payload).eq('id', ...) 没有 version 条件 → 会把别人
+        //    （团员刚提交的交款凭证 / 排发申请 / 反馈，机器人刚写的记录）整份抹掉 ——
+        //    这就是「团员交了截图却没记录、图变成孤儿图」的另一条触发路径。
+        //    现在：先直接读一次版本号；拿到就按版本锁写；CAS 失败或拿不到就刷新让团长重做。
+        let fallbackVer = null;
+        try {
+          const { data: vr } = await supabaseClient.from('leader_data').select('version').eq('id', CURRENT_RECORD_ID);
+          if (vr && vr[0] && vr[0].version !== undefined && vr[0].version !== null) fallbackVer = Number(vr[0].version);
+        } catch (e) {}
+        if (fallbackVer === null) {
+          alert('⚠️ 这次拿不到数据版本号，为避免覆盖别人刚提交的数据，已帮你刷新，请重新操作。');
+          await loadDataByQueryKey();
+          return false;
+        }
+        const { data: wres, error } = await supabaseClient.from('leader_data')
+          .update(Object.assign({}, payload, { version: fallbackVer + 1 }))
+          .eq('id', CURRENT_RECORD_ID).eq('version', fallbackVer).select('id');
         if (error) { showToast('保存失败: ' + error.message); return false; }
+        if (!wres || wres.length === 0) {
+          alert('⚠️ 数据刚被别处更新过，已帮你刷新，请重新操作。');
+          await loadDataByQueryKey();
+          return false;
+        }
+        CURRENT_VERSION = fallbackVer + 1;
         clearMine();
         return true;
       } catch (err) { showToast('保存异常'); return false; }
