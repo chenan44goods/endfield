@@ -1968,9 +1968,11 @@
           // 🆕 2026-10-05 团长要求：国际运费条目（名字里带克重，如「国际运费 460g」）直接列在卡片上，
           //    团员不用往下滚到逐条列表就能看到「这笔钱是怎么来的」。
           //    ⚠️ 只列 __intl 条目（普通订单的谷子名不列，否则卡片会很长）；文案一字不改、原样来自 item_name。
+          //    ⚠️ 与批次名一模一样的不列（老数据里 item_name 有时就填的批次名，列出来纯属重复）。
+          const _batchName = String(g.name || '').trim();
           const _feeNames = (g.items || []).filter(function(x){ return x && x.__intl; })
                                            .map(function(x){ return String(x.name || '').trim(); })
-                                           .filter(function(x){ return x; });
+                                           .filter(function(x){ return x && x !== _batchName; });
           if (_feeNames.length) {
             const _shown = _feeNames.slice(0, 8);
             html += '<div style="margin-top:4px; font-size:12px; color:var(--ink-soft); line-height:1.8;">'
