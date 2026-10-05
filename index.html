@@ -1965,6 +1965,19 @@
 
         if (due) {
           html += '<div style="margin-top:4px; font-size:12px; color:var(--ink-soft);">待交款 ' + due + (g.intl ? ' 项' : ' 条') + ' · 应付 ￥' + g.total.toFixed(2) + '</div>';
+          // 🆕 2026-10-05 团长要求：国际运费条目（名字里带克重，如「国际运费 460g」）直接列在卡片上，
+          //    团员不用往下滚到逐条列表就能看到「这笔钱是怎么来的」。
+          //    ⚠️ 只列 __intl 条目（普通订单的谷子名不列，否则卡片会很长）；文案一字不改、原样来自 item_name。
+          const _feeNames = (g.items || []).filter(function(x){ return x && x.__intl; })
+                                           .map(function(x){ return String(x.name || '').trim(); })
+                                           .filter(function(x){ return x; });
+          if (_feeNames.length) {
+            const _shown = _feeNames.slice(0, 8);
+            html += '<div style="margin-top:4px; font-size:12px; color:var(--ink-soft); line-height:1.8;">'
+                 + _shown.map(function(x){ return esc(x); }).join('、')
+                 + (_feeNames.length > _shown.length ? (' 等 ' + _feeNames.length + ' 笔') : '')
+                 + '</div>';
+          }
           if (g.island) {
             html += '<div style="margin-top:5px; font-size:11.5px; line-height:1.7; color:#0f766e;">🏝️ 岛内运费＝日本国内那一段的运费，东西<b>还没出发回国</b>（不是回国的国际段）。</div>';
           }
