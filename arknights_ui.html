@@ -5884,7 +5884,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     function confirmDispatchCn(gi) {
       const g = (window.APP_GROUPS || [])[gi];
       if (!g || !g.apps.length) return;
-      _showDispatchModal('派发 CN「' + g.cn + '」的全部申请', _dispatchConfirmBody([g]), '确认派发（' + g.apps.length + ' 条）', 'btn-success',
+      _showDispatchModal('派发 CN「' + g.cn + '」的全部申请',
+        _dispatchUnpaidWarningHtml(g.apps) + _dispatchConfirmBody([g]),
+        '确认派发（' + g.apps.length + ' 条）', 'btn-success',
         async () => { await _applyDispatchApps(g.apps); showToast('🚀 已派发 ' + g.cn + ' 的 ' + g.apps.length + ' 条申请'); });
     }
     window.confirmDispatchCn = confirmDispatchCn;
@@ -5894,7 +5896,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const g = (window.APP_GROUPS || [])[gi];
       const app = g && g.apps[ai];
       if (!app) return;
-      _showDispatchModal('派发「' + g.cn + '」的这 1 条申请', _dispatchConfirmBody([{ cn: g.cn, apps: [app] }]), '确认派发（1 条）', 'btn-success',
+      _showDispatchModal('派发「' + g.cn + '」的这 1 条申请',
+        _dispatchUnpaidWarningHtml([app]) + _dispatchConfirmBody([{ cn: g.cn, apps: [app] }]),
+        '确认派发（1 条）', 'btn-success',
         async () => { await _applyDispatchApps([app]); showToast('🚀 已派发 1 条申请'); });
     }
     window.confirmDispatchOneFromGroup = confirmDispatchOneFromGroup;
@@ -5923,18 +5927,71 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const groups = (window.APP_GROUPS || []).filter(g => g.apps.length);
       if (!groups.length) { showToast('当前没有待处理的排发申请'); return; }
       const total = groups.reduce((s, g) => s + g.apps.length, 0);
-      _showDispatchModal('全部一键派发（' + groups.length + ' 位 CN）', _dispatchConfirmBody(groups), '全部确认派发（' + total + ' 条）', 'btn-success',
+      const _allApps = groups.reduce((acc, g) => acc.concat(g.apps), []);
+      _showDispatchModal('全部一键派发（' + groups.length + ' 位 CN）',
+        _dispatchUnpaidWarningHtml(_allApps) + _dispatchConfirmBody(groups),
+        '全部确认派发（' + total + ' 条）', 'btn-success',
         async () => {
-          await _applyDispatchApps(groups.reduce((acc, g) => acc.concat(g.apps), []));
+          await _applyDispatchApps(_allApps);
           showToast('🚀 已派发全部 ' + total + ' 条申请');
         });
     }
     window.openDispatchAllConfirm = openDispatchAllConfirm;
 
+    /* 🚧 派发前置闸门（2026-10-06 团长要求，与 index.html 团员端同一口径）：
+       这些 CN 名下若还有**任何一笔未交运费**（国际段 + 🏝️岛内段，不限金额），
+       就在派发前明确列出来，让团长自己决定 —— 不静默放行、也不硬拦（团长可能有正当理由）。
+       背景：排发申请只认 status==='可排发'，而状态可以手动改；补上「钱」这道闸避免漏收。 */
+    function _dispatchUnpaidByCn(cns) {
+      const want = {}; (cns || []).forEach(function (c) { want[String(c || '').trim()] = 1; });
+      const out = {};   // cn -> [{batch, amount, island}]
+      (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+        if (!b || typeof b !== 'object') return;
+        const bn = String(b.batch_name || '').trim();
+        (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
+          if (!m || typeof m !== 'object') return;
+          const cn = String(m.cn || '').trim();
+          if (!want[cn]) return;
+          if (String(m.status || '').trim() !== '未交') return;
+          const amt = Number(m.amount_due) || 0;
+          if (amt <= 0) return;
+          (out[cn] = out[cn] || []).push({
+            batch: bn || '运费', amount: amt,
+            island: String(m.fee_type || '').trim() === 'island'
+          });
+        });
+      });
+      return out;
+    }
+    /* 在派发确认弹窗的正文最前面插一段红字警告（没欠费就不插，正文逐字不变） */
+    function _dispatchUnpaidWarningHtml(apps) {
+      const cns = (apps || []).map(function (a) { return String(a.cn || '').trim(); }).filter(Boolean);
+      const un = _dispatchUnpaidByCn(cns);
+      const hits = Object.keys(un);
+      if (!hits.length) return '';
+      let h = '<div style="margin-bottom:12px; padding:10px 12px; border:1px solid rgba(220,38,38,0.35); '
+            + 'background:rgba(220,38,38,0.06); border-radius:8px; font-size:0.85rem; line-height:1.8;">'
+            + '<div style="font-weight:700; color:#b91c1c; margin-bottom:4px;">⚠️ 这些人还有运费没交清</div>';
+      hits.forEach(function (cn) {
+        const arr = un[cn];
+        const sum = Math.round(arr.reduce(function (s, x) { return s + x.amount; }, 0) * 100) / 100;
+        h += '<div style="color:#991b1b;">· <b>' + escapeHtml(cn) + '</b> 合计 ￥' + sum.toFixed(2) + '：'
+           + arr.map(function (x) {
+               return (x.island ? '🏝️岛内' : '🌍国际') + '「' + escapeHtml(x.batch) + '」￥' + x.amount.toFixed(2);
+             }).join('、')
+           + '</div>';
+      });
+      h += '<div style="margin-top:6px; color:#7f1d1d;">仍然可以派发（你有你的判断），但请先确认钱是不是收到了。</div></div>';
+      return h;
+    }
+    window._dispatchUnpaidByCn = _dispatchUnpaidByCn;
+
     async function confirmDispatchAppByIndex(appIndex) {
       const app = window.APP_CACHE[appIndex];
       if (!app) return;
-      _showDispatchModal('派发「' + (app.cn || '') + '」的申请', _dispatchConfirmBody([{ cn: app.cn || '(未署名)', apps: [app] }]), '确认派发（1 条）', 'btn-success',
+      _showDispatchModal('派发「' + (app.cn || '') + '」的申请',
+        _dispatchUnpaidWarningHtml([app]) + _dispatchConfirmBody([{ cn: app.cn || '(未署名)', apps: [app] }]),
+        '确认派发（1 条）', 'btn-success',
         async () => { await _applyDispatchApps([app]); showToast('已确认发货！'); });
     }
     window.confirmDispatchAppByIndex = confirmDispatchAppByIndex;
