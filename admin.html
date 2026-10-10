@@ -2925,7 +2925,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         return;
       }
       const td = 'padding:7px 8px; border-bottom:1px solid var(--border);';
-      let html = '<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:0.85rem;">' +
+      let html = '<div style="overflow-x:auto;"><table class="bp-table" style="width:100%; border-collapse:collapse; font-size:0.85rem;">' +
         '<thead><tr style="color:var(--text-muted); font-size:0.8rem;">' +
         '<th style="text-align:left; ' + td + '">批次</th>' +
         '<th style="text-align:center; ' + td + '">启用</th>' +
@@ -2936,10 +2936,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const pl = _batchPlanOf(bn);
         const pct = Math.round(pl.ratio * 1000) / 10;
         html += '<tr>' +
-          '<td style="' + td + ' text-align:left;"><strong>' + escapeHtml(bn) + '</strong></td>' +
-          '<td style="' + td + ' text-align:center;"><input type="checkbox" id="bpOn_' + i + '"' + (pl.enabled ? ' checked' : '') + '></td>' +
-          '<td style="' + td + ' text-align:center;"><input type="number" id="bpRatio_' + i + '" min="1" max="100" step="1" value="' + pct + '" style="width:72px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); text-align:center; font-family:var(--sans);"> %</td>' +
-          '<td id="bpPrev_' + i + '" style="' + td + ' text-align:left; color:var(--text-muted);">' + _bpPreviewText(pct) + '</td>' +
+          '<td class="bp-name" style="' + td + ' text-align:left;"><strong>' + escapeHtml(bn) + '</strong></td>' +
+          '<td class="bp-on" style="' + td + ' text-align:center;"><input type="checkbox" id="bpOn_' + i + '"' + (pl.enabled ? ' checked' : '') + '></td>' +
+          '<td class="bp-ratio" style="' + td + ' text-align:center;"><input type="number" id="bpRatio_' + i + '" min="1" max="100" step="1" value="' + pct + '" style="width:72px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); text-align:center; font-family:var(--sans);"> %</td>' +
+          '<td class="bp-hint" id="bpPrev_' + i + '" style="' + td + ' text-align:left; color:var(--text-muted);">' + _bpPreviewText(pct) + '</td>' +
           '</tr>';
       });
       html += '</tbody></table></div>';
@@ -8050,6 +8050,22 @@ function importLedger(e){
       .side-nav .tab-btn svg { width: 15px; height: 15px; vertical-align: -2.5px; margin-right: 4px; }
       .container { margin: 0 12px !important; }
       .tab-content#tabCalc { margin: 0 12px !important; }
+      /* 💰 定金设置表：手机上四列挤成一条横线、只看得见「批次」→ 改成每行竖排成一坨。
+         ⚠️ 必须推翻全站两条：`table{min-width:900px}`（否则表格还是 900 宽、被横向裁掉）
+            与 `td{white-space:nowrap}`（否则说明文字不换行、溢出看不见）。
+         电脑端（>768px）这条媒体查询整体不生效，外观与原来完全一致。 */
+      .tab-content#tabCalc .bp-table { min-width: 0; }
+      .tab-content#tabCalc .bp-table thead { display: none; }
+      .tab-content#tabCalc .bp-table,
+      .tab-content#tabCalc .bp-table tbody,
+      .tab-content#tabCalc .bp-table tr,
+      .tab-content#tabCalc .bp-table td { display: block; width: auto; }
+      .tab-content#tabCalc .bp-table tr { padding: 9px 0; border-bottom: 1px solid var(--border); }
+      .tab-content#tabCalc .bp-table td { border: 0 !important; padding: 2px 0 !important; white-space: normal; }
+      .tab-content#tabCalc .bp-table td.bp-name { font-size: .92rem; }
+      .tab-content#tabCalc .bp-table td.bp-on::before { content: '启用：'; color: var(--text-muted); font-size: .8rem; }
+      .tab-content#tabCalc .bp-table td.bp-ratio::before { content: '定金比例：'; color: var(--text-muted); font-size: .8rem; }
+      .tab-content#tabCalc .bp-table td.bp-hint { font-size: .78rem; line-height: 1.6; }
       .load-title .lt-main { font-size: 24px; }
       .load-title .lt-sub { font-size: 12px; }
     }
