@@ -773,6 +773,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     .badge-status-已排发 { background-color: #e2e8f0; color: #64748b; border: 1px solid #cbd5e1; } /* 中灰：流程结束 */
     .badge-status-已交 { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 700; } /* 翠绿：国际运费已交 */
     .badge-status-未付款 { background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; } /* 警示红 */
+    .badge-status-已交定金 { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-weight: 700; } /* 暖橙：只交了定金，尾款未清 */
 
     /* 老状态兼容颜色 */
     .badge-status-已下单未到货 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
@@ -1344,6 +1345,23 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
             </div>
           </div>
         </form>
+      </div>
+
+      <!-- 💰 批次定金设置（一番赏分期收款 · 2026-10-10 团长需求） -->
+      <div class="card">
+        <div class="card-title">
+          <span>💰 定金设置（批次分期收款）</span>
+          <div class="btn-group">
+            <button class="btn btn-secondary" onclick="renderBatchPlans()">🔄 重画列表</button>
+            <button class="btn btn-primary" onclick="saveBatchPlans()">💾 保存定金设置</button>
+          </div>
+        </div>
+        <div style="font-size:0.82rem; color:var(--text-muted); line-height:1.8; margin-bottom:12px;">
+          给某个批次<b>启用定金</b>后，团员在自查终端交这个批次的钱时会多出一个「交定金」的选择：<br>
+          定金 = 该笔应付 × 比例，余下自动记成<b>尾款</b>；你确认收款后订单变成「已交定金」，等尾款补清才转「已下单」。<br>
+          没启用（或不填）的批次，团员看到的还是原来的「整批一次付清」，一点不受影响。
+        </div>
+        <div id="batchPlansList"></div>
       </div>
 
       <!-- 数据表格与批量操作 -->
@@ -2147,6 +2165,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     let RAW_FEEDBACK = [];
     let RAW_LOGISTICS = [];
     let RAW_PAY_PROOFS = [];        // 💳 团员在自查页上传的付款凭证（image_data.pay_proofs）
+    // 💰 批次「定金计划」（image_data.batch_plans）：{ <归一化批次名>: { ratio: 0.5, enabled: true } }
+    //    ⚠️ 键必须与团员端 index.html 的 _normBatch() 完全一致（两边函数逐字相同）
+    let RAW_BATCH_PLANS = {};
     let LOGISTICS_DELETED_BATCHES = new Set();
     // 🗑 本次保存中「已删除的付款凭证 id」—— 真删需要它：
     //    保存冲突时会走 mergeById（并集合并），不加墓碑的话删掉的会被服务器旧数据合并回来。
@@ -2742,10 +2763,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const { data, error } = await supabaseClient.from('leader_data').select('*').eq('query_key', CURRENT_QUERY_KEY);
         if (error) return showToast('读取失败: ' + error.message);
         if (!data || data.length === 0) {
-          CURRENT_RECORD_ID = null; CURRENT_VERSION = null; RAW_ITEMS = []; RAW_ARCHIVED = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = []; RAW_LOGISTICS = []; RAW_PAY_PROOFS = [];
+          CURRENT_RECORD_ID = null; CURRENT_VERSION = null; RAW_ITEMS = []; RAW_ARCHIVED = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = []; RAW_LOGISTICS = []; RAW_PAY_PROOFS = []; RAW_BATCH_PLANS = {};
           LOGISTICS_DELETED_BATCHES.clear();
           renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
-          renderPayReview(); renderPayStats(); renderQrCodes();
+          renderPayReview(); renderPayStats(); renderQrCodes(); renderBatchPlans();
           alert('该密钥暂无数据！'); return;
         }
         const rec = data[0];
@@ -2764,12 +2785,14 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         RAW_FEEDBACK.forEach(function (f) { if (f && !f.code) f.code = fbCodeOf(f); });
         RAW_LOGISTICS = Array.isArray(iData.logistics_data) ? iData.logistics_data : [];
         RAW_PAY_PROOFS = Array.isArray(iData.pay_proofs) ? iData.pay_proofs : [];
+        // 💰 批次定金计划（键 = 归一化批次名）
+        RAW_BATCH_PLANS = (iData.batch_plans && typeof iData.batch_plans === 'object' && !Array.isArray(iData.batch_plans)) ? iData.batch_plans : {};
         RAW_ARCHIVED = Array.isArray(iData.archived_items) ? iData.archived_items : [];
         showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)`);
         CURRENT_PAGE = 1;
         updateBatchDropdownOptions();
         renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
-        renderPayReview(); renderPayStats(); renderQrCodes();
+        renderPayReview(); renderPayStats(); renderQrCodes(); renderBatchPlans();
         loadBatches();
       } catch (err) { showToast('数据加载网络异常'); }
     }
@@ -2857,6 +2880,106 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     // 「已通过」照样保住了 → 静默产生「凭证过了、订单没动 → 机器人一直催已交的人」。
     // 09-30 实证：多利 ￥19、橘子 ￥90，两次点击相隔 2 秒（07:33:31 / 07:33:33），正是整轮审核最密的一刻。
     let _saveChain = Promise.resolve();
+    /* ==========================================
+       💰 批次定金设置（image_data.batch_plans）
+       键 = _normBatchKey(批次名) —— 与团员端 index.html 的 _normBatch() 逐字一致；
+            对不上就会「后台设了、团员看不到」，改一边必须同改另一边。
+       值 = { ratio: 0.5, enabled: true }（ratio 是小数，0.5 = 五成）
+       ========================================== */
+    function _batchPlanOf(name) {
+      const k = _normBatchKey(name);
+      const p = (RAW_BATCH_PLANS && typeof RAW_BATCH_PLANS === 'object') ? RAW_BATCH_PLANS[k] : null;
+      const r = (p && isFinite(Number(p.ratio))) ? Number(p.ratio) : 0.5;
+      return { key: k, ratio: (r > 0 && r <= 1) ? r : 0.5, enabled: !!(p && p.enabled) };
+    }
+
+    function _bpPreviewText(pct) {
+      if (!isFinite(pct) || pct <= 0) return '比例无效 → 按未启用处理';
+      if (pct > 100) return '比例不能超过 100%';
+      return '定金 = 应付 × ' + pct + '%，余下 ' + (Math.round((100 - pct) * 10) / 10) + '% 记成尾款';
+    }
+    function _bpRefreshPreview(i) {
+      const r = document.getElementById('bpRatio_' + i);
+      const cell = document.getElementById('bpPrev_' + i);
+      if (!r || !cell) return;
+      cell.textContent = _bpPreviewText(Number(r.value));
+    }
+
+    function renderBatchPlans() {
+      const box = document.getElementById('batchPlansList');
+      if (!box) return;
+      const names = [], seen = {};
+      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it) {
+        const bn = String((it && it.batch_name) || '').trim() || '默认批次';
+        const k = _normBatchKey(bn);
+        if (!k || seen[k]) return;
+        seen[k] = 1; names.push(bn);
+      });
+      names.sort(function (a, b) { return a.localeCompare(b, 'zh'); });
+      window.__BP_NAMES = names;
+      if (!names.length) {
+        box.innerHTML = '<div style="padding:10px; color:var(--text-muted); font-size:0.85rem;">排表里还没有批次。</div>';
+        return;
+      }
+      const td = 'padding:7px 8px; border-bottom:1px solid var(--border);';
+      let html = '<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:0.85rem;">' +
+        '<thead><tr style="color:var(--text-muted); font-size:0.8rem;">' +
+        '<th style="text-align:left; ' + td + '">批次</th>' +
+        '<th style="text-align:center; ' + td + '">启用</th>' +
+        '<th style="text-align:center; ' + td + '">定金比例</th>' +
+        '<th style="text-align:left; ' + td + '">说明</th>' +
+        '</tr></thead><tbody>';
+      names.forEach(function (bn, i) {
+        const pl = _batchPlanOf(bn);
+        const pct = Math.round(pl.ratio * 1000) / 10;
+        html += '<tr>' +
+          '<td style="' + td + ' text-align:left;"><strong>' + escapeHtml(bn) + '</strong></td>' +
+          '<td style="' + td + ' text-align:center;"><input type="checkbox" id="bpOn_' + i + '"' + (pl.enabled ? ' checked' : '') + '></td>' +
+          '<td style="' + td + ' text-align:center;"><input type="number" id="bpRatio_' + i + '" min="1" max="100" step="1" value="' + pct + '" style="width:72px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); text-align:center; font-family:var(--sans);"> %</td>' +
+          '<td id="bpPrev_' + i + '" style="' + td + ' text-align:left; color:var(--text-muted);">' + _bpPreviewText(pct) + '</td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div>';
+      box.innerHTML = html;
+      names.forEach(function (_, i) {
+        const r = document.getElementById('bpRatio_' + i);
+        if (r) r.oninput = function () { _bpRefreshPreview(i); };
+      });
+    }
+    window.renderBatchPlans = renderBatchPlans;
+
+    /* 保存定金设置 → RAW_BATCH_PLANS → 走 saveDataToSupabase()（带版本锁）。
+       ⚠️ 列表里没有的批次配置原样带走、不删 —— 后台不做「没显示到就顺手抹掉」这种事。 */
+    async function saveBatchPlans() {
+      if (!CURRENT_RECORD_ID) return showToast('请先加载数据');
+      const names = window.__BP_NAMES || [];
+      const next = {};
+      Object.keys(RAW_BATCH_PLANS || {}).forEach(function (k) { next[k] = RAW_BATCH_PLANS[k]; });
+      let on = 0; const bad = [];
+      names.forEach(function (bn, i) {
+        const k = _normBatchKey(bn);
+        const onEl = document.getElementById('bpOn_' + i);
+        const rEl = document.getElementById('bpRatio_' + i);
+        const pct = Number(rEl ? rEl.value : 0);
+        const okPct = isFinite(pct) && pct > 0 && pct <= 100;
+        if (onEl && onEl.checked) {
+          if (!okPct) { bad.push(bn); delete next[k]; return; }
+          next[k] = { ratio: Math.round(pct * 10) / 1000, enabled: true, updated_at: new Date().toISOString() };
+          on++;
+        } else {
+          delete next[k];
+        }
+      });
+      if (bad.length) showToast('比例不在 1–100 之间，已按未启用处理：' + bad.slice(0, 3).join('、') + (bad.length > 3 ? ' 等' : ''));
+      const prev = RAW_BATCH_PLANS;
+      RAW_BATCH_PLANS = next;
+      const ok = await saveDataToSupabase();
+      if (!ok) { RAW_BATCH_PLANS = prev; renderBatchPlans(); return; }
+      renderBatchPlans();
+      showToast(on ? ('✅ 定金设置已保存：' + on + ' 个批次启用定金') : '✅ 已保存：当前没有批次启用定金');
+    }
+    window.saveBatchPlans = saveBatchPlans;
+
     function saveDataToSupabase() {
       const run = function () { return _saveDataToSupabase(); };
       const next = _saveChain.then(run, run);
@@ -2889,7 +3012,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           // ⚠️ 下面每个字段都是「后台整份回写」的：
           //    以后往 image_data 里加新字段，必须同步加进这一行，
           //    否则后台一保存就会把它抹掉（2026-09-22 pay_proofs 踩过一次）。
-          image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK, logistics_data: RAW_LOGISTICS, archived_items: mergedArch, pay_proofs: RAW_PAY_PROOFS }
+          image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK, logistics_data: RAW_LOGISTICS, archived_items: mergedArch, pay_proofs: RAW_PAY_PROOFS, batch_plans: RAW_BATCH_PLANS }
         };
         if (CURRENT_VERSION !== null) {
           const nextVersion = (Number(CURRENT_VERSION) || 0) + 1;
@@ -2931,6 +3054,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               const freshLogistics = Array.isArray(freshImg2.logistics_data) ? freshImg2.logistics_data : [];
               freshImg2.logistics_data = mergeLogisticsData(freshLogistics, RAW_LOGISTICS, MY_LOGI_DELETED);
               freshImg2.archived_items = mergedArch;
+              // 💰 批次定金计划：按批次键合并（我这边的覆盖服务器，服务器多出来的批次保留）
+              freshImg2.batch_plans = Object.assign({},
+                (freshImg2.batch_plans && typeof freshImg2.batch_plans === 'object') ? freshImg2.batch_plans : {},
+                RAW_BATCH_PLANS || {});
               // ⚠️ 下面几类都按 id 合并「我这边的优先 + 服务器多出来的保留」。
               //    不合并的话，冲突分支会用服务器旧数据把刚做的修改冲掉 ——
               //    2026-09-24 踩到：派发后申请被冲回「待处理」，谷子却已「已排发」→ 两边状态不一致。
@@ -2949,7 +3076,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
                 continue;
               }
               mergedApplied = true;
-              mergeResult = { freshRec: freshRec, freshVersion: freshVersion, merged: merged, mergedLogistics: freshImg2.logistics_data, mergedProofs: freshImg2.pay_proofs, myNewCount: myNewCount };
+              mergeResult = { freshRec: freshRec, freshVersion: freshVersion, merged: merged, mergedLogistics: freshImg2.logistics_data, mergedProofs: freshImg2.pay_proofs, mergedBatchPlans: freshImg2.batch_plans, myNewCount: myNewCount };
               break;
             }
             if (!mergedApplied || !mergeResult) {
@@ -2971,6 +3098,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             RAW_ITEMS = merged;
             RAW_LOGISTICS = mergeResult.mergedLogistics || RAW_LOGISTICS;
             if (Array.isArray(mergeResult.mergedProofs)) RAW_PAY_PROOFS = mergeResult.mergedProofs;
+            if (mergeResult.mergedBatchPlans && typeof mergeResult.mergedBatchPlans === 'object') RAW_BATCH_PLANS = mergeResult.mergedBatchPlans;
             clearMine();
             RAW_APPLICATIONS = Array.isArray(freshImg.applications) ? freshImg.applications : RAW_APPLICATIONS;
             RAW_LOGS = Array.isArray(freshImg.transfer_logs) ? freshImg.transfer_logs : RAW_LOGS;
@@ -3271,7 +3399,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         '已下单未到货': 'badge-status-已下单',
         '回国中': 'badge-status-国际运输中',
         '已到货': 'badge-status-可排发',
-        '已申请发货': 'badge-status-待发货'
+        '已申请发货': 'badge-status-待发货',
+        '已交定金': 'badge-status-已交定金'   // 💰 系统状态（只由「确认收款」写，不在手动状态下拉里）
       };
       return legacyMap[s] || 'badge-status-custom';
     }
@@ -3296,7 +3425,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     //    'time' = 每个批次取「最近一次录入时间」(max created_at) 倒序；'due' = 老口径（应收金额降序）。
     let PAY_STATS_SORT = 'time';
 
-    function isOrderPaid(it) { return String((it && it.status) || '').trim() !== '未付款'; }
+    /* ⚠️ 「已交定金」不算钱已收齐（只收了一半）—— 漏掉它会让收款对账的「实收」虚高。
+       2026-10-10 上定金功能时一并修正（只多排除这一个状态，其余口径一字未动）。 */
+    function isOrderPaid(it) { const st = String((it && it.status) || '').trim(); return st !== '未付款' && st !== '已交定金'; }
 
     /* 把 created_at（ISO 串，老数据也可能是别的写法）转成毫秒时间戳；解析不了 → 0 */
     function _payTs(v) {
@@ -3544,13 +3675,49 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return { amount: null, source: 'none', matched: 0 };
     }
 
+    /* 💰 定金 / 尾款凭证的「应付」≠ 整批全款，必须单独判定 ——
+       不扩这一条，团长永远点不了「确认收款」（定金金额天生跟全款对不上）。
+         · deposit：应付 = 该批全款 × 该批定金比例（比例从「💰 定金设置」实时取）
+         · balance：应付 = 同一批次、同一人**已通过**的定金凭证上固化的 balance_due
+       ⚠️ 只认 plan 字段；老凭证没有 plan → 返回 null，走原来的全款口径（一个字不变）。 */
+    function _payProofPlanDue(p, fullDue) {
+      const plan = String((p && p.plan) || '').trim();
+      if (plan !== 'deposit' && plan !== 'balance') return null;
+      const k = _normBatchKey(p.batch_key || (Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names));
+      if (plan === 'deposit') {
+        const cfg = (RAW_BATCH_PLANS && RAW_BATCH_PLANS[k]) || null;
+        const r = (cfg && cfg.enabled) ? Number(cfg.ratio) : NaN;
+        if (!isFinite(r) || r <= 0 || r >= 1) return { amount: null, source: 'plan', note: '该批次没开定金，或比例不在 1–100 之间' };
+        if (fullDue.amount === null) return { amount: null, source: 'plan', note: '算不出整批应付' };
+        return { amount: Math.round(fullDue.amount * r * 100) / 100, source: 'plan', ratio: r };
+      }
+      const cn = String(p.cn || '').trim().toLowerCase();
+      let b = 0, paid = 0, hit = 0;
+      (Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : []).forEach(function (x) {
+        if (!x) return;
+        const xp = String(x.plan || '');
+        if (xp !== 'deposit' && xp !== 'balance') return;
+        if (String(x.status || '') !== '已通过') return;
+        if (String(x.cn || '').trim().toLowerCase() !== cn) return;
+        const xk = _normBatchKey(x.batch_key || (Array.isArray(x.batch_names) ? x.batch_names[0] : x.batch_names));
+        if (xk !== k) return;
+        if (xp === 'deposit') { b += Number(x.balance_due || 0); hit++; }
+        else { paid += Number(x.amount || 0); }   // ⚠️ 已补过的尾款要扣掉，判的是「还差多少」
+      });
+      if (!hit) return { amount: null, source: 'plan', note: '找不到这个人这一批的定金记录' };
+      return { amount: Math.max(0, Math.round((b - paid) * 100) / 100), source: 'plan' };
+    }
+
     /* 金额比对结果：ok（一致）/ mismatch（不一致，禁止通过）/ unknown（算不出应付） */
     function _payProofCheck(p) {
       const due = _payProofDueAmount(p);
+      const planDue = _payProofPlanDue(p, due);
+      const target = planDue || due;
       const got = Math.round((Number(p.amount) || 0) * 100) / 100;
-      if (due.amount === null) return { state: 'unknown', due: null, got: got, source: due.source };
-      if (Math.abs(due.amount - got) < 0.005) return { state: 'ok', due: due.amount, got: got, source: due.source };
-      return { state: 'mismatch', due: due.amount, got: got, source: due.source };
+      const plan = String((p && p.plan) || '') || 'full';
+      if (target.amount === null) return { state: 'unknown', due: null, got: got, source: target.source, plan: plan, planNote: target.note || '' };
+      if (Math.abs(target.amount - got) < 0.005) return { state: 'ok', due: target.amount, got: got, source: target.source, plan: plan, fullDue: due.amount };
+      return { state: 'mismatch', due: target.amount, got: got, source: target.source, plan: plan, fullDue: due.amount };
     }
 
     /* 🔁 落库校验（2026-09-30 新增）：回读数据库，确认这几条订单真的已经是「已下单 + 有付款方式」。
@@ -3621,26 +3788,45 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const canAct = (st === '待审核');
       const ids = Array.isArray(p.item_ids) ? p.item_ids : [];
       const chk = _payProofCheck(p);
-      const blocked = (chk.state === 'mismatch');
+      // 💰 定金凭证若算不出整批应付 → 尾款无从算起，一律不给过（宁可驳回，也不凭猜收钱）
+      const blocked = (chk.state === 'mismatch') || (chk.plan === 'deposit' && chk.state === 'unknown');
+      const planBadge = chk.plan === 'deposit'
+        ? '<span class="badge" style="background:#faeeda; color:#854f0b; border:1px solid #854f0b44;">💰 定金</span>'
+        : (chk.plan === 'balance'
+            ? '<span class="badge" style="background:#faeeda; color:#854f0b; border:1px solid #854f0b44;">💰 尾款</span>'
+            : '');
       const isIntl = String(p.order_type || '') === '国际' ||
                      ids.some(function (x) { return String(x).indexOf('intl:') === 0; });
       // 🏝️ 岛内那笔（日本国内段）单独标出来，别让团长也看成「国际运费」
       const isIsland = isIntl && _proofFeeIsIsland(p);
 
       let amtHtml = '';
+      const _dueLabel = chk.plan === 'deposit' ? '该交定金' : (chk.plan === 'balance' ? '该补尾款' : '应付');
+      const _hasFull = (chk.fullDue !== null && chk.fullDue !== undefined);
       if (chk.state === 'ok') {
         amtHtml = '金额：<strong style="color:#16a34a; font-size:0.95rem;">￥' + chk.got.toFixed(2) + '</strong>' +
-                  '<span style="color:#16a34a; font-size:0.82rem;"> ✓ 与应付一致</span>';
+                  '<span style="color:#16a34a; font-size:0.82rem;"> ✓ ' +
+                  (chk.plan === 'deposit'
+                    ? ('与「整批应付 ￥' + Number(chk.fullDue || 0).toFixed(2) + ' × 定金比例」一致')
+                    : (chk.plan === 'balance' ? '与该批尚欠尾款一致' : '与应付一致')) + '</span>' +
+                  (chk.plan === 'deposit' && _hasFull
+                    ? ('<br><span style="color:#854f0b; font-size:0.82rem;">💰 确认后这批变「已交定金」，还欠尾款 <strong>￥' +
+                        Math.max(0, Math.round((Number(chk.fullDue) - chk.got) * 100) / 100).toFixed(2) + '</strong>（会写进凭证，以后改比例也不受影响）</span>')
+                    : '');
       } else if (chk.state === 'mismatch') {
         const diff = Math.round((chk.due - chk.got) * 100) / 100;
         amtHtml = '金额：<strong style="color:#dc2626; font-size:0.95rem;">他填 ￥' + chk.got.toFixed(2) + '</strong>' +
-                  ' ｜ 应付 <strong style="color:#dc2626;">￥' + chk.due.toFixed(2) + '</strong>' +
+                  ' ｜ ' + _dueLabel + ' <strong style="color:#dc2626;">￥' + chk.due.toFixed(2) + '</strong>' +
+                  (chk.plan === 'deposit' && _hasFull
+                    ? ('<span style="color:var(--text-muted); font-size:0.8rem;">（整批应付 ￥' + Number(chk.fullDue).toFixed(2) + '）</span>') : '') +
                   '<br><span style="color:#dc2626; font-weight:700; font-size:0.85rem;">✗ 金额不符' +
                   (diff > 0 ? ('：还差 ￥' + diff.toFixed(2)) : ('：多付 ￥' + Math.abs(diff).toFixed(2))) +
                   ' —— 不能通过，只能驳回</span>';
       } else {
         amtHtml = '金额：<strong style="color:#dc2626; font-size:0.95rem;">￥' + chk.got.toFixed(2) + '</strong>' +
-                  '<br><span style="color:#a16207; font-size:0.82rem;">⚠️ 算不出这一笔的应付金额（订单可能已归档或找不到），无法自动核对，请自行确认后再通过。</span>';
+                  (chk.plan === 'deposit'
+                    ? '<br><span style="color:#dc2626; font-size:0.82rem;">⚠️ 算不出这一批的整批应付' + (chk.planNote ? ('（' + escapeHtml(chk.planNote) + '）') : '') + '，没法自动算尾款 —— <strong>这项不能通过</strong>。请先补全订单/运费数据，或让团员改交全款。</span>'
+                    : '<br><span style="color:#a16207; font-size:0.82rem;">⚠️ 算不出这一笔的应付金额（订单可能已归档或找不到），无法自动核对，请自行确认后再通过。</span>');
       }
 
       let actions = '';
@@ -3652,7 +3838,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">' +
             approveBtn +
             '<button class="btn btn-danger" style="padding:6px 14px; font-size:0.85rem;" onclick="showRejectBox(\'' + id + '\')">❌ 驳回</button>' +
-            '<span style="font-size:0.78rem; color:var(--text-muted);">确认后 ' + ids.length + (isIntl ? ' 项国际运费标为「已交」' : ' 条订单变为「已下单」') + '</span>' +
+            '<span style="font-size:0.78rem; color:var(--text-muted);">确认后 ' + ids.length +
+              (isIntl ? ' 项国际运费标为「已交」'
+                      : (chk.plan === 'deposit' ? ' 条订单变为「已交定金」（尾款以后再补）'
+                                                : (chk.plan === 'balance' ? ' 条订单补清，变为「已下单」' : ' 条订单变为「已下单」'))) + '</span>' +
           '</div>' +
           '<div id="rejectBox_' + id + '" style="display:none; margin-top:10px;">' +
             '<input id="rejectReason_' + id + '" placeholder="驳回原因（必填，团员能看到。例如：金额不符，截图只付了 20，还差 10 元）" oninput="this.style.borderColor=\'\'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();rejectPayProof(\'' + id + '\');}" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; box-sizing:border-box;">' +
@@ -3681,7 +3870,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             (isIsland
               ? '<span class="badge" style="background:#ccfbf1; color:#0f766e; border:1px solid #0f766e44;">🏝️ 岛内运费</span>'
               : (isIntl ? '<span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #0369a144;">🌍 国际运费</span>' : '')) +
-            _payProofStatusBadge(st) + _payReviewMethodBadge(p.pay_method) +
+            planBadge + _payProofStatusBadge(st) + _payReviewMethodBadge(p.pay_method) +
           '</div>' +
           '<div style="margin-top:6px; font-size:0.85rem; line-height:1.9; color:var(--text-muted);">' +
             '批次：' + escapeHtml(names || '—') + '<br>' +
@@ -3996,10 +4185,26 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const chk = _payProofCheck(proof);
       if (chk.state === 'mismatch') {
         const diff = Math.round((chk.due - chk.got) * 100) / 100;
-        return showToast('❌ 金额不符：应付 ￥' + chk.due.toFixed(2) + '，他填 ￥' + chk.got.toFixed(2) +
+        const _lb = chk.plan === 'deposit' ? '该交定金' : (chk.plan === 'balance' ? '该补尾款' : '应付');
+        return showToast('❌ 金额不符：' + _lb + ' ￥' + chk.due.toFixed(2) + '，他填 ￥' + chk.got.toFixed(2) +
           (diff > 0 ? ('，还差 ￥' + diff.toFixed(2)) : ('，多付 ￥' + Math.abs(diff).toFixed(2))) +
           '。请驳回让团员重新提交。');
       }
+      // 💰 定金凭证算不出整批应付 → 尾款无从算起，绝不能通过（否则尾款静默变成 0 = 少收钱）
+      if (chk.plan === 'deposit' && chk.state === 'unknown') {
+        return showToast('❌ 这一批的整批应付算不出来' + (chk.planNote ? ('（' + chk.planNote + '）') : '') +
+          '，没法自动算尾款，这次不能通过。请先补全订单/运费数据，或让团员改交全款。');
+      }
+
+      /* 💰 这笔凭证走哪条路：full=整批全款 / deposit=只交定金 / balance=补尾款。
+         状态迁移：未付款·未交 --full--> 已下单
+                   未付款·未交 --deposit--> 已交定金（同时记下欠多少尾款）
+                   已交定金    --balance--> 已下单（款清） */
+      const proofPlan = (chk.plan === 'deposit' || chk.plan === 'balance') ? chk.plan : 'full';
+      function _acceptStatus(st) {
+        return proofPlan === 'balance' ? (st === '已交定金') : (st === '未付款' || st === '未交');
+      }
+      const _targetStatus = proofPlan === 'deposit' ? '已交定金' : '已下单';
 
       const ids = (proof.item_ids || []).map(String);
       const isIntl = String(proof.order_type || '') === '国际' ||
@@ -4013,13 +4218,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const ordPrevSeen = {};
       function patchOneOrder(it, iid) {
         const st = String(it.status || '').trim();
-        if (st !== '未付款' && st !== '未交') return false;
+        if (!_acceptStatus(st)) return false;
         if (!ordPrevSeen[iid]) {
           ordPrevSeen[iid] = true;
           ordPrev.push({ iid: iid, it: it, status: it.status,
                          pay_method: it.pay_method, paid_at: it.paid_at });
         }
-        it.status = '已下单';
+        it.status = _targetStatus;
         it.pay_method = proof.pay_method || '';
         it.paid_at = nowStr;
         DIRTY_ITEM_IDS.add(iid);
@@ -4091,6 +4296,14 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         return showToast('❌ 这 ' + notFound + (isIntl ? ' 项运费' : ' 条订单') +
           '在系统里找不到（页面数据可能旧了），没有确认收款。请先点「🔄 刷新」再重试。');
       }
+      // 💰 定金/尾款这两条路**必须真的改到订单**才允许通过：
+      //    一条都没改到，说明这些单的状态跟「这条路」对不上（他其实已经交过全款、或定金还没审核）。
+      //    这时候标「已通过」会凭空造出一笔欠款、或记成一笔重复收款 → 直接拦下，让他先刷新看清。
+      if (changed === 0 && (proofPlan === 'deposit' || proofPlan === 'balance')) {
+        rollbackOrderPatch();
+        return showToast('❌ 这些订单现在不是「' + (proofPlan === 'deposit' ? '未付款 / 未交' : '已交定金') +
+          '」状态（共 ' + alreadyPaid + ' 条对不上），没有确认收款。请先点「🔄 刷新」看清这批的实际情况，再决定通过还是驳回。');
+      }
 
       // ② 记录侧：本条置为已通过；同批次的其他「非通过」凭证也一并停止引用原图
       //    （团长定的规则：被驳回/被撤回的旧图，等该批次最终通过时一起清）
@@ -4105,8 +4318,22 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         x.purged_at = new Date().toLocaleString('zh-CN');
       }
       const prevStatus = proof.status, prevReviewed = proof.reviewed_at;
+      const prevBalanceDue = proof.balance_due, prevBalancePaidAt = proof.balance_paid_at;
       proof.status = '已通过';
       proof.reviewed_at = new Date().toLocaleString('zh-CN');
+      // 💰 定金：把「尾款」在**审核这一刻**算好、写死在凭证上 ——
+      //    团长以后改定金比例，已经收过定金的这笔欠款不受影响。
+      if (proofPlan === 'deposit') {
+        const _full = _payProofDueAmount(proof);
+        proof.plan = 'deposit';
+        proof.balance_due = (_full.amount === null)
+          ? 0
+          : Math.max(0, Math.round((_full.amount - (Number(proof.amount) || 0)) * 100) / 100);
+        proof.balance_paid_at = '';
+      } else if (proofPlan === 'balance') {
+        proof.plan = 'balance';
+        proof.balance_paid_at = new Date().toLocaleString('zh-CN');
+      }
 
       const bkey = _normBatchKey(proof.batch_key || (Array.isArray(proof.batch_names) ? proof.batch_names[0] : proof.batch_names));
       stopRef(proof);
@@ -4123,6 +4350,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (!ok) {
         proof.status = prevStatus;
         proof.reviewed_at = prevReviewed;
+        proof.balance_due = prevBalanceDue; proof.balance_paid_at = prevBalancePaidAt;
         prevRefs.forEach(function (r) {
           r.obj.img_path = r.img_path; r.obj.purged_path = r.purged_path; r.obj.purged_at = r.purged_at;
         });
@@ -4155,6 +4383,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         if (!vok) {
           proof.status = prevStatus;
           proof.reviewed_at = prevReviewed;
+          proof.balance_due = prevBalanceDue; proof.balance_paid_at = prevBalancePaidAt;
           prevRefs.forEach(function (r) {
             r.obj.img_path = r.img_path; r.obj.purged_path = r.purged_path; r.obj.purged_at = r.purged_at;
           });
@@ -4170,7 +4399,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const removed = await _purgeProofObjects(toPurge);
 
       let msg = changed
-        ? ('✅ 已确认收款，' + changed + (isIntl ? ' 项国际运费标为「已交」' : ' 条订单改为「已下单」'))
+        ? ('✅ 已确认收款，' + changed +
+           (isIntl ? ' 项国际运费标为「已交」'
+                   : (proofPlan === 'deposit' ? (' 条订单改为「已交定金」，还欠尾款 ￥' + Number(proof.balance_due || 0).toFixed(2))
+                                              : (proofPlan === 'balance' ? ' 条订单补清，改为「已下单」' : ' 条订单改为「已下单」'))))
         : '✅ 已标记通过';
       if (alreadyPaid) msg += '（' + alreadyPaid + (isIntl ? ' 项原本就不是未交' : ' 条原本就不是未付款') + '，跳过）';
       if (notFound) msg += '（' + notFound + (isIntl ? ' 项在表里找不到' : ' 条订单在表里找不到') + '）';

@@ -1411,15 +1411,28 @@
         const active = Array.isArray(gd) ? gd : (typeof gd==='string' ? JSON.parse(gd) : []);
         let arc = (data[0].image_data && data[0].image_data.archived_items) || [];
         if (typeof arc === 'string') { try { arc = JSON.parse(arc); } catch(e){ arc = []; } }
+        // 💰 批次定金计划（后台「💰 定金设置」写的 image_data.batch_plans）：
+        //    键 = _normBatch(批次名)（与后台 _normBatchKey 逐字一致）；
+        //    值 = { ratio: 0.5, enabled: true }。读不到就当"全批次都没开定金"，
+        //    页面行为与改动前**一模一样**（这是本功能唯一的开关，宁可不生效也不能误开）。
+        let _batchPlans = {};
+        try {
+          let _imd = data[0].image_data;
+          if (typeof _imd === 'string') _imd = JSON.parse(_imd);
+          if (_imd && _imd.batch_plans && typeof _imd.batch_plans === 'object' && !Array.isArray(_imd.batch_plans)) _batchPlans = _imd.batch_plans;
+        } catch(e) { _batchPlans = {}; }
+        window.__BATCH_PLANS = _batchPlans;
         const arr = active.concat(Array.isArray(arc) ? arc : []);   // 合并已排发归档区：数据完整保留
         const lower = cn.toLowerCase();
         let items;
         if (mode === 'fee') {
           // 交肾核算：该 CN 未付款/未交
+          // 💰 「已交定金」也要收进来 —— 否则审核一过这单就从交肾核算里消失，
+          //    团员再也看不到「补交尾款」按钮（2026-10-10 预判到的坑）。
           items = arr.filter(it => {
             const c = String(it.cn||'').trim().toLowerCase();
             const s = String(it.status||'').trim();
-            return c === lower && (s === '未付款' || s === '未交');
+            return c === lower && (s === '未付款' || s === '未交' || s === '已交定金');
           });
         } else if (mode === 'dispatch') {
           // 排发调度：该 CN 可排发
@@ -1805,6 +1818,20 @@
         .toLowerCase()
         .replace(/\s+/g, '');
     }
+    /* 💰 本批是否开了定金 —— 读后台「💰 定金设置」写下的 image_data.batch_plans。
+       返回 { ratio } 或 null。未启用 / 比例不合法一律 null：
+       「读不到就按全款走」，绝不能因为配置异常把团员的交款口改歪。 */
+    function _batchDepositPlan(name){
+      try {
+        const plans = window.__BATCH_PLANS || {};
+        const p = plans[_normBatch(name)];
+        if (!p || !p.enabled) return null;
+        const r = Number(p.ratio);
+        if (!isFinite(r) || r <= 0 || r >= 1) return null;   // 1.0 就等于全款，没必要多给一个按钮
+        return { ratio: r };
+      } catch(e) { return null; }
+    }
+
     async function loadQrMap(){
       if (QR_MAP) return QR_MAP;
       QR_MAP = {};
@@ -1980,8 +2007,12 @@
       (Array.isArray(items) ? items : []).forEach(function(i){
         const b = String(i.batch_name || '默认批次').trim();
         const k = _normBatch(b);
-        if (!groups[k]) { groups[k] = { key: k, name: b, items: [], total: 0, intl: false, hasIntl: false, island: false }; order.push(k); }
+        if (!groups[k]) { groups[k] = { key: k, name: b, items: [], dueItems: [], depItems: [], total: 0, balanceDue: 0, intl: false, hasIntl: false, island: false }; order.push(k); }
         groups[k].items.push(i);
+        // 💰 已交定金的订单**不计入本批「应付」** —— 钱已经收了一半，
+        //    卡片必须显示「还欠尾款 ￥B」而不是把全款再算一遍（否则团员以为要重交）。
+        if (String(i.status || '').trim() === '已交定金') { groups[k].depItems.push(i); return; }
+        groups[k].dueItems.push(i);
         groups[k].total += itemAmount(i);
         if (i.__intl) {
           groups[k].intl = true;
@@ -1998,9 +2029,26 @@
         const bn = Array.isArray(p.batch_names) ? (p.batch_names[0] || '') : (p.batch_names || '');
         const _isIntl = String(p.order_type || '') === '国际';
         const _isIslandProof = _isIntl && proofIsIsland(p);
-        groups[k] = { key: k, name: String(bn || '默认批次'), items: [], total: Number(p.amount || 0),
+        groups[k] = { key: k, name: String(bn || '默认批次'), items: [], dueItems: [], depItems: [], total: Number(p.amount || 0), balanceDue: 0,
                       intl: _isIntl, hasIntl: _isIntl && !_isIslandProof, island: _isIslandProof };
         order.push(k);
+      });
+
+      // 💰 每批「还欠多少尾款」= 该批**已通过**的定金凭证上固化的 balance_due 之和。
+      //    ⚠️ 金额在后台审核那一刻就写死在凭证上，**不按当前比例重算** ——
+      //       团长事后改比例，已经收过定金的欠款不能跟着变。
+      //    ⚠️ 刻意**不套 7 天回执过期**：页面回执会收起，欠款不会。
+      order.forEach(function(k){
+        const g = groups[k];
+        let owed = 0, paid = 0;
+        mine.forEach(function(p){
+          if (proofKey(p) !== k) return;
+          if (String(p.status || '') !== '已通过') return;   // 待审核/被驳回不算数
+          const pl = String(p.plan || '');
+          if (pl === 'deposit') owed += Number(p.balance_due || 0);   // 审核那刻固化的欠款
+          else if (pl === 'balance') paid += Number(p.amount || 0);   // ⚠️ 补过的尾款必须扣掉，否则交完了还显示欠款
+        });
+        g.balanceDue = Math.max(0, Math.round((owed - paid) * 100) / 100);
       });
 
       if (!order.length) { hidePayBox(); return; }
@@ -2014,12 +2062,15 @@
         const pending  = proofs.filter(function(p){ return String(p.status || '待审核') === '待审核'; });
         const approved = proofs.filter(function(p){ return isApproved(p) && !receiptExpired(p); });
         const rejected = proofs.filter(function(p){ return String(p.status || '') === '已驳回'; });
-        const due = g.items.length;
+        const due = (g.dueItems || []).length;
+        const balDue = Number(g.balanceDue || 0);   // 💰 已交定金后还欠的尾款
         const hasPending = pending.length > 0;
-        const isDone = !due && !hasPending && approved.length > 0;
+        const isDone = !due && balDue <= 0 && !hasPending && approved.length > 0;
+        // 红＝还有本批应付未交；黄＝已交定金、等补尾款；绿＝结清
         const bd = isDone ? 'rgba(21,128,61,0.35)' : (due ? 'rgba(220,38,38,0.35)' : 'rgba(161,98,7,0.35)');
         const fg = isDone ? '#15803d' : (due ? '#b91c1c' : '#a16207');
         const qr = qrUrlForBatch(g.name);
+        const _plan = _batchDepositPlan(g.name);   // 💰 本批定金计划（没开 = null）
 
         html += '<div style="margin:14px 0; padding:16px; border-radius:12px; border:1px solid ' + bd + '; background:rgba(250,250,246,0.94);">';
         html += '<div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap;">';
@@ -2030,7 +2081,8 @@
             + (g.hasIntl ? '含岛内运费' : '岛内运费') + '</span>'
           : '';
         html += '<div style="font-size:14px; font-weight:600; color:' + fg + ';">' + _kindEmoji + esc(g.name) + _kindTag + '</div>';
-        html += '<div style="font-size:14px; font-weight:600; color:' + fg + ';">' + (due ? ('￥' + g.total.toFixed(2)) : '已结清') + '</div>';
+        html += '<div style="font-size:14px; font-weight:600; color:' + fg + ';">'
+             + (due ? ('￥' + g.total.toFixed(2)) : (balDue > 0 ? ('还欠 ￥' + balDue.toFixed(2)) : '已结清')) + '</div>';
         html += '</div>';
 
         if (due) {
@@ -2061,7 +2113,7 @@
           } else {
             html += '<div style="margin-top:10px; font-size:12px; color:#a16207;">该批次还没挂收款码，请找团长要码。</div>';
           }
-          html += '<div style="margin-top:10px; font-size:12px; color:var(--ink-soft); line-height:1.8;">付款时备注里写上你的 CN，方便团长核对。<br>付完后把截图传上来，团长确认到账后会自动把你的订单改成「已下单」。</div>';
+          html += '<div style="margin-top:10px; font-size:12px; color:var(--ink-soft); line-height:1.8;">付款时备注里写上你的 CN，方便团长核对。<br>付完后把截图传上来，团长确认到账后会自动更新你的订单状态。</div>';
         }
 
         pending.forEach(function(p){
@@ -2081,8 +2133,33 @@
           html += '<div style="margin-top:12px; padding:9px 11px; border-radius:9px; background:rgba(220,38,38,0.07); border:1px solid rgba(220,38,38,0.28); font-size:12.5px; color:#dc2626; line-height:1.7;">❌ 上次提交被驳回' + (why ? ('：' + esc(why)) : '') + '，请重新上传。</div>';
         });
 
+        // 💰 已交定金的批次：卡片**必须留着**并明说还欠多少（钱没交完，排发也过不去）。
+        //    这里刻意只"告知"，不在团长大喊之前催人交 —— 尾款由团长手动发起（2026-10-10 口径）。
+        if (balDue > 0) {
+          const _depPaid = approved.filter(function(p){ return String(p.plan || '') === 'deposit'; })
+                                   .reduce(function(s, p){ return s + Number(p.amount || 0); }, 0);
+          html += '<div style="margin-top:10px; padding:10px 12px; border-radius:9px; background:rgba(161,98,7,0.09); border:1px solid rgba(161,98,7,0.28); font-size:12.5px; color:#a16207; line-height:1.8;">'
+               + '💰 本批已交定金' + (_depPaid > 0 ? (' ￥' + _depPaid.toFixed(2)) : '') + '，还欠尾款 <b>￥' + balDue.toFixed(2) + '</b>。<br>'
+               + '尾款一般等货到、团长在群里通知后再交；通知到了点下面的按钮补交就行。</div>';
+          if (!hasPending) {
+            html += '<button type="button" onclick="openPayForm(' + idx + ', \'balance\')" style="margin-top:10px; padding:10px 18px; border-radius:9px; border:1px solid rgba(161,98,7,0.45); background:#fff; color:#a16207; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">📤 补交尾款 ￥' + balDue.toFixed(2) + '</button>';
+          }
+        }
         if (due && !hasPending) {
-          html += '<button type="button" onclick="openPayForm(' + idx + ')" style="margin-top:12px; padding:10px 18px; border-radius:9px; border:1px solid rgba(220,38,38,0.4); background:#fff; color:#b91c1c; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">📤 我已交款，上传截图</button>';
+          if (_plan) {
+            // 💰 开了定金的批次：并排两个按钮，团员自己选。**全款那条路一字未动**（照旧走老流程）。
+            const _dep = Math.round(g.total * _plan.ratio * 100) / 100;
+            const _bal = Math.max(0, Math.round((g.total - _dep) * 100) / 100);
+            const _pct = Math.round(_plan.ratio * 1000) / 10;
+            html += '<div style="margin-top:12px; padding:10px 12px; border-radius:9px; background:rgba(161,98,7,0.08); border:1px solid rgba(161,98,7,0.25); font-size:12.5px; color:#a16207; line-height:1.8;">'
+                 + '💰 本批可以分两笔交：先交<b>定金 ￥' + _dep.toFixed(2) + '</b>（应付的 ' + _pct + '%），剩下的<b>尾款 ￥' + _bal.toFixed(2) + '</b> 等团长通知再补。</div>';
+            html += '<div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">';
+            html += '<button type="button" onclick="openPayForm(' + idx + ', \'full\')" style="padding:10px 18px; border-radius:9px; border:1px solid rgba(220,38,38,0.4); background:#b91c1c; color:#fff; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">📤 交全款 ￥' + g.total.toFixed(2) + '</button>';
+            html += '<button type="button" onclick="openPayForm(' + idx + ', \'deposit\')" style="padding:10px 18px; border-radius:9px; border:1px solid rgba(161,98,7,0.45); background:#fff; color:#a16207; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">📤 交定金 ￥' + _dep.toFixed(2) + '</button>';
+            html += '</div>';
+          } else {
+            html += '<button type="button" onclick="openPayForm(' + idx + ')" style="margin-top:12px; padding:10px 18px; border-radius:9px; border:1px solid rgba(220,38,38,0.4); background:#fff; color:#b91c1c; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">📤 我已交款，上传截图</button>';
+          }
         }
         html += '<div id="payFormSlot_' + idx + '"></div>';
         html += '</div>';
@@ -2102,7 +2179,7 @@
     }
     window.toggleQr = toggleQr;
 
-    function openPayForm(idx){
+    function openPayForm(idx, payPlan){
       const base = window.__PAY_CTX || {};
       const batches = window.__PAY_BATCHES || [];
       const g = batches[idx];
@@ -2110,15 +2187,39 @@
       if (!g || !slot) return;
       // 同时只保留一个表单，避免 payFile / payMethod 这些 id 撞车
       batches.forEach(function(_, i){ if (i !== idx) cancelPayForm(i); });
+
+      /* 💰 三选一：full=整批全款 / deposit=只交定金 / balance=补尾款。
+         金额与「这笔钱对应哪些条目」在这里一次定死，提交端直接取用、**不再重算** ——
+         否则团长中途改了比例/数据，会出现"提交的金额和表单上显示的不一样"。 */
+      const mode = (payPlan === 'deposit' || payPlan === 'balance') ? payPlan : 'full';
+      let payAmount = Math.round(Number(g.total || 0) * 100) / 100;
+      let payItems  = g.dueItems || g.items || [];
+      let amountLabel = '本批次应付 ￥' + payAmount.toFixed(2);
+      let amountHint = '请按这个金额付款，金额对不上团长没法确认。';
+      if (mode === 'deposit') {
+        const pl = _batchDepositPlan(g.name);
+        const r = pl ? pl.ratio : 0.5;
+        payAmount = Math.round(payAmount * r * 100) / 100;
+        amountLabel = '本批定金 ￥' + payAmount.toFixed(2);
+        amountHint = '这是定金（应付 ￥' + Number(g.total || 0).toFixed(2) + ' 的 ' + (Math.round(r * 1000) / 10) + '%）。剩下的尾款等团长通知再补，现在不用交。';
+      } else if (mode === 'balance') {
+        payAmount = Math.round(Number(g.balanceDue || 0) * 100) / 100;
+        payItems  = g.depItems || [];
+        amountLabel = '本批尾款 ￥' + payAmount.toFixed(2);
+        amountHint = '这是补的尾款（定金已交、团长也确认过了）。付完这一笔，这个批次就清了。';
+      }
+      if (!payAmount || payAmount <= 0) { showToast('这一批暂时没有要交的钱'); return; }
+
       window.__PAY_CTX_BATCH = {
         key: base.key, cn: base.cn,
-        batchKey: g.key, batchName: g.name, total: g.total, items: g.items,
+        batchKey: g.key, batchName: g.name, total: payAmount, items: payItems,
+        plan: mode,
         orderType: g.intl ? '国际' : '普通'
       };
       slot.innerHTML =
         '<div style="margin-top:14px; padding-top:14px; border-top:1px dashed rgba(33,33,33,0.2);">' +
-          '<div style="font-size:13px; font-weight:600; color:#b91c1c;">本批次应付 ￥' + Number(g.total || 0).toFixed(2) + '</div>' +
-          '<div style="font-size:11.5px; color:var(--ink-soft); margin:4px 0 12px;">请按这个金额付款，金额对不上团长没法确认。</div>' +
+          '<div style="font-size:13px; font-weight:600; color:#b91c1c;">' + amountLabel + '</div>' +
+          '<div style="font-size:11.5px; color:var(--ink-soft); margin:4px 0 12px;">' + amountHint + '</div>' +
           '<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:6px;">付款截图 *</div>' +
           '<input id="payFile" type="file" accept="image/*" style="display:none;" onchange="onPayFilePicked(this)">' +
           '<button type="button" onclick="var e=document.getElementById(\'payFile\'); if(e) e.click();" style="padding:10px 16px; border-radius:9px; border:1px dashed rgba(33,33,33,0.3); background:rgba(33,33,33,0.03); color:var(--ink); font-size:13px; cursor:pointer; font-family:var(--sans);">📎 选择截图</button>' +
@@ -2249,6 +2350,11 @@
             batch_names: [ctx.batchName],
             item_ids: ctx.items.map(function(i){ return String(i.item_id || i.id || ''); }).filter(Boolean),
             amount: Number(ctx.total.toFixed(2)),
+            // 💰 full=全款 / deposit=定金 / balance=尾款。
+            //    尾款金额（balance_due）由**后台审核那一刻**算好写回，前端不预先算 ——
+            //    团长事后改比例也不会影响已经收过的定金。
+            plan: String(ctx.plan || 'full'),
+            balance_due: 0,
             pay_method: method,
             note: note,
             img_path: objPath,
