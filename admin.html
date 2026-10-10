@@ -1940,25 +1940,6 @@ cn 点数 金额
       <p style="font-size:0.8rem;color:var(--text-muted);">用表格填，不用写代码。金额自动按“分”计算，防浮点误差；计算/写库有防重复锁；校验不通过不会改动数据。</p>
     </div>
 
-    <!-- 💰 批次定金设置（一番赏分期收款 · 2026-10-10 团长需求）
-         ⚠️ 2026-10-10 晚从「排表管理」挪到这里（团长：排表管理手机端/电脑端都太挤，管理员录单不方便）。
-         刻意**不加 class="pane"** → 切到 砍配/二调/台账/退款 任一子页签都一直看得见。 -->
-    <div class="card" style="margin-bottom:12px;">
-      <div class="card-title">
-        <span>💰 定金设置（批次分期收款）</span>
-        <div class="btn-group">
-          <button class="btn btn-secondary" onclick="renderBatchPlans()">🔄 重画列表</button>
-          <button class="btn btn-primary" onclick="saveBatchPlans()">💾 保存定金设置</button>
-        </div>
-      </div>
-      <div style="font-size:0.82rem; color:var(--text-muted); line-height:1.8; margin-bottom:12px;">
-        给某个批次<b>启用定金</b>后，团员在自查终端交这个批次的钱时会多出一个「交定金」的选择：<br>
-        定金 = 该笔应付 × 比例，余下自动记成<b>尾款</b>；你确认收款后订单变成「已交定金」，等尾款补清才转「已下单」。<br>
-        没启用（或不填）的批次，团员看到的还是原来的「整批一次付清」，一点不受影响。
-      </div>
-      <div id="batchPlansList"></div>
-    </div>
-
     <div class="card pane active" id="pane-kanpei">
       <h3 style="margin-top:0;">第一步：录订单</h3>
       <p style="font-size:0.8rem;color:var(--text-muted);">整配订单：同属一整组的几行，填相同“组号”；单品：一行一单。角色=谷子名，认领人=团员名。</p>
@@ -2012,6 +1993,26 @@ cn 点数 金额
         </table>
       </div>
       <pre id="refListMsg" class="box" style="margin-top:8px;"></pre>
+    </div>
+
+    <!-- 💰 批次定金设置（一番赏分期收款 · 2026-10-10 团长需求）
+         ⚠️ 2026-10-10 晚先在「排表管理」，再挪进「算账中心」顶部；最终团长要求放到**最后一个子页签「退款补录」之后**（页面最下方），
+            免得挡着天天要用的砍配/二调/台账。
+         刻意**不加 class="pane"** → 切到 砍配/二调/台账/退款 任一子页签都一直看得见，只是排在最后。 -->
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-title">
+        <span>💰 定金设置（批次分期收款）</span>
+        <div class="btn-group">
+          <button class="btn btn-secondary" onclick="renderBatchPlans()">🔄 重画列表</button>
+          <button class="btn btn-primary" onclick="saveBatchPlans()">💾 保存定金设置</button>
+        </div>
+      </div>
+      <div style="font-size:0.82rem; color:var(--text-muted); line-height:1.8; margin-bottom:12px;">
+        给某个批次<b>启用定金</b>后，团员在自查终端交这个批次的钱时会多出一个「交定金」的选择：<br>
+        定金 = 该笔应付 × 比例，余下自动记成<b>尾款</b>；你确认收款后订单变成「已交定金」，等尾款补清才转「已下单」。<br>
+        没启用（或不填）的批次，团员看到的还是原来的「整批一次付清」，一点不受影响。
+      </div>
+      <div id="batchPlansList"></div>
     </div>
   </div>
 
