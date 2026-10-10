@@ -1936,6 +1936,7 @@ cn 点数 金额
         <button class="tab-btn" onclick="pane('erdiao')">♻️ 盲抽二调</button>
         <button class="tab-btn" onclick="pane('export')">📤 台账</button>
       <button class="tab-btn" onclick="pane('refund')">💰 退款补录</button>
+      <button class="tab-btn" onclick="pane('deposit')">💰 定金设置</button>
       </div>
       <p style="font-size:0.8rem;color:var(--text-muted);">用表格填，不用写代码。金额自动按“分”计算，防浮点误差；计算/写库有防重复锁；校验不通过不会改动数据。</p>
     </div>
@@ -1996,10 +1997,10 @@ cn 点数 金额
     </div>
 
     <!-- 💰 批次定金设置（一番赏分期收款 · 2026-10-10 团长需求）
-         ⚠️ 2026-10-10 晚先在「排表管理」，再挪进「算账中心」顶部；最终团长要求放到**最后一个子页签「退款补录」之后**（页面最下方），
-            免得挡着天天要用的砍配/二调/台账。
-         刻意**不加 class="pane"** → 切到 砍配/二调/台账/退款 任一子页签都一直看得见，只是排在最后。 -->
-    <div class="card" style="margin-bottom:12px;">
+         ⚠️ 2026-10-10 晚：先在「排表管理」→ 挪进「算账中心」→ 最终团长要求做成**这一行页签里的一个**，
+            排在「💰 退款补录」**按钮后面**（点它才显示，不占别人地方）。
+         因此它是和 砍配/二调/台账/退款 同级的第 5 个子页签卡片（id = pane-deposit，带 pane 类）。 -->
+    <div class="card pane" id="pane-deposit">
       <div class="card-title">
         <span>💰 定金设置（批次分期收款）</span>
         <div class="btn-group">
@@ -7477,8 +7478,9 @@ function pane(name){
   document.querySelectorAll('.tab-content#tabCalc .card.pane').forEach(function(x){x.classList.remove('active');});
   var t=document.getElementById('pane-'+name); if(t) t.classList.add('active');
   document.querySelectorAll('.tab-content#tabCalc .tabbar .tab-btn').forEach(function(b){b.classList.remove('active');});
-  var map={kanpei:'砍配',erdiao:'二调',export:'台账',refund:'退款补录'};
+  var map={kanpei:'砍配',erdiao:'二调',export:'台账',refund:'退款补录',deposit:'定金设置'};
   if(name==='refund'&&typeof loadRefundList==='function') loadRefundList();
+  if(name==='deposit'&&typeof renderBatchPlans==='function') renderBatchPlans();
   document.querySelectorAll('.tab-content#tabCalc .tabbar .tab-btn').forEach(function(b){ if(b.textContent.indexOf(map[name])>=0) b.classList.add('active'); });
 }
 function addOrderRow(){
