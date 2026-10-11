@@ -1058,7 +1058,7 @@
       <span class="sep">·</span>
       <span class="contact">3153199243</span>
       <span class="sep">·</span>
-      版本 2026-10-10
+      版本 2026-10-11
     </div>
   </div>
 
@@ -1137,7 +1137,7 @@
       </div>
 
     </div>
-    <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243 · 版本 2026-10-10</div>
+    <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243 · 版本 2026-10-11</div>
   </div>
 
   <!-- 自助查询面板 -->
@@ -1241,7 +1241,7 @@
   </div>
 
   <!-- 📌 版本标记（固定右下角，压过所有面板）：团员念一下这一行，就能判断他手上是不是缓存的旧页 -->
-  <div class="ver-tag">版本 2026-10-10</div>
+  <div class="ver-tag">版本 2026-10-11</div>
 
   <script>
     // 生成终末地式等高线地形背景
@@ -2065,6 +2065,18 @@
         const due = (g.dueItems || []).length;
         const balDue = Number(g.balanceDue || 0);   // 💰 已交定金后还欠的尾款
         const hasPending = pending.length > 0;
+        /* 🧮 分批补交（2026-10-11 团长要求）：已经提交、还在等团长确认的**全款**凭证，
+           要算成"这一批已经交过的钱"，卡片上直接告诉他「还需补交 ￥X」——
+           否则他会照着**整批金额**再交一遍，两张加起来就超了（团长那边判定是"加起来必须对上"）。
+           ⚠️ 定金 / 尾款凭证不并进来（各有各的账）；但只要那类凭证还挂着，
+             这一批就先锁住（lockedByPending），免得同一笔被收两次。 */
+        const pendingFull  = pending.filter(function(p){ return (String(p.plan || '') || 'full') === 'full'; });
+        const pendingOther = pending.filter(function(p){ return (String(p.plan || '') || 'full') !== 'full'; });
+        const pendingAmt = Math.round(pendingFull.reduce(function(a, p){ return a + (Number(p.amount) || 0); }, 0) * 100) / 100;
+        const payGap = Math.max(0, Math.round((g.total - pendingAmt) * 100) / 100);   // 这次还需要交多少
+        g.pendingAmt = pendingAmt;             // 给 openPayForm 用
+        g.payGap = payGap;
+        g.lockedByPending = pendingOther.length > 0;
         const isDone = !due && balDue <= 0 && !hasPending && approved.length > 0;
         // 红＝还有本批应付未交；黄＝已交定金、等补尾款；绿＝结清
         const bd = isDone ? 'rgba(21,128,61,0.35)' : (due ? 'rgba(220,38,38,0.35)' : 'rgba(161,98,7,0.35)');
@@ -2087,6 +2099,11 @@
 
         if (due) {
           html += '<div style="margin-top:4px; font-size:12px; color:var(--ink-soft);">待交款 ' + due + (g.intl ? ' 项' : ' 条') + ' · 应付 ￥' + g.total.toFixed(2) + '</div>';
+          if (pendingAmt > 0) {
+            html += '<div style="margin-top:4px; font-size:12px; color:#a16207; line-height:1.7;">⏳ 你已经提交了 <b>￥' + pendingAmt.toFixed(2) + '</b> 在等团长确认'
+                 + (payGap > 0 ? ('，<b>还需补交 ￥' + payGap.toFixed(2) + '</b>（两张加起来正好对上）。') : '，金额已经够了，先不用再交。')
+                 + '</div>';
+          }
           // 🆕 2026-10-05 团长要求：国际运费条目（名字里带克重，如「国际运费 460g」）直接列在卡片上，
           //    团员不用往下滚到逐条列表就能看到「这笔钱是怎么来的」。
           //    ⚠️ 只列 __intl 条目（普通订单的谷子名不列，否则卡片会很长）；文案一字不改、原样来自 item_name。
@@ -2145,13 +2162,16 @@
             html += '<button type="button" onclick="openPayForm(' + idx + ', \'balance\')" style="margin-top:10px; padding:10px 18px; border-radius:9px; border:1px solid rgba(161,98,7,0.45); background:#fff; color:#a16207; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">📤 补交尾款 ￥' + balDue.toFixed(2) + '</button>';
           }
         }
-        if (due && !hasPending) {
+        // 🧮 分批补交（2026-10-11 团长要求）：只要**还差着钱**（payGap > 0）就给他按钮 ——
+        //    哪怕他之前已经提交过一部分（那部分算进 payGap 里了，按钮上直接写「补交差额」）。
+        //    已经提交足额（payGap = 0）就不给按钮，等团长确认即可（上面有 ⏳ 提示）。
+        if (due && payGap > 0 && !g.lockedByPending) {
           // 💰 balDue > 0 = 这个人这一批**已经交过一次定金**（审核已通过）。
           //    此时绝不再给「交定金」——否则会出现"同一个人被收两次定金"；
           //    也不给「交全款」——那个金额只含未交条目，会让人看不懂。
           //    （正常流程里审核一过条目就变「已交定金」、due=0，压根走不到这；这道防线是防
           //     "条目状态和凭证对不上"的数据漂移——这项目真出过「审核没写进库」。）
-          if (_plan && balDue <= 0) {
+          if (_plan && balDue <= 0 && !hasPending) {
             // 💰 开了定金的批次：并排两个按钮，团员自己选。**全款那条路一字未动**（照旧走老流程）。
             const _dep = Math.round(g.total * _plan.ratio * 100) / 100;
             const _bal = Math.max(0, Math.round((g.total - _dep) * 100) / 100);
@@ -2163,7 +2183,8 @@
             html += '<button type="button" onclick="openPayForm(' + idx + ', \'deposit\')" style="padding:10px 18px; border-radius:9px; border:1px solid rgba(161,98,7,0.45); background:#fff; color:#a16207; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">📤 交定金 ￥' + _dep.toFixed(2) + '</button>';
             html += '</div>';
           } else {
-            html += '<button type="button" onclick="openPayForm(' + idx + ')" style="margin-top:12px; padding:10px 18px; border-radius:9px; border:1px solid rgba(220,38,38,0.4); background:#fff; color:#b91c1c; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">📤 我已交款，上传截图</button>';
+            const _btnTxt = pendingAmt > 0 ? ('📤 补交差额 ￥' + payGap.toFixed(2)) : '📤 我已交款，上传截图';
+            html += '<button type="button" onclick="openPayForm(' + idx + ')" style="margin-top:12px; padding:10px 18px; border-radius:9px; border:1px solid rgba(220,38,38,0.4); background:#fff; color:#b91c1c; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">' + _btnTxt + '</button>';
           }
         }
         html += '<div id="payFormSlot_' + idx + '"></div>';
@@ -2197,10 +2218,21 @@
          金额与「这笔钱对应哪些条目」在这里一次定死，提交端直接取用、**不再重算** ——
          否则团长中途改了比例/数据，会出现"提交的金额和表单上显示的不一样"。 */
       const mode = (payPlan === 'deposit' || payPlan === 'balance') ? payPlan : 'full';
-      let payAmount = Math.round(Number(g.total || 0) * 100) / 100;
+      /* 🧮 分批补交（2026-10-11）：这一批之前已经提交过一部分、还在等团长确认 →
+         这次只交**差额**。两张截图加起来正好对上（后台就是按"加起来必须一致"来判的）。 */
+      const _pendAmt = Number(g.pendingAmt || 0);
+      const _gapAmt = (g.payGap === undefined || g.payGap === null)
+        ? Math.round(Number(g.total || 0) * 100) / 100
+        : Number(g.payGap);
+      let payAmount = (mode === 'full') ? _gapAmt : Math.round(Number(g.total || 0) * 100) / 100;
       let payItems  = g.dueItems || g.items || [];
-      let amountLabel = '本批次应付 ￥' + payAmount.toFixed(2);
+      let amountLabel = '本批次应付 ￥' + Number(g.total || 0).toFixed(2);
       let amountHint = '请按这个金额付款，金额对不上团长没法确认。';
+      if (mode === 'full' && _pendAmt > 0) {
+        amountLabel = '本次需补交 ￥' + payAmount.toFixed(2);
+        amountHint = '这一批你已经提交过 ￥' + _pendAmt.toFixed(2) + '（在等团长确认），这次把差的 ￥' + payAmount.toFixed(2) +
+                     ' 补上就行 —— 两张截图加起来正好是 ￥' + Number(g.total || 0).toFixed(2) + '。';
+      }
       if (mode === 'deposit') {
         const pl = _batchDepositPlan(g.name);
         const r = pl ? pl.ratio : 0.5;
