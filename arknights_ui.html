@@ -3871,6 +3871,27 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return { amount: Math.round(sum * 100) / 100, source: 'recovered', matched: n };
     }
 
+    /* 🔁 疑似重复提交（2026-10-11 团长要求）：
+       同一组（同人/同批/同类型/full）里若还有别的**待审核**凭证，且
+       **金额一模一样、覆盖的订单编号也完全相同** → 多半是同一笔钱被交了两遍。
+       真实案例：初次见面 17:40:53 与 17:41:05 隔 12 秒交了两笔一模一样的 ￥294，两笔都被放行 → 多收一笔。
+       ⚠️ 只用来**红字提醒团长核实**，绝不参与金额判定、也不自动拦
+         （人家真买了两份时金额本来就该翻倍，拦了反而是错的）。 */
+    function _payProofDupSig(x) {
+      const amt = (Math.round((Number(x && x.amount) || 0) * 100) / 100).toFixed(2);
+      const ids = (Array.isArray(x && x.item_ids) ? x.item_ids.map(String).slice().sort() : []).join(',');
+      return amt + '|' + ids;
+    }
+    function _payProofDupCount(p, cl) {
+      const list = (cl && cl.list) || [];
+      if (list.length < 2 || !p) return 0;
+      const sig = _payProofDupSig(p);
+      if (!sig.slice(sig.indexOf('|') + 1)) return 0;   // 没有订单编号的老凭证不判重（免得误报）
+      return list.filter(function (x) {
+        return x !== p && String((x && x.status) || '') === '待审核' && _payProofDupSig(x) === sig;
+      }).length;
+    }
+
     /* 金额比对结果：ok（一致）/ mismatch（不一致，禁止通过）/ unknown（算不出应付）
        🧮 2026-10-11：**待审核的全款凭证**按「同一人同一批的合计」判定（见上面 _payProofCluster）。
          其余（已通过/已驳回的历史记录、定金、尾款）照旧按单张判定 ——
@@ -3882,7 +3903,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const got = Math.round((cl.list || []).reduce(function (a, x) { return a + (Number(x.amount) || 0); }, 0) * 100) / 100;
         const dueAmt = _payProofScopeDue(p, cl);
         const base = { got: got, source: 'cluster', plan: 'full', cluster: cl, n: (cl.list || []).length,
-                       staleN: _staleIdCount(p) };
+                       staleN: _staleIdCount(p), dupN: _payProofDupCount(p, cl) };
         if (dueAmt === null) return Object.assign({ state: 'unknown', due: null, planNote: '' }, base);
         if (Math.abs(dueAmt - got) < 0.005) return Object.assign({ state: 'ok', due: dueAmt, fullDue: dueAmt }, base);
         return Object.assign({ state: 'mismatch', due: dueAmt, fullDue: dueAmt }, base);
@@ -4015,6 +4036,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
                     : (chk.staleN
                         ? '<br><span style="color:#a16207; font-size:0.82rem;">⚠️ 这张截图上的订单编号已失效 —— <strong>这批排表被重新导入过</strong>（整批订单换了新编号），所以按编号对不上账。请自行确认金额后再通过。</span>'
                         : '<br><span style="color:#a16207; font-size:0.82rem;">⚠️ 算不出这一笔的应付金额（订单可能已归档或找不到），无法自动核对，请自行确认后再通过。</span>'));
+      }
+
+      /* 🔁 疑似重复提交：三种状态都提示 —— 只提醒核实，不改变能不能通过 */
+      if (chk.dupN && chk.dupN > 0) {
+        amtHtml += '<br><span style="color:#dc2626; font-weight:700; font-size:0.82rem;">🔁 疑似重复提交：这一组还有 ' +
+                   chk.dupN + ' 笔<b>金额和订单编号完全一样</b>的凭证也在待审核。请先核实对方是不是只付了一次 —— ' +
+                   '多交的那笔别确认，点「驳回」退回去。</span>';
       }
 
       let actions = '';
