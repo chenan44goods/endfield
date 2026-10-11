@@ -3787,6 +3787,90 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return Math.round(sum * 100) / 100;
     }
 
+    /* 🩺 这张凭证据以定位订单的 item_id，现在在库里还找得到吗？
+       → 返回「失效的条数」（运费 id 走 logistics 单独判）。
+       为什么需要：**这批排表被重新导入过**，整批订单换了新的 item_id，
+       而团员是在换 id 之前交的钱 → 凭证上记的还是旧 id。
+       （2026-10-11 实测：「10.10 一番赏第一期」8 笔凭证全军覆没，
+         团长看到的「算不出这一笔的应付金额（订单可能已归档或找不到）」就是它。）*/
+    function _staleIdCount(p) {
+      const ids = (Array.isArray(p && p.item_ids) ? p.item_ids : []).map(String);
+      if (!ids.length) return 0;
+      const found = {};
+      const pool = RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []);
+      pool.forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        const iid = String(it.item_id || it.id || '');
+        if (iid) found[iid] = true;
+      });
+      const logi = Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : [];
+      let n = 0;
+      ids.forEach(function (x) {
+        if (x.indexOf('intl:') === 0) {
+          const hit = logi.some(function (b) {
+            return b && Array.isArray(b.fee_members) &&
+                   b.fee_members.some(function (m) { return m && ('intl:' + String(m.id || '')) === x; });
+          });
+          if (!hit) n++;
+          return;
+        }
+        if (!found[x]) n++;
+      });
+      return n;
+    }
+
+    /* 🩺 凭证里的 item_id 全失效时，按「同一个人 + 同一个批次 + 该计划该有的状态」
+       重新定位要改的订单。**只在金额校验已经通过（chk.state==='ok'）时才允许调用** ——
+       也就是「这一组收到的钱 == 该人该批该交的总额」已经核对无误，
+       兜底只是把「改哪几条」从失效的旧编号换成现在库里的真实条目，
+       口径与 _payProofScopeDue 完全一致（同 cn + 同批次 + 未交），不会多改也不会少改。
+       ⚠️ full/deposit 认「未付款·未交」；balance（补尾款）认「已交定金」。 */
+    function _payProofRecoverIds(p, plan) {
+      const k = _normBatchKey(p && (p.batch_key || (Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names)));
+      const cn = String((p && p.cn) || '').trim().toLowerCase();
+      if (!k || !cn) return [];
+      const want = (plan === 'balance') ? ['已交定金'] : ['未付款', '未交'];
+      const out = [];
+      RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []).forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        if (String(it.cn || '').trim().toLowerCase() !== cn) return;
+        if (_normBatchKey(it.batch_name || '默认批次') !== k) return;
+        if (want.indexOf(String(it.status || '').trim()) < 0) return;
+        const iid = String(it.item_id || it.id || '');
+        if (iid) out.push(iid);
+      });
+      return out;
+    }
+
+    /* 🩺 整批应付（金额口径的统一入口）：
+       先按凭证上记的订单编号算（_payProofDueAmount）；**一个编号都对不上**时
+       （这批排表被重新导入过 → 整批换了新编号），退回到
+       「同一个人 + 同一个批次 + 还没交的条目」——与 _payProofScopeDue / _payProofRecoverIds 完全同口径。
+       ⚠️ 只要有一个编号还对得上，就仍以编号为准（老口径一字不改）。 */
+    function _payProofFullDue(p) {
+      const d = _payProofDueAmount(p);
+      if (d.amount !== null) return d;
+      const k = _normBatchKey(p && (p.batch_key || (Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names)));
+      const cn = String((p && p.cn) || '').trim().toLowerCase();
+      if (!k || !cn) return d;
+      /* ⚠️ 这里算的是「这个人这一批一共该交多少钱」，所以**必须把「已交定金」也算进来** ——
+         定金只是先交了一部分，整批应付并不因此变小。
+         （反过来，_payProofRecoverIds 是「要改哪几条订单」，那条路绝不能碰已交定金，
+           否则补交时会把"还欠尾款"的单直接改成「已下单」= 少收钱。） */
+      const WANT = ['未付款', '未交', '已交定金'];
+      let sum = 0, n = 0;
+      RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []).forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        if (String(it.cn || '').trim().toLowerCase() !== cn) return;
+        if (_normBatchKey(it.batch_name || '默认批次') !== k) return;
+        if (WANT.indexOf(String(it.status || '').trim()) < 0) return;
+        n++;
+        sum += (Number(it.quantity) || 1) * (Number(it.price) || 0);
+      });
+      if (!n) return d;
+      return { amount: Math.round(sum * 100) / 100, source: 'recovered', matched: n };
+    }
+
     /* 金额比对结果：ok（一致）/ mismatch（不一致，禁止通过）/ unknown（算不出应付）
        🧮 2026-10-11：**待审核的全款凭证**按「同一人同一批的合计」判定（见上面 _payProofCluster）。
          其余（已通过/已驳回的历史记录、定金、尾款）照旧按单张判定 ——
@@ -3797,18 +3881,20 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const cl = _payProofCluster(p);
         const got = Math.round((cl.list || []).reduce(function (a, x) { return a + (Number(x.amount) || 0); }, 0) * 100) / 100;
         const dueAmt = _payProofScopeDue(p, cl);
-        const base = { got: got, source: 'cluster', plan: 'full', cluster: cl, n: (cl.list || []).length };
+        const base = { got: got, source: 'cluster', plan: 'full', cluster: cl, n: (cl.list || []).length,
+                       staleN: _staleIdCount(p) };
         if (dueAmt === null) return Object.assign({ state: 'unknown', due: null, planNote: '' }, base);
         if (Math.abs(dueAmt - got) < 0.005) return Object.assign({ state: 'ok', due: dueAmt, fullDue: dueAmt }, base);
         return Object.assign({ state: 'mismatch', due: dueAmt, fullDue: dueAmt }, base);
       }
-      const due = _payProofDueAmount(p);
+      const due = _payProofFullDue(p);
       const planDue = _payProofPlanDue(p, due);
       const target = planDue || due;
       const got = Math.round((Number(p.amount) || 0) * 100) / 100;
-      if (target.amount === null) return { state: 'unknown', due: null, got: got, source: target.source, plan: plan, planNote: target.note || '' };
-      if (Math.abs(target.amount - got) < 0.005) return { state: 'ok', due: target.amount, got: got, source: target.source, plan: plan, fullDue: due.amount };
-      return { state: 'mismatch', due: target.amount, got: got, source: target.source, plan: plan, fullDue: due.amount };
+      const _stale = _staleIdCount(p);
+      if (target.amount === null) return { state: 'unknown', due: null, got: got, source: target.source, plan: plan, planNote: target.note || '', staleN: _stale };
+      if (Math.abs(target.amount - got) < 0.005) return { state: 'ok', due: target.amount, got: got, source: target.source, plan: plan, fullDue: due.amount, staleN: _stale };
+      return { state: 'mismatch', due: target.amount, got: got, source: target.source, plan: plan, fullDue: due.amount, staleN: _stale };
     }
 
     /* 🔁 落库校验（2026-09-30 新增）：回读数据库，确认这几条订单真的已经是「已下单 + 有付款方式」。
@@ -3907,7 +3993,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
                     ? ('<br><span style="color:#854f0b; font-size:0.82rem;">💰 确认后这批变「已交定金」，还欠尾款 <strong>￥' +
                         Math.max(0, Math.round((Number(chk.fullDue) - chk.got) * 100) / 100).toFixed(2) + '</strong>（会写进凭证，以后改比例也不受影响）</span>')
                     : '') +
-                  (_cnN ? ('<br><span style="color:#16a34a; font-size:0.8rem;">这 ' + _cnN + ' 笔会一起确认收款。</span>') : '');
+                  (_cnN ? ('<br><span style="color:#16a34a; font-size:0.8rem;">这 ' + _cnN + ' 笔会一起确认收款。</span>') : '') +
+                  /* 🩺 凭证编号失效（这批排表被重新导入过）→ 提前说明会怎么处理，免得团长以为改错单 */
+                  (chk.staleN
+                    ? ('<br><span style="color:#a16207; font-size:0.8rem;">⚠️ 这张截图上的订单编号已失效（这批排表被重新导入过）：确认收款时会按「同一个人 + 同一个批次」自动对上订单，金额已核对过，不会多收也不会少收。</span>')
+                    : '');
       } else if (chk.state === 'mismatch') {
         const diff = Math.round((chk.due - chk.got) * 100) / 100;
         amtHtml = '金额：<strong style="color:#dc2626; font-size:0.95rem;">' + (_cnN ? '合计 ￥' : '他填 ￥') + chk.got.toFixed(2) + '</strong>' + _nTip +
@@ -3922,7 +4012,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         amtHtml = '金额：<strong style="color:#dc2626; font-size:0.95rem;">￥' + chk.got.toFixed(2) + '</strong>' +
                   (chk.plan === 'deposit'
                     ? '<br><span style="color:#dc2626; font-size:0.82rem;">⚠️ 算不出这一批的整批应付' + (chk.planNote ? ('（' + escapeHtml(chk.planNote) + '）') : '') + '，没法自动算尾款 —— <strong>这项不能通过</strong>。请先补全订单/运费数据，或让团员改交全款。</span>'
-                    : '<br><span style="color:#a16207; font-size:0.82rem;">⚠️ 算不出这一笔的应付金额（订单可能已归档或找不到），无法自动核对，请自行确认后再通过。</span>');
+                    : (chk.staleN
+                        ? '<br><span style="color:#a16207; font-size:0.82rem;">⚠️ 这张截图上的订单编号已失效 —— <strong>这批排表被重新导入过</strong>（整批订单换了新编号），所以按编号对不上账。请自行确认金额后再通过。</span>'
+                        : '<br><span style="color:#a16207; font-size:0.82rem;">⚠️ 算不出这一笔的应付金额（订单可能已归档或找不到），无法自动核对，请自行确认后再通过。</span>'));
       }
 
       let actions = '';
@@ -4319,7 +4411,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       }
       const isIntl = String(proof.order_type || '') === '国际' ||
                      ids.some(function (x) { return x.indexOf('intl:') === 0; });
-      let changed = 0, alreadyPaid = 0, notFound = 0, filled = 0;
+      let changed = 0, alreadyPaid = 0, notFound = 0, filled = 0, recoveredN = 0;
       const nowStr = new Date().toLocaleString('zh-CN');
       let intlPrev = [];   // 国际条目改动前的值：保存失败必须回滚，否则重试会被误判成「已经改过」
 
@@ -4416,6 +4508,29 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         //   · 查条目口径与金额校验 _payProofDueAmount 完全一致（含归档区）—— 避免「算得出应付、却改不到条目」
         //   · 记下旧值，保存失败 / 落库校验不过时要能整体回滚
         //   · 抽成函数：落库校验不过时按 id 重新定位（合并分支会把 RAW_ITEMS 整个换成新数组）再打一次
+        /* 🩺 2026-10-11 兜底：动手之前先探一下「凭证上记的订单编号，现在还剩几个」——
+           这批排表被**重新导入**过 → 整批订单换了新的 item_id，
+           而团员是在换 id 之前交的钱（凭证里记的还是旧编号，一个都对不上）。
+           以前遇到这种情况，等改完才发现"一条都没改到"，只能报
+           「这 N 条订单在系统里找不到，请先点刷新」——可刷新也没用，旧编号是真没了 → 审核永远过不去。
+           现在：**只有在金额已经核对无误（chk.state==='ok'）时**，才把要改的订单按
+                 「同一个人 + 同一个批次 + 该计划该有的状态」换成库里真实存在的条目。
+           金额口径一个字没改（钱还是那一笔，审核前已核对），换的只是"改哪几条"。 */
+        if (chk.state === 'ok') {
+          const _pool = RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []);
+          const _set = {};
+          _pool.forEach(function (it) {
+            if (!it || typeof it !== 'object') return;
+            const iid = String(it.item_id || it.id || '');
+            if (iid) _set[iid] = true;
+          });
+          let _miss = 0;
+          ids.forEach(function (x) { if (x.indexOf('intl:') < 0 && !_set[x]) _miss++; });
+          if (_miss > 0) {
+            const _recov = _payProofRecoverIds(proof, proofPlan);
+            if (_recov.length) { ids = _recov; recoveredN = _recov.length; }
+          }
+        }
         const r0 = applyOrderPatch();
         changed = r0.changed; alreadyPaid = r0.alreadyPaid; notFound = r0.notFound; filled = r0.filled;
       }
@@ -4426,7 +4541,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (changed === 0 && notFound > 0) {
         rollbackOrderPatch();
         return showToast('❌ 这 ' + notFound + (isIntl ? ' 项运费' : ' 条订单') +
-          '在系统里找不到（页面数据可能旧了），没有确认收款。请先点「🔄 刷新」再重试。');
+          '在系统里找不到' + (recoveredN ? '（这张截图上的编号已失效，按「同一个人 + 同一个批次」也没能找到对应的待交订单）'
+                                          : '（页面数据可能旧了）') +
+          '，没有确认收款。请先点「🔄 刷新」再重试；若刷新后依旧，把这条凭证的编号发给开发。');
       }
       // 💰 定金/尾款这两条路**必须真的改到订单**才允许通过：
       //    一条都没改到，说明这些单的状态跟「这条路」对不上（他其实已经交过全款、或定金还没审核）。
@@ -4469,7 +4586,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         // 💰 定金：把「尾款」在**审核这一刻**算好、写死在凭证上 ——
         //    团长以后改定金比例，已经收过定金的这笔欠款不受影响。
         if (proofPlan === 'deposit') {
-          const _full = _payProofDueAmount(x);
+          const _full = _payProofFullDue(x);
           x.plan = 'deposit';
           x.balance_due = (_full.amount === null)
             ? 0
@@ -4557,6 +4674,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const _sumOK = _cnPending.reduce(function (a, x) { return a + (Number(x.amount) || 0); }, 0);
         msg += '（这一组共 ' + _cnPending.length + ' 笔一起确认，合计 ￥' + _sumOK.toFixed(2) + '）';
       }
+      if (recoveredN) msg += '（这张截图上的订单编号已失效，已按「同一个人 + 同一个批次」重新对上 ' + recoveredN + ' 条订单）';
       if (alreadyPaid) msg += '（' + alreadyPaid + (isIntl ? ' 项原本就不是未交' : ' 条原本就不是未付款') + '，跳过）';
       if (filled && changed) msg += '（另有 ' + filled + ' 条原本就是「已下单」，已补记支付方式）';
       if (notFound) msg += '（' + notFound + (isIntl ? ' 项在表里找不到' : ' 条订单在表里找不到') + '）';
