@@ -4214,7 +4214,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const ids = (proof.item_ids || []).map(String);
       const isIntl = String(proof.order_type || '') === '国际' ||
                      ids.some(function (x) { return x.indexOf('intl:') === 0; });
-      let changed = 0, alreadyPaid = 0, notFound = 0;
+      let changed = 0, alreadyPaid = 0, notFound = 0, filled = 0;
       const nowStr = new Date().toLocaleString('zh-CN');
       let intlPrev = [];   // 国际条目改动前的值：保存失败必须回滚，否则重试会被误判成「已经改过」
 
@@ -4223,7 +4223,28 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const ordPrevSeen = {};
       function patchOneOrder(it, iid) {
         const st = String(it.status || '').trim();
-        if (!_acceptStatus(st)) return false;
+        if (!_acceptStatus(st)) {
+          /* 🩺 2026-10-11 修「审核死结」（团长：守月 9.1中午科隆物料 点确认收款必弹
+             「订单状态没能写进数据库」）：
+             这条订单**已经是**这次审核要写成的状态（十有八九是被后台「批量改状态」
+             手动改成了「已下单」），但**没记支付方式**。以前这里直接 return false，
+             订单侧一个字没写 → 落库校验 _verifyPayApplied（要求 pay_method 非空）
+             永远不过 → 点多少次都过不去，成了死结。
+             现在把缺的支付方式/时间补上（状态不动），既解开死结，又让对账有据可查。
+             ⚠️ 只补「状态已经对了、唯独缺支付信息」这一种；状态对不上的照旧跳过。 */
+          if (st === _targetStatus && !String(it.pay_method || '').trim()) {
+            if (!ordPrevSeen[iid]) {
+              ordPrevSeen[iid] = true;
+              ordPrev.push({ iid: iid, it: it, status: it.status,
+                             pay_method: it.pay_method, paid_at: it.paid_at });
+            }
+            it.pay_method = proof.pay_method || '';
+            it.paid_at = it.paid_at || nowStr;
+            DIRTY_ITEM_IDS.add(iid);
+            return 'filled';
+          }
+          return false;
+        }
         if (!ordPrevSeen[iid]) {
           ordPrevSeen[iid] = true;
           ordPrev.push({ iid: iid, it: it, status: it.status,
@@ -4236,7 +4257,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         return true;
       }
       function applyOrderPatch() {
-        let c = 0, p = 0, nf = 0;
+        let c = 0, p = 0, nf = 0, f = 0;
         const pool = RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []);
         const hitIds = {};
         pool.forEach(function (it) {
@@ -4244,10 +4265,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           const iid = String(it.item_id || it.id || '');
           if (!iid || ids.indexOf(iid) < 0) return;
           hitIds[iid] = true;
-          if (patchOneOrder(it, iid)) c++; else p++;
+          const r = patchOneOrder(it, iid);
+          if (r === true) c++; else if (r === 'filled') f++; else p++;
         });
         ids.forEach(function (iid) { if (!hitIds[iid]) nf++; });
-        return { changed: c, alreadyPaid: p, notFound: nf };
+        return { changed: c, alreadyPaid: p, notFound: nf, filled: f };
       }
       function rollbackOrderPatch() {
         ordPrev.forEach(function (r) {
@@ -4290,7 +4312,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         //   · 记下旧值，保存失败 / 落库校验不过时要能整体回滚
         //   · 抽成函数：落库校验不过时按 id 重新定位（合并分支会把 RAW_ITEMS 整个换成新数组）再打一次
         const r0 = applyOrderPatch();
-        changed = r0.changed; alreadyPaid = r0.alreadyPaid; notFound = r0.notFound;
+        changed = r0.changed; alreadyPaid = r0.alreadyPaid; notFound = r0.notFound; filled = r0.filled;
       }
 
       // 🚫 一条都没改到、而且还有条目在表里找不到 → 绝不把凭证标成「已通过」。
@@ -4307,7 +4329,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (changed === 0 && (proofPlan === 'deposit' || proofPlan === 'balance')) {
         rollbackOrderPatch();
         return showToast('❌ 这些订单现在不是「' + (proofPlan === 'deposit' ? '未付款 / 未交' : '已交定金') +
-          '」状态（共 ' + alreadyPaid + ' 条对不上），没有确认收款。请先点「🔄 刷新」看清这批的实际情况，再决定通过还是驳回。');
+          '」状态（共 ' + (alreadyPaid + filled) + ' 条对不上），没有确认收款。请先点「🔄 刷新」看清这批的实际情况，再决定通过还是驳回。');
       }
 
       // ② 记录侧：本条置为已通过；同批次的其他「非通过」凭证也一并停止引用原图
@@ -4382,6 +4404,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         if (!vok) {
           const r1 = applyOrderPatch();
           changed = changed + r1.changed;
+          filled = filled + r1.filled;
           const ok2 = await saveDataToSupabase();
           vok = ok2 && await _verifyPayApplied(vIds);
         }
@@ -4408,8 +4431,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
            (isIntl ? ' 项国际运费标为「已交」'
                    : (proofPlan === 'deposit' ? (' 条订单改为「已交定金」，还欠尾款 ￥' + Number(proof.balance_due || 0).toFixed(2))
                                               : (proofPlan === 'balance' ? ' 条订单补清，改为「已下单」' : ' 条订单改为「已下单」'))))
-        : '✅ 已标记通过';
+        : (filled ? '✅ 已确认收款（订单本来就已经是「已下单」，这次补记了支付方式）' : '✅ 已标记通过');
       if (alreadyPaid) msg += '（' + alreadyPaid + (isIntl ? ' 项原本就不是未交' : ' 条原本就不是未付款') + '，跳过）';
+      if (filled && changed) msg += '（另有 ' + filled + ' 条原本就是「已下单」，已补记支付方式）';
       if (notFound) msg += '（' + notFound + (isIntl ? ' 项在表里找不到' : ' 条订单在表里找不到') + '）';
       if (removed) msg += '（已清理 ' + removed + ' 张截图原图）';
       showToast(msg);
