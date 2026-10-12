@@ -89,7 +89,7 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
   <h1>✂️ 插画集切页录入</h1>
   <div class="sub">给管理用的：把每一页的图传上来（<b>编号会自动按文件名填好</b>），生成一条「目录链接」发给团长。<br>
     团长在后台「排表管理 → 插画集切页导入」里粘这条链接，就能一键把切好的页导进排表。<br>
-    <span id="verTag" style="display:inline-block;margin-top:6px;font-size:12px;color:#8a8f98;border:1px solid #3a3f47;border-radius:999px;padding:1px 9px;">工具版本 v2026-10-01c</span>
+    <span id="verTag" style="display:inline-block;margin-top:6px;font-size:12px;color:#8a8f98;border:1px solid #3a3f47;border-radius:999px;padding:1px 9px;">工具版本 v2026-10-12</span>
     <span style="font-size:12px;color:#8a8f98;">　看不到这行 = 打开的是旧页面，请关掉重开或按 Ctrl+F5</span></div>
 
   <div class="card">
@@ -225,32 +225,132 @@ summary{ cursor:pointer; font-size:13px; color:var(--soft); }
   }
   function sbUrl(path){ return SB_BASE + path; }
 
-  /* ══════════ 图片压缩（与团员端 compressImage 一字不差，避免同一张图两端表现不同） ══════════ */
-  function compressImage(file, maxSide, quality){
+  /* ══════════ 图片压缩（与团员端 index.html 的 compressImage 逐字一致，避免同一张图两端表现不同）══════════
+     🩸 2026-10-12 重写。事故：小米 15T Pro 传交款截图 → 预览是一整块白图，还打印「已压到 6 KB」。
+        6 KB 正好是【纯白 JPEG】的体积 = canvas 一个像素都没画上；而旧代码把它当成功提交了。
+     旧写法三处致命伤：
+        ① onload 里立刻 URL.revokeObjectURL(url)：onload 只代表"资源加载完"、不代表"已解码"，
+           revoke 之后解码可能被中止；而 drawImage 遇到不可解码的图像按规范是【静默不画】（不抛异常）；
+        ② 原图整个解码再缩放：5000 万像素 / HEIC 的图会顶到 WebView 内存或 GPU 纹理上限，同样静默画空；
+        ③ 没有任何"画出来是不是空的"校验 → 白图一路成功。
+     新写法：createImageBitmap（解码期就降采样）→ img.decode() → onload，三级降级；
+        每一级都校验空图，空就换下一级，全失败就报错。【绝不提交空图】，blob URL 直到画完才释放。
+     ⚠️ 返回值仍是 Promise<Blob>；本函数在 index.html 与 cut.html 里必须【逐字一致】
+        （有跨文件断言 test_img_compress.py 守着，别只改一边）。 */
+  function _imgFit(sw, sh, maxSide){
+    var scale = Math.min(1, maxSide / Math.max(sw, sh));
+    return [Math.max(1, Math.round(sw * scale)), Math.max(1, Math.round(sh * scale))];
+  }
+  function _imgDims(file){
+    /* 只取尺寸（读文件头即可），不画任何东西，所以即使解码有问题也不影响这一步 */
     return new Promise(function(resolve, reject){
       var url = null;
       try { url = URL.createObjectURL(file); } catch(e){ return reject(new Error('无法读取该文件')); }
       var img = new Image();
-      img.onload = function(){
-        try {
-          URL.revokeObjectURL(url);
-          var w = img.naturalWidth || 0, h = img.naturalHeight || 0;
-          if (!w || !h) return reject(new Error('图片尺寸读取失败'));
-          var scale = Math.min(1, maxSide / Math.max(w, h));
-          w = Math.max(1, Math.round(w * scale));
-          h = Math.max(1, Math.round(h * scale));
-          var c = document.createElement('canvas');
-          c.width = w; c.height = h;
-          var ctx = c.getContext('2d');
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, w, h);
-          ctx.drawImage(img, 0, 0, w, h);
-          c.toBlob(function(blob){ blob ? resolve(blob) : reject(new Error('图片压缩失败')); }, 'image/jpeg', quality);
-        } catch(e){ reject(new Error('图片处理失败')); }
+      var done = function(w, h){
+        try { URL.revokeObjectURL(url); } catch(e){}
+        (w && h) ? resolve({ w: w, h: h }) : reject(new Error('图片尺寸读取失败'));
       };
-      img.onerror = function(){ try { URL.revokeObjectURL(url); } catch(e){} reject(new Error('这不是一张能识别的图片，请换一张')); };
+      img.onload = function(){ done(img.naturalWidth || 0, img.naturalHeight || 0); };
+      img.onerror = function(){ done(0, 0); };
       img.src = url;
     });
+  }
+  function _imgDraw(src, sw, sh, w, h){
+    /* 源图过大先逐级对半缩：一次 drawImage 去采样 8000px 以上的源，部分安卓 GPU 会整张画成空白 */
+    var cap = Math.max(8192, 2 * Math.max(w, h));
+    var cur = src, cw = sw, ch = sh, hw, hh, hc, hx;
+    while (Math.max(cw, ch) > cap && cw > 2 && ch > 2) {
+      hw = Math.max(1, Math.round(cw / 2)); hh = Math.max(1, Math.round(ch / 2));
+      hc = document.createElement('canvas'); hc.width = hw; hc.height = hh;
+      hx = hc.getContext('2d');
+      hx.fillStyle = '#ffffff'; hx.fillRect(0, 0, hw, hh);
+      hx.drawImage(cur, 0, 0, cw, ch, 0, 0, hw, hh);
+      cur = hc; cw = hw; ch = hh;
+    }
+    var c = document.createElement('canvas'); c.width = w; c.height = h;
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(cur, 0, 0, cw, ch, 0, 0, w, h);
+    return c;
+  }
+  function _imgIsBlank(c){
+    /* 只认「整幅纯白」：drawImage 静默失败时，留下的正是我们铺的白底（255,255,255）。
+       不用「颜色波动小」当判据 —— 白底黑字的截图缩到 24x24 后波动也可能很小，会误杀正常图。 */
+    try {
+      var n = 24, t = document.createElement('canvas'), tc, d, i;
+      t.width = n; t.height = n; tc = t.getContext('2d');
+      tc.drawImage(c, 0, 0, c.width, c.height, 0, 0, n, n);
+      d = tc.getImageData(0, 0, n, n).data;
+      for (i = 0; i < d.length; i += 4) {
+        if (d[i] < 248 || d[i + 1] < 248 || d[i + 2] < 248) return false;
+      }
+      return true;
+    } catch(e){ return false; }   /* 取不到像素（画布被跨域污染等）→ 不拦，交给上层 */
+  }
+  function _imgToBlob(c, quality){
+    return new Promise(function(resolve, reject){
+      try { c.toBlob(function(b){ b ? resolve(b) : reject(new Error('图片压缩失败')); }, 'image/jpeg', quality); }
+      catch(e){ reject(new Error('图片压缩失败')); }
+    });
+  }
+  function _imgEncode(src, sw, sh, maxSide, quality){
+    if (!src || !sw || !sh) return Promise.reject(new Error('图片尺寸读取失败'));
+    var wh = _imgFit(sw, sh, maxSide);
+    var c = _imgDraw(src, sw, sh, wh[0], wh[1]);
+    if (_imgIsBlank(c)) return Promise.reject(new Error('EMPTY_IMAGE'));
+    return _imgToBlob(c, quality);
+  }
+  function compressImage(file, maxSide, quality){
+    /* ① 首选 createImageBitmap：解码期就降采样，不产生超大纹理，也不依赖 blob URL 生命周期 */
+    var bitmapWith = function(opt){
+      return createImageBitmap(file, opt).then(function(bmp){
+        return _imgEncode(bmp, bmp.width, bmp.height, maxSide, quality);
+      });
+    };
+    var viaBitmap = function(){
+      if (typeof createImageBitmap !== 'function') return Promise.reject(new Error('NO_BITMAP'));
+      return _imgDims(file).then(function(d){
+        var wh = _imgFit(d.w, d.h, maxSide);
+        /* 老内核不认 imageOrientation:'from-image' / resize 选项时会直接抛，逐级退到不带选项 */
+        return bitmapWith({ imageOrientation: 'from-image', resizeWidth: wh[0], resizeHeight: wh[1], resizeQuality: 'high' })
+          .catch(function(){ return bitmapWith({ resizeWidth: wh[0], resizeHeight: wh[1] }); })
+          .catch(function(){ return bitmapWith({}); });
+      });
+    };
+    /* ② img.decode()：明确等到"解码完成"再画（老浏览器没有这个 API 就自然落到 ③） */
+    var viaDecode = function(){
+      return _imgDims(file).then(function(d){
+        var url = URL.createObjectURL(file), img = new Image();
+        var cleanup = function(){ try { URL.revokeObjectURL(url); } catch(e){} };
+        if (typeof img.decode !== 'function') { cleanup(); throw new Error('NO_DECODE'); }
+        img.src = url;
+        return img.decode().then(function(){ return _imgEncode(img, d.w, d.h, maxSide, quality); })
+          .then(function(b){ cleanup(); return b; }, function(e){ cleanup(); throw e; });
+      });
+    };
+    /* ③ 兜底：老办法，但 blob URL 一直留到画完才释放（旧代码就是在这里把图缩成白的） */
+    var viaLoad = function(){
+      return new Promise(function(resolve, reject){
+        var url = null;
+        try { url = URL.createObjectURL(file); } catch(e){ return reject(new Error('无法读取该文件')); }
+        var img = new Image();
+        var cleanup = function(){ try { URL.revokeObjectURL(url); } catch(e){} };
+        img.onload = function(){
+          _imgEncode(img, img.naturalWidth || 0, img.naturalHeight || 0, maxSide, quality)
+            .then(function(b){ cleanup(); resolve(b); }, function(e){ cleanup(); reject(e); });
+        };
+        img.onerror = function(){ cleanup(); reject(new Error('这不是一张能识别的图片，请换一张')); };
+        img.src = url;
+      });
+    };
+    return viaBitmap().catch(function(){ return viaDecode(); }).catch(function(){ return viaLoad(); })
+      .catch(function(e){
+        if (e && e.message === 'EMPTY_IMAGE') {
+          throw new Error('这张图传上去会是空白的（手机没能读出图片内容）。请用手机重新「截图」一次再传，或先在相册里编辑后另存一张。');
+        }
+        throw e;
+      });
   }
 
   function randObjName(){
