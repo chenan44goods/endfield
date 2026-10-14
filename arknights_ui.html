@@ -796,6 +796,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     .badge-pay-微信 { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
     .badge-pay-支付宝 { background-color: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
     .badge-pay-其他 { background-color: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    .badge-pay-零钱罐 { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; }
 
     .badge-fb-未读 { background-color: #fee2e2; color: #991b1b; }
     .badge-fb-已读 { background-color: #e0f2fe; color: #0369a1; }
@@ -1947,6 +1948,7 @@ cn 点数 金额
         <button class="tab-btn" onclick="pane('export')">📤 台账</button>
       <button class="tab-btn" onclick="pane('refund')">💰 退款补录</button>
       <button class="tab-btn" onclick="pane('deposit')">💰 定金设置</button>
+      <button class="tab-btn" onclick="pane('piggy')">🐷 零钱罐</button>
       </div>
       <p style="font-size:0.8rem;color:var(--text-muted);">用表格填，不用写代码。金额自动按“分”计算，防浮点误差；计算/写库有防重复锁；校验不通过不会改动数据。</p>
     </div>
@@ -2024,6 +2026,30 @@ cn 点数 金额
         没启用（或不填）的批次，团员看到的还是原来的「整批一次付清」，一点不受影响。
       </div>
       <div id="batchPlansList"></div>
+    </div>
+
+    <!-- 🐷 零钱罐（存肾）· 2026-10-14 团长需求
+         位置：算账中心 → 排在「💰 定金设置」后面（跟砍配/二调/台账/退款/定金 同级子页签）。
+         用途：团员随时可以「存钱」（学生党 / 工作日不方便回消息的人）→ 你在这里审核 →
+               通过后进罐，团员交谷子费/运费时可直接抵扣（部分抵扣也行，剩下补差价）。 -->
+    <div class="card pane" id="pane-piggy">
+      <div class="card-title">
+        <span>🐷 零钱罐（团员预存 · 交款时可抵扣）</span>
+        <div class="btn-group">
+          <button class="btn btn-secondary" onclick="renderPiggyBank()">🔄 重画列表</button>
+        </div>
+      </div>
+      <div style="font-size:0.82rem; color:var(--text-muted); line-height:1.8; margin-bottom:12px;">
+        团员在自查终端「我要存钱」提交的存款（金额 + 转账截图 + 备注）会进下面第一块。<b>审核通过</b>之后钱才真正进罐；
+        团员交谷子费 / 运费时可以勾选「用零钱罐抵扣」（余额不够就抵多少、剩下的补差价），
+        你在「交款审核」的卡片上能看到抵扣了多少。
+      </div>
+      <h3 style="margin:16px 0 8px;">⏳ 待审核（团员刚提交的）</h3>
+      <div id="piggyPendingList"></div>
+      <h3 style="margin:26px 0 8px;">💰 各人余额一览</h3>
+      <div id="piggyBalanceList"></div>
+      <h3 style="margin:26px 0 8px;">📋 全部存入记录</h3>
+      <div id="piggyAllList"></div>
     </div>
   </div>
 
@@ -2179,6 +2205,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     let RAW_FEEDBACK = [];
     let RAW_LOGISTICS = [];
     let RAW_PAY_PROOFS = [];        // 💳 团员在自查页上传的付款凭证（image_data.pay_proofs）
+    // 💰 零钱罐（image_data.piggy_bank）· 2026-10-14 团长需求：
+    //    团员在自查页「我要存钱」提交 → 这里是待审核队列 → 通过后进罐，可抵扣以后的谷子费/运费。
+    //    每条：{ id, cn, amount, note, img_path, status:待审核|可用|已驳回|已退回,
+    //            used(已抵扣), refunded(已退回), used_log[], created_at, reviewed_at, reject_reason }
+    let RAW_PIGGY = [];
     // 💰 批次「定金计划」（image_data.batch_plans）：{ <归一化批次名>: { ratio: 0.5, enabled: true } }
     //    ⚠️ 键必须与团员端 index.html 的 _normBatch() 完全一致（两边函数逐字相同）
     let RAW_BATCH_PLANS = {};
@@ -2769,7 +2800,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (tabId === 'tabPayStats') renderPayStats();
       if (tabId === 'tabPayReview') renderPayReview();
       if (tabId === 'tabQrCodes') renderQrCodes();
-      if (tabId === 'tabCalc') renderBatchPlans();   // 💰 定金设置已挪进「算账中心」→ 切进来就重画一次
+      if (tabId === 'tabCalc') { renderBatchPlans(); renderPiggyBank(); }   // 💰 定金设置 + 🐷 零钱罐 都在算账中心 → 切进来就重画
     }
     window.switchTab = switchTab;
 
@@ -2785,10 +2816,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const { data, error } = await supabaseClient.from('leader_data').select('*').eq('query_key', CURRENT_QUERY_KEY);
         if (error) return showToast('读取失败: ' + error.message);
         if (!data || data.length === 0) {
-          CURRENT_RECORD_ID = null; CURRENT_VERSION = null; RAW_ITEMS = []; RAW_ARCHIVED = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = []; RAW_LOGISTICS = []; RAW_PAY_PROOFS = []; RAW_BATCH_PLANS = {};
+          CURRENT_RECORD_ID = null; CURRENT_VERSION = null; RAW_ITEMS = []; RAW_ARCHIVED = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = []; RAW_LOGISTICS = []; RAW_PAY_PROOFS = []; RAW_BATCH_PLANS = {}; RAW_PIGGY = [];
           LOGISTICS_DELETED_BATCHES.clear();
           renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
-          renderPayReview(); renderPayStats(); renderQrCodes(); renderBatchPlans();
+          renderPayReview(); renderPayStats(); renderQrCodes(); renderBatchPlans(); renderPiggyBank();
           alert('该密钥暂无数据！'); return;
         }
         const rec = data[0];
@@ -2807,6 +2838,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         RAW_FEEDBACK.forEach(function (f) { if (f && !f.code) f.code = fbCodeOf(f); });
         RAW_LOGISTICS = Array.isArray(iData.logistics_data) ? iData.logistics_data : [];
         RAW_PAY_PROOFS = Array.isArray(iData.pay_proofs) ? iData.pay_proofs : [];
+        RAW_PIGGY = Array.isArray(iData.piggy_bank) ? iData.piggy_bank : [];   // 💰 零钱罐（2026-10-14）
         // 💰 批次定金计划（键 = 归一化批次名）
         RAW_BATCH_PLANS = (iData.batch_plans && typeof iData.batch_plans === 'object' && !Array.isArray(iData.batch_plans)) ? iData.batch_plans : {};
         RAW_ARCHIVED = Array.isArray(iData.archived_items) ? iData.archived_items : [];
@@ -2814,7 +2846,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         CURRENT_PAGE = 1;
         updateBatchDropdownOptions();
         renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
-        renderPayReview(); renderPayStats(); renderQrCodes(); renderBatchPlans();
+        renderPayReview(); renderPayStats(); renderQrCodes(); renderBatchPlans(); renderPiggyBank();
         loadBatches();
       } catch (err) { showToast('数据加载网络异常'); }
     }
@@ -3082,7 +3114,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           // ⚠️ 下面每个字段都是「后台整份回写」的：
           //    以后往 image_data 里加新字段，必须同步加进这一行，
           //    否则后台一保存就会把它抹掉（2026-09-22 pay_proofs 踩过一次）。
-          image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK, logistics_data: RAW_LOGISTICS, archived_items: mergedArch, pay_proofs: RAW_PAY_PROOFS, batch_plans: RAW_BATCH_PLANS }
+          image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK, logistics_data: RAW_LOGISTICS, archived_items: mergedArch, pay_proofs: RAW_PAY_PROOFS, batch_plans: RAW_BATCH_PLANS, piggy_bank: RAW_PIGGY }
         };
         if (CURRENT_VERSION !== null) {
           const nextVersion = (Number(CURRENT_VERSION) || 0) + 1;
@@ -3135,6 +3167,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               freshImg2.pay_proofs = mergeById(RAW_PAY_PROOFS, freshImg2.pay_proofs).filter(function (p) {
                 return !MY_PROOF_DELETED.has(String(p && p.id));
               });
+              // 💰 零钱罐：同样按 id 合并（我这边优先 + 服务器多出来的保留）——
+              //    审核/驳回/退回都是「改我自己那几条」，mergeById 以 mine 为准，改动能保住。
+              freshImg2.piggy_bank = mergeById(RAW_PIGGY, freshImg2.piggy_bank);
               freshImg2.applications = mergeApplications(RAW_APPLICATIONS, freshImg2.applications, MY_APP_DIRTY, MY_APP_DELETED);
               freshImg2.transfer_logs = mergeById(RAW_LOGS, freshImg2.transfer_logs);
               freshImg2.feedback = mergeById(RAW_FEEDBACK, freshImg2.feedback);
@@ -3146,7 +3181,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
                 continue;
               }
               mergedApplied = true;
-              mergeResult = { freshRec: freshRec, freshVersion: freshVersion, merged: merged, mergedLogistics: freshImg2.logistics_data, mergedProofs: freshImg2.pay_proofs, mergedBatchPlans: freshImg2.batch_plans, myNewCount: myNewCount };
+              mergeResult = { freshRec: freshRec, freshVersion: freshVersion, merged: merged, mergedLogistics: freshImg2.logistics_data, mergedProofs: freshImg2.pay_proofs, mergedBatchPlans: freshImg2.batch_plans, mergedPiggy: freshImg2.piggy_bank, myNewCount: myNewCount };
               break;
             }
             if (!mergedApplied || !mergeResult) {
@@ -3168,6 +3203,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             RAW_ITEMS = merged;
             RAW_LOGISTICS = mergeResult.mergedLogistics || RAW_LOGISTICS;
             if (Array.isArray(mergeResult.mergedProofs)) RAW_PAY_PROOFS = mergeResult.mergedProofs;
+            if (Array.isArray(mergeResult.mergedPiggy)) RAW_PIGGY = mergeResult.mergedPiggy;   // 💰 零钱罐
             if (mergeResult.mergedBatchPlans && typeof mergeResult.mergedBatchPlans === 'object') RAW_BATCH_PLANS = mergeResult.mergedBatchPlans;
             clearMine();
             RAW_APPLICATIONS = Array.isArray(freshImg.applications) ? freshImg.applications : RAW_APPLICATIONS;
@@ -3475,11 +3511,15 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return legacyMap[s] || 'badge-status-custom';
     }
 
-    // 支付方式彩色标签：微信绿 / 支付宝蓝 / 其他灰（普通订单与国际运费共用）
+    /* 支付方式彩色标签：微信绿 / 支付宝蓝 / 零钱罐紫 / 其他灰（普通订单与国际运费共用）
+       🐷 零钱罐（2026-10-14）：这笔钱是从团员零钱罐里抵扣的，没走微信/支付宝平台，
+          单独给一个紫色标签，团长看账时一眼能分清「平台到账」和「罐里划走」。 */
     function getPayMethodBadge(pm) {
       const pmRaw = String(pm || '').trim();
       if (!pmRaw) return '<span style="color:var(--text-muted);font-size:0.8rem;">—</span>';
-      const pmCls = pmRaw.indexOf('微信') >= 0 ? 'badge-pay-微信' : (pmRaw.indexOf('支付宝') >= 0 ? 'badge-pay-支付宝' : 'badge-pay-其他');
+      const pmCls = pmRaw.indexOf('零钱罐') >= 0 ? 'badge-pay-零钱罐'
+        : (pmRaw.indexOf('微信') >= 0 ? 'badge-pay-微信'
+          : (pmRaw.indexOf('支付宝') >= 0 ? 'badge-pay-支付宝' : 'badge-pay-其他'));
       return '<span class="badge ' + pmCls + '">' + escapeHtml(pmRaw) + '</span>';
     }
 
@@ -3515,8 +3555,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
     }
 
+    /* 🐷 零钱罐单独成一类：它既不是微信也不是支付宝（钱早就在罐里了），
+       混进「其他」会让团长以为平台上收到了钱。 */
     function _payMethodKey(pm) {
       const s = String(pm || '').trim();
+      if (s.indexOf('零钱罐') >= 0) return '零钱罐';
       if (s.indexOf('微信') >= 0) return '微信';
       if (s.indexOf('支付宝') >= 0) return '支付宝';
       return s ? '其他' : '未注明';
@@ -3524,7 +3567,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
 
     function computePayStats(includeArchived) {
       const batches = {};
-      const methods = { '微信': 0, '支付宝': 0, '其他': 0, '未注明': 0 };
+      const methods = { '微信': 0, '支付宝': 0, '零钱罐': 0, '其他': 0, '未注明': 0 };   // 🐷 零钱罐单列，别和"其他"混
       const overallMembers = new Set();
       let due = 0, recv = 0, cnt = 0, unpaidCnt = 0;
       const r2 = function (n) { return Math.round(n * 100) / 100; };
@@ -3534,7 +3577,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         if (!includeArchived && bn !== '默认批次' && isArchivedBatchName(bn)) return;
         const amt = (Number(it.price) || 0) * (Number(it.quantity) || 1);
         let b = batches[bn];
-        if (!b) { b = { name: bn, due: 0, recv: 0, cnt: 0, unpaidCnt: 0, firstTs: 0, lastTs: 0, members: new Set(), methods: { '微信': 0, '支付宝': 0, '其他': 0, '未注明': 0 } }; batches[bn] = b; }
+        if (!b) { b = { name: bn, due: 0, recv: 0, cnt: 0, unpaidCnt: 0, firstTs: 0, lastTs: 0, members: new Set(), methods: { '微信': 0, '支付宝': 0, '零钱罐': 0, '其他': 0, '未注明': 0 } }; batches[bn] = b; }
         // 📅 录入时间：firstTs = 该批次最早一条的录入时间；lastTs = 最近一条（团长要的排序依据）
         const _ts = _payTs(it.created_at);
         if (_ts) {
@@ -3581,6 +3624,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           '未收 <strong style="color:' + (o.unpaid > 0.0000001 ? '#dc2626' : '#64748b') + '; font-size:1.05rem;">￥' + o.unpaid.toFixed(2) + '</strong>' +
           '<br><span style="font-size:0.82rem; color:var(--text-muted);">平台分账：微信 ￥' + o.methods['微信'].toFixed(2) +
           ' ｜ 支付宝 ￥' + o.methods['支付宝'].toFixed(2) +
+          ((o.methods['零钱罐'] || 0) ? ' ｜ <span style="color:#7e22ce;">零钱罐 ￥' + o.methods['零钱罐'].toFixed(2) + '</span>' : '') +
           (o.methods['其他'] ? ' ｜ 其他 ￥' + o.methods['其他'].toFixed(2) : '') +
           (o.methods['未注明'] ? ' ｜ 未注明 ￥' + o.methods['未注明'].toFixed(2) : '') +
           '</span>' +
@@ -3651,9 +3695,17 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const totalDue = rows.reduce(function (a, r) { return a + r.due; }, 0);
       const totalRecv = rows.reduce(function (a, r) { return a + r.recv; }, 0);
       const unpaidPeople = rows.filter(function (r) { return r.unpaid > 0.0000001; }).length;
+      /* 🐷 零钱罐（2026-10-14）：把「这批人里谁的罐里还有钱」在明细里直接摊出来 ——
+         团长一句「你罐里还有 ￥X，直接用掉」就能收账，不必再翻算账中心。只读，不动任何数据。 */
+      const _pgOf = function (cn) {
+        try { return (typeof piggyBalanceOf === 'function') ? piggyBalanceOf(cn) : 0; } catch (e) { return 0; }
+      };
+      let pgPeople = 0, pgTotal = 0;
+      rows.forEach(function (r) { const b2 = _pgOf(r.cn); if (b2 > 0.004) { pgPeople++; pgTotal += b2; } });
       document.getElementById('payDetailTitle').innerText = '💰 收款对账明细 - ' + batchName;
       document.getElementById('payDetailSummary').innerText =
-        '共 ' + rows.length + ' 人 | 未付款 ' + unpaidPeople + ' 人 | 应收 ￥' + totalDue.toFixed(2) + ' | 实收 ￥' + totalRecv.toFixed(2) + ' | 未收 ￥' + (totalDue - totalRecv).toFixed(2);
+        '共 ' + rows.length + ' 人 | 未付款 ' + unpaidPeople + ' 人 | 应收 ￥' + totalDue.toFixed(2) + ' | 实收 ￥' + totalRecv.toFixed(2) + ' | 未收 ￥' + (totalDue - totalRecv).toFixed(2) +
+        (pgPeople ? '　｜　🐷 零钱罐可用：' + pgPeople + ' 人 共 ￥' + pgTotal.toFixed(2) + '（可从罐里直接抵扣）' : '');
       const tbody = document.getElementById('payDetailBody');
       if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">该批次暂无订单</td></tr>';
@@ -3661,8 +3713,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         tbody.innerHTML = rows.map(function (r) {
           const pmKeys = Object.keys(r.methods).sort(function (a, b) { return r.methods[b] - r.methods[a]; });
           const pmHtml = pmKeys.length ? pmKeys.map(function (k) { return getPayMethodBadge(k) + (r.methods[k] > 1 ? '<span style="font-size:0.72rem;color:var(--text-muted);">×' + r.methods[k] + '</span>' : ''); }).join(' ') : '<span style="color:var(--text-muted);font-size:0.8rem;">—</span>';
+          /* 🐷 零钱罐挂在「支付方式」下面一行：有余额才显示，余额为 0 什么都不加（老账目一字不变） */
+          const _pgb = _pgOf(r.cn);
+          const pgHtml = _pgb > 0.004
+            ? '<div style="margin-top:4px; font-size:0.76rem; line-height:1.5;">🐷 零钱罐 <span class="badge badge-pay-零钱罐" style="font-size:0.72rem;">可用 ￥' + _pgb.toFixed(2) + '</span></div>'
+            : '';
           const un = r.unpaid > 0.0000001;
-          return '<tr><td><strong>' + escapeHtml(r.cn) + '</strong></td><td>' + pmHtml + '</td><td>￥' + r.due.toFixed(2) + '</td><td style="color:#16a34a;">￥' + r.recv.toFixed(2) + '</td><td style="color:' + (un ? '#dc2626' : '#64748b') + '; font-weight:' + (un ? '700' : '400') + ';">￥' + r.unpaid.toFixed(2) + '</td></tr>';
+          return '<tr><td><strong>' + escapeHtml(r.cn) + '</strong></td><td>' + pmHtml + pgHtml + '</td><td>￥' + r.due.toFixed(2) + '</td><td style="color:#16a34a;">￥' + r.recv.toFixed(2) + '</td><td style="color:' + (un ? '#dc2626' : '#64748b') + '; font-weight:' + (un ? '700' : '400') + ';">￥' + r.unpaid.toFixed(2) + '</td></tr>';
         }).join('');
       }
       document.getElementById('payDetailModal').classList.add('active');
@@ -4033,7 +4090,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     function _payReviewMethodBadge(pm) {
       const s = String(pm || '').trim();
       if (!s) return '<span class="badge" style="color:var(--text-muted);">未注明</span>';
-      const cls = s.indexOf('微信') >= 0 ? 'badge-pay-微信' : (s.indexOf('支付宝') >= 0 ? 'badge-pay-支付宝' : 'badge-pay-其他');
+      const cls = s.indexOf('零钱罐') >= 0 ? 'badge-pay-零钱罐'
+        : (s.indexOf('微信') >= 0 ? 'badge-pay-微信'
+          : (s.indexOf('支付宝') >= 0 ? 'badge-pay-支付宝' : 'badge-pay-其他'));
       return '<span class="badge ' + cls + '">' + escapeHtml(s) + '</span>';
     }
 
@@ -4110,6 +4169,26 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
                    '多交的那笔别确认，点「驳回」退回去。</span>';
       }
 
+      /* 💰 零钱罐（2026-10-14）：这张凭证要么已经勾了「用零钱罐抵扣」，要么这个团员罐里还有余额。
+         团长收钱时一眼能看到「这人手里还有钱」，不用去别处翻。 */
+      const _pgUsed = Math.round(Number(p.piggy_used || 0) * 100) / 100;
+      const _pgBal = (typeof piggyBalanceOf === 'function') ? piggyBalanceOf(p.cn) : 0;
+      let piggyHtml = '';
+      if (_pgUsed > 0) {
+        const _gotN = Number(chk.got || 0);
+        const _need = Math.max(0, Math.round((_gotN - _pgUsed) * 100) / 100);
+        piggyHtml = '<div style="margin-top:8px; padding:8px 10px; border-radius:8px; border:1px solid rgba(217,75,75,0.35); background:#fffbe6; font-size:0.84rem; line-height:1.7;">' +
+          '💰 <b>零钱罐抵扣 ￥' + _pgUsed.toFixed(2) + '</b>' +
+          (_need > 0.004 ? (' ｜ 团员另需转账 <b>￥' + _need.toFixed(2) + '</b>（截图应体现这一笔）') : ' ｜ <b>全额抵扣，无需转账</b>') +
+          '<br><span style="color:var(--text-muted); font-size:0.78rem;">确认收款时会自动从他罐里扣掉这 ￥' + _pgUsed.toFixed(2) + '。</span>' +
+        '</div>';
+      } else if (_pgBal > 0.004 && canAct) {
+        piggyHtml = '<div style="margin-top:8px; padding:8px 10px; border-radius:8px; border:1px solid #f0d9a0; background:#fffdf5; font-size:0.84rem; line-height:1.7;">' +
+          '🐷 该团员零钱罐还有 <b style="color:#15803d;">￥' + _pgBal.toFixed(2) + '</b>' +
+          '<br><span style="color:var(--text-muted); font-size:0.78rem;">他提交时若勾了「用零钱罐抵扣」，这里会显示抵扣多少；没勾就是正常转账。</span>' +
+        '</div>';
+      }
+
       let actions = '';
       if (canAct) {
         const approveBtn = blocked
@@ -4162,6 +4241,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             '提交：' + escapeHtml(p.created_at || '') +
             (p.reviewed_at ? (' ｜ 处理：' + escapeHtml(p.reviewed_at)) : '') +
           '</div>' +
+          piggyHtml +
           actions +
         '</div>' +
       '</div>';
@@ -4691,6 +4771,50 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         }
       });
 
+      /* 💰 零钱罐抵扣（2026-10-14 团长需求）：团员交这笔钱时如果勾了「用零钱罐抵扣」，
+         就在**这一刻**从他罐里扣掉。规则：
+           · 先存的先用（按 created_at 从早到晚吃）；
+           · 余额不够 → 整单不通过（绝不出现「订单收齐了、罐里却没扣」的账目黑洞）；
+           · 余额够 → 扣减写进内存，跟凭证状态一起 saveDataToSupabase()（同一把版本锁）。
+         幂等：凭证上打 _piggyDeducted 标记，重复点不会扣两次。 */
+      const _piggyPrev = [];
+      let _piggyShort = 0;
+      _cnPending.forEach(function (x) {
+        const use = Math.round(Number(x.piggy_used || 0) * 100) / 100;
+        if (!(use > 0)) return;
+        if (String(x._piggyDeducted || '') === 'yes') return;
+        const list = (Array.isArray(RAW_PIGGY) ? RAW_PIGGY : []).filter(function (r) {
+          return r && _piggySameCn(r.cn, x.cn) && piggyRemain(r) > 0.004;
+        }).sort(function (a, b) { return String(a.created_at || '').localeCompare(String(b.created_at || '')); });
+        let left = use;
+        const touched = [];
+        for (let i = 0; i < list.length && left > 0.004; i++) {
+          const r = list[i];
+          const can = Math.min(piggyRemain(r), left);
+          touched.push({ r: r, used: Number(r.used || 0), log: Array.isArray(r.used_log) ? r.used_log.slice() : [] });
+          r.used = Math.round((Number(r.used || 0) + can) * 100) / 100;
+          if (!Array.isArray(r.used_log)) r.used_log = [];
+          r.used_log.push({ at: _nowCN, amount: Math.round(can * 100) / 100,
+                            note: '交款抵扣 ' + (Array.isArray(x.batch_names) ? x.batch_names.join('/') : (x.batch_names || '')) });
+          left = Math.round((left - can) * 100) / 100;
+        }
+        if (left > 0.004) {
+          touched.forEach(function (t) { t.r.used = t.used; t.r.used_log = t.log; });   // 回滚这一笔已扣的
+          _piggyShort++;
+          return;
+        }
+        touched.forEach(function (t) { _piggyPrev.push(t); });
+        x._piggyDeducted = 'yes';
+      });
+      if (_piggyShort > 0) {
+        _pPrev.forEach(function (r) {
+          r.p.status = r.status; r.p.reviewed_at = r.reviewed_at;
+          r.p.balance_due = r.balance_due; r.p.balance_paid_at = r.balance_paid_at;
+          r.p._piggyDeducted = '';
+        });
+        return showToast('❌ 有 ' + _piggyShort + ' 笔勾了「零钱罐抵扣」，但罐里余额不够了（可能刚被别处用掉）。请驳回让他重新提交，或到「算账中心 → 零钱罐」核对余额。');
+      }
+
       const bkey = _normBatchKey(proof.batch_key || (Array.isArray(proof.batch_names) ? proof.batch_names[0] : proof.batch_names));
       _cnPending.forEach(stopRef);
       RAW_PAY_PROOFS.forEach(function (p) {
@@ -4704,9 +4828,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
 
       let ok = await saveDataToSupabase();
       if (!ok) {
+        _piggyPrev.forEach(function (t) { t.r.used = t.used; t.r.used_log = t.log; });   // 💰 零钱罐扣减一起回滚
         _pPrev.forEach(function (r) {
           r.p.status = r.status; r.p.reviewed_at = r.reviewed_at;
           r.p.balance_due = r.balance_due; r.p.balance_paid_at = r.balance_paid_at;
+          r.p._piggyDeducted = '';
         });
         prevRefs.forEach(function (r) {
           r.obj.img_path = r.img_path; r.obj.purged_path = r.purged_path; r.obj.purged_at = r.purged_at;
@@ -4739,9 +4865,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           vok = ok2 && await _verifyPayApplied(vIds);
         }
         if (!vok) {
+          _piggyPrev.forEach(function (t) { t.r.used = t.used; t.r.used_log = t.log; });   // 💰 零钱罐扣减一起撤销
           _pPrev.forEach(function (r) {
             r.p.status = r.status; r.p.reviewed_at = r.reviewed_at;
             r.p.balance_due = r.balance_due; r.p.balance_paid_at = r.balance_paid_at;
+            r.p._piggyDeducted = '';
           });
           prevRefs.forEach(function (r) {
             r.obj.img_path = r.img_path; r.obj.purged_path = r.purged_path; r.obj.purged_at = r.purged_at;
@@ -7045,9 +7173,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         tbody.innerHTML = members.map((m, i) => {
           const st = String(m.status || '未交').trim();
           const stBadge = st === '已交' ? 'badge-status-已交' : (st === '免交' ? 'badge-status-custom' : 'badge-status-未付款');
-          const pmRaw = String(m.pay_method || '').trim();
-          const pmCls = pmRaw.indexOf('微信') >= 0 ? 'badge-pay-微信' : (pmRaw.indexOf('支付宝') >= 0 ? 'badge-pay-支付宝' : 'badge-pay-其他');
-          const pmHtml = pmRaw ? '<span class="badge ' + pmCls + '">' + escapeHtml(pmRaw) + '</span>' : '<span style="color:var(--text-muted);font-size:0.8rem;">—</span>';
+          const pmHtml = getPayMethodBadge(m.pay_method);   // 🐷 零钱罐等分类统一走这一个函数，别各处自己判
           let ops = '';
           if (st !== '已交') ops += '<button class="btn btn-success" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'已交\')">标已交</button> ';
           if (st !== '免交') ops += '<button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'免交\')">免交</button> ';
@@ -7905,9 +8031,10 @@ function pane(name){
   document.querySelectorAll('.tab-content#tabCalc .card.pane').forEach(function(x){x.classList.remove('active');});
   var t=document.getElementById('pane-'+name); if(t) t.classList.add('active');
   document.querySelectorAll('.tab-content#tabCalc .tabbar .tab-btn').forEach(function(b){b.classList.remove('active');});
-  var map={kanpei:'砍配',erdiao:'二调',export:'台账',refund:'退款补录',deposit:'定金设置'};
+  var map={kanpei:'砍配',erdiao:'二调',export:'台账',refund:'退款补录',deposit:'定金设置',piggy:'零钱罐'};
   if(name==='refund'&&typeof loadRefundList==='function') loadRefundList();
   if(name==='deposit'&&typeof renderBatchPlans==='function') renderBatchPlans();
+  if(name==='piggy'&&typeof renderPiggyBank==='function') renderPiggyBank();
   document.querySelectorAll('.tab-content#tabCalc .tabbar .tab-btn').forEach(function(b){ if(b.textContent.indexOf(map[name])>=0) b.classList.add('active'); });
 }
 function addOrderRow(){
@@ -8083,6 +8210,302 @@ async function runErdiao(){
   finally{ _unlock('erdiao'); }
 }
 function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); return saveDataToSupabase(); }
+    /* ============================================================
+       🐷 零钱罐（存肾）· 2026-10-14 团长需求
+       数据：image_data.piggy_bank（数组，一条 = 一笔团员存款）
+       状态机：待审核 ──通过──▶ 可用 ──(抵扣)──▶ 还是「可用」，余额动态算
+                          ──驳回──▶ 已驳回
+                          ──退回──▶ 已退回（同时往 refunds 表插一条，走现有退款流程）
+       余额(cn) = Σ(amount - used - refunded)，只算「可用」的。
+       ⚠️ 铁律：所有写入一律走 saveDataToSupabase()（内部带版本锁 + 合并分支），
+               绝不直接 update —— 直接写会被别人（团员/机器人）的整份回写盖掉。
+       ⚠️ _piggyNormCn() 必须与团员端 index.html 里的同名函数【逐字一致】。
+       ============================================================ */
+    const PIGGY_ST_PENDING = '待审核';
+    const PIGGY_ST_OK = '可用';
+    const PIGGY_ST_REJECT = '已驳回';
+    const PIGGY_ST_REFUND = '已退回';
+
+    /* 圈名归一化 —— 只用于「把同一个人认出来」：去 ❄ 之类装饰符、剥 _1992 后缀、忽略大小写与空格 */
+    function _piggyNormCn(s) {
+      return String(s == null ? '' : s)
+        .replace(/[\u2744\u2745\u2746\u273b\u273c\u273d\u273e\u273f]/g, '')
+        .replace(/_[0-9]+$/, '')
+        .replace(/\s+/g, '')
+        .toLowerCase();
+    }
+    function _piggySameCn(a, b) { return !!_piggyNormCn(a) && _piggyNormCn(a) === _piggyNormCn(b); }
+
+    /* 单条存款现在还剩多少可用（待审核 / 已驳回 / 已退回 = 0） */
+    function piggyRemain(rec) {
+      if (!rec) return 0;
+      const st = String(rec.status || '');
+      if (st === PIGGY_ST_PENDING || st === PIGGY_ST_REJECT || st === PIGGY_ST_REFUND) return 0;
+      const v = Number(rec.amount || 0) - Number(rec.used || 0) - Number(rec.refunded || 0);
+      return Math.round(Math.max(0, v) * 100) / 100;
+    }
+    /* 某人当前可用余额 */
+    function piggyBalanceOf(cn) {
+      let s = 0;
+      (Array.isArray(RAW_PIGGY) ? RAW_PIGGY : []).forEach(function (r) {
+        if (r && _piggySameCn(r.cn, cn)) s += piggyRemain(r);
+      });
+      return Math.round(s * 100) / 100;
+    }
+    function _piggyPendingCount() {
+      return (Array.isArray(RAW_PIGGY) ? RAW_PIGGY : []).filter(function (r) {
+        return String((r && r.status) || '') === PIGGY_ST_PENDING;
+      }).length;
+    }
+    window.piggyBalanceOf = piggyBalanceOf;
+    window._piggyPendingCount = _piggyPendingCount;
+
+    /* 一条存款的卡片（待审核区用） */
+    function _piggyCardHtml(r) {
+      const id = escapeHtml(String(r.id || ''));
+      const rawUrl = _payProofPublicUrl(r.img_path);
+      const thumb = rawUrl
+        ? '<img src="' + escapeHtml(sbImg(rawUrl)) + '" data-orig="' + escapeHtml(rawUrl) + '" onerror="imgFallback(this)" ' +
+          'onclick="window.open(this.src,\'_blank\')" style="width:132px;height:132px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in;background:#f1f5f9;" alt="存款截图" loading="lazy">'
+        : '<div style="width:132px;height:132px;border-radius:8px;border:1px solid var(--border);background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:0.72rem;color:var(--text-muted);">无截图</div>';
+      const amt = Number(r.amount || 0);
+      return '' +
+        '<div style="display:flex; gap:14px; align-items:flex-start; padding:12px; border:1px solid var(--border); border-radius:10px; background:#fff; margin-bottom:10px; flex-wrap:wrap;">' +
+          '<div style="flex:0 0 132px;">' + thumb + '</div>' +
+          '<div style="flex:1 1 260px; min-width:220px;">' +
+            '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+              '<strong style="font-size:0.95rem;">' + escapeHtml(r.cn || '(未填CN)') + '</strong>' +
+              '<span class="badge" style="background:#fef3c7; color:#a16207; border:1px solid #a1620744;">💰 待审核存款</span>' +
+            '</div>' +
+            '<div style="margin-top:6px; font-size:0.86rem; line-height:1.9; color:var(--text-muted);">' +
+              '金额：<b style="color:#b91c1c; font-size:1rem;">￥' + amt.toFixed(2) + '</b><br>' +
+              (r.note ? ('备注：' + escapeHtml(r.note) + '<br>') : '') +
+              '提交：' + escapeHtml(r.created_at || '') +
+            '</div>' +
+            '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">' +
+              '<button class="btn btn-primary" style="padding:6px 14px; font-size:0.85rem;" onclick="approvePiggyDeposit(\'' + id + '\')">✅ 确认到账·入罐</button>' +
+              '<button class="btn btn-danger" style="padding:6px 14px; font-size:0.85rem;" onclick="showPiggyRejectBox(\'' + id + '\')">❌ 驳回</button>' +
+            '</div>' +
+            '<div id="piggyRejectBox_' + id + '" style="display:none; margin-top:10px;">' +
+              '<input id="piggyRejectReason_' + id + '" placeholder="驳回原因（必填，团员能看到。例如：金额和截图对不上 / 没收到这笔钱）" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; box-sizing:border-box;">' +
+              '<div style="margin-top:6px; font-size:0.76rem; color:var(--text-muted); line-height:1.6;">⚠️ 这段话会原样显示给团员，系统不会替你编理由。</div>' +
+              '<div style="margin-top:8px; display:flex; gap:8px;">' +
+                '<button class="btn btn-danger" style="padding:5px 12px; font-size:0.82rem;" onclick="rejectPiggyDeposit(\'' + id + '\')">确认驳回</button>' +
+                '<button class="btn btn-secondary" style="padding:5px 12px; font-size:0.82rem;" onclick="hidePiggyRejectBox(\'' + id + '\')">取消</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+
+    function showPiggyRejectBox(id) {
+      const b = document.getElementById('piggyRejectBox_' + id);
+      if (b) { b.style.display = 'block'; const i = document.getElementById('piggyRejectReason_' + id); if (i) i.focus(); }
+    }
+    function hidePiggyRejectBox(id) {
+      const b = document.getElementById('piggyRejectBox_' + id);
+      if (b) b.style.display = 'none';
+    }
+    window.showPiggyRejectBox = showPiggyRejectBox;
+    window.hidePiggyRejectBox = hidePiggyRejectBox;
+
+    function _piggyFind(id) {
+      return (Array.isArray(RAW_PIGGY) ? RAW_PIGGY : []).filter(function (x) {
+        return String((x && x.id) || '') === String(id);
+      })[0] || null;
+    }
+
+    function renderPiggyBank() {
+      const pendEl = document.getElementById('piggyPendingList');
+      const balEl = document.getElementById('piggyBalanceList');
+      const allEl = document.getElementById('piggyAllList');
+      if (!pendEl && !balEl && !allEl) return;
+      const all = Array.isArray(RAW_PIGGY) ? RAW_PIGGY : [];
+
+      /* ── 待审核 ── */
+      const pend = all.filter(function (r) { return String((r && r.status) || '') === PIGGY_ST_PENDING; })
+        .sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
+      if (pendEl) {
+        pendEl.innerHTML = pend.length
+          ? pend.map(_piggyCardHtml).join('')
+          : '<div class="box" style="color:var(--text-muted);">暂时没有待审核的存款。团员在自查终端「我要存钱」提交后会出现在这里。</div>';
+      }
+
+      /* ── 各人余额一览 ── */
+      const byCn = {};
+      all.forEach(function (r) {
+        if (!r) return;
+        const k = _piggyNormCn(r.cn) || '\u0000none';
+        if (!byCn[k]) byCn[k] = { cn: r.cn || '(未填CN)', bal: 0, pend: 0, used: 0, refunded: 0, n: 0 };
+        const o = byCn[k];
+        o.bal += piggyRemain(r);
+        o.used += Number(r.used || 0);
+        o.refunded += Number(r.refunded || 0);
+        o.n++;
+        if (String(r.status || '') === PIGGY_ST_PENDING) o.pend += Number(r.amount || 0);
+      });
+      const list = Object.keys(byCn).map(function (k) { return byCn[k]; })
+        .filter(function (o) { return o.bal > 0.004 || o.pend > 0.004; })
+        .sort(function (a, b) { return b.bal - a.bal; });
+      if (balEl) {
+        if (!list.length) {
+          balEl.innerHTML = '<div class="box" style="color:var(--text-muted);">现在还没有人有余额。</div>';
+        } else {
+          let h = '<div style="overflow:auto; border:1px solid var(--line); border-radius:10px;">' +
+            '<table style="width:100%; font-size:13px; border-collapse:collapse;">' +
+            '<thead><tr style="background:#f1f5f9;">' +
+              '<th style="padding:7px; text-align:left;">团员</th>' +
+              '<th style="padding:7px;">可用余额</th><th style="padding:7px;">待审核</th>' +
+              '<th style="padding:7px;">已抵扣</th><th style="padding:7px;">已退回</th><th style="padding:7px;">笔数</th>' +
+            '</tr></thead><tbody>';
+          list.forEach(function (o) {
+            h += '<tr style="border-top:1px solid var(--line);">' +
+              '<td style="padding:7px; font-weight:600;">' + escapeHtml(o.cn) + '</td>' +
+              '<td style="padding:7px; text-align:center; font-weight:700; color:#15803d;">￥' + o.bal.toFixed(2) + '</td>' +
+              '<td style="padding:7px; text-align:center; color:#a16207;">' + (o.pend > 0.004 ? ('￥' + o.pend.toFixed(2)) : '—') + '</td>' +
+              '<td style="padding:7px; text-align:center; color:var(--text-muted);">' + (o.used > 0.004 ? ('￥' + o.used.toFixed(2)) : '—') + '</td>' +
+              '<td style="padding:7px; text-align:center; color:var(--text-muted);">' + (o.refunded > 0.004 ? ('￥' + o.refunded.toFixed(2)) : '—') + '</td>' +
+              '<td style="padding:7px; text-align:center; color:var(--text-muted);">' + o.n + '</td>' +
+            '</tr>';
+          });
+          h += '</tbody></table></div>';
+          const totalBal = list.reduce(function (s, o) { return s + o.bal; }, 0);
+          h += '<div style="margin-top:8px; font-size:0.82rem; color:var(--text-muted);">共 ' + list.length +
+               ' 人有余额，合计 <b style="color:#15803d;">￥' + totalBal.toFixed(2) + '</b>（这笔钱是你代管的，不是你的收入）</div>';
+          balEl.innerHTML = h;
+        }
+      }
+
+      /* ── 全部存入记录 ── */
+      if (allEl) {
+        const rows = all.slice().sort(function (a, b) {
+          return String((b && b.created_at) || '').localeCompare(String((a && a.created_at) || ''));
+        });
+        if (!rows.length) {
+          allEl.innerHTML = '<div class="box" style="color:var(--text-muted);">还没有任何存入记录。</div>';
+        } else {
+          let h = '<div style="overflow:auto; max-height:460px; border:1px solid var(--line); border-radius:10px;">' +
+            '<table style="width:100%; font-size:13px; border-collapse:collapse;">' +
+            '<thead><tr style="background:#f1f5f9;">' +
+              '<th style="padding:7px; text-align:left;">团员</th><th style="padding:7px;">金额</th>' +
+              '<th style="padding:7px;">状态</th><th style="padding:7px;">已抵/已退</th>' +
+              '<th style="padding:7px;">备注</th><th style="padding:7px;">提交时间</th><th style="padding:7px;">操作</th>' +
+            '</tr></thead><tbody>';
+          rows.forEach(function (r) {
+            const st = String(r.status || PIGGY_ST_PENDING);
+            const color = st === PIGGY_ST_OK ? '#15803d' : (st === PIGGY_ST_REJECT ? '#dc2626' : (st === PIGGY_ST_REFUND ? '#64748b' : '#a16207'));
+            const remain = piggyRemain(r);
+            const used = Number(r.used || 0), refunded = Number(r.refunded || 0);
+            const canRefund = remain > 0.004 && (st === PIGGY_ST_OK);
+            h += '<tr style="border-top:1px solid var(--line);">' +
+              '<td style="padding:7px; font-weight:600;">' + escapeHtml(r.cn || '(未填CN)') + '</td>' +
+              '<td style="padding:7px; text-align:center; font-weight:700;">￥' + Number(r.amount || 0).toFixed(2) + '</td>' +
+              '<td style="padding:7px; text-align:center; color:' + color + '; font-weight:600;">' + escapeHtml(st) +
+                (st === PIGGY_ST_OK && remain > 0.004 ? ('<br><span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">余 ￥' + remain.toFixed(2) + '</span>') : '') +
+              '</td>' +
+              '<td style="padding:7px; text-align:center; color:var(--text-muted); font-size:0.8rem;">' +
+                (used > 0.004 ? ('抵 ￥' + used.toFixed(2)) : '') + (used > 0.004 && refunded > 0.004 ? '<br>' : '') +
+                (refunded > 0.004 ? ('退 ￥' + refunded.toFixed(2)) : '') + ((used <= 0.004 && refunded <= 0.004) ? '—' : '') +
+              '</td>' +
+              '<td style="padding:7px; color:var(--text-muted); font-size:0.82rem;">' + escapeHtml(r.note || '') +
+                (st === PIGGY_ST_REJECT && r.reject_reason ? ('<br><span style="color:#dc2626;">驳回：' + escapeHtml(r.reject_reason) + '</span>') : '') +
+              '</td>' +
+              '<td style="padding:7px; color:var(--text-muted); font-size:0.78rem;">' + escapeHtml(r.created_at || '') + '</td>' +
+              '<td style="padding:7px; text-align:center;">' +
+                (canRefund ? '<button class="btn btn-secondary" style="padding:3px 9px; font-size:0.78rem;" onclick="refundPiggyDeposit(\'' + escapeHtml(String(r.id || '')) + '\')">↩️ 退回</button>' : '<span style="color:#cbd5e1; font-size:0.8rem;">—</span>') +
+              '</td>' +
+            '</tr>';
+          });
+          h += '</tbody></table></div>';
+          allEl.innerHTML = h;
+        }
+      }
+    }
+    window.renderPiggyBank = renderPiggyBank;
+
+    /* 审核通过：钱进罐（只改内存 + 走带版本锁的保存） */
+    async function approvePiggyDeposit(id) {
+      const r = _piggyFind(id);
+      if (!r) return showToast('找不到这条存款记录');
+      if (String(r.status || '') !== PIGGY_ST_PENDING) return showToast('这条已经处理过了');
+      const amt = Number(r.amount || 0);
+      if (!(amt > 0)) return showToast('金额不对，没法通过');
+      if (!confirm('确认收到「' + (r.cn || '') + '」的 ￥' + amt.toFixed(2) + ' 了吗？\n\n' +
+                   '· 通过后这笔钱进他的零钱罐\n' +
+                   '· 他交谷子费/运费时可以直接勾选「用零钱罐抵扣」\n' +
+                   '· 钱还没到账就别点 —— 可在「全部存入记录」里退回')) return;
+      const oldSt = r.status, oldAt = r.reviewed_at;
+      r.status = PIGGY_ST_OK;
+      r.reviewed_at = new Date().toLocaleString('zh-CN');
+      r.reject_reason = '';
+      const ok = await saveDataToSupabase();
+      if (!ok) { r.status = oldSt; r.reviewed_at = oldAt; showToast('❌ 保存失败，已回滚，请重试'); }
+      else showToast('✅ 已入罐 ￥' + amt.toFixed(2));
+      renderPiggyBank();
+    }
+    window.approvePiggyDeposit = approvePiggyDeposit;
+
+    /* 驳回：团员能看到原因 */
+    async function rejectPiggyDeposit(id) {
+      const r = _piggyFind(id);
+      if (!r) return showToast('找不到这条存款记录');
+      if (String(r.status || '') !== PIGGY_ST_PENDING) return showToast('这条已经处理过了');
+      const box = document.getElementById('piggyRejectReason_' + id);
+      const reason = box ? String(box.value || '').trim() : '';
+      if (!reason) return showToast('请填驳回原因（团员会看到）');
+      const oldSt = r.status, oldRs = r.reject_reason, oldAt = r.reviewed_at;
+      r.status = PIGGY_ST_REJECT;
+      r.reject_reason = reason;
+      r.reviewed_at = new Date().toLocaleString('zh-CN');
+      const ok = await saveDataToSupabase();
+      if (!ok) { r.status = oldSt; r.reject_reason = oldRs; r.reviewed_at = oldAt; showToast('❌ 保存失败，已回滚'); }
+      else showToast('已驳回');
+      renderPiggyBank();
+    }
+    window.rejectPiggyDeposit = rejectPiggyDeposit;
+
+    /* 退回：把这条还剩的钱退给团员 —— 往 refunds 表插一条（跟手动补录退款同一张表、同一套流程），
+       再把这条标成「已退回」。之后你照老办法（/通知退款 让他交收款码）把钱退给他。 */
+    async function refundPiggyDeposit(id) {
+      const r = _piggyFind(id);
+      if (!r) return showToast('找不到这条存款记录');
+      const remain = piggyRemain(r);
+      if (!(remain > 0)) return showToast('这条没有可退的余额');
+      const cn = String(r.cn || '').trim();
+      if (!cn) return showToast('这条没填圈名，退不了');
+      if (!confirm('把「' + cn + '」零钱罐里剩下的 ￥' + remain.toFixed(2) + ' 退给他？\n\n' +
+                   '会在退款表里生成一条「待退款」（退款类型 = 零钱罐退回），\n' +
+                   '之后跟其它退款一起处理（让他交收款码 → 你打款 → 后台批量标记已退）。')) return;
+      let qq = '';
+      try {
+        const bd = await supabaseClient.from('qq_bindings').select('qq_number').eq('buyer_cn', cn);
+        if (bd.data && bd.data.length) qq = String(bd.data[0].qq_number || '');
+      } catch (e) {}
+      try {
+        const row = {
+          query_key: CURRENT_QUERY_KEY, batch_name: '', order_type: '零钱罐退回',
+          member_qq: qq, member_cn: cn,
+          item_id: 'piggy_' + String(r.id || ''), item_name: '', role_id: '', role_name: cn,
+          original_price: 0, settled_price: 0,
+          kanpei_type: '零钱罐退回', kanpei_reason: '零钱罐余额退回',
+          refund_amount: Math.round(remain * 100) / 100, refund_status: '待退款', source: 'web'
+        };
+        const re = await supabaseClient.from('refunds').insert([row]);
+        if (re.error) throw new Error(re.error.message);
+      } catch (e) {
+        return showToast('❌ 写退款表失败：' + (e.message || e));
+      }
+      const oldRef = r.refunded, oldAt = r.refund_at;
+      r.refunded = Math.round((Number(r.refunded || 0) + remain) * 100) / 100;
+      r.refund_at = new Date().toLocaleString('zh-CN');
+      const ok = await saveDataToSupabase();
+      if (!ok) { r.refunded = oldRef; r.refund_at = oldAt; showToast('⚠️ 退款表已写入，但零钱罐状态没保存成功 —— 请点「🔄 重画列表」后重试（别重复退）'); }
+      else showToast('✅ 已生成待退款 ￥' + remain.toFixed(2) + '（在「退款补录」里能看到）');
+      renderPiggyBank();
+      if (typeof loadRefundList === 'function') loadRefundList();
+    }
+    window.refundPiggyDeposit = refundPiggyDeposit;
+
 async function saveManualRefund(){
   var cn=(document.getElementById('mr-cn').value||'').trim();
   var amt=Number(document.getElementById('mr-amt').value||0);
