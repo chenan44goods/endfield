@@ -1236,7 +1236,7 @@
           <div class="field">
             <label>转账截图 *</label>
             <input id="piggyFile" type="file" accept="image/*" style="display:none;" onchange="onPiggyFilePicked(this)">
-            <button type="button" onclick="var e=document.getElementById('piggyFile'); if(e) e.click();" style="padding:10px 16px; border-radius:9px; border:1px dashed rgba(33,33,33,0.3); background:rgba(33,33,33,0.03); color:var(--ink); font-size:13px; cursor:pointer; font-family:var(--sans);">📎 选择截图</button>
+            <button type="button" onclick="var e=document.getElementById('piggyFile'); if(e) e.click();" style="padding:11px 18px; border:1px dashed rgba(33,33,33,0.35); background:transparent; color:var(--ink); font-size:13px; cursor:pointer; font-family:var(--sans);">📎 选择截图</button>
             <div id="piggyPreview" style="margin-top:10px;"></div>
           </div>
           <div class="field">
@@ -2634,16 +2634,15 @@
       pend = Math.round(pend * 100) / 100;
       usedSum = Math.round(usedSum * 100) / 100;
       if (balEl) balEl.innerHTML =
-        // ⚠️ 10-14 晚团长反馈：整块品牌黄「太难看、跟页面不统一」→ 改回站内标准卡（近白底 + 细黑边 + 圆角），
-        //    品牌黄降级为「左侧 4px 竖条 + 标题前小圆点」的点缀（同 console-btn / net-node 的用法）。
-        '<div style="position:relative; overflow:hidden; background:rgba(250,250,246,0.94); border:1px solid rgba(33,33,33,0.22); border-radius:12px; padding:14px 16px; box-shadow:0 8px 20px -14px rgba(20,22,26,0.35);">' +
-          '<span style="position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--paper);"></span>' +
-          '<div style="font-size:11px; letter-spacing:0.18em; color:var(--muted); display:flex; align-items:center; gap:7px;">' +
-            '<span style="width:6px; height:6px; border-radius:50%; background:var(--paper); box-shadow:0 0 7px rgba(233,226,48,0.85); flex-shrink:0;"></span>' +
-            'PIGGY BANK · 当前可用余额' +
-          '</div>' +
-          '<div style="font-family:var(--serif); font-size:34px; font-weight:700; line-height:1.15; margin-top:4px; color:var(--ink);">￥' + bal.toFixed(2) + '</div>' +
-          '<div style="font-size:12px; color:var(--ink-soft); margin-top:7px; line-height:1.8;">' +
+        // 🎨 10-14 晚二次返工：团长「卡片还是难看，要像线稿一样干净简单」。
+        //    对齐站内既有的「线稿语言」（见 .field：label 小灰大写、输入框只留一条下划线、无底色无边框），
+        //    所以这里**彻底去掉盒子**——无底色 / 无边框 / 无圆角 / 无阴影 / 无竖条 / 无圆点，
+        //    只剩：小灰标题 + 大金额 + 一条细线 + 小灰说明。
+        '<div style="padding-top:2px;">' +
+          '<div style="font-size:11px; letter-spacing:0.2em; color:var(--muted); text-transform:uppercase;">PIGGY BANK · 当前可用余额</div>' +
+          '<div style="font-family:var(--serif); font-size:30px; font-weight:700; line-height:1.2; margin-top:5px; color:var(--ink);">￥' + bal.toFixed(2) + '</div>' +
+          '<div style="height:1px; background:rgba(33,33,33,0.32); margin:13px 0 11px;"></div>' +
+          '<div style="font-size:12px; color:var(--muted); line-height:1.9;">' +
             (pend > 0 ? ('⏳ 另有 ￥' + pend.toFixed(2) + ' 在等团长审核<br>') : '') +
             (usedSum > 0 ? ('已经用它抵扣过 ￥' + usedSum.toFixed(2) + ' 的费用') : '交谷子费 / 运费时可以直接用这里面的钱抵扣') +
           '</div>' +
@@ -2653,17 +2652,18 @@
       const rows = all.slice().sort(function(a, b){
         return String(b.created_at || '').localeCompare(String(a.created_at || ''));
       });
-      let h = '<div style="font-size:11.5px; letter-spacing:0.16em; color:var(--ink-soft); margin-bottom:8px;">存入记录</div>';
+      // 🎨 同上：记录不再是一堆小盒子，改成「细线分隔的列表」（同 .entry-line 的思路）—— 金额 + 状态一行、时间备注一行。
+      let h = '<div style="font-size:11px; letter-spacing:0.2em; color:var(--muted); text-transform:uppercase;">DEPOSITS · 存入记录</div>';
       rows.forEach(function(r){
         const st = String(r.status || PIGGY_ST_PENDING);
         const remain = piggyRemain(r);
         const color = st === PIGGY_ST_PENDING ? '#b45309' : (st === PIGGY_ST_OK ? '#15803d' : (st === PIGGY_ST_REJECT ? '#dc2626' : '#6b7280'));
-        h += '<div style="border:1px solid rgba(33,33,33,0.13); border-radius:10px; padding:10px 12px; margin-bottom:8px; background:rgba(250,250,250,0.7);">' +
+        h += '<div style="border-top:1px solid rgba(33,33,33,0.16); margin-top:14px; padding-top:14px;">' +
                '<div style="display:flex; justify-content:space-between; gap:10px; align-items:baseline;">' +
-                 '<span style="font-weight:700; font-size:15px;">￥' + Number(r.amount || 0).toFixed(2) + '</span>' +
-                 '<span style="font-size:11.5px; font-weight:700; color:' + color + ';">' + esc(st) + '</span>' +
+                 '<span style="font-family:var(--serif); font-size:17px; font-weight:700; color:var(--ink);">￥' + Number(r.amount || 0).toFixed(2) + '</span>' +
+                 '<span style="font-size:11px; font-weight:700; letter-spacing:0.06em; color:' + color + ';">' + esc(st) + '</span>' +
                '</div>' +
-               '<div style="font-size:11.5px; color:var(--ink-soft); margin-top:5px; line-height:1.75;">' +
+               '<div style="font-size:11.5px; color:var(--muted); margin-top:5px; line-height:1.8;">' +
                  (r.created_at ? esc(String(r.created_at)) : '') +
                  (r.note ? (' ｜ ' + esc(String(r.note))) : '') +
                  (Number(r.used || 0) > 0 ? ('<br>已抵扣 ￥' + Number(r.used).toFixed(2) + (remain > 0 ? ('，还剩 ￥' + remain.toFixed(2)) : '，已用完')) : '') +
