@@ -358,7 +358,21 @@
        改回与同列其它入口完全一致的灰白渐变；品牌黄只留在「右上角标」和名字后面的
        「零钱罐」小药丸上（呼应站内 --paper 一贯的用法：只做小面积点缀，不做大色块）。 */
     .entry-piggy .entry-icon::after { background: var(--paper); box-shadow: 0 0 9px rgba(233,226,48,0.9); }
-    .entry-piggy .entry-name { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    /* 🎨 10-14 晚三次返工：团长「又不是很明显了，搞明显一点」。
+       在一列长得一样的入口里给零钱罐一条**左侧品牌黄定位条**（线，不是盒子）+
+       名字放大一档 + 黄药丸，扫一眼就能找到。 */
+    .entry-piggy::before {
+      content: "";
+      position: absolute;
+      left: -18px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 5px;
+      height: 56%;
+      background: var(--paper);
+      box-shadow: 0 0 10px rgba(233,226,48,0.9);
+    }
+    .entry-piggy .entry-name { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 28px; }
     .entry-piggy .entry-badge {
       font-family: var(--sans);
       font-size: 11px;
@@ -2634,15 +2648,17 @@
       pend = Math.round(pend * 100) / 100;
       usedSum = Math.round(usedSum * 100) / 100;
       if (balEl) balEl.innerHTML =
-        // 🎨 10-14 晚二次返工：团长「卡片还是难看，要像线稿一样干净简单」。
-        //    对齐站内既有的「线稿语言」（见 .field：label 小灰大写、输入框只留一条下划线、无底色无边框），
-        //    所以这里**彻底去掉盒子**——无底色 / 无边框 / 无圆角 / 无阴影 / 无竖条 / 无圆点，
-        //    只剩：小灰标题 + 大金额 + 一条细线 + 小灰说明。
-        '<div style="padding-top:2px;">' +
-          '<div style="font-size:11px; letter-spacing:0.2em; color:var(--muted); text-transform:uppercase;">PIGGY BANK · 当前可用余额</div>' +
-          '<div style="font-family:var(--serif); font-size:30px; font-weight:700; line-height:1.2; margin-top:5px; color:var(--ink);">￥' + bal.toFixed(2) + '</div>' +
-          '<div style="height:1px; background:rgba(33,33,33,0.32); margin:13px 0 11px;"></div>' +
-          '<div style="font-size:12px; color:var(--muted); line-height:1.9;">' +
+        // 🎨 10-14 晚二次返工：团长「卡片还是难看，要像线稿一样干净简单」→ 去掉盒子（无底色/边框/圆角/阴影）。
+        // 🎨 10-14 晚三次返工：团长「又不是很明显了，搞明显一点」→ **在线稿语言里加重量**：
+        //    ① 左侧 5px 品牌黄定位条（线，不是盒子）② 金额 30px → 42px ③ 金额垫一道荧光笔黄
+        //    ④ 状态改成带底色的药丸。整体仍是「文字 + 线」，不回到盒子。
+        '<div style="border-left:5px solid var(--paper); padding:2px 0 2px 16px; margin:8px 0 2px;">' +
+          '<div style="font-size:11px; letter-spacing:0.2em; color:var(--ink-soft); text-transform:uppercase;">PIGGY BANK · 当前可用余额</div>' +
+          '<div style="margin-top:7px;">' +
+            '<span style="display:inline-block; font-family:var(--serif); font-size:42px; font-weight:700; line-height:1.1; color:var(--ink); padding-right:7px; background:linear-gradient(transparent 56%, rgba(254,254,44,0.8) 56%);">￥' + bal.toFixed(2) + '</span>' +
+          '</div>' +
+          '<div style="height:1px; background:rgba(33,33,33,0.32); margin:15px 0 12px;"></div>' +
+          '<div style="font-size:12.5px; color:var(--ink-soft); line-height:1.9;">' +
             (pend > 0 ? ('⏳ 另有 ￥' + pend.toFixed(2) + ' 在等团长审核<br>') : '') +
             (usedSum > 0 ? ('已经用它抵扣过 ￥' + usedSum.toFixed(2) + ' 的费用') : '交谷子费 / 运费时可以直接用这里面的钱抵扣') +
           '</div>' +
@@ -2652,18 +2668,20 @@
       const rows = all.slice().sort(function(a, b){
         return String(b.created_at || '').localeCompare(String(a.created_at || ''));
       });
-      // 🎨 同上：记录不再是一堆小盒子，改成「细线分隔的列表」（同 .entry-line 的思路）—— 金额 + 状态一行、时间备注一行。
-      let h = '<div style="font-size:11px; letter-spacing:0.2em; color:var(--muted); text-transform:uppercase;">DEPOSITS · 存入记录</div>';
+      // 🎨 同上：记录是「细线分隔的列表」；10-14 晚三次返工把状态改成**带底色的药丸**、金额放大到 19px，
+      //    这样一眼能扫出「哪笔可用、哪笔被驳回」。
+      let h = '<div style="font-size:11px; letter-spacing:0.2em; color:var(--ink-soft); text-transform:uppercase;">DEPOSITS · 存入记录</div>';
       rows.forEach(function(r){
         const st = String(r.status || PIGGY_ST_PENDING);
         const remain = piggyRemain(r);
         const color = st === PIGGY_ST_PENDING ? '#b45309' : (st === PIGGY_ST_OK ? '#15803d' : (st === PIGGY_ST_REJECT ? '#dc2626' : '#6b7280'));
+        const bg = st === PIGGY_ST_PENDING ? 'rgba(180,83,9,0.13)' : (st === PIGGY_ST_OK ? 'rgba(21,128,61,0.13)' : (st === PIGGY_ST_REJECT ? 'rgba(220,38,38,0.13)' : 'rgba(107,114,128,0.15)'));
         h += '<div style="border-top:1px solid rgba(33,33,33,0.16); margin-top:14px; padding-top:14px;">' +
-               '<div style="display:flex; justify-content:space-between; gap:10px; align-items:baseline;">' +
-                 '<span style="font-family:var(--serif); font-size:17px; font-weight:700; color:var(--ink);">￥' + Number(r.amount || 0).toFixed(2) + '</span>' +
-                 '<span style="font-size:11px; font-weight:700; letter-spacing:0.06em; color:' + color + ';">' + esc(st) + '</span>' +
+               '<div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">' +
+                 '<span style="font-family:var(--serif); font-size:19px; font-weight:700; color:var(--ink);">￥' + Number(r.amount || 0).toFixed(2) + '</span>' +
+                 '<span style="font-size:11.5px; font-weight:700; letter-spacing:0.06em; color:' + color + '; background:' + bg + '; border-radius:20px; padding:3px 11px; white-space:nowrap;">' + esc(st) + '</span>' +
                '</div>' +
-               '<div style="font-size:11.5px; color:var(--muted); margin-top:5px; line-height:1.8;">' +
+               '<div style="font-size:11.5px; color:var(--ink-soft); margin-top:6px; line-height:1.8;">' +
                  (r.created_at ? esc(String(r.created_at)) : '') +
                  (r.note ? (' ｜ ' + esc(String(r.note))) : '') +
                  (Number(r.used || 0) > 0 ? ('<br>已抵扣 ￥' + Number(r.used).toFixed(2) + (remain > 0 ? ('，还剩 ￥' + remain.toFixed(2)) : '，已用完')) : '') +
