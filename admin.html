@@ -2173,6 +2173,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     //    ⚠️ 键必须与团员端 index.html 的 _normBatch() 完全一致（两边函数逐字相同）
     let RAW_BATCH_PLANS = {};
     let LOGISTICS_DELETED_BATCHES = new Set();
+    // 🚀 排发申请（image_data.applications）的「本地脏标记 + 删除墓碑」。
+    //    2026-10-14 修复：applications 以前既没有脏标记、也没有墓碑 →
+    //    ① 另一份旧页面保存时，mergeById 是「我这边无条件优先」，
+    //       而谷子那侧有 MY_DIRTY 保护 → 出现「谷子已排发、申请却被冲回待处理」的错位；
+    //    ② 删除申请后一刷新就复活（并集把删掉的补回来）。
+    let APP_STATUS_DIRTY = new Set();   // 本次改过状态的申请 id（派发 / 回退）
+    let APP_DELETED_IDS = new Set();    // 本次删除的申请 id（墓碑，保存时 filter 掉）
     // 🗑 本次保存中「已删除的付款凭证 id」—— 真删需要它：
     //    保存冲突时会走 mergeById（并集合并），不加墓碑的话删掉的会被服务器旧数据合并回来。
     //    只活在一次保存过程里，保存成功即清空，不落库、不留痕。
@@ -2861,6 +2868,50 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return out;
     }
 
+    // 🚀 申请记录合并（比 mergeById 严格，专治 applications 的「状态错位」）：
+    //   ① 墓碑优先：本次明确删掉的一律不保留（否则并集会把删掉的复活）
+    //   ② 脏标记优先：本次改过状态的申请，用我这边的
+    //   ③ 其余一律用服务器最新版 —— 避免「另一份旧页面」把刚派发的申请冲回「待处理」
+    //   ④ 终态保护：「已完成」不可逆，任一侧已完成就保持已完成
+    function mergeApplications(mine, theirs, dirtyIds, deletedIds) {
+      const dirty = dirtyIds || new Set();
+      const deleted = deletedIds || new Set();
+      const theirMap = {};
+      (theirs || []).forEach(function (x) { if (x) theirMap[String(x.id)] = x; });
+      const out = [];
+      const seen = {};
+      (mine || []).forEach(function (x) {
+        if (!x) return;
+        const k = String(x.id);
+        if (deleted.has(k) || seen[k]) return;
+        seen[k] = true;
+        const t = theirMap[k];
+        if (!t || dirty.has(k)) { out.push(x); return; }
+        out.push(_mergeAppOne(x, t));
+      });
+      (theirs || []).forEach(function (x) {
+        if (!x) return;
+        const k = String(x.id);
+        if (deleted.has(k) || seen[k]) return;
+        seen[k] = true;
+        out.push(x);
+      });
+      return out;
+    }
+
+    // 单条申请合并：a = 我这边的，b = 服务器最新版
+    function _mergeAppOne(a, b) {
+      const sa = String((a && a.status) || '').trim();
+      const sb = String((b && b.status) || '').trim();
+      if (sa === '已完成' || sb === '已完成') {
+        const base = (sa === '已完成') ? a : b;   // 取已完成那份（字段更全）
+        const o = Object.assign({}, base);
+        o.status = '已完成';
+        return o;
+      }
+      return a;
+    }
+
     // 🗄️ 保存前与数据库归档区做并集合并，防止旧页面保存时覆盖归档数据
     async function _mergedArchivedItems() {
       try {
@@ -3001,11 +3052,15 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const MY_DELETED = new Set(DELETED_ITEM_IDS);
         const MY_PROOF_DELETED = new Set(PAY_PROOF_DELETED_IDS);
         const MY_LOGI_DELETED = new Set(LOGISTICS_DELETED_BATCHES);
+        const MY_APP_DIRTY = new Set(APP_STATUS_DIRTY);
+        const MY_APP_DELETED = new Set(APP_DELETED_IDS);
         const clearMine = function () {
           MY_DIRTY.forEach(function (x) { DIRTY_ITEM_IDS.delete(x); });
           MY_DELETED.forEach(function (x) { DELETED_ITEM_IDS.delete(x); });
           MY_PROOF_DELETED.forEach(function (x) { PAY_PROOF_DELETED_IDS.delete(x); });
           MY_LOGI_DELETED.forEach(function (x) { LOGISTICS_DELETED_BATCHES.delete(x); });
+          MY_APP_DIRTY.forEach(function (x) { APP_STATUS_DIRTY.delete(x); });
+          MY_APP_DELETED.forEach(function (x) { APP_DELETED_IDS.delete(x); });
         };
         const mergedArch = await _mergedArchivedItems();
         RAW_ARCHIVED = mergedArch;
@@ -3070,7 +3125,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               freshImg2.pay_proofs = mergeById(RAW_PAY_PROOFS, freshImg2.pay_proofs).filter(function (p) {
                 return !MY_PROOF_DELETED.has(String(p && p.id));
               });
-              freshImg2.applications = mergeById(RAW_APPLICATIONS, freshImg2.applications);
+              freshImg2.applications = mergeApplications(RAW_APPLICATIONS, freshImg2.applications, MY_APP_DIRTY, MY_APP_DELETED);
               freshImg2.transfer_logs = mergeById(RAW_LOGS, freshImg2.transfer_logs);
               freshImg2.feedback = mergeById(RAW_FEEDBACK, freshImg2.feedback);
               const retry = await supabaseClient.from('leader_data')
@@ -6292,6 +6347,65 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return html;
     }
 
+    // 🧹 找「状态错位」的申请：申请还是「待处理」，但它名下的谷子在排表里已经全部「已排发」。
+    //    这种申请会永久卡在待处理列表里（东西已寄出、申请却还挂着没办）。
+    //    ⚠️ 保守判据：只要有一条谷子找不到、或状态不是「已排发」，就不算错位。
+    function findMisalignedApps(apps) {
+      const byId = {};
+      (RAW_ITEMS || []).forEach(function (it) { byId[String(it.item_id || it.id)] = it; });
+      return (apps || []).filter(function (a) {
+        if (!a || String(a.status || '').trim() !== '待处理') return false;
+        const its = a.items || [];
+        if (!its.length) return false;
+        let found = 0;
+        for (let i = 0; i < its.length; i++) {
+          const h = byId[String(its[i].item_id || its[i].id)];
+          if (!h) return false;
+          if (String(h.status || '').trim() !== '已排发') return false;
+          found++;
+        }
+        return found > 0;
+      });
+    }
+
+    function _misalignedBannerHtml(mis) {
+      const names = {};
+      mis.forEach(function (a) { const cn = String(a.cn || ''); names[cn] = (names[cn] || 0) + 1; });
+      const list = Object.keys(names).map(function (k) { return escapeHtml(k) + ' ' + names[k] + ' 条'; }).join('、');
+      return '<div style="margin-bottom:12px; padding:10px 12px; border:1px solid #fcd34d; background:#fffbeb; border-radius:8px; font-size:0.84rem; color:#92400e;">'
+        + '<b>⚠️ 有 ' + mis.length + ' 条申请状态不一致</b><br>'
+        + '谷子已经「已排发」，申请却还留在待处理列表（' + list + '）。<br>'
+        + '<button class="btn btn-secondary" style="margin-top:8px; padding:3px 10px; font-size:0.78rem;" onclick="fixMisalignedApps()">🧹 一键整理</button>'
+        + '</div>';
+    }
+
+    // 🧹 一键整理：把「谷子已排发、申请还待处理」的申请归位成「已完成」。
+    //    只改申请状态，不动谷子、不动金额、不动凭证。
+    async function fixMisalignedApps() {
+      const mis = findMisalignedApps(RAW_APPLICATIONS);
+      if (!mis.length) { showToast('没有需要整理的申请'); return; }
+      const names = {};
+      mis.forEach(function (a) { const cn = String(a.cn || ''); names[cn] = (names[cn] || 0) + 1; });
+      const list = Object.keys(names).map(function (k) { return escapeHtml(k) + ' ' + names[k] + ' 条'; }).join('、');
+      _showDispatchModal('整理状态不一致的申请？',
+        '<div style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:0.86rem;">'
+        + '<div>以下 <b>' + mis.length + '</b> 条申请的谷子已经「已排发」，但申请还挂在「待处理」：</div>'
+        + '<div style="margin-top:6px; font-weight:700;">' + list + '</div>'
+        + '<div style="margin-top:8px; color:#166534;">整理后：这些申请标记为「已完成」并从待处理列表移出。<br><b>谷子状态不变、金额与凭证不受影响。</b></div>'
+        + '</div>', '确认整理', 'btn-success',
+        async () => {
+          mis.forEach(function (a) {
+            a.status = '已完成';
+            APP_STATUS_DIRTY.add(String(a.id));   // 🚀 标记本次改过，防止被旧页面冲回
+          });
+          await saveDataToSupabase();
+          renderDispatchWorkbench();
+          renderTable();
+          showToast('🧹 已整理 ' + mis.length + ' 条申请');
+        });
+    }
+    window.fixMisalignedApps = fixMisalignedApps;
+
     function renderDispatchWorkbench() {
       const pendingApps = RAW_APPLICATIONS.filter(a => a.status === '待处理');
       const completedApps = RAW_APPLICATIONS.filter(a => a.status === '已完成');
@@ -6312,7 +6426,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);">暂无记录</div>`;
         return;
       }
-      if (isPending) { container.innerHTML = renderPendingGrouped(pendingApps); return; }
+      if (isPending) {
+        const _mis = findMisalignedApps(pendingApps);
+        container.innerHTML = (_mis.length ? _misalignedBannerHtml(_mis) : '') + renderPendingGrouped(pendingApps);
+        return;
+      }
 
       let html = '';
       completedApps.forEach((app, appIndex) => {
@@ -6378,6 +6496,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const targetItemIds = new Set();
       apps.forEach(app => {
         app.status = '已完成';
+        APP_STATUS_DIRTY.add(String(app.id));   // 🚀 标记「本次改过状态」，防止被另一份旧页面冲回「待处理」
         (app.items || []).forEach(i => targetItemIds.add(String(i.item_id || i.id)));
       });
       RAW_ITEMS.forEach(item => {
@@ -6448,6 +6567,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           <div style="margin-top:8px; color:#991b1b;">删除后不可恢复，但谷子本身的状态不受影响。</div>
         </div>`, '确认删除', 'btn-danger',
         async () => {
+          APP_DELETED_IDS.add(String(app.id));   // 🗑️ 删除墓碑：否则并集合并会把删掉的申请复活
           RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
           await saveDataToSupabase(); renderDispatchWorkbench(); showToast('已删除这条申请');
         });
@@ -6539,6 +6659,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           <div style="margin-top:8px; color:#991b1b;">删除后不可恢复。</div>
         </div>`, '确认删除', 'btn-danger',
         async () => {
+          APP_DELETED_IDS.add(String(app.id));   // 🗑️ 删除墓碑：否则并集合并会把删掉的申请复活
           RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
           await saveDataToSupabase(); renderDispatchWorkbench(); showToast('已删除申请！');
         });
@@ -6551,6 +6672,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const targetItemIds = new Set((app.items || []).map(i => String(i.item_id || i.id)));
       targetItemIds.forEach(id => DELETED_ITEM_IDS.add(id));
       RAW_ITEMS = RAW_ITEMS.filter(item => !targetItemIds.has(String(item.item_id || item.id)));
+      APP_DELETED_IDS.add(String(app.id));   // 🗑️ 删除墓碑：否则并集合并会把删掉的申请复活
       RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
       await saveDataToSupabase(); updateBatchDropdownOptions(); renderDispatchWorkbench(); renderTable(); showToast('已彻底删除！');
     }
