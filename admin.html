@@ -8495,11 +8495,14 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
       } catch (e) {
         return showToast('❌ 写退款表失败：' + (e.message || e));
       }
-      const oldRef = r.refunded, oldAt = r.refund_at;
+      /* 🔴 必须把状态标成「已退回」（2026-10-14 修正：原代码只加 refunded 不改状态 →
+         团员端会显示成「可用 · 已抵扣，已用完」，看不出钱是团长退回来的）。 */
+      const oldRef = r.refunded, oldAt = r.refund_at, oldSt2 = r.status;
       r.refunded = Math.round((Number(r.refunded || 0) + remain) * 100) / 100;
       r.refund_at = new Date().toLocaleString('zh-CN');
+      r.status = PIGGY_ST_REFUND;
       const ok = await saveDataToSupabase();
-      if (!ok) { r.refunded = oldRef; r.refund_at = oldAt; showToast('⚠️ 退款表已写入，但零钱罐状态没保存成功 —— 请点「🔄 重画列表」后重试（别重复退）'); }
+      if (!ok) { r.refunded = oldRef; r.refund_at = oldAt; r.status = oldSt2; showToast('⚠️ 退款表已写入，但零钱罐状态没保存成功 —— 请点「🔄 重画列表」后重试（别重复退）'); }
       else showToast('✅ 已生成待退款 ￥' + remain.toFixed(2) + '（在「退款补录」里能看到）');
       renderPiggyBank();
       if (typeof loadRefundList === 'function') loadRefundList();

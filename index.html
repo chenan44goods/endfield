@@ -2669,6 +2669,7 @@
                  (r.created_at ? esc(String(r.created_at)) : '') +
                  (r.note ? (' ｜ ' + esc(String(r.note))) : '') +
                  (Number(r.used || 0) > 0 ? ('<br>已抵扣 ￥' + Number(r.used).toFixed(2) + (remain > 0 ? ('，还剩 ￥' + remain.toFixed(2)) : '，已用完')) : '') +
+                 (st === PIGGY_ST_REFUND && Number(r.refunded || 0) > 0 ? ('<br>已退回 ￥' + Number(r.refunded).toFixed(2) + '，这笔钱不在罐里了') : '') +
                  (st === PIGGY_ST_REJECT && r.reject_reason ? ('<br>驳回原因：' + esc(String(r.reject_reason))) : '') +
                '</div>' +
              '</div>';
