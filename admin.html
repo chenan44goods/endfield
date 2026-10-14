@@ -16,8 +16,18 @@
   })();
   </script>
   <title>山团团管理组 · 团长后台管理系统（试用版）</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- 📦 改自托管（2026-10-14）：cdn.jsdelivr.net 在国内连不上 → supabase is not defined → 后台打不开。
+       改走自己站点同源文件（vendor/），彻底不依赖外部 CDN；万一本地文件缺失再兜底回 unpkg。 -->
+  <script src="./vendor/supabase-js.js"></script>
+  <script src="./vendor/xlsx.full.min.js"></script>
+  <script>
+  if (typeof window.supabase === 'undefined') {
+    document.write('<script src="https://unpkg.com/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"><\/script>');
+  }
+  if (typeof window.XLSX === 'undefined') {
+    document.write('<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>');
+  }
+  </script>
   
 <style>
 /* ═══════════════════════════════════════════════════════════
