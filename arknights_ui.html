@@ -4588,6 +4588,20 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const nowStr = new Date().toLocaleString('zh-CN');
       let intlPrev = [];   // 国际条目改动前的值：保存失败必须回滚，否则重试会被误判成「已经改过」
 
+      /* 🐷 用零钱罐抵扣的订单，支付方式该怎么记（2026-10-15 团长口径）：
+           · 全额罐抵（没另外转账）→ 「零钱罐」
+           · 罐抵一部分 + 另转一部分 → 「零钱罐 + 微信」（保留团员选的那个方式）
+         凭证上的 amount 是**整笔应付**、piggy_used 是其中罐抵的部分
+         （见团员端 index.html 2342-2344 注释）。piggy_used=0 时行为与以前完全一致。 */
+      function _payMethodWithPiggy(pf) {
+        const base = String((pf && pf.pay_method) || '').trim();
+        const use = Math.round(Number((pf && pf.piggy_used) || 0) * 100) / 100;
+        if (!(use > 0)) return base;
+        const gross = Math.round(Number((pf && pf.amount) || 0) * 100) / 100;
+        if (gross > 0 && use >= gross - 0.005) return '零钱罐';
+        return base ? ('零钱罐 + ' + base) : '零钱罐';
+      }
+
       // —— 普通订单：改动 / 回滚（保存失败、落库校验不过时用得上）——
       const ordPrev = [];      // 改动前的值（按 id 去重）
       const ordPrevSeen = {};
@@ -4608,7 +4622,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               ordPrev.push({ iid: iid, it: it, status: it.status,
                              pay_method: it.pay_method, paid_at: it.paid_at });
             }
-            it.pay_method = proof.pay_method || '';
+            it.pay_method = _payMethodWithPiggy(proof);
             it.paid_at = it.paid_at || nowStr;
             DIRTY_ITEM_IDS.add(iid);
             return 'filled';
@@ -4621,7 +4635,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
                          pay_method: it.pay_method, paid_at: it.paid_at });
         }
         it.status = _targetStatus;
-        it.pay_method = proof.pay_method || '';
+        it.pay_method = _payMethodWithPiggy(proof);
         it.paid_at = nowStr;
         DIRTY_ITEM_IDS.add(iid);
         return true;
@@ -4660,7 +4674,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               intlPrev.push({ m: m, status: m.status, pay_method: m.pay_method,
                               paid_at: m.paid_at, amount_paid: m.amount_paid });
               m.status = '已交';
-              m.pay_method = proof.pay_method || '';
+              m.pay_method = _payMethodWithPiggy(proof);
               m.paid_at = nowStr;
               m.amount_paid = Number(m.amount_due) || 0;
               changed++;
@@ -8354,9 +8368,12 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
           let h = '<div style="overflow:auto; border:1px solid var(--line); border-radius:10px;">' +
             '<table style="width:100%; font-size:13px; border-collapse:collapse;">' +
             '<thead><tr style="background:#f1f5f9;">' +
+              /* ⚠️ 每个 th 必须显式写 text-align，与下面 td 一致 ——
+                 全局 `table{text-align:left}` 会让 th 继承左对齐，而数据 td 是居中的，
+                 结果表头永远"飘"在列左侧、跟数字对不上（2026-10-15 团长报）。 */
               '<th style="padding:7px; text-align:left;">团员</th>' +
-              '<th style="padding:7px;">可用余额</th><th style="padding:7px;">待审核</th>' +
-              '<th style="padding:7px;">已抵扣</th><th style="padding:7px;">已退回</th><th style="padding:7px;">笔数</th>' +
+              '<th style="padding:7px; text-align:center;">可用余额</th><th style="padding:7px; text-align:center;">待审核</th>' +
+              '<th style="padding:7px; text-align:center;">已抵扣</th><th style="padding:7px; text-align:center;">已退回</th><th style="padding:7px; text-align:center;">笔数</th>' +
             '</tr></thead><tbody>';
           list.forEach(function (o) {
             h += '<tr style="border-top:1px solid var(--line);">' +
@@ -8387,21 +8404,29 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
           let h = '<div style="overflow:auto; max-height:460px; border:1px solid var(--line); border-radius:10px;">' +
             '<table style="width:100%; font-size:13px; border-collapse:collapse;">' +
             '<thead><tr style="background:#f1f5f9;">' +
-              '<th style="padding:7px; text-align:left;">团员</th><th style="padding:7px;">金额</th>' +
-              '<th style="padding:7px;">状态</th><th style="padding:7px;">已抵/已退</th>' +
-              '<th style="padding:7px;">备注</th><th style="padding:7px;">提交时间</th><th style="padding:7px;">操作</th>' +
+              '<th style="padding:7px; text-align:left;">团员</th><th style="padding:7px; text-align:center;">金额</th>' +
+              '<th style="padding:7px; text-align:center;">状态</th><th style="padding:7px; text-align:center;">已抵/已退</th>' +
+              '<th style="padding:7px; text-align:left;">备注</th><th style="padding:7px; text-align:center;">提交时间</th><th style="padding:7px; text-align:center;">操作</th>' +
             '</tr></thead><tbody>';
           rows.forEach(function (r) {
             const st = String(r.status || PIGGY_ST_PENDING);
-            const color = st === PIGGY_ST_OK ? '#15803d' : (st === PIGGY_ST_REJECT ? '#dc2626' : (st === PIGGY_ST_REFUND ? '#64748b' : '#a16207'));
             const remain = piggyRemain(r);
             const used = Number(r.used || 0), refunded = Number(r.refunded || 0);
+            /* 💰 2026-10-15 团长口径：钱被抵扣光了就别再写「可用」（会让人以为还能花）。
+               用光 → 红字「已抵 ￥50.00」；没用光 → 绿字「可用」+ 小字「已抵 ￥30 · 余 ￥20」。 */
+            const spentOut = (st === PIGGY_ST_OK) && remain <= 0.004 && used > 0.004;
+            const color = spentOut ? '#dc2626'
+              : (st === PIGGY_ST_OK ? '#15803d' : (st === PIGGY_ST_REJECT ? '#dc2626' : (st === PIGGY_ST_REFUND ? '#64748b' : '#a16207')));
+            const stLabel = spentOut ? ('已抵 ￥' + used.toFixed(2)) : st;
+            const stSub = (st === PIGGY_ST_OK && !spentOut && remain > 0.004)
+              ? ('<br><span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">' +
+                 (used > 0.004 ? ('已抵 ￥' + used.toFixed(2) + ' · ') : '') + '余 ￥' + remain.toFixed(2) + '</span>')
+              : '';
             const canRefund = remain > 0.004 && (st === PIGGY_ST_OK);
             h += '<tr style="border-top:1px solid var(--line);">' +
               '<td style="padding:7px; font-weight:600;">' + escapeHtml(r.cn || '(未填CN)') + '</td>' +
               '<td style="padding:7px; text-align:center; font-weight:700;">￥' + Number(r.amount || 0).toFixed(2) + '</td>' +
-              '<td style="padding:7px; text-align:center; color:' + color + '; font-weight:600;">' + escapeHtml(st) +
-                (st === PIGGY_ST_OK && remain > 0.004 ? ('<br><span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">余 ￥' + remain.toFixed(2) + '</span>') : '') +
+              '<td style="padding:7px; text-align:center; color:' + color + '; font-weight:600;">' + escapeHtml(stLabel) + stSub +
               '</td>' +
               '<td style="padding:7px; text-align:center; color:var(--text-muted); font-size:0.8rem;">' +
                 (used > 0.004 ? ('抵 ￥' + used.toFixed(2)) : '') + (used > 0.004 && refunded > 0.004 ? '<br>' : '') +
@@ -8410,7 +8435,7 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
               '<td style="padding:7px; color:var(--text-muted); font-size:0.82rem;">' + escapeHtml(r.note || '') +
                 (st === PIGGY_ST_REJECT && r.reject_reason ? ('<br><span style="color:#dc2626;">驳回：' + escapeHtml(r.reject_reason) + '</span>') : '') +
               '</td>' +
-              '<td style="padding:7px; color:var(--text-muted); font-size:0.78rem;">' + escapeHtml(r.created_at || '') + '</td>' +
+              '<td style="padding:7px; text-align:center; color:var(--text-muted); font-size:0.78rem;">' + escapeHtml(r.created_at || '') + '</td>' +
               '<td style="padding:7px; text-align:center;">' +
                 (canRefund ? '<button class="btn btn-secondary" style="padding:3px 9px; font-size:0.78rem;" onclick="refundPiggyDeposit(\'' + escapeHtml(String(r.id || '')) + '\')">↩️ 退回</button>' : '<span style="color:#cbd5e1; font-size:0.8rem;">—</span>') +
               '</td>' +
