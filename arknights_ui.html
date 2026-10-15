@@ -1407,6 +1407,10 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           </datalist>
         </div>
 
+        <div style="font-size:0.78rem; color:var(--text-muted); margin:8px 0 2px;">
+          💡 <b>单击这一行的任意位置即可勾选</b>（勾上整行变绿）；<b>双击任意位置直接进编辑</b>。不想双击的话，最右边的「编辑 / 转单」按钮照旧能用。
+        </div>
+
         <!-- 桌面端表格视图 -->
         <div class="table-container desktop-table-view">
           <table>
@@ -5141,8 +5145,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const orderPlatformTd = orderPlatformStr ? escapeHtml(orderPlatformStr) : '<span style="color:#cbd5e1;">—</span>';
 
         html += `
-          <tr>
-            <td><input type="checkbox" class="item-checkbox" value="${index}"></td>
+          <tr class="itemRow" style="cursor:pointer;" onclick="itemRowClick(event, ${index})" ondblclick="itemRowDblClick(event, ${index})">
+            <td><input type="checkbox" class="item-checkbox" value="${index}" onclick="itemPaintFromCb(this)"></td>
             <td>${imgTag}</td>
             <td style="font-weight:600;">${escapeHtml(item.name)}</td>
             <td><strong>${escapeHtml(item.cn)}</strong></td>
@@ -5163,10 +5167,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         `;
 
         cardsHtml += `
-          <div class="admin-card-mobile">
+          <div class="admin-card-mobile itemRow" style="cursor:pointer;" onclick="itemRowClick(event, ${index})">
             <div class="admin-card-mobile-header">
               <div style="display:flex; align-items:center; gap:6px;">
-                <input type="checkbox" class="item-checkbox" value="${index}">
+                <input type="checkbox" class="item-checkbox" value="${index}" onclick="itemPaintFromCb(this)">
                 <span class="badge badge-batch">${escapeHtml(batchStr)}</span>
                 <span class="badge badge-country">${escapeHtml(countryStr)}</span>
               </div>
@@ -5377,8 +5381,70 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
     window.transferSingleByIndex = transferSingleByIndex;
 
+    /* ═══════════════════════════════════════════════════════════════════
+       🗂 排表管理 · 谷子明细：单击选中 / 双击编辑（2026-10-16 团长要求）
+       「不用只能戳那个小方框」。桌面端整行、手机端整张卡片都能点。
+       ⚠️ 双击＝两次单击＝勾选被翻两次＝**回到原样**，所以双击进编辑时不会顺手把
+          这一行选上（这正是我们要的：双击是"编辑"，不是"选中"）。
+       ⚠️ 必须让开三类控件的点击：勾选框自己（浏览器已切过一次，再切就白切）、
+          「编辑 / 转单」按钮、卡片上的链接。
+       ═══════════════════════════════════════════════════════════════════ */
+    function _itemHitControl(t, box) {
+      /* 从点击目标往上找，碰到按钮/链接/勾选框就算"点在控件上"（用循环不用 closest，兼容性稳） */
+      let n = t;
+      while (n && n !== box) {
+        const tag = String(n.tagName || '').toLowerCase();
+        if (tag === 'button' || tag === 'a' || tag === 'input') return true;
+        n = n.parentNode;
+      }
+      return false;
+    }
+
+    function _itemBoxOf(cb) {
+      /* 勾选框所在的那"一条"：桌面端是 <tr>，手机端是 .admin-card-mobile */
+      let n = cb;
+      while (n && n.tagName) {
+        if (n.tagName === 'TR') return n;
+        if (n.classList && n.classList.contains('admin-card-mobile')) return n;
+        n = n.parentNode;
+      }
+      return cb ? cb.parentNode : null;
+    }
+
+    function itemPaintBox(box) {
+      if (!box || !box.querySelector) return;
+      const cb = box.querySelector('.item-checkbox');
+      if (!cb) return;
+      box.style.background = cb.checked ? 'rgba(21,128,61,0.09)' : '';
+    }
+
+    function itemPaintFromCb(cb) { itemPaintBox(_itemBoxOf(cb)); }
+
+    function itemRowClick(ev, idx) {
+      const box = ev && ev.currentTarget;
+      if (!box) return;
+      if (_itemHitControl(ev.target, box)) return;   /* 控件自己的点击不抢 */
+      const cb = box.querySelector('.item-checkbox');
+      if (!cb) return;
+      cb.checked = !cb.checked;
+      itemPaintBox(box);
+    }
+
+    function itemRowDblClick(ev, idx) {
+      const box = ev && ev.currentTarget;
+      if (_itemHitControl(ev.target, box)) return;
+      editItemByIndex(idx);
+    }
+
+    window.itemRowClick = itemRowClick;
+    window.itemRowDblClick = itemRowDblClick;
+    window.itemPaintFromCb = itemPaintFromCb;
+
     function toggleSelectAll(master) {
-      document.querySelectorAll('.item-checkbox').forEach(cb => cb.checked = master.checked);
+      document.querySelectorAll('.item-checkbox').forEach(cb => {
+        cb.checked = master.checked;
+        itemPaintFromCb(cb);   /* 全选也要整行变绿，否则只有勾、没有底色 */
+      });
     }
     window.toggleSelectAll = toggleSelectAll;
 
