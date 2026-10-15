@@ -1996,12 +1996,17 @@ cn 点数 金额
       </div>
       <button class="btn btn-primary" style="margin-top:12px;" onclick="saveManualRefund()">💾 补录退款并写入</button>
       <pre id="mrOut" class="box" style="margin-top:10px;"></pre>
-      <h3 style="margin-top:22px;">📋 已录入的退款记录</h3>
-      <p style="font-size:0.78rem;color:var(--text-muted);">勾选后点“批量标记已退”，表示这几笔已退款给团员（批量退款）。</p>
+      <h3 style="margin-top:22px;">📋 待退款记录（收款码已就位）</h3>
+      <p style="font-size:0.78rem;color:var(--text-muted);">
+        点开小图看收款码大图 → 手机扫码打款 → 勾上这一行 → 最后点「批量标记已退」。
+        <b>已退的记录不再显示在这里</b>（鼠标扫过一遍没勾的，就是还没退的）。
+      </p>
+      <div id="refStats" style="font-size:0.82rem; line-height:1.95; margin-bottom:10px; color:var(--text-muted);">统计加载中…</div>
       <button class="btn btn-primary" style="margin-bottom:8px;" onclick="batchMarkRefunded()">✅ 批量标记已退</button>
-      <div style="overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:10px;">
+      <button class="btn btn-secondary" style="margin-bottom:8px; margin-left:6px;" onclick="loadRefundList()">🔄 重画列表</button>
+      <div style="overflow:auto;max-height:560px;border:1px solid var(--line);border-radius:10px;">
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
-          <thead><tr style="background:#f1f5f9;"><th style="width:36px;padding:6px;"><input type="checkbox" id="refAll" onclick="toggleAllRef()"></th><th style="padding:6px;text-align:left;">团员CN</th><th style="padding:6px;">金额</th><th style="padding:6px;">类型</th><th style="padding:6px;">原因</th><th style="padding:6px;">状态</th><th style="padding:6px;">录于</th></tr></thead>
+          <thead><tr style="background:#f1f5f9;"><th style="width:36px;padding:6px;text-align:center;"><input type="checkbox" id="refAll" onclick="toggleAllRef()"></th><th style="padding:6px;text-align:left;">团员CN</th><th style="padding:6px;text-align:center;">金额</th><th style="padding:6px;text-align:center;">收款码</th><th style="padding:6px;text-align:center;">类型</th><th style="padding:6px;text-align:center;">原因</th><th style="padding:6px;text-align:center;">录于</th></tr></thead>
           <tbody id="refRows"><tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:12px;">加载中…</td></tr></tbody>
         </table>
       </div>
@@ -8552,22 +8557,120 @@ async function saveManualRefund(){
     showToast('退款已补录'); await loadRefundList(); }catch(err){ out.textContent='❌ '+err.message; }
 }
 function _rc_esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];}); }
+/* ═══════════════════════════════════════════════════════════════════════
+   💰 待退款记录 + 收款码（2026-10-15 团长需求）
+   团长要「一路扫过去」：在退款记录里直接看到团员交的收款码，扫一笔勾一笔。
+   收款码不在 refunds 表里 —— 它由机器人上传到公开桶 pay-qr，对象名
+   refund_<退款记录id>_<32位随机>.<ext>（随机段不可枚举＝老红线；id 段用来对回记录）。
+   所以这里先 list 一次桶，建「记录id → 对象名」映射，再渲染。同一个 id 重复交过码的，
+   取 updated_at 最新的那张。
+   ⚠️ 桶读不到时**绝不能显示成「未提交」** —— 那会骗团长，让他以为团员没交码。
+   ═══════════════════════════════════════════════════════════════════════ */
+var REF_QR_MAP = {};      // '28' -> {name, t}
+var REF_QR_OK = false;    // 桶列表是否真的读到了（false 时表格显示「读取失败」而不是「未提交」）
+var REF_LIST_CACHE = [];  // 当前待退款行（点开/收起时复用，不重新请求）
+var REF_OPEN_ID = null;   // 当前展开了哪一条
+
+function _refQrDirect(name){ return SUPABASE_DIRECT + '/storage/v1/object/public/pay-qr/' + name; }
+
+async function _refLoadQrMap(){
+  REF_QR_MAP = {}; REF_QR_OK = false;
+  try{
+    var re = await supabaseClient.storage.from('pay-qr').list('', { limit: 1000 });
+    if (re && re.error) throw new Error(re.error.message || 'list 失败');
+    var arr = (re && re.data) || [];
+    arr.forEach(function(o){
+      var m = /^refund_(\d+)_/.exec(String((o && o.name) || ''));
+      if (!m) return;
+      var id = m[1], t = String((o && (o.updated_at || o.created_at)) || '');
+      if (!REF_QR_MAP[id] || t > REF_QR_MAP[id].t) REF_QR_MAP[id] = { name: o.name, t: t };
+    });
+    REF_QR_OK = true;
+  }catch(e){ REF_QR_OK = false; }
+  return REF_QR_MAP;
+}
+
+function refToggleQr(id){
+  id = String(id);
+  REF_OPEN_ID = (String(REF_OPEN_ID) === id) ? null : id;
+  _refRenderRows();
+}
+
+function _refBigRow(r, q){
+  var amt = Number(r.refund_amount || 0).toFixed(2);
+  return '<tr><td colspan="7" style="padding:14px; background:#f8fafc; border-top:1px dashed var(--line);">' +
+    '<div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">' +
+      '<img src="' + escapeHtml(sbImg(_refQrDirect(q.name))) + '" data-orig="' + escapeHtml(_refQrDirect(q.name)) + '" ' +
+        'onerror="imgFallback(this)" alt="收款码" ' +
+        'style="width:340px; max-width:46vw; background:#fff; border:1px solid var(--line); border-radius:10px;">' +
+      '<div style="font-size:0.88rem; line-height:2.05;">' +
+        '<div style="font-weight:700; font-size:1.1rem;">' + _rc_esc(r.member_cn || '') + '</div>' +
+        '<div>应退 <b style="font-size:1.35rem; color:#b45309;">￥' + amt + '</b></div>' +
+        '<div style="color:var(--text-muted);">' + _rc_esc(r.kanpei_type || '') + (r.kanpei_reason ? (' · ' + _rc_esc(r.kanpei_reason)) : '') + '</div>' +
+        '<div style="color:var(--text-muted); font-size:0.8rem;">手机扫码 → 转 ￥' + amt + ' → 回来勾上左边那格</div>' +
+        '<button class="btn btn-secondary" style="margin-top:8px;" onclick="refToggleQr(\'' + String(r.id) + '\')">收起</button>' +
+      '</div>' +
+    '</div></td></tr>';
+}
+
+function _refRenderRows(){
+  var tb = document.getElementById('refRows'); if (!tb) return;
+  var rows = REF_LIST_CACHE || [];
+  if (!rows.length){ tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:12px;">没有待退款的记录了 🎉</td></tr>'; return; }
+  tb.innerHTML = rows.map(function(r){
+    var id = String(r.id), q = REF_QR_MAP[id], cell;
+    if (!REF_QR_OK){
+      cell = '<span style="color:#dc2626; font-size:0.78rem;">读取失败</span>';
+    } else if (q){
+      cell = '<img src="' + escapeHtml(sbImg(_refQrDirect(q.name))) + '" data-orig="' + escapeHtml(_refQrDirect(q.name)) + '" ' +
+             'onerror="imgFallback(this)" title="点一下看大图" onclick="refToggleQr(\'' + id + '\')" ' +
+             'style="width:90px;height:90px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px;cursor:zoom-in;display:block;margin:0 auto;">' +
+             '<div style="font-size:10px;color:var(--text-muted);text-align:center;margin-top:2px;">点开看大图</div>';
+    } else {
+      cell = '<span style="color:#cbd5e1; font-size:0.78rem;">未提交</span>';
+    }
+    var tr = '<tr style="border-top:1px solid var(--line);">' +
+      '<td style="text-align:center;padding:6px;"><input type="checkbox" class="refChk" data-id="' + escapeHtml(id) + '"></td>' +
+      '<td style="padding:6px;">' + _rc_esc(r.member_cn || '') + '</td>' +
+      '<td style="padding:6px;text-align:center;font-weight:700;">¥' + Number(r.refund_amount || 0).toFixed(2) + '</td>' +
+      '<td style="padding:6px;text-align:center;">' + cell + '</td>' +
+      '<td style="padding:6px;text-align:center;">' + _rc_esc(r.kanpei_type || '') + '</td>' +
+      '<td style="padding:6px;text-align:center;">' + _rc_esc(r.kanpei_reason || '') + '</td>' +
+      '<td style="padding:6px;text-align:center;font-size:11px;color:var(--text-muted);">' + _rc_esc((r.created_at || '').slice(0, 10)) + '</td></tr>';
+    if (REF_OPEN_ID === id && q && REF_QR_OK) tr += _refBigRow(r, q);
+    return tr;
+  }).join('');
+}
+
 async function loadRefundList(){
   var tb=document.getElementById('refRows'); if(!tb) return;
   var msg=document.getElementById('refListMsg'); if(msg) msg.textContent='加载中…';
+  var stat=document.getElementById('refStats');
+  REF_OPEN_ID=null;
   try{
-    var re=await supabaseClient.from('refunds').select('id,member_cn,refund_amount,kanpei_type,kanpei_reason,refund_status,created_at').order('id',{ascending:false});
+    await _refLoadQrMap();
+    var re=await supabaseClient.from('refunds').select('id,member_cn,refund_amount,kanpei_type,kanpei_reason,refund_status,created_at').order('id',{ascending:false}).limit(500);
     if(re.error) throw new Error(re.error.message);
-    var rows=re.data||[];
-    if(!rows.length){ tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:12px;">暂无退款记录，可先补录一笔</td></tr>'; if(msg) msg.textContent=''; return; }
-    tb.innerHTML=rows.map(function(r){
-      var st=r.refund_status==='已退'?'<span style="color:#15803d;font-weight:600;">已退</span>':'<span style="color:#b45309;font-weight:600;">待退款</span>';
-      return '<tr><td style="text-align:center;padding:6px;"><input type="checkbox" class="refChk" data-id="'+r.id+'"></td>'+
-        '<td style="padding:6px;">'+_rc_esc(r.member_cn||'')+'</td><td style="padding:6px;text-align:right;">¥'+r.refund_amount+'</td>'+
-        '<td style="padding:6px;">'+_rc_esc(r.kanpei_type||'')+'</td><td style="padding:6px;">'+_rc_esc(r.kanpei_reason||'')+'</td><td style="padding:6px;">'+st+'</td>'+
-        '<td style="padding:6px;font-size:11px;color:var(--text-muted);">'+_rc_esc((r.created_at||'').slice(0,10))+'</td></tr>';
-    }).join('');
-    if(msg) msg.textContent='共 '+rows.length+' 条';
+    var all=re.data||[];
+    var pend=all.filter(function(r){ return String(r.refund_status||'').trim()==='待退款'; });
+    REF_LIST_CACHE=pend;
+    var withQr=0, total=0;
+    pend.forEach(function(r){ if(REF_QR_MAP[String(r.id)]) withQr++; total+=Number(r.refund_amount||0); });
+    if(stat){
+      /* ⚠️ 桶没读到的时候，「已收到收款码 / 未提交」这两个数**一个都不能报** ——
+         报 0 就等于告诉团长「团员都没交码」，是假的。一律显示 ?。 */
+      var qrTxt = REF_QR_OK
+        ? ('已收到收款码 <b style="color:#15803d;font-size:1rem;">'+withQr+'</b> 笔'+
+           ' · 未提交 <b style="color:'+(pend.length-withQr ? '#dc2626' : '#15803d')+';font-size:1rem;">'+(pend.length-withQr)+'</b> 笔')
+        : ('已收到收款码 <b style="color:#94a3b8;font-size:1rem;">?</b> 笔'+
+           ' · 未提交 <b style="color:#94a3b8;font-size:1rem;">?</b> 笔');
+      stat.innerHTML='待退款 <b style="color:#b45309;font-size:1rem;">'+pend.length+'</b> 笔（合计 ￥'+total.toFixed(2)+'）'+
+        ' · '+qrTxt+
+        ' · 已退 '+(all.length-pend.length)+' 笔（不在下表）'+
+        (REF_QR_OK ? '' : '<br><b style="color:#dc2626;">⚠️ 收款码列表没读到，所以上面两个数是「?」；表格里的「读取失败」也不代表团员没交码 —— 点「🔄 重画列表」重试</b>');
+    }
+    _refRenderRows();
+    if(msg) msg.textContent = pend.length ? ('下表只列未退的 '+pend.length+' 笔；扫完一笔勾一格，最后点「批量标记已退」') : '';
   }catch(err){ if(msg) msg.textContent='❌ '+err.message; }
 }
 function toggleAllRef(){ var all=document.getElementById('refAll'); var cbs=document.querySelectorAll('.refChk'); cbs.forEach(function(c){ c.checked=all.checked; }); }
