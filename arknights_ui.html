@@ -1998,7 +1998,7 @@ cn 点数 金额
       <pre id="mrOut" class="box" style="margin-top:10px;"></pre>
       <h3 style="margin-top:22px;">📋 待退款记录（收款码已就位）</h3>
       <p style="font-size:0.78rem;color:var(--text-muted);">
-        点开小图看收款码大图 → 手机扫码打款 → 勾上这一行 → 最后点「批量标记已退」。
+        点开小图看收款码大图 → 手机扫码打款 → <b>点这一行任意位置即可勾选</b>（勾上会整行变绿）→ 最后点「批量标记已退」。
         <b>已退的记录不再显示在这里</b>（鼠标扫过一遍没勾的，就是还没退的）。
       </p>
       <div id="refStats" style="font-size:0.82rem; line-height:1.95; margin-bottom:10px; color:var(--text-muted);">统计加载中…</div>
@@ -8608,6 +8608,33 @@ function refToggleQr(id){
   }
 }
 
+/* 勾选范围扩大到整行（2026-10-15 团长要求）：
+   点这一行的任意位置都能勾上/取消，不用去戳那个小方框。
+   ⚠️ 必须让开三类控件的点击，否则会互相打架：
+     · 勾选框自己（浏览器已切过一次，再切就变回原样）
+     · 收款码缩略图（点了要放大，不能顺手把勾选翻掉）
+     · 展开区里的按钮 */
+function _refTrOf(cb){ return (cb && cb.parentNode) ? cb.parentNode.parentNode : null; }
+
+function refRowPaint(tr){
+  if (!tr || !tr.querySelector) return;
+  var cb = tr.querySelector('.refChk');
+  if (!cb) return;
+  tr.style.background = cb.checked ? 'rgba(21,128,61,0.09)' : '';
+}
+
+function refRowClick(ev, tr){
+  var t = ev && ev.target;
+  if (!t || !tr) return;
+  var tag = String(t.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'img' || tag === 'button' || tag === 'a') return;
+  if (t.closest && (t.closest('img') || t.closest('button') || t.closest('a'))) return;
+  var cb = tr.querySelector('.refChk');
+  if (!cb) return;
+  cb.checked = !cb.checked;
+  refRowPaint(tr);
+}
+
 function _refBigRow(r, q){
   var amt = Number(r.refund_amount || 0).toFixed(2);
   return '<tr><td colspan="7" style="padding:14px; background:#f8fafc; border-top:1px dashed var(--line);">' +
@@ -8641,8 +8668,8 @@ function _refRenderRows(){
     } else {
       cell = '<span style="color:#cbd5e1; font-size:0.78rem;">未提交</span>';
     }
-    var tr = '<tr style="border-top:1px solid var(--line);">' +
-      '<td style="text-align:center;padding:6px;"><input type="checkbox" class="refChk" data-id="' + escapeHtml(id) + '"></td>' +
+    var tr = '<tr class="refRow" style="border-top:1px solid var(--line); cursor:pointer;" onclick="refRowClick(event, this)">' +
+      '<td style="text-align:center;padding:6px;"><input type="checkbox" class="refChk" data-id="' + escapeHtml(id) + '" onclick="refRowPaint(this.parentNode.parentNode)"></td>' +
       '<td style="padding:6px;">' + _rc_esc(r.member_cn || '') + '</td>' +
       '<td style="padding:6px;text-align:center;font-weight:700;">¥' + Number(r.refund_amount || 0).toFixed(2) + '</td>' +
       '<td style="padding:6px;text-align:center;">' + cell + '</td>' +
@@ -8685,7 +8712,13 @@ async function loadRefundList(){
     if(msg) msg.textContent = pend.length ? ('下表只列未退的 '+pend.length+' 笔；扫完一笔勾一格，最后点「批量标记已退」') : '';
   }catch(err){ if(msg) msg.textContent='❌ '+err.message; }
 }
-function toggleAllRef(){ var all=document.getElementById('refAll'); var cbs=document.querySelectorAll('.refChk'); cbs.forEach(function(c){ c.checked=all.checked; }); }
+function toggleAllRef(){
+  var all=document.getElementById('refAll');
+  document.querySelectorAll('.refChk').forEach(function(c){
+    c.checked = all.checked;
+    refRowPaint(_refTrOf(c));   /* 整行选中高亮也得跟着走 */
+  });
+}
 async function batchMarkRefunded(){
   var ids=[]; document.querySelectorAll('.refChk').forEach(function(c){ if(c.checked) ids.push(c.getAttribute('data-id')); });
   var msg=document.getElementById('refListMsg');
