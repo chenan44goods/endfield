@@ -1066,7 +1066,9 @@
     }
     .qmodal-btn:active { transform: scale(0.98); }
     .qmodal-cancel { background: #f3f1ec; }
-    .qmodal-ok { background: var(--accent, #e0a92b); border-color: rgba(33,33,33,0.35); color: #1a1a1a; }
+    /* ⚠️ 2026-10-22 修：主题 --accent 就是 #212121（近黑），原来这里把文字也写成 #1a1a1a
+       → 黑底黑字、按钮文字完全看不见。确认按钮一律白字。 */
+    .qmodal-ok { background: var(--accent, #212121); border-color: rgba(33,33,33,0.35); color: #fff; }
     @media (max-width: 600px) {
       .qmodal-mask { padding: 0; align-items: flex-end; }   /* 手机端从底部弹出，方便单手操作 */
       .qmodal { max-width: none; width: 100%; border-radius: 16px 16px 0 0; border-bottom: none;
