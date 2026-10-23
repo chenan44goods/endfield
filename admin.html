@@ -5242,7 +5242,14 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const price = parseFloat(document.getElementById('inputPrice').value) || 0;
       const quantity = parseInt(document.getElementById('inputQuantity').value) || 1;
       const country = document.getElementById('inputCountry').value;
-      const status = document.getElementById('inputStatus').value.trim() || '未出荷';
+      // 💰 费用类条目守卫：团员端「交肾核算」只认 未付款 / 未交 / 已交定金 三种状态，
+      //    其它状态（未出荷/已下单…）一律不显示。代购费补差、掉落补款、运费差价这类
+      //    条目若停在默认「未出荷」，团员永远看不到待付记录 → 这里强制落成未付款。
+      const _statusInput = document.getElementById('inputStatus').value.trim() || '未出荷';
+      const _FEE_RE = /补差|补款|补收|补交|代购费|差价|掉落|追加费用/;
+      const _FEE_OK = ['未付款', '未交', '已交定金'];
+      const _feeFixed = _FEE_RE.test(name) && !_FEE_OK.includes(_statusInput);
+      const status = _feeFixed ? '未付款' : _statusInput;
       const imageUrl = (document.getElementById('inputImageUrl')?.value || '').trim();
       // 📅 下单日期 / 下单平台（散货批次用，允许留空）
       const orderDate = (document.getElementById('inputOrderDate')?.value || '').trim();
@@ -5276,7 +5283,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       clearForm();
       updateBatchDropdownOptions();
       renderTable();
-      showToast('已保存至 group_data！');
+      showToast(_feeFixed ? '已保存 · 费用条目已自动设为「未付款」，团员在交肾核算能看到待付' : '已保存至 group_data！');
     }
     window.saveItemForm = saveItemForm;
 
