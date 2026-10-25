@@ -2280,12 +2280,12 @@
         const _payAmt = due ? Number(g.total || 0) : (balDue > 0 ? Number(balDue) : 0);
         const _copyName = String(g.name || '').trim();
         const _copyTag = balDue > 0 ? '尾款' : '';   // 尾款那笔写明，免得跟「整批应付」混
-        const _cpBtn = 'font-size:11px; padding:1px 7px; border-radius:6px; border:1px solid rgba(22,24,28,0.22); color:var(--ink-soft); cursor:pointer; user-select:none; white-space:nowrap;';
+        const _cpBtn = 'font-size:11px; padding:4px 8px; border-radius:8px; border:1px solid rgba(22,24,28,0.22); color:var(--ink-soft); cursor:pointer; user-select:none; white-space:nowrap;';
         html += '<div style="display:flex; align-items:baseline; justify-content:flex-end; gap:8px; flex-wrap:wrap;">'
              + '<div style="font-size:14px; font-weight:600; color:' + fg + ';">'
              + (due ? ('￥' + g.total.toFixed(2)) : (balDue > 0 ? ('还欠 ￥' + balDue.toFixed(2)) : '已结清')) + '</div>'
              + (_payAmt > 0
-                 ? '<span style="display:inline-flex; gap:6px; align-items:baseline;">'
+                 ? '<span style="display:inline-flex; gap:8px; align-items:baseline;">'
                    + '<span data-cn="' + esc(_copyName) + '" data-tag="' + esc(_copyTag) + '" data-amt="' + _payAmt.toFixed(2) + '"'
                    + ' onclick="copyAmountDetailEl(this)" title="复制「批次名 ￥金额」，粘到聊天或备注里" style="' + _cpBtn + '">复制明细</span>'
                    + '<span data-amt="' + _payAmt.toFixed(2) + '"'
@@ -2318,34 +2318,34 @@
                  + '</div>';
           }
           if (g.island) {
-            html += '<div style="margin-top:5px; font-size:11.5px; line-height:1.7; color:#0f766e;">🏝️ 岛内运费＝日本国内那一段的运费，东西<b>还没出发回国</b>（不是回国的国际段）。</div>';
+            html += '<div style="margin-top:4px; font-size:11px; line-height:1.7; color:#0f766e;">🏝️ 岛内运费＝日本国内那一段的运费，东西<b>还没出发回国</b>（不是回国的国际段）。</div>';
           }
           if (qr) {
             html += '<div style="margin-top:12px; text-align:center;">';
             html += '<img src="' + esc(qr) + '" alt="收款码" onclick="toggleQr(this)" style="width:150px; max-width:60%; border-radius:8px; border:1px solid rgba(33,33,33,0.12); background:#fff; cursor:zoom-in;">';
-            html += '<div style="font-size:11.5px; color:var(--ink-soft); margin-top:6px;">长按图片可保存 · 点一下放大</div>';
+            html += '<div style="font-size:11px; color:var(--ink-soft); margin-top:8px;">长按图片可保存 · 点一下放大</div>';
             html += '</div>';
           } else {
-            html += '<div style="margin-top:10px; font-size:12px; color:#a16207;">该批次还没挂收款码，请找团长要码。</div>';
+            html += '<div style="margin-top:12px; font-size:12px; color:#a16207;">该批次还没挂收款码，请找团长要码。</div>';
           }
-          html += '<div style="margin-top:10px; font-size:12px; color:var(--ink-soft); line-height:1.8;">付款时备注里写上你的 CN，方便团长核对。<br>付完后把截图传上来，团长确认到账后会自动更新你的订单状态。</div>';
+          html += '<div style="margin-top:12px; font-size:12px; color:var(--ink-soft); line-height:1.8;">付款时备注里写上你的 CN，方便团长核对。<br>付完后把截图传上来，团长确认到账后会自动更新你的订单状态。</div>';
         }
 
         pending.forEach(function(p){
-          html += '<div style="margin-top:12px; padding:9px 11px; border-radius:9px; background:rgba(161,98,7,0.08); border:1px solid rgba(161,98,7,0.25);">';
-          html += '<div style="font-size:12.5px; color:#a16207; line-height:1.7;">⏳ 你上传的 ￥' + Number(p.amount || 0).toFixed(2) + ' 正在等团长审核（' + esc(when(p)) + '），先不用重复提交。</div>';
-          html += '<button type="button" onclick="withdrawPayProof(\'' + esc(String(p.id || '')) + '\')" style="margin-top:8px; padding:7px 13px; border-radius:8px; border:1px solid rgba(33,33,33,0.24); background:transparent; color:var(--ink-soft); font-size:12.5px; cursor:pointer; font-family:var(--sans);">撤销这次提交</button>';
+          html += '<div style="margin-top:12px; padding:8px 12px; border-radius:8px; background:rgba(161,98,7,0.08); border:1px solid rgba(161,98,7,0.25);">';
+          html += '<div style="font-size:12px; color:#a16207; line-height:1.7;">⏳ 你上传的 ￥' + Number(p.amount || 0).toFixed(2) + ' 正在等团长审核（' + esc(when(p)) + '），先不用重复提交。</div>';
+          html += '<button type="button" onclick="withdrawPayProof(\'' + esc(String(p.id || '')) + '\')" style="margin-top:8px; padding:8px 12px; border-radius:8px; border:1px solid rgba(33,33,33,0.24); background:transparent; color:var(--ink-soft); font-size:12px; cursor:pointer; font-family:var(--sans);">撤销这次提交</button>';
           html += '</div>';
         });
         approved.forEach(function(p){
-          html += '<div style="margin-top:12px; padding:9px 11px; border-radius:9px; background:rgba(21,128,61,0.08); border:1px solid rgba(21,128,61,0.25); font-size:12.5px; color:#15803d; line-height:1.7;">✅ 你交的 ￥' + Number(p.amount || 0).toFixed(2) + ' 已确认收款（' + esc(when(p)) + '）';
-          html += '<div style="margin-top:3px; font-size:11px; color:rgba(21,128,61,0.7);">这条回执保存 7 天，到期后自动从页面收起（账目不受影响）</div></div>';
+          html += '<div style="margin-top:12px; padding:8px 12px; border-radius:8px; background:rgba(21,128,61,0.08); border:1px solid rgba(21,128,61,0.25); font-size:12px; color:#15803d; line-height:1.7;">✅ 你交的 ￥' + Number(p.amount || 0).toFixed(2) + ' 已确认收款（' + esc(when(p)) + '）';
+          html += '<div style="margin-top:4px; font-size:11px; color:rgba(21,128,61,0.7);">这条回执保存 7 天，到期后自动从页面收起（账目不受影响）</div></div>';
         });
         rejected.slice(0, 2).forEach(function(p){
           // 驳回原因由团长亲手填写、原样展示（系统不编任何理由）。
           // 末尾统一补「请重新上传」；团长写的句子若自带句号，先剥掉尾部标点，免得出现「。。，请重新上传。」
           const why = String(p.reject_reason || '').replace(/[\s。．.,，、；;！!？?]+$/, '');
-          html += '<div style="margin-top:12px; padding:9px 11px; border-radius:9px; background:rgba(220,38,38,0.07); border:1px solid rgba(220,38,38,0.28); font-size:12.5px; color:#dc2626; line-height:1.7;">❌ 上次提交被驳回' + (why ? ('：' + esc(why)) : '') + '，请重新上传。</div>';
+          html += '<div style="margin-top:12px; padding:8px 12px; border-radius:8px; background:rgba(220,38,38,0.07); border:1px solid rgba(220,38,38,0.28); font-size:12px; color:#dc2626; line-height:1.7;">❌ 上次提交被驳回' + (why ? ('：' + esc(why)) : '') + '，请重新上传。</div>';
         });
 
         // 💰 已交定金的批次：卡片**必须留着**并明说还欠多少（钱没交完，排发也过不去）。
@@ -2353,11 +2353,11 @@
         if (balDue > 0) {
           const _depPaid = approved.filter(function(p){ return String(p.plan || '') === 'deposit'; })
                                    .reduce(function(s, p){ return s + Number(p.amount || 0); }, 0);
-          html += '<div style="margin-top:10px; padding:10px 12px; border-radius:9px; background:rgba(161,98,7,0.09); border:1px solid rgba(161,98,7,0.28); font-size:12.5px; color:#a16207; line-height:1.8;">'
+          html += '<div style="margin-top:12px; padding:8px 12px; border-radius:8px; background:rgba(161,98,7,0.09); border:1px solid rgba(161,98,7,0.28); font-size:12px; color:#a16207; line-height:1.8;">'
                + '💰 本批已交定金' + (_depPaid > 0 ? (' ￥' + _depPaid.toFixed(2)) : '') + '，还欠尾款 <b>￥' + balDue.toFixed(2) + '</b>。<br>'
                + '尾款一般等货到、团长在群里通知后再交；通知到了点下面的按钮补交就行。</div>';
           if (!hasPending) {
-            html += '<button type="button" onclick="openPayForm(' + idx + ', \'balance\')" style="margin-top:10px; padding:10px 18px; border-radius:9px; border:1px solid rgba(161,98,7,0.45); background:#fff; color:#a16207; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">📤 补交尾款 ￥' + balDue.toFixed(2) + '</button>';
+            html += '<button type="button" onclick="openPayForm(' + idx + ', \'balance\')" style="margin-top:12px; padding:10px 16px; border-radius:8px; border:1px solid rgba(161,98,7,0.45); background:#fff; color:#a16207; font-weight:600; font-size:13px; cursor:pointer; font-family:var(--sans);">📤 补交尾款 ￥' + balDue.toFixed(2) + '</button>';
           }
         }
         // 🧮 分批补交（2026-10-11 团长要求）：只要**还差着钱**（payGap > 0）就给他按钮 ——
@@ -2374,15 +2374,15 @@
             const _dep = Math.round(g.total * _plan.ratio * 100) / 100;
             const _bal = Math.max(0, Math.round((g.total - _dep) * 100) / 100);
             const _pct = Math.round(_plan.ratio * 1000) / 10;
-            html += '<div style="margin-top:12px; padding:10px 12px; border-radius:9px; background:rgba(161,98,7,0.08); border:1px solid rgba(161,98,7,0.25); font-size:12.5px; color:#a16207; line-height:1.8;">'
+            html += '<div style="margin-top:12px; padding:8px 12px; border-radius:8px; background:rgba(161,98,7,0.08); border:1px solid rgba(161,98,7,0.25); font-size:12px; color:#a16207; line-height:1.8;">'
                  + '💰 本批可以分两笔交：先交<b>定金 ￥' + _dep.toFixed(2) + '</b>（应付的 ' + _pct + '%），剩下的<b>尾款 ￥' + _bal.toFixed(2) + '</b> 等团长通知再补。</div>';
-            html += '<div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">';
-            html += '<button type="button" onclick="openPayForm(' + idx + ', \'full\')" style="padding:10px 18px; border-radius:9px; border:1px solid rgba(220,38,38,0.4); background:#b91c1c; color:#fff; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">📤 交全款 ￥' + g.total.toFixed(2) + '</button>';
-            html += '<button type="button" onclick="openPayForm(' + idx + ', \'deposit\')" style="padding:10px 18px; border-radius:9px; border:1px solid rgba(161,98,7,0.45); background:#fff; color:#a16207; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">📤 交定金 ￥' + _dep.toFixed(2) + '</button>';
+            html += '<div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">';
+            html += '<button type="button" onclick="openPayForm(' + idx + ', \'full\')" style="padding:10px 16px; border-radius:8px; border:1px solid rgba(220,38,38,0.4); background:#b91c1c; color:#fff; font-weight:600; font-size:13px; cursor:pointer; font-family:var(--sans);">📤 交全款 ￥' + g.total.toFixed(2) + '</button>';
+            html += '<button type="button" onclick="openPayForm(' + idx + ', \'deposit\')" style="padding:10px 16px; border-radius:8px; border:1px solid rgba(161,98,7,0.45); background:#fff; color:#a16207; font-weight:600; font-size:13px; cursor:pointer; font-family:var(--sans);">📤 交定金 ￥' + _dep.toFixed(2) + '</button>';
             html += '</div>';
           } else {
             const _btnTxt = pendingAmt > 0 ? ('📤 补交差额 ￥' + payGap.toFixed(2)) : '📤 我已交款，上传截图';
-            html += '<button type="button" onclick="openPayForm(' + idx + ')" style="margin-top:12px; padding:10px 18px; border-radius:9px; border:1px solid rgba(220,38,38,0.4); background:#fff; color:#b91c1c; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">' + _btnTxt + '</button>';
+            html += '<button type="button" onclick="openPayForm(' + idx + ')" style="margin-top:12px; padding:10px 16px; border-radius:8px; border:1px solid rgba(220,38,38,0.4); background:#fff; color:#b91c1c; font-weight:600; font-size:13px; cursor:pointer; font-family:var(--sans);">' + _btnTxt + '</button>';
           }
         }
         html += '<div id="payFormSlot_' + idx + '"></div>';
