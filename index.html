@@ -504,6 +504,7 @@
       display: flex;
       flex-direction: column;
       justify-content: center;
+      position: relative;   /* 返回键要钉在这个白色方框的右上角 */
     }
     /* 查询表单折叠交互 */
     .qp-left-inner {
@@ -516,7 +517,7 @@
       opacity: 0;
     }
     .query-panel.folded .qp-left {
-      padding-top: 2vh;
+      padding-top: 58px;    /* 给右上角的「返回 /」留位置，否则和「▼ 展开查询」叠上 */
       padding-bottom: 2vh;
     }
     .fold-form-btn {
@@ -539,18 +540,22 @@
       transition: background 0.2s, border-color 0.2s;
     }
     .fold-form-btn:hover { background: #f3f4f6; }
-    /* 🧭 返回键（桌面=左上角一行字；手机=吸顶细条，条本身只是浅色底，按钮本身没有形状）
-       2026-10-26 团长否掉了第一版「黑底药丸」：形状和颜色都太重，跟整站的纸感不搭。
-       → 回归纯文字：小箭头 + 「返回」+ 一个斜杠，跟页面里 `AS / PAYMENT · FEE` 那套眉标一个调子。
-       保留的三件事（都是实打实的 bug，不能一起退回）：
-       ① 位置不再压在下面那行小标题上（原来 top:34px 和 5vh 内边距打架 = 看着像乱码）；
-       ② 触控区还是有 44px 高（文字本身小，但点击范围够大）；
-       ③ 移出了 #qpLeftInner —— 否则手机端出结果自动折叠时，返回键会被 max-height:0 裁没。 */
+    /* 🧭 返回键：钉在**白色表单方框（.qp-left）的右上角**里，纯文字一行，不加底色/边框。
+       2026-10-26 两轮反馈定稿：
+       ① 团长否掉了「黑底药丸」——太重，跟整站纸感不搭 → 纯文字 `‹ 返回 /`；
+       ② 团长要求「放回白色方框最顶上、最右边，别跑到框外」→ 从 #queryPanel 直接子元素
+          挪进 .qp-left（`.qp-left{position:relative}` 当定位锚），脱离原来的吸顶白条。
+       仍然保留的（都是实打实的 bug）：
+       - 不压在下面那行小标题上（原 top:34px 撞 5vh 内边距 = 看着像乱码）；
+       - 触控区 44px 高（字小但手指够得着）；
+       - 不在 #qpLeftInner 里 —— 否则手机端出结果自动折叠时会被 max-height:0 裁没。
+       ⚠️ 手机端 .qp-left 的 padding-top 已经给它留了位置（见 @media max-width:900px），
+          改 padding 前先回来看这里。 */
     .qp-backbar {
       position: absolute;
-      top: 22px;
-      left: 30px;
-      z-index: 32;
+      top: 16px;
+      right: 24px;
+      z-index: 5;
     }
     .qp-back {
       display: inline-flex;
@@ -1030,27 +1035,16 @@
       .query-panel { display: block; overflow-y: auto; }
       .qp-left { justify-content: flex-start; min-height: 0; padding: 5vh 6vw 2vh; }
       .qp-right { display: block; min-height: 0; padding: 2vh 5vw 8vh; overflow: visible; }
-      /* 📱 手机端返回键：吸顶细条（浅底只为滚动时不糊在内容上），按钮本身仍是纯文字 */
+      /* 📱 手机端：返回键待在白色表单框里，右上角（不再横贯整屏吸顶） */
+      .qp-left { padding-top: calc(5vh + 40px); }   /* 顶部多留一条，让按钮不压小标题 */
       .qp-backbar {
-        position: sticky;
-        top: 0; left: 0;
-        display: flex;
-        align-items: center;
-        width: 100%;
-        margin: 0;
-        padding: calc(env(safe-area-inset-top, 0px) + 2px) 6vw 2px;
-        /* 停在顶部时完全透明（就是原来那种一行字）；滚下去才浮出一层浅底 + 发丝线，
-           否则「返回 /」会糊在谷子卡片上看不清 */
+        position: absolute;
+        top: calc(env(safe-area-inset-top, 0px) + 8px);   /* 刘海屏不糊在状态栏下面 */
+        right: 6vw; left: auto;
+        width: auto;
+        padding: 0;
         background: transparent;
-        border-bottom: 1px solid transparent;
-        transition: background 0.2s ease, border-color 0.2s ease;
-        z-index: 40;
-      }
-      .qp-backbar.scrolled {
-        background: rgba(255,255,255,0.92);
-        -webkit-backdrop-filter: blur(10px);
-        backdrop-filter: blur(10px);
-        border-bottom-color: rgba(22,24,28,0.08);
+        border-bottom: 0;
       }
       .qp-back {
         height: 44px;                 /* 字小，但手指够得着 */
@@ -1059,6 +1053,7 @@
         font-weight: 500;
         letter-spacing: 0.18em;
       }
+      .query-panel.folded .qp-left { padding-top: calc(2vh + 44px); }
       .brand-title { font-size: 54px; }
     }
 
@@ -1257,18 +1252,17 @@
 
   <!-- 自助查询面板 -->
   <div class="query-panel" id="queryPanel">
-    <!-- 🧭 返回键：必须是 #queryPanel 的直接子元素
-         ① 手机端出结果后 autoFoldFormOnMobile() 会把 #qpLeftInner 的 max-height 压成 0，
-            放里面会被 overflow:hidden 裁掉（返回键凭空消失）；
-         ② 手机端要 position:sticky 吸顶，只有直接挂在滚动容器下面才能全程粘住。 -->
-    <div class="qp-backbar">
-      <button type="button" class="qp-back" onclick="closePanel()" aria-label="返回首页">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
-        <span>返回</span>
-        <span class="qp-slash">/</span>
-      </button>
-    </div>
     <div class="qp-left">
+      <!-- 🧭 返回键：团长要求钉在**这个白色方框的右上角**里。
+           ⚠️ 藏在 #qpLeftInner 外面是有原因的：手机端出结果后 autoFoldFormOnMobile()
+              会把 #qpLeftInner 的 max-height 压成 0（overflow:hidden），放里面会被整块裁没。 -->
+      <div class="qp-backbar">
+        <button type="button" class="qp-back" onclick="closePanel()" aria-label="返回首页">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          <span>返回</span>
+          <span class="qp-slash">/</span>
+        </button>
+      </div>
       <div class="qp-left-inner" id="qpLeftInner">
       <div>
         <div class="qp-sub" id="panelSub">AS / PAYMENT · FEE</div>
@@ -3625,16 +3619,6 @@
       const qPanel = document.getElementById('queryPanel');
       if (qPanel) { qPanel.classList.remove('folded'); }
     }
-    /* 🧭 返回键吸顶条：只在滚下去之后才加浅底（见 .qp-backbar.scrolled），
-       停在顶部时保持「一行字」的干净样子。 */
-    (function bindBackBarScroll(){
-      const panel = document.getElementById('queryPanel');
-      const bar = document.querySelector('.qp-backbar');
-      if (!panel || !bar) return;
-      const upd = function(){ bar.classList.toggle('scrolled', panel.scrollTop > 6); };
-      panel.addEventListener('scroll', upd, { passive: true });
-      upd();
-    })();
     /* ===== 🔑 记住查询密钥 / CN（2026-10-26）=====
        团长反馈：团员每次打开网站都要把密钥和 CN 重打一遍。
        密钥是全团共用的一个串（leader_data 只有一行 query_key=4goods），不是个人密码，
