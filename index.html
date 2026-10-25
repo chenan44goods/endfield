@@ -517,7 +517,7 @@
       opacity: 0;
     }
     .query-panel.folded .qp-left {
-      padding-top: 58px;    /* 给右上角的「返回 /」留位置，否则和「▼ 展开查询」叠上 */
+      padding-top: 58px;    /* 给左上角的「返回 /」留位置，否则和「▼ 展开查询」叠上 */
       padding-bottom: 2vh;
     }
     .fold-form-btn {
@@ -540,21 +540,20 @@
       transition: background 0.2s, border-color 0.2s;
     }
     .fold-form-btn:hover { background: #f3f4f6; }
-    /* 🧭 返回键：钉在**白色表单方框（.qp-left）的右上角**里，纯文字一行，不加底色/边框。
-       2026-10-26 两轮反馈定稿：
+    /* 🧭 返回键：钉在**白色表单方框（.qp-left）的左上角**，压在那行眉标 `AS / PAYMENT · FEE` 上面。
+       2026-10-26 三轮反馈定稿：
        ① 团长否掉了「黑底药丸」——太重，跟整站纸感不搭 → 纯文字 `‹ 返回 /`；
-       ② 团长要求「放回白色方框最顶上、最右边，别跑到框外」→ 从 #queryPanel 直接子元素
-          挪进 .qp-left（`.qp-left{position:relative}` 当定位锚），脱离原来的吸顶白条。
+       ② 团长要求「放回白色方框最顶上、别跑到框外」→ 挪进 .qp-left（锚点 .qp-left{position:relative}）；
+       ③ 位置定稿 = **左上角**（原来贴右上角，团长要它压在小标题上方、跟正文左对齐）。
        仍然保留的（都是实打实的 bug）：
        - 不压在下面那行小标题上（原 top:34px 撞 5vh 内边距 = 看着像乱码）；
        - 触控区 44px 高（字小但手指够得着）；
        - 不在 #qpLeftInner 里 —— 否则手机端出结果自动折叠时会被 max-height:0 裁没。
-       ⚠️ 手机端 .qp-left 的 padding-top 已经给它留了位置（见 @media max-width:900px），
-          改 padding 前先回来看这里。 */
+       ⚠️ left 跟 .qp-left 的左右内边距对齐（桌面 36px / 手机 6vw），改 padding 要同步这里。 */
     .qp-backbar {
       position: absolute;
       top: 16px;
-      right: 24px;
+      left: 36px;          /* = .qp-left 的左内边距，跟下面的眉标/标题左对齐 */
       z-index: 5;
     }
     .qp-back {
@@ -1035,12 +1034,13 @@
       .query-panel { display: block; overflow-y: auto; }
       .qp-left { justify-content: flex-start; min-height: 0; padding: 5vh 6vw 2vh; }
       .qp-right { display: block; min-height: 0; padding: 2vh 5vw 8vh; overflow: visible; }
-      /* 📱 手机端：返回键待在白色表单框里，右上角（不再横贯整屏吸顶） */
+      /* 📱 手机端：返回键待在白色表单框里，**左上角**（压在那行眉标上面） */
       .qp-left { padding-top: calc(5vh + 40px); }   /* 顶部多留一条，让按钮不压小标题 */
       .qp-backbar {
         position: absolute;
         top: calc(env(safe-area-inset-top, 0px) + 8px);   /* 刘海屏不糊在状态栏下面 */
-        right: 6vw; left: auto;
+        left: 6vw;           /* = .qp-left 的左内边距 */
+        right: auto;
         width: auto;
         padding: 0;
         background: transparent;
@@ -1253,7 +1253,7 @@
   <!-- 自助查询面板 -->
   <div class="query-panel" id="queryPanel">
     <div class="qp-left">
-      <!-- 🧭 返回键：团长要求钉在**这个白色方框的右上角**里。
+      <!-- 🧭 返回键：团长要求钉在**这个白色方框的左上角**，压在那行眉标上方。
            ⚠️ 藏在 #qpLeftInner 外面是有原因的：手机端出结果后 autoFoldFormOnMobile()
               会把 #qpLeftInner 的 max-height 压成 0（overflow:hidden），放里面会被整块裁没。 -->
       <div class="qp-backbar">
