@@ -914,6 +914,39 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       background: #f8fafc;
     }
 
+    /* 搜索框一键清空（2026-10-26）：搜完想清空以前要 Ctrl+A 删，手机上是长按全选 */
+    .search-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    .search-wrap input {
+      max-width: 180px;
+      padding-right: 26px;
+    }
+    .search-clear {
+      position: absolute;
+      right: 3px;
+      top: 50%;
+      transform: translateY(-50%);
+      border: none;
+      background: transparent;
+      color: #94a3b8;
+      font-size: 17px;
+      line-height: 1;
+      padding: 2px 5px;
+      cursor: pointer;
+      display: none;
+      border-radius: 50%;
+    }
+    .search-clear:hover { background: #e2e8f0; color: #334155; }
+    .search-wrap.has-val .search-clear { display: block; }
+
+    /* 手机上分页按钮一行放不下 8 个 → 首页/末页先收起来（「跳到」能直接输页码） */
+    @media (max-width: 768px) {
+      .page-btn.page-btn-ends { display: none; }
+    }
+
     /* 桌面宽屏表头吸顶（2026-10-26）：排表明细 14 列、20 行要滚两屏，
        滚下去就分不清哪列是哪列。
        ⚠️ 关键点：`position:sticky` 只有在「最近的滚动容器不裁剪纵向」时才跟页面走。
@@ -1435,7 +1468,10 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
 
         <!-- 过滤器栏 -->
         <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
-          <input type="text" id="filterSearch" placeholder="搜索名称/CN/批次..." style="max-width: 180px;" oninput="onSearchInput()">
+          <span class="search-wrap" id="searchWrap">
+            <input type="text" id="filterSearch" placeholder="搜索名称/CN/批次..." oninput="onSearchInput()">
+            <button type="button" class="search-clear" id="filterSearchClear" title="清空搜索（Esc）" onclick="clearSearch()">×</button>
+          </span>
           
           <!-- 批次级联选择器（筛选区：一级批次 → 二级详细分类） -->
           <div class="cascade-wrap" id="filterBatchCascade">
@@ -3514,13 +3550,56 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (wrap && !wrap.contains(e.target)) closeFilterBatchCascade();
     });
 
+    function _syncSearchClearBtn() {
+      const w = document.getElementById('searchWrap');
+      const f = document.getElementById('filterSearch');
+      if (w && f) w.classList.toggle('has-val', !!String(f.value || '').length);
+    }
+
     function onSearchInput() {
+      _syncSearchClearBtn();
       clearTimeout(searchDebounceTimer);
       /* 500ms → 260ms（2026-10-26）：2645 条过滤 + 渲染实测只要 3~6ms，
          原来那 500ms 是纯等待，打完字要愣半秒才动。 */
       searchDebounceTimer = setTimeout(() => { CURRENT_PAGE = 1; renderTable(); }, 260);
     }
     window.onSearchInput = onSearchInput;
+
+    function clearSearch() {
+      const f = document.getElementById('filterSearch');
+      if (!f) return;
+      f.value = '';
+      _syncSearchClearBtn();
+      clearTimeout(searchDebounceTimer);
+      CURRENT_PAGE = 1;
+      renderTable();
+      f.focus();
+    }
+    window.clearSearch = clearSearch;
+
+    /* 键盘快捷键（2026-10-26）：/ 聚焦搜索、Esc 清空搜索、← → 翻页。
+       只在不处于输入状态、且当前就在「排表管理」页时生效，避免打断打字。 */
+    document.addEventListener('keydown', function (e) {
+      const el = e.target || {};
+      const tag = String(el.tagName || '').toLowerCase();
+      const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+      if (e.key === 'Escape') {
+        if (el.id === 'filterSearch') { clearSearch(); el.blur(); }
+        return;
+      }
+      if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+      const tabOn = document.getElementById('tabItems');
+      if (!tabOn || !tabOn.classList.contains('active')) return;
+      if (e.key === '/') {
+        e.preventDefault();
+        const f = document.getElementById('filterSearch');
+        if (f) f.focus();
+      } else if (e.key === 'ArrowLeft') {
+        if (CURRENT_PAGE > 1) { e.preventDefault(); changePage(CURRENT_PAGE - 1); }
+      } else if (e.key === 'ArrowRight') {
+        if (CURRENT_PAGE < (window.__LAST_TOTAL_PAGES || 1)) { e.preventDefault(); changePage(CURRENT_PAGE + 1); }
+      }
+    });
 
     function stripBatchCountLabel(val) {
       // 将 "批次名 (N件)" 还原为 "批次名"；普通输入原样返回
@@ -5363,7 +5442,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         return;
       }
 
-      let btnHtml = `<button class="page-btn" onclick="changePage(1)" ${CURRENT_PAGE === 1 ? 'disabled' : ''} title="第一页">首页</button>`;
+      let btnHtml = `<button class="page-btn page-btn-ends" onclick="changePage(1)" ${CURRENT_PAGE === 1 ? 'disabled' : ''} title="第一页">首页</button>`;
       btnHtml += `<button class="page-btn" onclick="changePage(${CURRENT_PAGE - 1})" ${CURRENT_PAGE === 1 ? 'disabled' : ''}>&lt; 上一页</button>`;
       for (let i = 1; i <= totalPages; i++) {
         if (i === 1 || i === totalPages || (i >= CURRENT_PAGE - 2 && i <= CURRENT_PAGE + 2)) {
@@ -5373,7 +5452,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         }
       }
       btnHtml += `<button class="page-btn" onclick="changePage(${CURRENT_PAGE + 1})" ${CURRENT_PAGE === totalPages ? 'disabled' : ''}>下一页 &gt;</button>`;
-      btnHtml += `<button class="page-btn" onclick="changePage(${totalPages})" ${CURRENT_PAGE === totalPages ? 'disabled' : ''} title="最后一页">末页</button>`;
+      btnHtml += `<button class="page-btn page-btn-ends" onclick="changePage(${totalPages})" ${CURRENT_PAGE === totalPages ? 'disabled' : ''} title="最后一页">末页</button>`;
       btnHtml += `<span style="display:inline-flex; align-items:center; gap:3px; font-size:0.82rem; color:var(--text-muted); white-space:nowrap; margin-left:4px;">跳到
         <input id="pageJumpInput" type="number" min="1" max="${totalPages}" value="${CURRENT_PAGE}"
                onkeydown="if(event.key==='Enter'){event.preventDefault(); jumpToPage(this.value); this.blur();}"
