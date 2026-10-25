@@ -2271,15 +2271,26 @@
             + (g.hasIntl ? '含岛内运费' : '岛内运费') + '</span>'
           : '';
         html += '<div style="font-size:14px; font-weight:600; color:' + fg + ';">' + _kindEmoji + esc(g.name) + _kindTag + '</div>';
-        // 💳 2026-10-26：金额旁加「复制」—— 团员要照着这个数字去微信转账，手抄容易错位。
-        //    复制的就是纯数字（如 173.00），粘到转账金额框直接能用。
+        // 💳 金额旁的复制（2026-10-26 团长两次要求）：
+        //    ① 最早只有一个「复制」，复制纯数字（如 173.00），粘到转账金额框直接能用；
+        //    ② 团长要求「把批次的名字也带上」→ 拆成两个小按钮：
+        //       「复制明细」= `批次名 ￥173.00`（粘到聊天/备注/表格，一眼知道是哪一批）
+        //       「仅金额」  = 纯数字 173.00（微信/支付宝的转账金额框只认这个，带名字粘不进去）
+        //    ⚠️ 名字/金额走 data-* 而不是拼进 onclick 字符串 —— 批次名里有引号就会把 JS 切断。
         const _payAmt = due ? Number(g.total || 0) : (balDue > 0 ? Number(balDue) : 0);
+        const _copyName = String(g.name || '').trim();
+        const _copyTag = balDue > 0 ? '尾款' : '';   // 尾款那笔写明，免得跟「整批应付」混
+        const _cpBtn = 'font-size:11px; padding:1px 7px; border-radius:6px; border:1px solid rgba(22,24,28,0.22); color:var(--ink-soft); cursor:pointer; user-select:none; white-space:nowrap;';
         html += '<div style="display:flex; align-items:baseline; justify-content:flex-end; gap:8px; flex-wrap:wrap;">'
              + '<div style="font-size:14px; font-weight:600; color:' + fg + ';">'
              + (due ? ('￥' + g.total.toFixed(2)) : (balDue > 0 ? ('还欠 ￥' + balDue.toFixed(2)) : '已结清')) + '</div>'
              + (_payAmt > 0
-                 ? '<span onclick="copyAmountText(\'' + _payAmt.toFixed(2) + '\')" title="复制这个金额，去微信转账直接粘贴" '
-                   + 'style="font-size:11px; padding:1px 7px; border-radius:6px; border:1px solid rgba(22,24,28,0.22); color:var(--ink-soft); cursor:pointer; user-select:none; white-space:nowrap;">复制</span>'
+                 ? '<span style="display:inline-flex; gap:6px; align-items:baseline;">'
+                   + '<span data-cn="' + esc(_copyName) + '" data-tag="' + esc(_copyTag) + '" data-amt="' + _payAmt.toFixed(2) + '"'
+                   + ' onclick="copyAmountDetailEl(this)" title="复制「批次名 ￥金额」，粘到聊天或备注里" style="' + _cpBtn + '">复制明细</span>'
+                   + '<span data-amt="' + _payAmt.toFixed(2) + '"'
+                   + ' onclick="copyAmountEl(this)" title="只复制数字，粘到微信/支付宝的转账金额框" style="' + _cpBtn + '">仅金额</span>'
+                   + '</span>'
                  : '')
              + '</div>';
         html += '</div>';
@@ -3527,14 +3538,37 @@
     function copyAmountText(txt) {
       const t = String(txt || '').trim();
       if (!t) return;
-      const done = function () { showToast('已复制 ￥' + t + '，去转账页粘贴即可'); };
+      _copyToClipboard(t, '已复制 ￥' + t + '，去转账页粘贴即可');
+    }
+    /* 🧾 复制明细：`批次名 ￥173.00`（尾款那笔是 `批次名 尾款 ￥88.00`）——
+       团长 2026-10-26 要求「复制把批次的名字也带上」，粘到聊天/备注/表格里能看清是哪一批。
+       ⚠️ 名字走 data-cn 读，不拼进 onclick，批次名带引号也不会把脚本切断。 */
+    function copyAmountDetailEl(el) {
+      if (!el) return;
+      const amt = String(el.getAttribute('data-amt') || '').trim();
+      if (!amt) return;
+      const head = [String(el.getAttribute('data-cn') || '').trim(),
+                    String(el.getAttribute('data-tag') || '').trim()].filter(Boolean).join(' ');
+      const line = head ? (head + ' ￥' + amt) : ('￥' + amt);
+      _copyToClipboard(line, '已复制：' + line);
+    }
+    /* 仅复制纯数字（转账金额框只认数字） */
+    function copyAmountEl(el) {
+      if (!el) return;
+      copyAmountText(String(el.getAttribute('data-amt') || '').trim());
+    }
+    /* 统一的写剪贴板：优先 Clipboard API，被 QQ/微信内置浏览器拦了就走 textarea 兜底 */
+    function _copyToClipboard(t, okMsg) {
+      const s = String(t || '');
+      if (!s) return;
+      const done = function () { showToast(okMsg || ('已复制：' + s)); };
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(t).then(done, function () { _copyFallback(t); done(); });
+          navigator.clipboard.writeText(s).then(done, function () { _copyFallback(s); done(); });
           return;
         }
       } catch (e) {}
-      _copyFallback(t);
+      _copyFallback(s);
       done();
     }
     function _copyFallback(t) {
@@ -3548,6 +3582,8 @@
       } catch (e) {}
     }
     window.copyAmountText = copyAmountText;
+    window.copyAmountDetailEl = copyAmountDetailEl;
+    window.copyAmountEl = copyAmountEl;
 
     function copyFbCode(){
       const el = document.getElementById('fbNewCode');
