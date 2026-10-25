@@ -908,6 +908,32 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       color: #ffffff;
     }
 
+    .page-btn:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+      background: #f8fafc;
+    }
+
+    /* 桌面宽屏表头吸顶（2026-10-26）：排表明细 14 列、20 行要滚两屏，
+       滚下去就分不清哪列是哪列。
+       ⚠️ 关键点：`position:sticky` 只有在「最近的滚动容器不裁剪纵向」时才跟页面走。
+       `.table-container` 原来是 `overflow-x:auto`，它自己就成了滚动容器，sticky 会失效。
+       所以宽度 ≥1200 时干脆放弃容器横向滚动、让页面本体滚；列 padding 收到 9px，
+       14 列能塞进 1200（实测 1203 → 约 1119），不会横溢。
+       窄屏仍然保留横向滚动，只是没有吸顶。 */
+    @media (min-width: 1200px) {
+      .table-container.desktop-table-view { overflow-x: visible; }
+      .desktop-table-view table { min-width: 0; }
+      .desktop-table-view th, .desktop-table-view td { padding-left: 9px; padding-right: 9px; }
+      .desktop-table-view thead th {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        background-color: #f8fafc;
+        box-shadow: inset 0 -1px 0 var(--border);
+      }
+    }
+
     /* Modal Overlay（终末地整合：z-index 必须低于加载页 loadPhase(60)/全屏黄 flood(9999)，
          动画结束后由 checkAuthStatus 加 .active 才显示在最上层内容之上） */
         .modal-overlay {
@@ -2289,7 +2315,15 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     window.FEEDBACK_CACHE = [];
 
     let CURRENT_PAGE = 1;
-    const PAGE_SIZE = 20;
+    /* 每页条数可调（2026-10-26）：2645 条 / 20 = 133 页，只能一页页点「下一页」太折磨。
+       可选 20/50/100/200，选择记在 localStorage，下次进来还是这个数。 */
+    let PAGE_SIZE = 20;
+    try {
+      const _ps = parseInt(localStorage.getItem('gtbot_admin_page_size') || '', 10);
+      if ([20, 50, 100, 200].indexOf(_ps) >= 0) PAGE_SIZE = _ps;
+    } catch (e) {}
+    window.__LAST_TOTAL_ITEMS = 0;
+    window.__LAST_TOTAL_PAGES = 1;
     /* 🔴 已选谷子按 item_id 记（2026-10-26）：以前只读当前页 DOM，
        翻页/改搜索词一重画就全丢，跨页批量根本做不了。
        现在勾选状态存在这个 Set 里，重画时回填，翻到第 3 页再翻回来还是勾着的。 */
@@ -3482,7 +3516,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
 
     function onSearchInput() {
       clearTimeout(searchDebounceTimer);
-      searchDebounceTimer = setTimeout(() => { CURRENT_PAGE = 1; renderTable(); }, 500);
+      /* 500ms → 260ms（2026-10-26）：2645 条过滤 + 渲染实测只要 3~6ms，
+         原来那 500ms 是纯等待，打完字要愣半秒才动。 */
+      searchDebounceTimer = setTimeout(() => { CURRENT_PAGE = 1; renderTable(); }, 260);
     }
     window.onSearchInput = onSearchInput;
 
@@ -3501,13 +3537,56 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     function onFilterChange() { CURRENT_PAGE = 1; renderTable(); }
     window.onFilterChange = onFilterChange;
 
+    /* 翻页后把视线带回列表顶部（2026-10-26）：
+       以前滚到页底点「下一页」，新内容在最上面、视口还停在页面底部，
+       第一行被导航挡掉 -471px，看着像"点了没反应"。 */
+    function _scrollToItemsTop() {
+      try {
+        const tb = document.getElementById('itemsTableBody');
+        if (!tb) return;
+        const isMobile = window.matchMedia('(max-width: 768px)').matches;
+        const box = isMobile
+          ? (document.getElementById('mobileSelBar') || document.getElementById('adminMobileCardsView'))
+          : (tb.closest('.table-container') || tb);
+        /* 表格容器的内部滚动也要归零（桌面端表头吸顶后它自己有滚动条） */
+        const container = tb.closest('.table-container');
+        if (container) container.scrollTop = 0;
+        if (!box) return;
+        const navH = isMobile ? 54 : 0;   /* 手机上顶部 tab 条是 sticky，别把列表头挡住 */
+        const y = box.getBoundingClientRect().top + window.scrollY - navH - 8;
+        window.scrollTo(0, Math.max(0, y));
+      } catch (e) {}
+    }
+    window._scrollToItemsTop = _scrollToItemsTop;
+
     function changePage(page) {
       CURRENT_PAGE = page;
       /* ⚠️ 别再手动 mc.checked = false：renderTable 会按 SELECTED_ITEM_KEYS 回填勾选并调
          _refreshSelectAllState()，这里再清零会把「本页全勾」的表头状态抹成未勾（行还是绿的）。 */
       renderTable();
+      _scrollToItemsTop();
     }
     window.changePage = changePage;
+
+    function jumpToPage(v) {
+      const n = parseInt(v, 10);
+      if (!isFinite(n)) return;
+      const last = Math.max(1, window.__LAST_TOTAL_PAGES || 1);
+      changePage(Math.min(Math.max(1, n), last));
+    }
+    window.jumpToPage = jumpToPage;
+
+    function onPageSizeChange(v) {
+      const n = parseInt(v, 10);
+      if (!n || n < 1) return;
+      const firstIdx = (CURRENT_PAGE - 1) * PAGE_SIZE;   /* 尽量停在原来那批数据附近 */
+      PAGE_SIZE = n;
+      try { localStorage.setItem('gtbot_admin_page_size', String(n)); } catch (e) {}
+      CURRENT_PAGE = Math.max(1, Math.floor(firstIdx / PAGE_SIZE) + 1);
+      renderTable();
+      _scrollToItemsTop();
+    }
+    window.onPageSizeChange = onPageSizeChange;
 
     function handleImageUrlInput(val) { updateImagePreview(val.trim()); }
     window.handleImageUrlInput = handleImageUrlInput;
@@ -5163,6 +5242,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
 
       const totalItems = filtered.length;
       const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
+      window.__LAST_TOTAL_ITEMS = totalItems;
+      window.__LAST_TOTAL_PAGES = totalPages;
       if (CURRENT_PAGE > totalPages) CURRENT_PAGE = totalPages;
       if (CURRENT_PAGE < 1) CURRENT_PAGE = 1;
 
@@ -5172,7 +5253,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (totalItems === 0) {
         tbody.innerHTML = `<tr><td colspan="14" style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</td></tr>`;
         if (mobileView) mobileView.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配数据</div>`;
-        document.getElementById('tablePagination').innerHTML = '';
+        /* 以前这里直接清空分页区 → 页面底部什么都不显示，看不出是"筛掉了"还是"没加载"。
+           现在照样渲染「共 0 条」+ 每页条数选择。 */
+        renderPaginationBar(0, 1);
         renderPayStats();
         /* ⚠️ 这条 early-return 分支也必须重置表头全选框：
            否则「全选 → 搜一个搜不到的词」时表格是空的，表头那个勾还亮着。 */
@@ -5266,8 +5349,22 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     function renderPaginationBar(totalItems, totalPages) {
       const container = document.getElementById('tablePagination');
       if (!container) return;
-      if (totalPages <= 1) { container.innerHTML = `<div class="pagination-info">共 ${totalItems} 条数据</div>`; return; }
-      let btnHtml = `<button class="page-btn" onclick="changePage(${CURRENT_PAGE - 1})" ${CURRENT_PAGE === 1 ? 'disabled' : ''}>&lt; 上一页</button>`;
+      const sizeSel = `<label style="display:inline-flex; align-items:center; gap:4px; font-size:0.82rem; color:var(--text-muted); white-space:nowrap;">每页
+        <select id="pageSizeSelect" onchange="onPageSizeChange(this.value)" style="font-size:0.82rem; padding:3px 6px; border-radius:6px;">
+          ${[20, 50, 100, 200].map(n => `<option value="${n}"${n === PAGE_SIZE ? ' selected' : ''}>${n}</option>`).join('')}
+        </select> 条</label>`;
+
+      if (!totalItems) {
+        container.innerHTML = `<div class="pagination-info">共 <strong>0</strong> 条（没有符合筛选条件的谷子）</div><div class="pagination-buttons">${sizeSel}</div>`;
+        return;
+      }
+      if (totalPages <= 1) {
+        container.innerHTML = `<div class="pagination-info">共 ${totalItems} 条数据</div><div class="pagination-buttons">${sizeSel}</div>`;
+        return;
+      }
+
+      let btnHtml = `<button class="page-btn" onclick="changePage(1)" ${CURRENT_PAGE === 1 ? 'disabled' : ''} title="第一页">首页</button>`;
+      btnHtml += `<button class="page-btn" onclick="changePage(${CURRENT_PAGE - 1})" ${CURRENT_PAGE === 1 ? 'disabled' : ''}>&lt; 上一页</button>`;
       for (let i = 1; i <= totalPages; i++) {
         if (i === 1 || i === totalPages || (i >= CURRENT_PAGE - 2 && i <= CURRENT_PAGE + 2)) {
           btnHtml += `<button class="page-btn ${i === CURRENT_PAGE ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
@@ -5276,7 +5373,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         }
       }
       btnHtml += `<button class="page-btn" onclick="changePage(${CURRENT_PAGE + 1})" ${CURRENT_PAGE === totalPages ? 'disabled' : ''}>下一页 &gt;</button>`;
-      container.innerHTML = `<div class="pagination-info">共 <strong>${totalItems}</strong> 条，第 <strong>${CURRENT_PAGE}</strong> / <strong>${totalPages}</strong> 页</div><div class="pagination-buttons">${btnHtml}</div>`;
+      btnHtml += `<button class="page-btn" onclick="changePage(${totalPages})" ${CURRENT_PAGE === totalPages ? 'disabled' : ''} title="最后一页">末页</button>`;
+      btnHtml += `<span style="display:inline-flex; align-items:center; gap:3px; font-size:0.82rem; color:var(--text-muted); white-space:nowrap; margin-left:4px;">跳到
+        <input id="pageJumpInput" type="number" min="1" max="${totalPages}" value="${CURRENT_PAGE}"
+               onkeydown="if(event.key==='Enter'){event.preventDefault(); jumpToPage(this.value); this.blur();}"
+               style="width:58px; padding:3px 6px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;" title="输入页码后按回车">页</span>`;
+      container.innerHTML = `<div class="pagination-info">共 <strong>${totalItems}</strong> 条，第 <strong>${CURRENT_PAGE}</strong> / <strong>${totalPages}</strong> 页</div>`
+        + `<div class="pagination-buttons">${btnHtml}${sizeSel}</div>`;
     }
 
     async function saveItemForm() {
