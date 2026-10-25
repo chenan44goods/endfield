@@ -1291,6 +1291,12 @@
           <span class="scan"></span>
           <span>PROCEED SEARCH</span>
         </button>
+        <!-- 🔑 2026-10-26：密钥与 CN 会记在本机（下次打开自动填好）。
+             密钥是全团共用的一个串，不是个人密码；但共用设备时仍要能一键抹掉。 -->
+        <div id="clearRememberRow" style="display:none; margin-top:14px; text-align:center;">
+          <span id="clearRememberBtn" onclick="clearRememberedId()"
+                style="font-size:11.5px; letter-spacing:.3px; color:rgba(22,24,28,0.42); cursor:pointer; text-decoration:underline; text-underline-offset:3px;">共用设备？清除本机记住的密钥和 CN</span>
+        </div>
       </div>
       </div>
       <button type="button" id="foldFormBtn" class="fold-form-btn" style="display:none" onclick="toggleFormFold()">▲</button>
@@ -2203,8 +2209,17 @@
             + (g.hasIntl ? '含岛内运费' : '岛内运费') + '</span>'
           : '';
         html += '<div style="font-size:14px; font-weight:600; color:' + fg + ';">' + _kindEmoji + esc(g.name) + _kindTag + '</div>';
-        html += '<div style="font-size:14px; font-weight:600; color:' + fg + ';">'
-             + (due ? ('￥' + g.total.toFixed(2)) : (balDue > 0 ? ('还欠 ￥' + balDue.toFixed(2)) : '已结清')) + '</div>';
+        // 💳 2026-10-26：金额旁加「复制」—— 团员要照着这个数字去微信转账，手抄容易错位。
+        //    复制的就是纯数字（如 173.00），粘到转账金额框直接能用。
+        const _payAmt = due ? Number(g.total || 0) : (balDue > 0 ? Number(balDue) : 0);
+        html += '<div style="display:flex; align-items:baseline; justify-content:flex-end; gap:8px; flex-wrap:wrap;">'
+             + '<div style="font-size:14px; font-weight:600; color:' + fg + ';">'
+             + (due ? ('￥' + g.total.toFixed(2)) : (balDue > 0 ? ('还欠 ￥' + balDue.toFixed(2)) : '已结清')) + '</div>'
+             + (_payAmt > 0
+                 ? '<span onclick="copyAmountText(\'' + _payAmt.toFixed(2) + '\')" title="复制这个金额，去微信转账直接粘贴" '
+                   + 'style="font-size:11px; padding:1px 7px; border-radius:6px; border:1px solid rgba(22,24,28,0.22); color:var(--ink-soft); cursor:pointer; user-select:none; white-space:nowrap;">复制</span>'
+                 : '')
+             + '</div>';
         html += '</div>';
 
         if (due) {
@@ -3446,6 +3461,32 @@
         '<button type="button" onclick="copyFbCode()" style="padding:8px 14px; border-radius:8px; border:1px solid rgba(33,33,33,0.3); background:transparent; color:var(--ink); font-size:13px; cursor:pointer;">复制编号</button>' +
         '</div></div>';
     }
+    /* 复制应付金额：只要纯数字，粘到微信/支付宝的转账金额框就能直接用 */
+    function copyAmountText(txt) {
+      const t = String(txt || '').trim();
+      if (!t) return;
+      const done = function () { showToast('已复制 ￥' + t + '，去转账页粘贴即可'); };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(t).then(done, function () { _copyFallback(t); done(); });
+          return;
+        }
+      } catch (e) {}
+      _copyFallback(t);
+      done();
+    }
+    function _copyFallback(t) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = t;
+        ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch (e) {}
+    }
+    window.copyAmountText = copyAmountText;
+
     function copyFbCode(){
       const el = document.getElementById('fbNewCode');
       if (!el) return;
@@ -3460,6 +3501,7 @@
       } catch(e){ showToast('复制失败，请手动截图保存'); }
     }
     async function queryFeedbackReply(){
+      try { rememberQueryId(); } catch(e){}
       const key = (document.getElementById('panelKey').value || '').trim();
       const code = normCode(document.getElementById('fbCode').value);
       const box = document.getElementById('fbReplyResult');
@@ -3515,7 +3557,67 @@
       const qPanel = document.getElementById('queryPanel');
       if (qPanel) { qPanel.classList.remove('folded'); }
     }
+    /* ===== 🔑 记住查询密钥 / CN（2026-10-26）=====
+       团长反馈：团员每次打开网站都要把密钥和 CN 重打一遍。
+       密钥是全团共用的一个串（leader_data 只有一行 query_key=4goods），不是个人密码，
+       所以默认记在本机；共用设备的人点面板底部的「清除」就能抹掉。
+       ⚠️ 只做「预填」，不做「自动查询」—— 打开页面不会自动把人家的账单摊在屏幕上。 */
+    const LS_QKEY = 'shantu_qkey';
+    const LS_QCN  = 'shantu_qcn';
+
+    function _lsGet(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+    function _lsSet(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) {} }
+
+    function rememberQueryId() {
+      const ke = document.getElementById('panelKey');
+      const ce = document.getElementById('panelCn');
+      if (ke) _lsSet(LS_QKEY, String(ke.value || '').trim());
+      if (ce) _lsSet(LS_QCN, String(ce.value || '').trim());
+      syncClearRememberLink();
+    }
+    function restoreQueryId() {
+      const ke = document.getElementById('panelKey');
+      const ce = document.getElementById('panelCn');
+      if (ke && !ke.value) ke.value = _lsGet(LS_QKEY);
+      if (ce && !ce.value) ce.value = _lsGet(LS_QCN);
+      syncClearRememberLink();
+    }
+    function clearRememberedId() {
+      _lsSet(LS_QKEY, ''); _lsSet(LS_QCN, '');
+      const ke = document.getElementById('panelKey');
+      const ce = document.getElementById('panelCn');
+      if (ke) ke.value = '';
+      if (ce) ce.value = '';
+      syncClearRememberLink();
+      showToast('已清除本机记住的密钥和 CN');
+    }
+    function syncClearRememberLink() {
+      const row = document.getElementById('clearRememberRow');
+      if (!row) return;
+      row.style.display = (_lsGet(LS_QKEY) || _lsGet(LS_QCN)) ? 'block' : 'none';
+    }
+    window.clearRememberedId = clearRememberedId;
+
+    /* 回车 = 点「PROCEED SEARCH」。手机上打完字还要收键盘再找按钮，实测是个真摩擦点。
+       只在「密钥 / CN」两个输入框上生效，不进 textarea（反馈正文那里回车必须能换行）。 */
+    function _bindEnterToSearch() {
+      ['panelKey', 'panelCn'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (!el || el.__enterBound) return;
+        el.__enterBound = true;
+        el.addEventListener('keydown', function (e) {
+          if (e.key !== 'Enter' && e.keyCode !== 13) return;
+          e.preventDefault();
+          el.blur();                       // 手机上顺手收起键盘，结果才看得见
+          if (currentPanel === 'fbreply') return queryFeedbackReply();
+          if (currentPanel === 'feedback') return;
+          panelAction();
+        });
+      });
+    }
+
     function panelAction(){
+      rememberQueryId();   // 顺手记在本机，下次打开自动填好
       const fn = PANEL_ACTIONS[currentPanel];
       if (fn) fn();
     }
@@ -3581,6 +3683,9 @@
           if (el) el.value = k.trim();
         }
       } catch(e){}
+      // 🔑 本机记住的密钥 / CN 自动填好（?key= 链接优先，上面的写法已先把链接里的填进去）
+      try { restoreQueryId(); } catch(e){}
+      try { _bindEnterToSearch(); } catch(e){}
       // 功能入口 / 返回按钮支持键盘操作（Tab 聚焦 + Enter/空格触发）
       document.querySelectorAll('.entry, .qp-back').forEach(el => {
         el.setAttribute('tabindex', '0');

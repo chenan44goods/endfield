@@ -981,6 +981,14 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       }
     }
 
+    /* ↕️ 可排序表头（2026-10-26）：没排序的列灰箭头，排上的列实心箭头
+       ⚠️ 不加 white-space:nowrap —— 14 列本来就很挤，nowrap 会把「地区 (country)」挤出格子 */
+    th.th-sort { cursor: pointer; user-select: none; }
+    th.th-sort:hover { background-color: #eef2f7; }
+    th.th-sort .sort-ind { font-size: 9px; margin-left: 2px; color: #cbd5e1; }
+    th.th-sort.on { color: var(--primary); }
+    th.th-sort.on .sort-ind { color: var(--primary); }
+
     /* Modal Overlay（终末地整合：z-index 必须低于加载页 loadPhase(60)/全屏黄 flood(9999)，
          动画结束后由 checkAuthStatus 加 .active 才显示在最上层内容之上） */
         .modal-overlay {
@@ -1527,14 +1535,14 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
               <tr>
                 <th style="width: 40px;"><input type="checkbox" id="selectAllCheckbox" title="全选 / 取消全选（本页所有行）" onchange="toggleSelectAll(this)"></th>
                 <th>图片</th>
-                <th>谷子名称</th>
-                <th>认领 CN</th>
-                <th>所属批次</th>
-                <th>单价 (元)</th>
-                <th>数量</th>
-                <th>地区 (country)</th>
-                <th>状态</th>
-                <th>下单日期</th>
+                <th class="th-sort" data-sort="name" onclick="toggleSort('name')" title="点一下按谷子名称排（再点反转，第三次回原序）">谷子名称<span class="sort-ind"></span></th>
+                <th class="th-sort" data-sort="cn" onclick="toggleSort('cn')" title="点一下按认领 CN 排（再点反转，第三次回原序）">认领 CN<span class="sort-ind"></span></th>
+                <th class="th-sort" data-sort="batch_name" onclick="toggleSort('batch_name')" title="点一下按批次排（再点反转，第三次回原序）">所属批次<span class="sort-ind"></span></th>
+                <th class="th-sort" data-sort="price" onclick="toggleSort('price')" title="点一下从贵到便宜排（再点反转，第三次回原序）">单价 (元)<span class="sort-ind"></span></th>
+                <th class="th-sort" data-sort="quantity" onclick="toggleSort('quantity')" title="点一下从多到少排（再点反转，第三次回原序）">数量<span class="sort-ind"></span></th>
+                <th class="th-sort" data-sort="country" onclick="toggleSort('country')" title="点一下按地区排（再点反转，第三次回原序）">地区 (country)<span class="sort-ind"></span></th>
+                <th class="th-sort" data-sort="status" onclick="toggleSort('status')" title="点一下按状态排（再点反转，第三次回原序）">状态<span class="sort-ind"></span></th>
+                <th class="th-sort" data-sort="order_date" onclick="toggleSort('order_date')" title="点一下按日期排（空的排最后；再点反转，第三次回原序）">下单日期<span class="sort-ind"></span></th>
                 <th>下单平台</th>
                 <th>支付方式</th>
                 <th>囤货有效期</th>
@@ -2378,6 +2386,14 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
        翻页/改搜索词一重画就全丢，跨页批量根本做不了。
        现在勾选状态存在这个 Set 里，重画时回填，翻到第 3 页再翻回来还是勾着的。 */
     const SELECTED_ITEM_KEYS = new Set();
+    /* ↕️ 表头排序（2026-10-26）：2645 条里想找「这批最贵的一单」只能肉眼扫。
+       规则：数字列第一次点 = 从大到小（找最大值最常用），文字列第一次点 = A→Z；
+       同一列再点反转；第三次点回到「原始顺序」（不排）。 */
+    let SORT_KEY = '';
+    let SORT_DIR = 0;          // 0 = 原序，1 = 升序，-1 = 降序
+    const SORT_NUM_COLS = { price: 1, quantity: 1 };
+    const SORT_COL_LABEL = { name: '谷子名称', cn: '认领 CN', batch_name: '所属批次', price: '单价',
+                             quantity: '数量', country: '地区', status: '状态', order_date: '下单日期' };
     let searchDebounceTimer = null;
     let IS_IMAGE_UPLOADING = false;
     let CURRENT_BATCH_ACTION_TYPE = null; // 'status' | 'country' | 'batch'
@@ -2999,6 +3015,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)`);
         CURRENT_PAGE = 1;
         updateBatchDropdownOptions();
+        /* 💾 数据到位后再恢复上次的筛选（批次要在 RAW_ITEMS 上校验过才敢用） */
+        try { restoreFilterState(); } catch (e) {}
         renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
         renderPayReview(); renderPayStats(); renderQrCodes(); renderBatchPlans(); renderPiggyBank();
         loadBatches();
@@ -3629,6 +3647,93 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       }
     });
 
+    /* ===== 🖱️ 弹窗手感（2026-10-26）=====
+       ① Esc 关掉最上面那个弹窗（原来只能去点 ✕ 或「取消」）
+       ② 点灰色遮罩也能关；但「批量改状态/改批次」里已经敲了字就先问一句，别手一滑白打字
+       ③ 弹窗一打开自动聚焦第一个输入框，少一次手动点
+       ⚠️ 不碰 authOverlay 的登录逻辑，只是共用了同一套显示/隐藏的 class。 */
+    const MODAL_CLOSERS = {
+      logisticsDetailModal: 'closeLogisticsDetail',
+      payDetailModal: 'closePayDetail',
+      batchImportModal: 'closeBatchImportModal',
+      batchStatusModal: 'closeBatchStatusModal',
+      batchSelectModal: 'closeBatchSelectModal',
+      feedbackModal: 'closeFeedbackModal',
+      dispatchConfirmModal: 'closeDispatchConfirm'
+    };
+
+    /* 用户在这一层刚敲进去、关掉就没了的文字 */
+    function _modalDirtyText(modal) {
+      if (!modal || !modal.contains) return '';
+      const ids = ['batchModalCustomInput', 'batchModalSearch', 'batchModalPrefix'];
+      for (let i = 0; i < ids.length; i++) {
+        const el = document.getElementById(ids[i]);
+        if (el && modal.contains(el) && el.offsetParent !== null) {
+          const v = String(el.value || '').trim();
+          if (v) return v;
+        }
+      }
+      return '';
+    }
+
+    function _closeModalById(id) {
+      const fnName = MODAL_CLOSERS[id];
+      if (!fnName || typeof window[fnName] !== 'function') return;
+      const dirty = _modalDirtyText(document.getElementById(id));
+      if (dirty && !confirm('「' + dirty.slice(0, 20) + '」还没确认，关掉就白输了。\n\n确定关闭吗？')) return;
+      window[fnName]();
+    }
+    window._closeModalById = _closeModalById;
+
+    function _topActiveModal() {
+      const list = Array.prototype.filter.call(document.querySelectorAll('.modal-overlay.active'), function (m) {
+        return MODAL_CLOSERS[m.id];
+      });
+      return list.length ? list[list.length - 1] : null;
+    }
+
+    function _focusFirstField(modal) {
+      if (!modal) return;
+      const cand = modal.querySelectorAll('input[type="text"], input[type="number"], input[type="date"], textarea, select');
+      for (let i = 0; i < cand.length; i++) {
+        const el = cand[i];
+        if (el.disabled || el.readOnly || el.offsetParent === null) continue;
+        if (el.type === 'hidden') continue;
+        try {
+          el.focus({ preventScroll: true });
+          if (el.tagName === 'INPUT' && el.type === 'text' && el.select) el.select();
+        } catch (e) {}
+        return;
+      }
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      const m = _topActiveModal();
+      if (!m) return;
+      e.preventDefault();
+      _closeModalById(m.id);
+    });
+
+    (function bindModalOverlays() {
+      const obs = new MutationObserver(function (muts) {
+        muts.forEach(function (mu) {
+          const el = mu.target;
+          if (!el.classList || !el.classList.contains('modal-overlay')) return;
+          if (el.classList.contains('active')) setTimeout(function () { _focusFirstField(el); }, 60);
+        });
+      });
+      document.querySelectorAll('.modal-overlay').forEach(function (m) {
+        if (MODAL_CLOSERS[m.id]) {
+          m.addEventListener('click', function (e) {
+            if (e.target !== m) return;          // 只有点到遮罩本身才算，点弹窗内容不算
+            _closeModalById(m.id);
+          });
+        }
+        obs.observe(m, { attributes: true, attributeFilter: ['class'] });
+      });
+    })();
+
     function stripBatchCountLabel(val) {
       // 将 "批次名 (N件)" 还原为 "批次名"；普通输入原样返回
       return String(val || '').replace(/\s*\(\d+件\)\s*$/, '');
@@ -3641,8 +3746,48 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
     window.onFilterIncludeArchivedChange = onFilterIncludeArchivedChange;
 
-    function onFilterChange() { CURRENT_PAGE = 1; renderTable(); }
+    function onFilterChange() { CURRENT_PAGE = 1; saveFilterState(); renderTable(); }
     window.onFilterChange = onFilterChange;
+
+    /* 💾 筛选条件记忆（2026-10-26）：批次 / 地区 / 状态记在本机，下次进后台不用重新选一遍。
+       ⚠️ 页码刻意不记 —— 回来永远从第 1 页，否则停在第 87 页更找不到北。
+       ⚠️ 记下来的批次如果已经改名/删掉，必须在 restore 时丢掉，否则团长会对着空表发呆。 */
+    const FILTER_LS_KEY = 'gtbot_admin_filters';
+    function saveFilterState() {
+      try {
+        localStorage.setItem(FILTER_LS_KEY, JSON.stringify({
+          batch: window.SELECTED_FILTER_BATCH || '',
+          detail: window.SELECTED_BATCH_DETAIL || '',
+          country: (document.getElementById('filterCountry') || {}).value || '',
+          status: (document.getElementById('filterStatus') || {}).value || ''
+        }));
+      } catch (e) {}
+    }
+    function restoreFilterState() {
+      let s = null;
+      try { s = JSON.parse(localStorage.getItem(FILTER_LS_KEY) || 'null'); } catch (e) {}
+      if (!s || typeof s !== 'object') return false;
+      let batch = String(s.batch || '');
+      let detail = String(s.detail || '');
+      const items = Array.isArray(RAW_ITEMS) ? RAW_ITEMS : [];
+      if (batch && items.length && !items.some(function (i) { return String(i.batch_name || '默认批次') === batch; })) {
+        batch = ''; detail = '';
+      }
+      if (batch && detail && items.length &&
+          !items.some(function (i) { return String(i.name || '').toLowerCase().indexOf(detail.toLowerCase()) >= 0; })) {
+        detail = '';
+      }
+      window.SELECTED_FILTER_BATCH = batch;
+      window.SELECTED_BATCH_DETAIL = detail;
+      const t = document.getElementById('filterBatchCascadeText');
+      if (t) t.innerText = batch ? (detail ? batch + ' - ' + detail : batch) : '全部批次';
+      const c = document.getElementById('filterCountry');
+      if (c && s.country && Array.prototype.some.call(c.options, function (o) { return o.value === s.country; })) c.value = s.country;
+      const st = document.getElementById('filterStatus');
+      if (st && s.status) st.value = s.status;
+      return true;
+    }
+    window.restoreFilterState = restoreFilterState;
 
     /* 翻页后把视线带回列表顶部（2026-10-26）：
        以前滚到页底点「下一页」，新内容在最上面、视口还停在页面底部，
@@ -5312,6 +5457,61 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
 
     window.closePayDetail = closePayDetail;
 
+    /* ===== ↕️ 表头排序（2026-10-26）=====
+       规则：数字列第一下从大到小（找最贵的一单是最常见的用法），文字列第一下 A→Z；
+       同一列再点反转；第三下回到原始顺序（给团长一个"我什么都不排了"的出口）。
+       ⚠️ 排序只影响「画出来的顺序」，不动 RAW_ITEMS；勾选按 item_id 记，排完还是勾着的。 */
+    function _sortValue(item, key) {
+      if (key === 'price') return Number(item.price) || 0;
+      if (key === 'quantity') return Number(item.quantity) || 0;
+      if (key === 'order_date') return String(item.order_date || '').trim();      // ISO 串按字典序就是时间序
+      if (key === 'status') return String(item.status || '未出荷').trim();
+      if (key === 'country') return String(item.country || '日本').trim();
+      return String(item[key] || '').trim();
+    }
+
+    function applySort(list) {
+      if (!SORT_KEY || !SORT_DIR) return list;
+      const key = SORT_KEY, dir = SORT_DIR;
+      const arr = list.slice();
+      arr.sort(function (a, b) {
+        const va = _sortValue(a, key), vb = _sortValue(b, key);
+        let r;
+        if (typeof va === 'number' && typeof vb === 'number') {
+          r = va - vb;
+        } else {
+          /* 空的永远排最后（不管升还是降），否则「下单日期」一升序满屏都是空行 */
+          const ea = (va === '' || va === null || va === undefined), eb = (vb === '' || vb === null || vb === undefined);
+          if (ea && eb) r = 0; else if (ea) return 1; else if (eb) return -1;
+          else r = String(va).localeCompare(String(vb), 'zh');
+        }
+        if (r === 0) r = String(a.item_id || a.id || '').localeCompare(String(b.item_id || b.id || ''));  // 同值稳定，重画不乱跳
+        return r * dir;
+      });
+      return arr;
+    }
+
+    function toggleSort(key) {
+      if (!SORT_COL_LABEL[key]) return;
+      const firstDir = SORT_NUM_COLS[key] ? -1 : 1;
+      if (SORT_KEY !== key) { SORT_KEY = key; SORT_DIR = firstDir; }
+      else if (SORT_DIR === firstDir) { SORT_DIR = -firstDir; }
+      else { SORT_KEY = ''; SORT_DIR = 0; }
+      CURRENT_PAGE = 1;          // 换排序就回第一页，不然停在 133 页看着像没反应
+      renderTable();
+    }
+    window.toggleSort = toggleSort;
+
+    function _paintSortHeads() {
+      document.querySelectorAll('th.th-sort').forEach(function (th) {
+        const on = SORT_KEY && th.getAttribute('data-sort') === SORT_KEY;
+        th.classList.toggle('on', !!on);
+        const ind = th.querySelector('.sort-ind');
+        if (ind) ind.textContent = on ? (SORT_DIR === -1 ? '▼' : '▲') : '⇅';
+      });
+    }
+    window._paintSortHeads = _paintSortHeads;
+
     function renderTable() {
       const tbody = document.getElementById('itemsTableBody');
       const mobileView = document.getElementById('adminMobileCardsView');
@@ -5347,14 +5547,17 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               return matchSearch && matchBatch && matchDetail && matchCountry && matchStatus;
             });
 
-      const totalItems = filtered.length;
+      // ↕️ 排序只影响展示顺序（不动 RAW_ITEMS），勾选按 item_id 记所以排完还在
+      const filteredSorted = applySort(filtered);
+
+      const totalItems = filteredSorted.length;
       const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
       window.__LAST_TOTAL_ITEMS = totalItems;
       window.__LAST_TOTAL_PAGES = totalPages;
       if (CURRENT_PAGE > totalPages) CURRENT_PAGE = totalPages;
       if (CURRENT_PAGE < 1) CURRENT_PAGE = 1;
 
-      const pageItems = filtered.slice((CURRENT_PAGE - 1) * PAGE_SIZE, CURRENT_PAGE * PAGE_SIZE);
+      const pageItems = filteredSorted.slice((CURRENT_PAGE - 1) * PAGE_SIZE, CURRENT_PAGE * PAGE_SIZE);
       window.ITEM_CACHE = pageItems;
 
       if (totalItems === 0) {
@@ -5367,6 +5570,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         /* ⚠️ 这条 early-return 分支也必须重置表头全选框：
            否则「全选 → 搜一个搜不到的词」时表格是空的，表头那个勾还亮着。 */
         try { _refreshSelectAllState(); } catch (e) {}
+        try { _paintSortHeads(); } catch (e) {}
         return;
       }
 
@@ -5451,6 +5655,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       renderPayStats();
       /* 重画时已按 SELECTED_ITEM_KEYS 回填勾选；这里清掉已不存在的 key，再刷表头三态 + 已选计数 */
       try { _pruneItemSelection(); _refreshSelectAllState(); } catch (e) {}
+      try { _paintSortHeads(); } catch (e) {}
     }
 
     function renderPaginationBar(totalItems, totalPages) {
