@@ -894,7 +894,7 @@
     .result-item .r-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
     .result-item .r-price { font-weight: 700; font-size: 15px; color: #b0651a; white-space: nowrap; }
     /* 右侧一栏改成竖排靠右：第一行「金额 + 状态」，第二行「📦 囤货至 …」（2026-09-30 团长要求） */
-    .result-item .r-side { display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0; }
+    .result-item .r-side { display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex-shrink:0; }
     .result-item .r-side-top { display:flex; align-items:center; gap:12px; }
     .result-item .r-badge {
       font-size: 11px; padding: 3px 10px; border-radius: 999px; white-space: nowrap;
@@ -918,7 +918,7 @@
     .result-empty { text-align:center; padding:30px; color:var(--ink-soft); font-size:13px; background:rgba(250,250,246,0.82); border-radius:8px; white-space:pre-line; line-height:1.7; }
     .stat-pill { display:inline-block; background:rgba(22,24,28,0.72); color:#f5f4ec; padding:7px 14px; border-radius:999px; font-size:13px; font-weight:600; letter-spacing:0.06em; backdrop-filter:blur(3px); }
     .batch-label-pill { display:inline-block; background:rgba(22,24,28,0.72); color:#f5f4ec; padding:8px 12px; border-radius:999px; font-size:11px; letter-spacing:0.12em; backdrop-filter:blur(3px); }
-    .r-batch { font-size:11px; color:#7a756a; margin-top:3px; letter-spacing:0.02em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+    .r-batch { font-size:11px; color:#7a756a; margin-top:4px; letter-spacing:0.02em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
     /* 📦 囤货到期时间（2026-09-30 团长要求）：团员原来完全看不到自己囤到什么时候。
        09-30 二次调整：从左侧信息区挪到右侧「金额 + 状态徽章」正下方 —— 那里才是
        团员看状态时视线停留的地方，红字更醒目（原来的灰色太容易被忽略）。
@@ -1315,7 +1315,7 @@
         <!-- 💰 零钱罐 · 存钱表单（默认隐藏）2026-10-14 团长需求
              团员随时可存：金额 + 截图 + 备注 → 交团长审核 → 通过后进零钱罐，可用于抵扣以后的费用 -->
         <div id="piggyFields" style="display:none;">
-          <div id="piggyBalance" style="font-size:12.5px; color:var(--ink-soft); line-height:1.85; margin:26px 0 2px;"></div>
+          <div id="piggyBalance" style="font-size:12px; color:var(--ink-soft); line-height:1.85; margin:24px 0 4px;"></div>
           <div class="field">
             <label for="piggyAmount">存入金额 *（元）</label>
             <input id="piggyAmount" type="number" step="0.01" min="0.01" inputmode="decimal" placeholder="例如 50" autocomplete="off">
@@ -1357,7 +1357,7 @@
              密钥是全团共用的一个串，不是个人密码；但共用设备时仍要能一键抹掉。 -->
         <div id="clearRememberRow" style="display:none; margin-top:14px; text-align:center;">
           <span id="clearRememberBtn" onclick="clearRememberedId()"
-                style="font-size:11.5px; letter-spacing:.3px; color:rgba(22,24,28,0.42); cursor:pointer; text-decoration:underline; text-underline-offset:3px;">共用设备？清除本机记录和当前查询结果</span>
+                style="font-size:11px; letter-spacing:.3px; color:rgba(22,24,28,0.42); cursor:pointer; text-decoration:underline; text-underline-offset:3px;">共用设备？清除本机记录和当前查询结果</span>
         </div>
       </div>
       </div>
@@ -2465,7 +2465,7 @@
       };
       const _pgBlock = _pgBal > 0
         ? ('<div style="margin:2px 0 13px; padding:11px 13px; border-radius:10px; border:1px solid rgba(217,75,75,0.32); background:#fffbe6;">' +
-             '<label style="display:flex; align-items:center; gap:9px; cursor:pointer; font-size:13.5px; font-weight:600; color:var(--ink);">' +
+             '<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600; color:var(--ink);">' +
                '<input type="checkbox" id="piggyUseChk" onchange="onPayPiggyToggle(this)" style="width:18px; height:18px; accent-color:#d94b4b; cursor:pointer;">' +
                '<span>用零钱罐抵扣（余额 ￥' + _pgBal.toFixed(2) + '）</span>' +
              '</label>' +
@@ -2475,23 +2475,23 @@
       slot.innerHTML =
         '<div style="margin-top:14px; padding-top:14px; border-top:1px dashed rgba(33,33,33,0.2);">' +
           '<div style="font-size:13px; font-weight:600; color:#b91c1c;">' + amountLabel + '</div>' +
-          '<div style="font-size:11.5px; color:var(--ink-soft); margin:4px 0 12px;">' + amountHint + '</div>' +
+          '<div style="font-size:11px; color:var(--ink-soft); margin:4px 0 12px;">' + amountHint + '</div>' +
           _pgBlock +
           '<div id="payFileWrap">' +
-            '<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:6px;">付款截图 *</div>' +
+            '<div style="font-size:12px; color:var(--ink-soft); margin-bottom:8px;">付款截图 *</div>' +
             '<input id="payFile" type="file" accept="image/*" style="display:none;" onchange="onPayFilePicked(this)">' +
-            '<button type="button" onclick="var e=document.getElementById(\'payFile\'); if(e) e.click();" style="padding:10px 16px; border-radius:9px; border:1px dashed rgba(33,33,33,0.3); background:rgba(33,33,33,0.03); color:var(--ink); font-size:13px; cursor:pointer; font-family:var(--sans);">📎 选择截图</button>' +
+            '<button type="button" onclick="var e=document.getElementById(\'payFile\'); if(e) e.click();" style="padding:10px 16px; border-radius:8px; border:1px dashed rgba(33,33,33,0.3); background:rgba(33,33,33,0.03); color:var(--ink); font-size:13px; cursor:pointer; font-family:var(--sans);">📎 选择截图</button>' +
             '<div id="payPreview" style="margin-top:10px;"></div>' +
           '</div>' +
-          '<div style="font-size:12.5px; color:var(--ink-soft); margin:14px 0 6px;">支付方式 *</div>' +
-          '<select id="payMethod" style="width:100%; padding:10px; border-radius:9px; border:1px solid rgba(33,33,33,0.2); background:#fff; color:var(--ink); font-size:14px; font-family:var(--sans); outline:none;">' +
+          '<div style="font-size:12px; color:var(--ink-soft); margin:12px 0 8px;">支付方式 *</div>' +
+          '<select id="payMethod" style="width:100%; padding:10px; border-radius:8px; border:1px solid rgba(33,33,33,0.2); background:#fff; color:var(--ink); font-size:14px; font-family:var(--sans); outline:none;">' +
             '<option value="微信">微信</option><option value="支付宝">支付宝</option>' +
           '</select>' +
-          '<div style="font-size:12.5px; color:var(--ink-soft); margin:14px 0 6px;">备注（可选）</div>' +
-          '<input id="payNote" placeholder="例如：转账尾号 1234 / 昨天下午付的" style="width:100%; padding:10px; border-radius:9px; border:1px solid rgba(33,33,33,0.2); background:#fff; color:var(--ink); font-size:14px; font-family:var(--sans); outline:none; box-sizing:border-box;">' +
+          '<div style="font-size:12px; color:var(--ink-soft); margin:12px 0 8px;">备注（可选）</div>' +
+          '<input id="payNote" placeholder="例如：转账尾号 1234 / 昨天下午付的" style="width:100%; padding:10px; border-radius:8px; border:1px solid rgba(33,33,33,0.2); background:#fff; color:var(--ink); font-size:14px; font-family:var(--sans); outline:none; box-sizing:border-box;">' +
           '<div style="margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">' +
-            '<button type="button" id="paySubmitBtn" onclick="submitPayProof()" style="padding:11px 20px; border-radius:9px; border:none; background:#b91c1c; color:#fff; font-weight:600; font-size:13.5px; cursor:pointer; font-family:var(--sans);">提交给团长审核</button>' +
-            '<button type="button" onclick="cancelPayForm(' + idx + ')" style="padding:11px 16px; border-radius:9px; border:1px solid rgba(33,33,33,0.2); background:transparent; color:var(--ink-soft); font-size:13px; cursor:pointer; font-family:var(--sans);">取消</button>' +
+            '<button type="button" id="paySubmitBtn" onclick="submitPayProof()" style="padding:10px 16px; border-radius:8px; border:none; background:#b91c1c; color:#fff; font-weight:600; font-size:13px; cursor:pointer; font-family:var(--sans);">提交给团长审核</button>' +
+            '<button type="button" onclick="cancelPayForm(' + idx + ')" style="padding:10px 16px; border-radius:8px; border:1px solid rgba(33,33,33,0.2); background:transparent; color:var(--ink-soft); font-size:13px; cursor:pointer; font-family:var(--sans);">取消</button>' +
           '</div>' +
         '</div>';
       window.__PAY_FILE = null;
@@ -2675,7 +2675,7 @@
         window.__PAY_PREVIEW_URL = url;
         if (pv) pv.innerHTML =
           '<img src="' + url + '" onerror="this.style.opacity=0.25;" style="max-width:180px; max-height:180px; border-radius:8px; border:1px solid rgba(33,33,33,0.15); display:block;">' +
-          '<div style="font-size:11.5px; color:#15803d; margin-top:5px;">✅ 已压到 ' + Math.round(blob.size / 1024) + ' KB，可以提交了</div>';
+          '<div style="font-size:11px; color:#15803d; margin-top:4px;">✅ 已压到 ' + Math.round(blob.size / 1024) + ' KB，可以提交了</div>';
       } catch(e){
         window.__PAY_FILE = null;
         try { if (window.__PAY_PREVIEW_URL) { URL.revokeObjectURL(window.__PAY_PREVIEW_URL); window.__PAY_PREVIEW_URL = null; } } catch(e2){}
@@ -2784,13 +2784,13 @@
             '<span style="display:inline-block; font-family:var(--serif); font-size:42px; font-weight:700; line-height:1.1; color:var(--ink); padding-right:7px; background:linear-gradient(transparent 56%, rgba(254,254,44,0.8) 56%);">￥' + bal.toFixed(2) + '</span>' +
           '</div>' +
           '<div style="height:1px; background:rgba(33,33,33,0.32); margin:15px 0 12px;"></div>' +
-          '<div style="font-size:12.5px; color:var(--ink-soft); line-height:1.9;">' +
+          '<div style="font-size:12px; color:var(--ink-soft); line-height:1.9;">' +
             (pend > 0 ? ('⏳ 另有 ￥' + pend.toFixed(2) + ' 在等团长审核<br>') : '') +
             (usedSum > 0 ? ('已经用它抵扣过 ￥' + usedSum.toFixed(2) + ' 的费用') : '交谷子费 / 运费时可以直接用这里面的钱抵扣') +
           '</div>' +
         '</div>';
       if (!recEl) return;
-      if (!all.length){ recEl.innerHTML = '<div style="font-size:12.5px; color:var(--ink-soft); line-height:1.9;">还没有存过钱。上面填金额 + 传一张转账截图，就能存进来。</div>'; return; }
+      if (!all.length){ recEl.innerHTML = '<div style="font-size:12px; color:var(--ink-soft); line-height:1.9;">还没有存过钱。上面填金额 + 传一张转账截图，就能存进来。</div>'; return; }
       const rows = all.slice().sort(function(a, b){
         return String(b.created_at || '').localeCompare(String(a.created_at || ''));
       });
@@ -2805,9 +2805,9 @@
         h += '<div style="border-top:1px solid rgba(33,33,33,0.16); margin-top:14px; padding-top:14px;">' +
                '<div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">' +
                  '<span style="font-family:var(--serif); font-size:19px; font-weight:700; color:var(--ink);">￥' + Number(r.amount || 0).toFixed(2) + '</span>' +
-                 '<span style="font-size:11.5px; font-weight:700; letter-spacing:0.06em; color:' + color + '; background:' + bg + '; border-radius:20px; padding:3px 11px; white-space:nowrap;">' + esc(st) + '</span>' +
+                 '<span style="font-size:11px; font-weight:700; letter-spacing:0.06em; color:' + color + '; background:' + bg + '; border-radius:20px; padding:4px 12px; white-space:nowrap;">' + esc(st) + '</span>' +
                '</div>' +
-               '<div style="font-size:11.5px; color:var(--ink-soft); margin-top:6px; line-height:1.8;">' +
+               '<div style="font-size:11px; color:var(--ink-soft); margin-top:8px; line-height:1.8;">' +
                  (r.created_at ? esc(String(r.created_at)) : '') +
                  (r.note ? (' ｜ ' + esc(String(r.note))) : '') +
                  (Number(r.used || 0) > 0 ? ('<br>已抵扣 ￥' + Number(r.used).toFixed(2) + (remain > 0 ? ('，还剩 ￥' + remain.toFixed(2)) : '，已用完')) : '') +
@@ -2833,7 +2833,7 @@
         window.__PIGGY_PREVIEW_URL = url;
         if (pv) pv.innerHTML =
           '<img src="' + url + '" onerror="this.style.opacity=0.25;" style="max-width:180px; max-height:180px; border-radius:8px; border:1px solid rgba(33,33,33,0.15); display:block;">' +
-          '<div style="font-size:11.5px; color:#15803d; margin-top:5px;">✅ 已压到 ' + Math.round(blob.size / 1024) + ' KB，可以提交了</div>';
+          '<div style="font-size:11px; color:#15803d; margin-top:4px;">✅ 已压到 ' + Math.round(blob.size / 1024) + ' KB，可以提交了</div>';
       } catch (e) {
         window.__PIGGY_FILE = null;
         try { if (window.__PIGGY_PREVIEW_URL) { URL.revokeObjectURL(window.__PIGGY_PREVIEW_URL); window.__PIGGY_PREVIEW_URL = null; } } catch (e2) {}
@@ -2859,7 +2859,7 @@
       if (!blob) return showToast('请上传转账截图');
       window.__PIGGY_SUBMITTING = true;
       if (btn) btn.disabled = true;
-      if (resEl) { resEl.style.display = 'block'; resEl.innerHTML = '<div style="font-size:12.5px; color:var(--ink-soft);">正在上传截图…</div>'; }
+      if (resEl) { resEl.style.display = 'block'; resEl.innerHTML = '<div style="font-size:12px; color:var(--ink-soft);">正在上传截图…</div>'; }
       try {
         const depId = 'pb_' + Date.now() + '_' + Math.floor(Math.random() * 9000 + 1000);
         const ext = (blob.type && blob.type.indexOf('png') >= 0) ? 'png' : 'jpg';
@@ -2874,7 +2874,7 @@
           let t = ''; try { t = await upRes.text(); } catch (e) {}
           throw new Error('截图上传失败（' + upRes.status + '）' + (t ? ' ' + String(t).slice(0, 120) : ''));
         }
-        if (resEl) resEl.innerHTML = '<div style="font-size:12.5px; color:var(--ink-soft);">正在登记…</div>';
+        if (resEl) resEl.innerHTML = '<div style="font-size:12px; color:var(--ink-soft);">正在登记…</div>';
         // 🔒 带版本锁写入（理由同交款凭证：不带 version 会被后台整份回写覆盖掉）
         const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON,
                     'Content-Type': 'application/json', 'Prefer': 'return=representation' };
@@ -2914,7 +2914,7 @@
           await new Promise(function (r) { setTimeout(r, 250 + Math.random() * 350); });
         }
         if (!written) throw new Error('提交时正好有人在改数据，请再点一次「存进零钱罐」');
-        if (resEl) resEl.innerHTML = '<div style="font-size:12.5px; color:#15803d; line-height:1.8;">✅ 已提交 ￥' + amt.toFixed(2) + '（等团长审核）。审核通过后就进你的零钱罐，交钱时能直接抵扣。</div>';
+        if (resEl) resEl.innerHTML = '<div style="font-size:12px; color:#15803d; line-height:1.8;">✅ 已提交 ￥' + amt.toFixed(2) + '（等团长审核）。审核通过后就进你的零钱罐，交钱时能直接抵扣。</div>';
         showToast('✅ 已提交，等团长审核');
         window.__PIGGY_FILE = null;
         if (amtEl) amtEl.value = '';
@@ -2924,7 +2924,7 @@
         try { if (window.__PIGGY_PREVIEW_URL) { URL.revokeObjectURL(window.__PIGGY_PREVIEW_URL); window.__PIGGY_PREVIEW_URL = null; } } catch (e) {}
         await loadPiggyPanel();
       } catch (e) {
-        if (resEl) resEl.innerHTML = '<div style="font-size:12.5px; color:#dc2626; line-height:1.8;">' + esc(e.message || String(e)) + '</div>';
+        if (resEl) resEl.innerHTML = '<div style="font-size:12px; color:#dc2626; line-height:1.8;">' + esc(e.message || String(e)) + '</div>';
       } finally {
         window.__PIGGY_SUBMITTING = false;
         if (btn) btn.disabled = false;
@@ -3515,7 +3515,7 @@
       const codes = getMyFbCodes(((kEl && kEl.value) || '').trim());
       if (!codes.length) { box.innerHTML = '<span style="opacity:.75;">在这台手机上提交过反馈的话，编号会自动填好。</span>'; return; }
       box.innerHTML = '本机提交过的编号（点一下自动填入）：<br>' + codes.map(function(c){
-        return '<span onclick="var i=document.getElementById(\'fbCode\'); if(i) i.value=\'' + c + '\';" style="display:inline-block; margin:3px 6px 3px 0; padding:3px 9px; border:1px solid rgba(33,33,33,0.25); border-radius:6px; cursor:pointer; letter-spacing:1px;">' + esc(c) + '</span>';
+        return '<span onclick="var i=document.getElementById(\'fbCode\'); if(i) i.value=\'' + c + '\';" style="display:inline-block; margin:4px 8px 4px 0; padding:3px 9px; border:1px solid rgba(33,33,33,0.25); border-radius:6px; cursor:pointer; letter-spacing:1px;">' + esc(c) + '</span>';
       }).join('');
       if (input && !input.value) input.value = codes[0];
     }
@@ -3632,7 +3632,7 @@
           '<span style="font-size:14px; font-weight:600;">编号 ' + esc(code) + ' · ' + esc(fb.category || '其他') + '</span>' +
           '<span style="font-size:12px; padding:3px 9px; border-radius:20px; border:1px solid ' + stColor + '55; color:' + stColor + ';">' + esc(st) + '</span>' +
           '</div>' +
-          '<div style="margin-top:6px; font-size:12px; color:var(--ink-soft);">提交时间：' + esc(fb.created_at || '') + '</div>' +
+          '<div style="margin-top:8px; font-size:12px; color:var(--ink-soft);">提交时间：' + esc(fb.created_at || '') + '</div>' +
           '<div style="margin-top:10px; font-size:13px; line-height:1.8; color:var(--ink-soft); white-space:pre-wrap;">📝 <b>我的反馈：</b><br>' + esc(fb.content || '') + '</div>' +
           replyHtml +
           '</div>';
