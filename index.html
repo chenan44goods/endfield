@@ -58,7 +58,7 @@
       display: block;
       width: min(380px, 82%);
       border: 2px solid #212121;
-      border-radius: 6px;
+      border-radius: 8px;
       box-shadow: 0 22px 45px -20px rgba(33,33,33,0.55);
     }
     /* 左上角：山团团黑色徽标 */
@@ -201,11 +201,11 @@
     .console-btn {
       position: relative;
       width: auto;
-      padding: 11px 20px;
+      padding: 12px 20px;
       background: transparent;
       color: var(--ink);
       border: 1.5px solid var(--ink);
-      border-radius: 2px;
+      border-radius: 4px;
       font-family: var(--serif-cn);
       font-size: 14px;
       letter-spacing: 0.14em;
@@ -223,7 +223,7 @@
     .console-btn .label {
       display: inline-flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       z-index: 2;
       position: relative;
     }
@@ -255,7 +255,7 @@
     }
 
     .console-caption {
-      margin-top: 14px;
+      margin-top: 16px;
       font-size: 11px;
       letter-spacing: 0.22em;
       color: var(--muted);
@@ -276,7 +276,7 @@
     .entry {
       display: flex;
       align-items: center;
-      gap: 26px;
+      gap: 24px;
       cursor: pointer;
       padding: 10px 0;
       position: relative;
@@ -326,7 +326,7 @@
       box-shadow: 0 0 10px rgba(233,226,48,0.85);
     }
 
-    .entry-meta { display: flex; flex-direction: column; gap: 6px; }
+    .entry-meta { display: flex; flex-direction: column; gap: 8px; }
     .entry-sub {
       font-size: 11px;
       letter-spacing: 0.24em;
@@ -372,18 +372,18 @@
       background: var(--paper);
       box-shadow: 0 0 10px rgba(233,226,48,0.9);
     }
-    .entry-piggy .entry-name { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 28px; }
+    .entry-piggy .entry-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 28px; }
     .entry-piggy .entry-badge {
       font-family: var(--sans);
       font-size: 11px;
       font-weight: 700;
       letter-spacing: 0.05em;
-      padding: 3px 9px;
+      padding: 4px 8px;
       border-radius: 20px;
       background: var(--paper);
       color: var(--ink);
       border: 1px solid rgba(33,33,33,0.3);
-      box-shadow: 0 2px 6px rgba(20,22,26,0.16);
+      box-shadow: 0 2px 8px rgba(20,22,26,0.16);
       white-space: nowrap;
     }
 
@@ -526,10 +526,10 @@
       justify-content: center;
       gap: 8px;
       width: 100%;
-      margin-top: 14px;
+      margin-top: 16px;
       padding: 10px 0;
       border: 1px solid rgba(22,24,28,0.16);
-      border-radius: 10px;
+      border-radius: 12px;
       background: rgba(255,255,255,0.96);
       color: var(--ink);
       font-size: 14px;
@@ -559,7 +559,7 @@
     .qp-back {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
       height: 34px;
       padding: 0;
       border: 0;
@@ -599,7 +599,7 @@
       letter-spacing: 0.26em;
       color: var(--muted);
       text-transform: uppercase;
-      margin-bottom: 34px;
+      margin-bottom: 32px;
     }
     .field {
       margin-bottom: 24px;
@@ -610,14 +610,14 @@
       letter-spacing: 0.2em;
       color: var(--muted);
       text-transform: uppercase;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
     .field input {
       width: 100%;
       border: none;
       border-bottom: 1px solid var(--ink-soft);
       background: transparent;
-      padding: 10px 2px;
+      padding: 10px 4px;
       font-size: 16px;
       color: var(--ink);
       outline: none;
@@ -626,9 +626,9 @@
     .field input::placeholder { color: #aab2c0; }
     .field input:focus { border-color: var(--navy-ink); }
     .panel-btn {
-      margin-top: 10px;
+      margin-top: 8px;
       width: 100%;
-      padding: 18px;
+      padding: 16px;
       background: var(--navy-2);
       color: #eef0f2;
       border: none;
@@ -674,14 +674,14 @@
       bottom: 48px;
       z-index: 3000;
       max-width: 82vw;
-      padding: 12px 22px;
+      padding: 12px 24px;
       border-radius: 8px;
       background: var(--navy);
       color: #f5f4ec;
       font-size: 14px;
       line-height: 1.5;
       letter-spacing: 0.02em;
-      box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+      box-shadow: 0 12px 34px rgba(0,0,0,0.26);
       opacity: 0;
       transform: translateX(-50%) translateY(16px);
       transition: opacity 0.25s ease, transform 0.25s ease;
@@ -747,7 +747,7 @@
       top: 30px;
       right: 90px;
       width: 150px;
-      padding: 12px 14px;
+      padding: 12px 16px;
       border-left: 2px solid rgba(22,24,28,0.6);
       background: rgba(31,35,42,0.05);
       backdrop-filter: blur(2px);
@@ -812,7 +812,7 @@
       z-index: 9;
       text-align: center;
       line-height: 1.9;
-      padding: 10px 28px;
+      padding: 10px 24px;
       background: rgba(31,35,42,0.05);
       backdrop-filter: blur(2px);
       border-top: 1px solid rgba(22,24,28,0.4);
@@ -821,7 +821,7 @@
       letter-spacing: 0.08em;
       white-space: nowrap;
     }
-    .hud-note .sep { color: var(--accent); margin: 0 10px; }
+    .hud-note .sep { color: var(--accent); margin: 0 8px; }
     .hud-note .contact { color: var(--ink); font-weight: 600; }
 
     /* 📌 版本标记：必须 z-index 压过 .query-panel(fixed, z-index:20)，
@@ -838,8 +838,8 @@
       letter-spacing: 0.06em;
       color: rgba(33, 33, 33, 0.55);
       background: rgba(255, 255, 255, 0.32);
-      padding: 3px 6px;
-      border-radius: 5px;
+      padding: 4px 8px;
+      border-radius: 4px;
       pointer-events: none;
       user-select: none;
       -webkit-user-select: none;
@@ -897,7 +897,7 @@
     .result-item .r-side { display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex-shrink:0; }
     .result-item .r-side-top { display:flex; align-items:center; gap:12px; }
     .result-item .r-badge {
-      font-size: 11px; padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+      font-size: 11px; padding: 4px 8px; border-radius: 999px; white-space: nowrap;
       letter-spacing: 0.04em; font-weight: 600; border: 1px solid transparent;
       background: rgba(28,32,38,0.9); color: #fff;
     }
@@ -911,11 +911,11 @@
     .r-badge.st-custom   { background:rgba(28,32,38,0.9); color:#fff; }
     .result-item .r-apply {
       border: none; background:#15803d; color:#fff; font-size:12px; font-weight:700;
-      padding: 7px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap; font-family: var(--sans);
+      padding: 8px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap; font-family: var(--sans);
       transition: background 0.2s, transform 0.15s;
     }
     .result-item .r-apply:hover { background:#166534; transform: translateY(-1px); }
-    .result-empty { text-align:center; padding:30px; color:var(--ink-soft); font-size:13px; background:rgba(250,250,246,0.82); border-radius:8px; white-space:pre-line; line-height:1.7; }
+    .result-empty { text-align:center; padding:32px; color:var(--ink-soft); font-size:13px; background:rgba(250,250,246,0.82); border-radius:8px; white-space:pre-line; line-height:1.7; }
     .stat-pill { display:inline-block; background:rgba(22,24,28,0.72); color:#f5f4ec; padding:8px 16px; border-radius:999px; font-size:13px; font-weight:600; letter-spacing:0.06em; backdrop-filter:blur(3px); }
     .batch-label-pill { display:inline-block; background:rgba(22,24,28,0.72); color:#f5f4ec; padding:8px 12px; border-radius:999px; font-size:11px; letter-spacing:0.12em; backdrop-filter:blur(3px); }
     .r-batch { font-size:11px; color:#7a756a; margin-top:4px; letter-spacing:0.02em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
@@ -933,7 +933,7 @@
     /* 🏆 帝江号大胃袋榜（可爱贴纸风） */
     .taotie-btn {
       display: inline-flex; align-items: center; gap: 8px;
-      margin-top: 20px; padding: 9px 18px;
+      margin-top: 20px; padding: 8px 16px;
       background: #fff; border: 2px solid #212121; border-radius: 999px;
       font-family: var(--sans); font-size: 13px; font-weight: 700; color: var(--ink);
       cursor: pointer; box-shadow: 3px 3px 0 #212121; transition: all .2s ease;
@@ -942,13 +942,13 @@
     .taotie-overlay {
       position: fixed; inset: 0; z-index: 2600;
       background: rgba(33,33,33,0.45); backdrop-filter: blur(3px);
-      display: none; align-items: center; justify-content: center; padding: 18px;
+      display: none; align-items: center; justify-content: center; padding: 16px;
     }
     .taotie-overlay.open { display: flex; }
     .taotie-card {
       position: relative; width: min(440px, 94vw); max-height: 84vh;
       display: flex; flex-direction: column;
-      background: #fffdf6; border: 3px solid #212121; border-radius: 26px;
+      background: #fffdf6; border: 3px solid #212121; border-radius: 24px;
       box-shadow: 8px 10px 0 rgba(33,33,33,0.85);
       animation: ttPop .32s cubic-bezier(.34,1.56,.64,1);
     }
@@ -959,11 +959,11 @@
       font-weight: 900; font-size: 13px; cursor: pointer; color: var(--ink);
     }
     .taotie-close:hover { transform: rotate(90deg); transition: transform .25s; }
-    .taotie-head { display: flex; gap: 12px; align-items: center; padding: 20px 22px 12px; border-bottom: 2px dashed rgba(33,33,33,0.2); }
+    .taotie-head { display: flex; gap: 12px; align-items: center; padding: 20px 24px 12px; border-bottom: 2px dashed rgba(33,33,33,0.2); }
     .taotie-mascot { font-size: 34px; }
     .taotie-title { font-family: var(--serif-cn); font-size: 24px; font-weight: 900; color: var(--ink); }
-    .taotie-sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
-    .taotie-list { overflow-y: auto; padding: 12px 18px 16px; }
+    .taotie-sub { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+    .taotie-list { overflow-y: auto; padding: 12px 16px 16px; }
     .tt-row {
       display: flex; align-items: center; gap: 12px; padding: 10px 12px;
       border-radius: 16px; margin-bottom: 8px; background: #fff;
@@ -978,10 +978,10 @@
     }
     .tt-info { flex: 1; min-width: 0; }
     .tt-cn { font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .tt-count { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+    .tt-count { font-size: 11px; color: var(--ink-soft); margin-top: 4px; }
     .tt-amount { font-weight: 900; color: var(--ink); font-size: 16px; white-space: nowrap; }
-    .taotie-loading, .taotie-empty { text-align: center; padding: 26px; color: var(--ink-soft); font-size: 13px; }
-    .taotie-foot { padding: 10px 18px 16px; font-size: 10px; color: var(--muted); text-align: center; border-top: 2px dashed rgba(33,33,33,0.14); }
+    .taotie-loading, .taotie-empty { text-align: center; padding: 24px; color: var(--ink-soft); font-size: 13px; }
+    .taotie-foot { padding: 10px 16px 16px; font-size: 10px; color: var(--muted); text-align: center; border-top: 2px dashed rgba(33,33,33,0.14); }
     /* 📱 移动端：隐藏纯装饰 HUD，联系方式改为随内容滚动，不再悬浮遮挡 */
     .mobile-contact { display:none; }
     @media (max-width: 900px) {
@@ -1060,7 +1060,7 @@
     @media (max-width: 600px) {
       .result-carousel { height: 64vh; padding: 24vh 8px 24vh; }
       /* 手机上去掉毛玻璃和高斯模糊：这类效果每帧都要重绘，是滑动掉帧的大户 */
-      .result-item { flex-wrap: wrap; gap: 8px 12px; padding: 16px; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: 0 4px 14px rgba(0,0,0,0.18); }
+      .result-item { flex-wrap: wrap; gap: 8px 12px; padding: 16px; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: 0 4px 16px rgba(0,0,0,0.18); }
       .stat-pill, .batch-label-pill { backdrop-filter: none; -webkit-backdrop-filter: none; }
       .result-item .r-img, .result-item .r-img-empty { width: 84px; height: 84px; border-radius: 12px; }
       .result-item .r-info { flex: 1 1 calc(100% - 96px); min-width: 0; }
@@ -1086,9 +1086,9 @@
       width: 100%; max-width: 420px;
       background: #fffdf7;
       border: 2px solid var(--ink, #212121);
-      border-radius: 14px;
+      border-radius: 16px;
       box-shadow: 0 18px 50px rgba(0,0,0,0.35);
-      padding: 18px 18px 14px;
+      padding: 16px 16px 16px;
       animation: qmodalPop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2);
       max-height: 86vh; overflow-y: auto;
       -webkit-overflow-scrolling: touch;
@@ -1102,17 +1102,17 @@
       line-height: 1.55;
       padding: 10px 12px;
       border: 1.5px solid rgba(33,33,33,0.28);
-      border-radius: 10px;
+      border-radius: 12px;
       background: #fff; color: var(--ink, #212121);
       resize: vertical; outline: none;
       -webkit-appearance: none; appearance: none;
     }
     .qmodal-input:focus { border-color: var(--accent, #e0a92b); box-shadow: 0 0 0 3px rgba(224,169,43,0.18); }
-    .qmodal-btns { display: flex; gap: 10px; margin-top: 14px; }
+    .qmodal-btns { display: flex; gap: 8px; margin-top: 16px; }
     .qmodal-btn {
-      flex: 1; padding: 11px 10px;
+      flex: 1; padding: 12px 8px;
       font-family: var(--sans, system-ui, sans-serif); font-size: 14px; font-weight: 700;
-      border-radius: 10px; cursor: pointer;
+      border-radius: 12px; cursor: pointer;
       border: 1.5px solid rgba(33,33,33,0.3); background: #fff; color: var(--ink, #212121);
       transition: background 0.15s, transform 0.1s;
       -webkit-tap-highlight-color: transparent;
@@ -1127,7 +1127,7 @@
       .qmodal { max-width: none; width: 100%; border-radius: 16px 16px 0 0; border-bottom: none;
                 padding: 18px 16px calc(16px + env(safe-area-inset-bottom, 0px)); max-height: 88vh; }
       .qmodal-title { font-size: 17px; }
-      .qmodal-btn { padding: 13px 10px; font-size: 15px; }   /* 加大点击区，避免误触 */
+      .qmodal-btn { padding: 12px 8px; font-size: 15px; }   /* 加大点击区，避免误触 */
     }
   </style>
 </head>
@@ -1268,7 +1268,7 @@
         <div class="qp-sub" id="panelSub">AS / PAYMENT · FEE</div>
         <div class="qp-title" id="panelTitle">交肾核算</div>
 
-        <div class="field" style="margin-top: 34px;">
+        <div class="field" style="margin-top: 32px;">
           <label for="panelKey">Query Key · 查询密钥</label>
           <input id="panelKey" placeholder="输入团长提供的密钥" oninput="if(typeof currentPanel!=='undefined'){ if(currentPanel==='fbreply') renderMyFbCodes(); if(currentPanel==='piggy') piggyDebouncedLoad(); }">
         </div>
@@ -1278,9 +1278,9 @@
         </div>
         <!-- 反馈表单字段（默认隐藏） -->
         <div id="fbFields" style="display:none;">
-          <div class="field" style="margin-top: 34px;">
+          <div class="field" style="margin-top: 32px;">
             <label for="fbCategory">反馈分类</label>
-            <select id="fbCategory" style="width:100%; border:none; border-bottom:1px solid var(--ink-soft); background:transparent; padding:10px 2px; font-size:16px; color:var(--ink); outline:none; font-family:var(--sans);">
+            <select id="fbCategory" style="width:100%; border:none; border-bottom:1px solid var(--ink-soft); background:transparent; padding:10px 4px; font-size:16px; color:var(--ink); outline:none; font-family:var(--sans);">
               <option value="建议">💡 建议</option>
               <option value="问题反馈">⚠️ 问题反馈</option>
               <option value="投诉">🚨 投诉</option>
@@ -1289,7 +1289,7 @@
           </div>
           <div class="field">
             <label for="fbContent">反馈详情 *</label>
-            <textarea id="fbContent" rows="4" placeholder="请描述您的想法、建议或遇到的问题..." style="width:100%; border:none; border-bottom:1px solid var(--ink-soft); background:transparent; padding:10px 2px; font-size:16px; color:var(--ink); outline:none; font-family:var(--sans); resize:vertical;"></textarea>
+            <textarea id="fbContent" rows="4" placeholder="请描述您的想法、建议或遇到的问题..." style="width:100%; border:none; border-bottom:1px solid var(--ink-soft); background:transparent; padding:10px 4px; font-size:16px; color:var(--ink); outline:none; font-family:var(--sans); resize:vertical;"></textarea>
           </div>
           <button class="panel-btn" id="fbSubmitBtn" onclick="submitFeedback()">
             <span class="scan"></span>
@@ -1300,16 +1300,16 @@
 
         <!-- 查反馈回复字段（默认隐藏） -->
         <div id="fbReplyFields" style="display:none;">
-          <div class="field" style="margin-top: 34px;">
+          <div class="field" style="margin-top: 32px;">
             <label for="fbCode">反馈编号 · 取件码</label>
             <input id="fbCode" placeholder="提交反馈时给你的 6 位编号" style="text-transform:uppercase; letter-spacing:2px;" autocomplete="off">
           </div>
-          <div id="fbMyCodes" style="font-size:12px; color:var(--ink-soft); margin:10px 0 2px; line-height:1.8;"></div>
+          <div id="fbMyCodes" style="font-size:12px; color:var(--ink-soft); margin:8px 0 4px; line-height:1.8;"></div>
           <button class="panel-btn" id="fbQueryBtn" onclick="queryFeedbackReply()">
             <span class="scan"></span>
             <span>CHECK REPLY</span>
           </button>
-          <div id="fbReplyResult" style="display:none; margin-top:18px;"></div>
+          <div id="fbReplyResult" style="display:none; margin-top:16px;"></div>
         </div>
 
         <!-- 💰 零钱罐 · 存钱表单（默认隐藏）2026-10-14 团长需求
@@ -1325,8 +1325,8 @@
           <div class="field">
             <label>扫码转账</label>
             <img src="images/piggy_pay_qr.jpg" alt="山团团微信存肾专用收款码" decoding="async"
-                 style="display:block; width:100%; height:auto; margin-top:2px; border:1px solid rgba(33,33,33,0.16); background:#141414;">
-            <div style="font-size:12px; color:var(--ink-soft); margin-top:10px; line-height:1.85;">
+                 style="display:block; width:100%; height:auto; margin-top:4px; border:1px solid rgba(33,33,33,0.16); background:#141414;">
+            <div style="font-size:12px; color:var(--ink-soft); margin-top:8px; line-height:1.85;">
               📱 <b>长按图片识别二维码</b>，或用另一台手机扫。<br>
               转账时记得备注里写上<b>你的圈名</b>；转完把截图存下来，填在下面「转账截图」里。
             </div>
@@ -1334,8 +1334,8 @@
           <div class="field">
             <label>转账截图 *</label>
             <input id="piggyFile" type="file" accept="image/*" style="display:none;" onchange="onPiggyFilePicked(this)">
-            <button type="button" onclick="var e=document.getElementById('piggyFile'); if(e) e.click();" style="padding:11px 18px; border:1px dashed rgba(33,33,33,0.35); background:transparent; color:var(--ink); font-size:13px; cursor:pointer; font-family:var(--sans);">📎 选择截图</button>
-            <div id="piggyPreview" style="margin-top:10px;"></div>
+            <button type="button" onclick="var e=document.getElementById('piggyFile'); if(e) e.click();" style="padding:12px 16px; border:1px dashed rgba(33,33,33,0.35); background:transparent; color:var(--ink); font-size:13px; cursor:pointer; font-family:var(--sans);">📎 选择截图</button>
+            <div id="piggyPreview" style="margin-top:8px;"></div>
           </div>
           <div class="field">
             <label for="piggyNote">备注（可选）</label>
@@ -1355,7 +1355,7 @@
         </button>
         <!-- 🔑 2026-10-26：密钥与 CN 会记在本机（下次打开自动填好）。
              密钥是全团共用的一个串，不是个人密码；但共用设备时仍要能一键抹掉。 -->
-        <div id="clearRememberRow" style="display:none; margin-top:14px; text-align:center;">
+        <div id="clearRememberRow" style="display:none; margin-top:16px; text-align:center;">
           <span id="clearRememberBtn" onclick="clearRememberedId()"
                 style="font-size:11px; letter-spacing:.3px; color:rgba(22,24,28,0.42); cursor:pointer; text-decoration:underline; text-underline-offset:3px;">共用设备？清除本机记录和当前查询结果</span>
         </div>
@@ -2130,7 +2130,7 @@
       if (s === '已通过') { bg='rgba(21,128,61,0.10)'; bd='rgba(21,128,61,0.35)'; fg='#15803d'; }
       if (s === '已驳回') { bg='rgba(220,38,38,0.10)'; bd='rgba(220,38,38,0.35)'; fg='#dc2626'; }
       if (s === '已撤回') { bg='rgba(33,33,33,0.06)'; bd='rgba(33,33,33,0.22)'; fg='#6b6b6b'; }
-      return '<span style="font-size:11px; padding:2px 8px; border-radius:20px; border:1px solid '+bd+'; background:'+bg+'; color:'+fg+';">'+esc(s)+'</span>';
+      return '<span style="font-size:11px; padding:4px 8px; border-radius:20px; border:1px solid '+bd+'; background:'+bg+'; color:'+fg+';">'+esc(s)+'</span>';
     }
     async function renderPayBox(items, key, cn){
       const box = document.getElementById('payBox');
@@ -2262,12 +2262,12 @@
         const qr = qrUrlForBatch(g.name);
         const _plan = _batchDepositPlan(g.name);   // 💰 本批定金计划（没开 = null）
 
-        html += '<div style="margin:14px 0; padding:16px; border-radius:12px; border:1px solid ' + bd + '; background:rgba(250,250,246,0.94);">';
-        html += '<div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap;">';
+        html += '<div style="margin:16px 0; padding:16px; border-radius:12px; border:1px solid ' + bd + '; background:rgba(250,250,246,0.94);">';
+        html += '<div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px; flex-wrap:wrap;">';
         // 🏝️ 岛内那笔要一眼看得出不是国际运费（2026-09-28 团长要求）
         const _kindEmoji = g.hasIntl ? '🌍 ' : (g.island ? '🏝️ ' : '');
         const _kindTag = g.island
-          ? '<span style="font-size:11px; padding:2px 8px; border-radius:20px; border:1px solid rgba(13,148,136,0.35); background:rgba(13,148,136,0.10); color:#0f766e; margin-left:6px; white-space:nowrap;">'
+          ? '<span style="font-size:11px; padding:4px 8px; border-radius:20px; border:1px solid rgba(13,148,136,0.35); background:rgba(13,148,136,0.10); color:#0f766e; margin-left:8px; white-space:nowrap;">'
             + (g.hasIntl ? '含岛内运费' : '岛内运费') + '</span>'
           : '';
         html += '<div style="font-size:14px; font-weight:600; color:' + fg + ';">' + _kindEmoji + esc(g.name) + _kindTag + '</div>';
@@ -2376,7 +2376,7 @@
             const _pct = Math.round(_plan.ratio * 1000) / 10;
             html += '<div style="margin-top:12px; padding:8px 12px; border-radius:8px; background:rgba(161,98,7,0.08); border:1px solid rgba(161,98,7,0.25); font-size:12px; color:#a16207; line-height:1.8;">'
                  + '💰 本批可以分两笔交：先交<b>定金 ￥' + _dep.toFixed(2) + '</b>（应付的 ' + _pct + '%），剩下的<b>尾款 ￥' + _bal.toFixed(2) + '</b> 等团长通知再补。</div>';
-            html += '<div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">';
+            html += '<div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">';
             html += '<button type="button" onclick="openPayForm(' + idx + ', \'full\')" style="padding:10px 16px; border-radius:8px; border:1px solid rgba(220,38,38,0.4); background:#b91c1c; color:#fff; font-weight:600; font-size:13px; cursor:pointer; font-family:var(--sans);">📤 交全款 ￥' + g.total.toFixed(2) + '</button>';
             html += '<button type="button" onclick="openPayForm(' + idx + ', \'deposit\')" style="padding:10px 16px; border-radius:8px; border:1px solid rgba(161,98,7,0.45); background:#fff; color:#a16207; font-weight:600; font-size:13px; cursor:pointer; font-family:var(--sans);">📤 交定金 ￥' + _dep.toFixed(2) + '</button>';
             html += '</div>';
@@ -2464,16 +2464,16 @@
         piggyUsed: 0
       };
       const _pgBlock = _pgBal > 0
-        ? ('<div style="margin:2px 0 13px; padding:11px 13px; border-radius:10px; border:1px solid rgba(217,75,75,0.32); background:#fffbe6;">' +
+        ? ('<div style="margin:4px 0 12px; padding:12px 12px; border-radius:12px; border:1px solid rgba(217,75,75,0.32); background:#fffbe6;">' +
              '<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600; color:var(--ink);">' +
                '<input type="checkbox" id="piggyUseChk" onchange="onPayPiggyToggle(this)" style="width:18px; height:18px; accent-color:#d94b4b; cursor:pointer;">' +
                '<span>用零钱罐抵扣（余额 ￥' + _pgBal.toFixed(2) + '）</span>' +
              '</label>' +
-             '<div id="piggyUseInfo" style="display:none; font-size:12px; color:var(--ink-soft); margin-top:7px; line-height:1.75;"></div>' +
+             '<div id="piggyUseInfo" style="display:none; font-size:12px; color:var(--ink-soft); margin-top:8px; line-height:1.75;"></div>' +
            '</div>')
         : '';
       slot.innerHTML =
-        '<div style="margin-top:14px; padding-top:14px; border-top:1px dashed rgba(33,33,33,0.2);">' +
+        '<div style="margin-top:16px; padding-top:14px; border-top:1px dashed rgba(33,33,33,0.2);">' +
           '<div style="font-size:13px; font-weight:600; color:#b91c1c;">' + amountLabel + '</div>' +
           '<div style="font-size:11px; color:var(--ink-soft); margin:4px 0 12px;">' + amountHint + '</div>' +
           _pgBlock +
@@ -2481,7 +2481,7 @@
             '<div style="font-size:12px; color:var(--ink-soft); margin-bottom:8px;">付款截图 *</div>' +
             '<input id="payFile" type="file" accept="image/*" style="display:none;" onchange="onPayFilePicked(this)">' +
             '<button type="button" onclick="var e=document.getElementById(\'payFile\'); if(e) e.click();" style="padding:10px 16px; border-radius:8px; border:1px dashed rgba(33,33,33,0.3); background:rgba(33,33,33,0.03); color:var(--ink); font-size:13px; cursor:pointer; font-family:var(--sans);">📎 选择截图</button>' +
-            '<div id="payPreview" style="margin-top:10px;"></div>' +
+            '<div id="payPreview" style="margin-top:8px;"></div>' +
           '</div>' +
           '<div style="font-size:12px; color:var(--ink-soft); margin:12px 0 8px;">支付方式 *</div>' +
           '<select id="payMethod" style="width:100%; padding:10px; border-radius:8px; border:1px solid rgba(33,33,33,0.2); background:#fff; color:var(--ink); font-size:14px; font-family:var(--sans); outline:none;">' +
@@ -2489,7 +2489,7 @@
           '</select>' +
           '<div style="font-size:12px; color:var(--ink-soft); margin:12px 0 8px;">备注（可选）</div>' +
           '<input id="payNote" placeholder="例如：转账尾号 1234 / 昨天下午付的" style="width:100%; padding:10px; border-radius:8px; border:1px solid rgba(33,33,33,0.2); background:#fff; color:var(--ink); font-size:14px; font-family:var(--sans); outline:none; box-sizing:border-box;">' +
-          '<div style="margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">' +
+          '<div style="margin-top:16px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">' +
             '<button type="button" id="paySubmitBtn" onclick="submitPayProof()" style="padding:10px 16px; border-radius:8px; border:none; background:#b91c1c; color:#fff; font-weight:600; font-size:13px; cursor:pointer; font-family:var(--sans);">提交给团长审核</button>' +
             '<button type="button" onclick="cancelPayForm(' + idx + ')" style="padding:10px 16px; border-radius:8px; border:1px solid rgba(33,33,33,0.2); background:transparent; color:var(--ink-soft); font-size:13px; cursor:pointer; font-family:var(--sans);">取消</button>' +
           '</div>' +
@@ -2741,7 +2741,7 @@
       const balEl = document.getElementById('piggyBalance');
       const recEl = document.getElementById('piggyRecords');
       if (!key || !cn){
-        if (balEl) balEl.innerHTML = '<div style="line-height:1.9; margin-top:22px;">填好上面的<b>查询密钥</b>和<b>圈名</b>，这里就会显示你的零钱罐余额和存入记录。</div>';
+        if (balEl) balEl.innerHTML = '<div style="line-height:1.9; margin-top:24px;">填好上面的<b>查询密钥</b>和<b>圈名</b>，这里就会显示你的零钱罐余额和存入记录。</div>';
         if (recEl) recEl.innerHTML = '';
         return;
       }
@@ -2778,12 +2778,12 @@
         // 🎨 10-14 晚三次返工：团长「又不是很明显了，搞明显一点」→ **在线稿语言里加重量**：
         //    ① 左侧 5px 品牌黄定位条（线，不是盒子）② 金额 30px → 42px ③ 金额垫一道荧光笔黄
         //    ④ 状态改成带底色的药丸。整体仍是「文字 + 线」，不回到盒子。
-        '<div style="border-left:5px solid var(--paper); padding:2px 0 2px 16px; margin:8px 0 2px;">' +
+        '<div style="border-left:5px solid var(--paper); padding:4px 0 4px 16px; margin:8px 0 4px;">' +
           '<div style="font-size:11px; letter-spacing:0.2em; color:var(--ink-soft); text-transform:uppercase;">PIGGY BANK · 当前可用余额</div>' +
-          '<div style="margin-top:7px;">' +
+          '<div style="margin-top:8px;">' +
             '<span style="display:inline-block; font-family:var(--serif); font-size:42px; font-weight:700; line-height:1.1; color:var(--ink); padding-right:7px; background:linear-gradient(transparent 56%, rgba(254,254,44,0.8) 56%);">￥' + bal.toFixed(2) + '</span>' +
           '</div>' +
-          '<div style="height:1px; background:rgba(33,33,33,0.32); margin:15px 0 12px;"></div>' +
+          '<div style="height:1px; background:rgba(33,33,33,0.32); margin:16px 0 12px;"></div>' +
           '<div style="font-size:12px; color:var(--ink-soft); line-height:1.9;">' +
             (pend > 0 ? ('⏳ 另有 ￥' + pend.toFixed(2) + ' 在等团长审核<br>') : '') +
             (usedSum > 0 ? ('已经用它抵扣过 ￥' + usedSum.toFixed(2) + ' 的费用') : '交谷子费 / 运费时可以直接用这里面的钱抵扣') +
@@ -2802,8 +2802,8 @@
         const remain = piggyRemain(r);
         const color = st === PIGGY_ST_PENDING ? '#b45309' : (st === PIGGY_ST_OK ? '#15803d' : (st === PIGGY_ST_REJECT ? '#dc2626' : '#6b7280'));
         const bg = st === PIGGY_ST_PENDING ? 'rgba(180,83,9,0.13)' : (st === PIGGY_ST_OK ? 'rgba(21,128,61,0.13)' : (st === PIGGY_ST_REJECT ? 'rgba(220,38,38,0.13)' : 'rgba(107,114,128,0.15)'));
-        h += '<div style="border-top:1px solid rgba(33,33,33,0.16); margin-top:14px; padding-top:14px;">' +
-               '<div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">' +
+        h += '<div style="border-top:1px solid rgba(33,33,33,0.16); margin-top:16px; padding-top:14px;">' +
+               '<div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">' +
                  '<span style="font-family:var(--serif); font-size:19px; font-weight:700; color:var(--ink);">￥' + Number(r.amount || 0).toFixed(2) + '</span>' +
                  '<span style="font-size:11px; font-weight:700; letter-spacing:0.06em; color:' + color + '; background:' + bg + '; border-radius:20px; padding:4px 12px; white-space:nowrap;">' + esc(st) + '</span>' +
                '</div>' +
@@ -3515,7 +3515,7 @@
       const codes = getMyFbCodes(((kEl && kEl.value) || '').trim());
       if (!codes.length) { box.innerHTML = '<span style="opacity:.75;">在这台手机上提交过反馈的话，编号会自动填好。</span>'; return; }
       box.innerHTML = '本机提交过的编号（点一下自动填入）：<br>' + codes.map(function(c){
-        return '<span onclick="var i=document.getElementById(\'fbCode\'); if(i) i.value=\'' + c + '\';" style="display:inline-block; margin:4px 8px 4px 0; padding:3px 9px; border:1px solid rgba(33,33,33,0.25); border-radius:6px; cursor:pointer; letter-spacing:1px;">' + esc(c) + '</span>';
+        return '<span onclick="var i=document.getElementById(\'fbCode\'); if(i) i.value=\'' + c + '\';" style="display:inline-block; margin:4px 8px 4px 0; padding:4px 8px; border:1px solid rgba(33,33,33,0.25); border-radius:8px; cursor:pointer; letter-spacing:1px;">' + esc(c) + '</span>';
       }).join('');
       if (input && !input.value) input.value = codes[0];
     }
@@ -3524,14 +3524,14 @@
       if (!box) return;
       box.style.display = 'block';
       box.innerHTML =
-        '<div style="margin-top:18px; padding:16px; border:1px dashed rgba(33,33,33,0.3); border-radius:10px; background:rgba(33,33,33,0.04);">' +
+        '<div style="margin-top:16px; padding:16px; border:1px dashed rgba(33,33,33,0.3); border-radius:12px; background:rgba(33,33,33,0.04);">' +
         '<div style="font-size:12px; letter-spacing:1px; color:var(--ink-soft);">YOUR FEEDBACK CODE · 反馈编号</div>' +
-        '<div id="fbNewCode" style="margin:8px 0 6px; font-size:28px; font-weight:700; letter-spacing:5px; color:var(--accent);">' + esc(code) + '</div>' +
+        '<div id="fbNewCode" style="margin:8px 0 8px; font-size:28px; font-weight:700; letter-spacing:5px; color:var(--accent);">' + esc(code) + '</div>' +
         '<div style="font-size:12px; line-height:1.75; color:var(--ink-soft);">' +
         '团长回复后，回首页点「查反馈回复」，输入密钥 + 这个编号就能看到答复。<br>' +
         '⚠️ 这个编号只显示这一次，请截图保存；弄丢了只能重新提一条。</div>' +
         '<div style="margin-top:12px;">' +
-        '<button type="button" onclick="copyFbCode()" style="padding:8px 14px; border-radius:8px; border:1px solid rgba(33,33,33,0.3); background:transparent; color:var(--ink); font-size:13px; cursor:pointer;">复制编号</button>' +
+        '<button type="button" onclick="copyFbCode()" style="padding:8px 16px; border-radius:8px; border:1px solid rgba(33,33,33,0.3); background:transparent; color:var(--ink); font-size:13px; cursor:pointer;">复制编号</button>' +
         '</div></div>';
     }
     /* 复制应付金额：只要纯数字，粘到微信/支付宝的转账金额框就能直接用 */
@@ -3617,7 +3617,7 @@
         const list = (imgData && Array.isArray(imgData.feedback)) ? imgData.feedback : [];
         const fb = list.filter(function(f){ return fbCodeOf(f) === code; })[0];
         if (!fb) {
-          if (box) box.innerHTML = '<div style="padding:14px; border-radius:10px; background:rgba(33,33,33,0.04); font-size:13px; line-height:1.75; color:var(--ink-soft);">' +
+          if (box) box.innerHTML = '<div style="padding:16px; border-radius:12px; background:rgba(33,33,33,0.04); font-size:13px; line-height:1.75; color:var(--ink-soft);">' +
             '没有找到编号 <b>' + esc(code) + '</b> 对应的反馈。<br>请检查是否输错（不区分大小写）；如果是在别的手机或浏览器上提交的，需要手动输入当时的编号。</div>';
           return;
         }
@@ -3627,13 +3627,13 @@
           ? '<div style="margin-top:12px; padding:12px; border-radius:8px; background:rgba(21,128,61,0.08); border:1px solid rgba(21,128,61,0.25); font-size:14px; line-height:1.8; color:var(--ink); white-space:pre-wrap;">💬 <b>团长回复：</b><br>' + esc(fb.reply) + '</div>'
           : '<div style="margin-top:12px; font-size:13px; color:var(--ink-soft);">团长还没回复这条，过几天再来看看。</div>';
         if (box) box.innerHTML =
-          '<div style="padding:16px; border-radius:10px; background:rgba(33,33,33,0.04); border:1px solid rgba(33,33,33,0.12);">' +
-          '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">' +
+          '<div style="padding:16px; border-radius:12px; background:rgba(33,33,33,0.04); border:1px solid rgba(33,33,33,0.12);">' +
+          '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">' +
           '<span style="font-size:14px; font-weight:600;">编号 ' + esc(code) + ' · ' + esc(fb.category || '其他') + '</span>' +
-          '<span style="font-size:12px; padding:3px 9px; border-radius:20px; border:1px solid ' + stColor + '55; color:' + stColor + ';">' + esc(st) + '</span>' +
+          '<span style="font-size:12px; padding:4px 8px; border-radius:20px; border:1px solid ' + stColor + '55; color:' + stColor + ';">' + esc(st) + '</span>' +
           '</div>' +
           '<div style="margin-top:8px; font-size:12px; color:var(--ink-soft);">提交时间：' + esc(fb.created_at || '') + '</div>' +
-          '<div style="margin-top:10px; font-size:13px; line-height:1.8; color:var(--ink-soft); white-space:pre-wrap;">📝 <b>我的反馈：</b><br>' + esc(fb.content || '') + '</div>' +
+          '<div style="margin-top:8px; font-size:13px; line-height:1.8; color:var(--ink-soft); white-space:pre-wrap;">📝 <b>我的反馈：</b><br>' + esc(fb.content || '') + '</div>' +
           replyHtml +
           '</div>';
       } catch(e){
