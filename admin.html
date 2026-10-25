@@ -9144,9 +9144,12 @@ function _refRenderRows(){
       cell = '<span style="color:#dc2626; font-size:0.78rem;">读取失败</span>';
     } else if (q){
       cell = '<img src="' + escapeHtml(sbImg(_refQrDirect(q.name))) + '" data-orig="' + escapeHtml(_refQrDirect(q.name)) + '" ' +
-             'onerror="imgFallback(this)" title="点一下看大图" onclick="refToggleQr(\'' + id + '\')" ' +
+             'onerror="imgFallback(this)" title="点一下看大图" onclick="event.stopPropagation(); refToggleQr(\'' + id + '\')" ' +
              'style="width:90px;height:90px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px;cursor:zoom-in;display:block;margin:0 auto;">' +
-             '<div style="font-size:10px;color:var(--text-muted);text-align:center;margin-top:2px;">点开看大图</div>';
+             /* 这行小字原来没挂 onclick → 点它什么都不发生（只有点图本身才行），
+                现在补上，并且阻止冒泡去勾选整行。 */
+             '<div style="font-size:10px;color:var(--text-muted);text-align:center;margin-top:2px;cursor:zoom-in;" ' +
+             'onclick="event.stopPropagation(); refToggleQr(\'' + id + '\')">点开看大图</div>';
     } else {
       cell = '<span style="color:#cbd5e1; font-size:0.78rem;">未提交</span>';
     }
