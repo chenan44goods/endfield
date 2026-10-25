@@ -3012,11 +3012,14 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         // 💰 批次定金计划（键 = 归一化批次名）
         RAW_BATCH_PLANS = (iData.batch_plans && typeof iData.batch_plans === 'object' && !Array.isArray(iData.batch_plans)) ? iData.batch_plans : {};
         RAW_ARCHIVED = Array.isArray(iData.archived_items) ? iData.archived_items : [];
-        showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)`);
         CURRENT_PAGE = 1;
         updateBatchDropdownOptions();
-        /* 💾 数据到位后再恢复上次的筛选（批次要在 RAW_ITEMS 上校验过才敢用） */
-        try { restoreFilterState(); } catch (e) {}
+        /* 💾 数据到位后再恢复上次的筛选（批次要在 RAW_ITEMS 上校验过才敢用）。
+           ⚠️ 必须告诉团长「筛选被恢复了」—— 否则他只看到 20 条，会以为数据丢了。 */
+        let _filterRestored = false;
+        try { _filterRestored = restoreFilterState(); } catch (e) {}
+        showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)`
+                  + (_filterRestored ? '｜已恢复上次的筛选条件，看全部点批次框选「全部批次」' : ''));
         renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
         renderPayReview(); renderPayStats(); renderQrCodes(); renderBatchPlans(); renderPiggyBank();
         loadBatches();
@@ -3785,7 +3788,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (c && s.country && Array.prototype.some.call(c.options, function (o) { return o.value === s.country; })) c.value = s.country;
       const st = document.getElementById('filterStatus');
       if (st && s.status) st.value = s.status;
-      return true;
+      // 真的恢复了「有内容」的筛选才返回 true（全是空的不算，免得每次开都弹一句废话）
+      const _c = (c && c.value) || '';
+      const _s = (st && st.value) || '';
+      return !!(batch || detail || _c || _s);
     }
     window.restoreFilterState = restoreFilterState;
 
