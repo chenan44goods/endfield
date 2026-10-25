@@ -1355,7 +1355,7 @@
              密钥是全团共用的一个串，不是个人密码；但共用设备时仍要能一键抹掉。 -->
         <div id="clearRememberRow" style="display:none; margin-top:14px; text-align:center;">
           <span id="clearRememberBtn" onclick="clearRememberedId()"
-                style="font-size:11.5px; letter-spacing:.3px; color:rgba(22,24,28,0.42); cursor:pointer; text-decoration:underline; text-underline-offset:3px;">共用设备？清除本机记住的密钥和 CN</span>
+                style="font-size:11.5px; letter-spacing:.3px; color:rgba(22,24,28,0.42); cursor:pointer; text-decoration:underline; text-underline-offset:3px;">共用设备？清除本机记录和当前查询结果</span>
         </div>
       </div>
       </div>
@@ -1401,7 +1401,7 @@
   </div>
 
   <!-- 📌 版本标记（固定右下角，压过所有面板）：团员念一下这一行，就能判断他手上是不是缓存的旧页 -->
-  <div class="ver-tag">版本 2026-10-22</div>
+  <div class="ver-tag">版本 2026-10-26</div>
 
   <script>
     // 生成终末地式等高线地形背景
@@ -3642,14 +3642,70 @@
       if (ce && !ce.value) ce.value = _lsGet(LS_QCN);
       syncClearRememberLink();
     }
+    /* 🧹 把右侧「查出来的东西」一次性抹掉（面板本身不关、不切页签）。
+       团长 2026-10-26 报：点了「清除本机记住的密钥和 CN」之后，底下的账单 / 收款码 / 谷子列表
+       还挂在屏幕上 —— 既然身份都清了，屏幕上这些属于上一个人的数据当然也得跟着消失。
+       ⚠️ 这里的清理目标与 openPanel() 开头那段**是同一批**（overlay / resultList / payBox /
+          batchFilter / piggy / 反馈回执）；以后新增「跟人绑定」的结果区，两个地方都要加。 */
+    function resetPanelResults() {
+      const overlay = document.getElementById('queryResultOverlay');
+      if (overlay) overlay.style.display = 'none';
+      const rList = document.getElementById('resultList');
+      if (rList) rList.innerHTML = '';
+      const rStat = document.getElementById('resultStat');
+      if (rStat) rStat.innerText = '';
+      hidePayBox();                       // 收款码 / 待上传的付款截图 / 零钱罐抵扣勾选都在这块里
+      // 分类筛选下拉 + 一键排发：装着上一个团员的批次名，不能留给下一个人
+      const bf = document.getElementById('batchFilter');
+      if (bf) bf.innerHTML = '<option value="">全部分类</option>';
+      const allBtn = document.getElementById('applyAllBtn');
+      if (allBtn) allBtn.style.display = 'none';
+      // 内存里那份「当前这个人的订单」也要断掉，否则后续动作还能改到上一个人的条目
+      window.CURRENT_ITEMS = [];
+      window.CURRENT_VIEW_ITEMS = [];
+      window.__LAST_ROW = null;
+      window.__PIGGY_ROW = null;
+      // 零钱罐：余额 / 存入记录 / 提交回执 / 还没上传的图
+      const pb = document.getElementById('piggyBalance');
+      if (pb) pb.innerHTML = '';
+      const prec = document.getElementById('piggyRecords');
+      if (prec) prec.innerHTML = '';
+      const pres = document.getElementById('piggyResult');
+      if (pres) { pres.style.display = 'none'; pres.innerHTML = ''; }
+      const pprev = document.getElementById('piggyPreview');
+      if (pprev) pprev.innerHTML = '';
+      window.__PIGGY_FILE = null;
+      try { if (window.__PIGGY_PREVIEW_URL) { URL.revokeObjectURL(window.__PIGGY_PREVIEW_URL); window.__PIGGY_PREVIEW_URL = null; } } catch (e) {}
+      // 反馈：提交回执 / 我的反馈回复
+      const fbs = document.getElementById('fbSubmitResult');
+      if (fbs) { fbs.style.display = 'none'; fbs.innerHTML = ''; }
+      const fbr = document.getElementById('fbReplyResult');
+      if (fbr) { fbr.style.display = 'none'; fbr.innerHTML = ''; }
+    }
+    window.resetPanelResults = resetPanelResults;
+
     function clearRememberedId() {
       _lsSet(LS_QKEY, ''); _lsSet(LS_QCN, '');
       const ke = document.getElementById('panelKey');
       const ce = document.getElementById('panelCn');
       if (ke) ke.value = '';
       if (ce) ce.value = '';
+      resetPanelResults();
+      // 手机上出了结果会自动把表单折起来（autoFoldFormOnMobile）。身份都清了还折着，
+      // 人就只看到右边一片空白 + 一个「▼ 展开查询」，像是页面崩了 —— 一律展开回初始态。
+      const panel = document.getElementById('queryPanel');
+      if (panel) {
+        panel.classList.remove('folded');
+        panel.scrollTop = 0;
+      }
+      const inner = document.getElementById('qpLeftInner');
+      if (inner) inner.style.maxHeight = 'none';
+      const foldBtn = document.getElementById('foldFormBtn');
+      if (foldBtn) foldBtn.style.display = 'none';
+      // 零钱罐页签的余额区改成「填好密钥和 CN 就会显示」的提示，不留空白
+      if (currentPanel === 'piggy') { try { loadPiggyPanel(); } catch (e) {} }
       syncClearRememberLink();
-      showToast('已清除本机记住的密钥和 CN');
+      showToast('已清除本机记录，页面上的查询结果也一起清掉了');
     }
     function syncClearRememberLink() {
       const row = document.getElementById('clearRememberRow');
