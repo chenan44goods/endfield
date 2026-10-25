@@ -5127,6 +5127,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         if (mobileView) mobileView.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配数据</div>`;
         document.getElementById('tablePagination').innerHTML = '';
         renderPayStats();
+        /* ⚠️ 这条 early-return 分支也必须重置表头全选框：
+           否则「全选 → 搜一个搜不到的词」时表格是空的，表头那个勾还亮着。 */
+        try { _refreshSelectAllState(); } catch (e) {}
         return;
       }
 
@@ -8725,11 +8728,24 @@ function refToggleQr(id){
      · 展开区里的按钮 */
 function _refTrOf(cb){ return (cb && cb.parentNode) ? cb.parentNode.parentNode : null; }
 
+/* 表头「全选」跟随实际勾选数：全中=勾、部分=半勾、零=空。
+   ⚠️ 原来只有点「全选」才会更新它，单条勾/取消时表头一直是空的 → 团长看着像没选中任何东西。 */
+function _refreshRefAllState(){
+  var all = document.getElementById('refAll');
+  if (!all) return;
+  var boxes = document.querySelectorAll('.refChk');
+  var on = 0;
+  Array.prototype.forEach.call(boxes, function(c){ if (c.checked) on++; });
+  all.checked = boxes.length > 0 && on === boxes.length;
+  all.indeterminate = on > 0 && on < boxes.length;
+}
+
 function refRowPaint(tr){
   if (!tr || !tr.querySelector) return;
   var cb = tr.querySelector('.refChk');
   if (!cb) return;
   tr.style.background = cb.checked ? 'rgba(21,128,61,0.09)' : '';
+  _refreshRefAllState();
 }
 
 function refRowClick(ev, tr){
@@ -8764,7 +8780,7 @@ function _refBigRow(r, q){
 function _refRenderRows(){
   var tb = document.getElementById('refRows'); if (!tb) return;
   var rows = REF_LIST_CACHE || [];
-  if (!rows.length){ tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:12px;">没有待退款的记录了 🎉</td></tr>'; return; }
+  if (!rows.length){ tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:12px;">没有待退款的记录了 🎉</td></tr>'; _refreshRefAllState(); return; }
   tb.innerHTML = rows.map(function(r){
     var id = String(r.id), q = REF_QR_MAP[id], cell;
     if (!REF_QR_OK){
@@ -8788,6 +8804,7 @@ function _refRenderRows(){
     if (REF_OPEN_ID === id && q && REF_QR_OK) tr += _refBigRow(r, q);
     return tr;
   }).join('');
+  _refreshRefAllState();   /* 重画后全选框归零，别留着上一轮的勾/半勾 */
 }
 
 async function loadRefundList(){
@@ -8823,10 +8840,14 @@ async function loadRefundList(){
 }
 function toggleAllRef(){
   var all=document.getElementById('refAll');
+  /* ⚠️ 先记住目标状态：循环里 refRowPaint → _refreshRefAllState 会回头改 all.checked，
+     边循环边读会让后半部分行按错的状态设值（全选只勾一半）。 */
+  var want = !!all.checked;
   document.querySelectorAll('.refChk').forEach(function(c){
-    c.checked = all.checked;
+    c.checked = want;
     refRowPaint(_refTrOf(c));   /* 整行选中高亮也得跟着走 */
   });
+  _refreshRefAllState();
 }
 async function batchMarkRefunded(){
   var ids=[]; document.querySelectorAll('.refChk').forEach(function(c){ if(c.checked) ids.push(c.getAttribute('data-id')); });
