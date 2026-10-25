@@ -945,6 +945,20 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     /* 手机上分页按钮一行放不下 8 个 → 首页/末页先收起来（「跳到」能直接输页码） */
     @media (max-width: 768px) {
       .page-btn.page-btn-ends { display: none; }
+
+      /* 批次级联下拉：手机上触发按钮靠右时，200px 的面板会顶出屏幕右侧被裁掉
+         （实测溢出 51px）→ 改成右对齐展开；二级面板改为在一级同一位置叠上来。 */
+      .cascade-panel {
+        left: auto;
+        right: 0;
+        max-width: calc(100vw - 24px);
+      }
+      .cascade-panel--level2 {
+        left: auto;
+        right: 0;
+        top: calc(100% + 4px);
+        z-index: 1001;
+      }
     }
 
     /* 桌面宽屏表头吸顶（2026-10-26）：排表明细 14 列、20 行要滚两屏，
@@ -2926,6 +2940,20 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (tabId === 'tabPayReview') renderPayReview();
       if (tabId === 'tabQrCodes') renderQrCodes();
       if (tabId === 'tabCalc') { renderBatchPlans(); renderPiggyBank(); }   // 💰 定金设置 + 🐷 零钱罐 都在算账中心 → 切进来就重画
+      /* 切页回顶部（2026-10-26）：手机上从排表底部（7000px）点别的 tab，
+         新页面会停在半空中，看到的是空白，像"点了没反应"。 */
+      try { window.scrollTo(0, 0); } catch (e) {}
+      /* 手机侧导航是横向滑条，当前 tab 可能滚在屏幕外 → 把它滑到中间 */
+      try {
+        const nav = document.querySelector('.side-nav');
+        const act = document.querySelector('.side-nav .tab-btn.active');
+        if (nav && act && nav.scrollWidth > nav.clientWidth + 4) {
+          const nr = nav.getBoundingClientRect();
+          const ar = act.getBoundingClientRect();
+          const delta = (ar.left - nr.left) - (nav.clientWidth - ar.width) / 2;
+          if (Math.abs(delta) > 2) nav.scrollLeft += delta;
+        }
+      } catch (e) {}
     }
     window.switchTab = switchTab;
 
