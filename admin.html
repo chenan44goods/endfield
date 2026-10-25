@@ -1416,7 +1416,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           <table>
             <thead>
               <tr>
-                <th style="width: 40px;"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
+                <th style="width: 40px;"><input type="checkbox" id="selectAllCheckbox" title="全选 / 取消全选（本页所有行）" onchange="toggleSelectAll(this)"></th>
                 <th>图片</th>
                 <th>谷子名称</th>
                 <th>认领 CN</th>
@@ -5202,6 +5202,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (mobileView) mobileView.innerHTML = cardsHtml;
       renderPaginationBar(totalItems, totalPages);
       renderPayStats();
+      /* 重画后所有勾选框都是空的 → 表头全选框也要跟着归零（否则它还是"勾着"的样子） */
+      try { _refreshSelectAllState(); } catch (e) {}
     }
 
     function renderPaginationBar(totalItems, totalPages) {
@@ -5425,7 +5427,37 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       box.style.background = cb.checked ? 'rgba(21,128,61,0.09)' : '';
     }
 
-    function itemPaintFromCb(cb) { itemPaintBox(_itemBoxOf(cb)); }
+    /* 🔴 2026-10-25 团长报的 bug：排表管理里「取消勾选两条，批量补图还是把它们加上了」。
+       根因：桌面 <tr> 和手机卡片各有一个 .item-checkbox（value = 同一个 index），
+       而且两个都在 DOM 里（另一端只是 display:none）。勾/取消只改看得见的那个，
+       另一个（隐藏的）还保持着勾选 → `querySelectorAll('.item-checkbox:checked')`
+       照样把它算进"已选"。修法：任何一次勾/取消都把同 value 的孪生框同步一遍。 */
+    function _syncItemCheckbox(cb) {
+      if (!cb) return;
+      const v = String(cb.value);
+      document.querySelectorAll('.item-checkbox').forEach(function (x) {
+        if (x !== cb && String(x.value) === v) {
+          x.checked = cb.checked;
+          itemPaintBox(_itemBoxOf(x));
+        }
+      });
+      itemPaintBox(_itemBoxOf(cb));
+      _refreshSelectAllState();
+    }
+    window._syncItemCheckbox = _syncItemCheckbox;
+
+    /* 表头全选框跟随实际选中数：全中=勾、部分=半勾、零=空 */
+    function _refreshSelectAllState() {
+      const master = document.getElementById('selectAllCheckbox');
+      if (!master) return;
+      const boxes = document.querySelectorAll('tr.itemRow .item-checkbox');
+      const on = Array.prototype.filter.call(boxes, function (x) { return x.checked; }).length;
+      master.checked = boxes.length > 0 && on === boxes.length;
+      master.indeterminate = on > 0 && on < boxes.length;
+    }
+    window._refreshSelectAllState = _refreshSelectAllState;
+
+    function itemPaintFromCb(cb) { _syncItemCheckbox(cb); }
 
     function itemRowClick(ev, idx) {
       const box = ev && ev.currentTarget;
@@ -5434,7 +5466,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const cb = box.querySelector('.item-checkbox');
       if (!cb) return;
       cb.checked = !cb.checked;
-      itemPaintBox(box);
+      _syncItemCheckbox(cb);
     }
 
     function itemRowDblClick(ev, idx) {
@@ -5448,18 +5480,22 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     window.itemPaintFromCb = itemPaintFromCb;
 
     function toggleSelectAll(master) {
+      const want = !!master.checked;   /* ⚠️ 先记住目标状态：循环里 _refreshSelectAllState 会回头写 master.checked */
       document.querySelectorAll('.item-checkbox').forEach(cb => {
-        cb.checked = master.checked;
-        itemPaintFromCb(cb);   /* 全选也要整行变绿，否则只有勾、没有底色 */
+        cb.checked = want;
+        itemPaintBox(_itemBoxOf(cb));   /* 全选也要整行变绿，否则只有勾、没有底色 */
       });
+      _refreshSelectAllState();
     }
     window.toggleSelectAll = toggleSelectAll;
 
     function getSelectedCacheItems() {
       const selected = [];
+      const seen = new Set();          /* 桌面 + 手机两个勾选框 value 相同 → 同一件只算一次 */
       document.querySelectorAll('.item-checkbox:checked').forEach(cb => {
         const idx = parseInt(cb.value);
-        if (window.ITEM_CACHE[idx]) selected.push(window.ITEM_CACHE[idx]);
+        if (seen.has(idx)) return;
+        if (window.ITEM_CACHE[idx]) { seen.add(idx); selected.push(window.ITEM_CACHE[idx]); }
       });
       return selected;
     }
