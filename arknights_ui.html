@@ -29,6 +29,8 @@
   }
   </script>
   
+<!-- 🅰️ 终末地字体（自托管 vendor/fonts/，不走外网 CDN）：Saira 窄体数字 + 思源黑体中文 -->
+<link rel="stylesheet" href="./vendor/fonts/endfield.css">
 <style>
 /* ═══════════════════════════════════════════════════════════
    1. 设计系统 · Design Tokens（全部参数在此修改，勿在下方写死）
@@ -52,9 +54,9 @@
   --c-line-dark: rgba(255,255,255,.07);   /* 深色区细线分割 */
 
   /* ── 字体字重 Typography ─────────────────── */
-  --font-ui: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
-  --font-display: "Microsoft YaHei", "PingFang SC", sans-serif;
-  --font-mono: Consolas, "Courier New", monospace;
+  --font-ui: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-display: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: 'Saira', Consolas, "Courier New", monospace;
   --fw-hero:  900;
   --fw-title: 800;
   --fw-body:  500;
@@ -447,8 +449,8 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           --c-ink-1: #1A1A1A;
           --c-ink-2: #242424;
           --c-paper: #ffffff;
-          --font-display: "Microsoft YaHei", "PingFang SC", sans-serif;
-          --font-mono: Consolas, "Courier New", monospace;
+          --font-display: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+          --font-mono: 'Saira', Consolas, "Courier New", monospace;
           --fw-hero: 900;
           --fw-title: 800;
           --fs-hero-rail: 44px;
@@ -475,7 +477,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-family: var(--font-ui);   /* 统一走字体令牌；原来这里硬编码 apple-system 栈会把 --font-ui 整个盖掉 */
     }
 
     body {
@@ -526,13 +528,16 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           padding-bottom: 8px;
         }
         .terminal-title .t-mark {
-          width: 10px; height: 10px;
-          background: #FEFE2C;
-          margin-bottom: 8px;
+          width: 31px; height: 22px;
+          color: #212121;
+          align-self: center;
+          margin-bottom: 7px;
+          flex: none;
         }
         .terminal-title h1 {
           font-size: 1.5rem;
-          font-weight: 800;
+          font-weight: 900;
+          letter-spacing: -.03em;
           color: #212121;
           margin: 0;
         }
@@ -543,12 +548,28 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           line-height: 1;
           margin-bottom: 4px;
         }
+        /* 标题前缀「//」：替代原来那对空括号，跟游戏里 ENDF//总控中枢 的锁排同款 */
+        .terminal-title .t-slash {
+          font-family: var(--font-mono);
+          font-size: 1.42rem;
+          font-weight: 900;
+          font-stretch: 84%;
+          color: #212121;
+          line-height: 1;
+          letter-spacing: -.12em;
+          align-self: center;
+          margin: 0 12px 8px 2px;
+        }
         .terminal-title .t-sub {
-          font-family: monospace;
-          font-size: 0.85rem;
+          font-family: var(--font-mono);
+          font-size: 0.72rem;
+          font-weight: 600;
+          font-stretch: 90%;
           color: #666;
-          letter-spacing: 0.2em;
+          letter-spacing: 0.22em;
           margin-left: 10px;
+          margin-bottom: 6px;
+          align-self: center;
         }
 
     .key-selector {
@@ -1263,11 +1284,15 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
   <div class="container">
     <header>
       <div class="terminal-title">
-        <span class="t-mark"></span>
+        <svg class="t-mark" viewBox="0 0 64 46" aria-hidden="true" fill="currentColor">
+          <path d="M32 2 L39 10 L39 36 L25 36 L25 10 Z"/>
+          <path d="M12 15 L17 21 L17 36 L7 36 L7 21 Z"/>
+          <path d="M52 15 L57 21 L57 36 L47 36 L47 21 Z"/>
+          <path d="M0 36 H64 V45 H0 Z"/>
+        </svg>
+        <span class="t-slash">//</span>
         <h1>后台管理系统</h1>
-        <span class="t-bracket">[</span>
-        <span class="t-bracket">]</span>
-        <span class="t-sub">// MANAGEMENT SYSTEM</span>
+        <span class="t-sub">MANAGEMENT SYSTEM</span>
       </div>
       <div class="user-info">
         <span id="userEmailSpan" style="color: var(--text-muted);">已登录: 检查中...</span>
