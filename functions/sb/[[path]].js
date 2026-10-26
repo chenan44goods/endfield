@@ -94,6 +94,54 @@ export async function onRequest(context) {
     out.set('access-control-allow-origin', '*');
   }
 
+  // ── 自己 gzip（2026-10-26，团长反馈「苹果手机查询一直转」）─────────────
+  // 根因：Supabase 的响应在 Workers 里已被自动解压，而 Cloudflare **不会**
+  //   给 Worker 的流式响应再压一次 → 手机每次查询实收 1.37MB 明文 JSON。
+  //   4G 要 3–5 秒，弱网十几秒，iOS 上还可能直接卡住。
+  // 做法：>32KB 的 JSON 用 CompressionStream 压（实测 1.37MB → ~150KB）；
+  //   压缩失败 / 环境不支持就原样返回 —— 绝不因为优化把数据通道搞坏。
+  const ctype = String(out.get('content-type') || '').toLowerCase();
+  const isJson = ctype.indexOf('application/json') === 0
+    && request.method !== 'HEAD'
+    && resp.status !== 204;
+  if (isJson) {
+    let buf;
+    try {
+      buf = await resp.arrayBuffer();
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ error: 'proxy_read_failed', detail: String(e) }),
+        { status: 502, headers: { 'content-type': 'application/json; charset=utf-8' } },
+      );
+    }
+    const ae = String(request.headers.get('accept-encoding') || '').toLowerCase();
+    const wantGzip = ae.indexOf('gzip') !== -1;
+    if (wantGzip && buf.byteLength > 32 * 1024 && typeof CompressionStream !== 'undefined') {
+      try {
+        const gz = await new Response(
+          new Blob([buf]).stream().pipeThrough(new CompressionStream('gzip')),
+        ).arrayBuffer();
+        const h = new Headers(out);
+        h.set('content-encoding', 'gzip');
+        h.set('content-length', String(gz.byteLength));
+        if (!h.has('vary')) h.set('vary', 'Accept-Encoding');
+        return new Response(gz, {
+          status: resp.status,
+          statusText: resp.statusText,
+          headers: h,
+        });
+      } catch (e) {
+        // 压缩失败：退回明文，走下面的路径
+      }
+    }
+    out.set('content-length', String(buf.byteLength));
+    return new Response(buf, {
+      status: resp.status,
+      statusText: resp.statusText,
+      headers: out,
+    });
+  }
+
   return new Response(resp.body, {
     status: resp.status,
     statusText: resp.statusText,
