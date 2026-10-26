@@ -1214,60 +1214,6 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
         </style>
 </head>
 <body>
-<!-- 🔐 试用版口令门槛：输错就停在这一屏，看不到后台任何内容 -->
-<div id="__pvGate" style="position:fixed; inset:0; z-index:2147483000; background:#0e1116;
-     display:flex; align-items:center; justify-content:center; font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;">
-  <div style="width:min(88vw,360px); text-align:center; color:#e8eaf0;">
-    <div style="font-size:13px; letter-spacing:.24em; color:#FEFE2C; margin-bottom:20px;">PREVIEW · 试用版</div>
-    <div style="font-size:15px; font-weight:600; margin-bottom:8px;">后台节奏优化 试用页</div>
-    <div style="font-size:12px; color:#8b919c; margin-bottom:24px; line-height:1.7;">
-      这一版还没上正式后台，需要口令才能看。
-    </div>
-    <input id="__pvInput" type="password" inputmode="text" autocomplete="off"
-           placeholder="请输入口令"
-           style="width:100%; box-sizing:border-box; padding:12px 16px; font-size:14px;
-                  background:#171b22; color:#e8eaf0; border:1px solid #2a313c; border-radius:8px;
-                  outline:none; text-align:center; letter-spacing:.1em;"
-           onkeydown="if(event.key==='Enter'){__pvCheck();}">
-    <button type="button" onclick="__pvCheck()"
-            style="width:100%; margin-top:12px; padding:12px; font-size:14px; font-weight:700;
-                   background:#FEFE2C; color:#16181d; border:0; border-radius:8px; cursor:pointer;">
-      进入试用页
-    </button>
-    <div id="__pvErr" style="margin-top:12px; font-size:12px; color:#ff6b6b; min-height:18px;"></div>
-  </div>
-</div>
-<script>
-(function () {
-  var GATE_ID = '__pvGate', LS = '__pv_ok';
-  function open() {
-    var g = document.getElementById(GATE_ID);
-    if (g) g.style.display = 'flex';
-    try { document.documentElement.style.overflow = 'hidden'; } catch (e) {}
-  }
-  function close() {
-    var g = document.getElementById(GATE_ID);
-    if (g) g.style.display = 'none';
-    try { document.documentElement.style.overflow = ''; } catch (e) {}
-  }
-  window.__pvCheck = function () {
-    var el = document.getElementById('__pvInput');
-    var v = (el && el.value ? el.value : '').trim();
-    if (v === "st2026") {
-      try { sessionStorage.setItem(LS, '1'); } catch (e) {}
-      close();
-    } else {
-      var err = document.getElementById('__pvErr');
-      if (err) err.textContent = '口令不对，再试一次';
-      if (el) { el.value = ''; try { el.focus(); } catch (e) {} }
-    }
-  };
-  var ok = false;
-  try { ok = sessionStorage.getItem(LS) === '1'; } catch (e) {}
-  if (ok) { close(); } else { open(); }
-})();
-</script>
-
 <div class="load-phase" id="loadPhase">
   <div class="load-progress" id="loadBar"></div>
   <div class="load-count" id="loadCount">0%</div>
