@@ -509,10 +509,11 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           content: "";
           position: absolute;
           top: 0; left: 0; width: 100%; height: 8px;
+          /* 顶部色条：左 亮粉 / 中 亮黄 / 右 薄荷绿（比例沿用 6% : 88% : 6%） */
           background: linear-gradient(90deg,
-            #111 0%, #111 6%,
-            #FEFE2C 6%, #FEFE2C 94%,
-            #111 94%, #111 100%);
+            #F00AE7 0%, #F00AE7 6%,
+            #FFFC2C 6%, #FFFC2C 94%,
+            #10F8A5 94%, #10F8A5 100%);
         }
 
         .terminal-title {
