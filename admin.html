@@ -594,12 +594,17 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     }
 
     /* 左侧固定侧边栏 */
+        /* 深色斜纹底（终末地 HUD 风）：参考图实测底 #1B2630 + 45° 细斜纹，
+           斜纹用 2px 亮线 / 5px 间隔叠加在底色上，不做图片。 */
         .side-nav {
           position: fixed;
           top: 0; left: 0;
           width: 88px;
           height: 100vh;
-          background: #212121;
+          background-color: #1B2630;
+          background-image: repeating-linear-gradient(135deg,
+            rgba(255,255,255,.055) 0, rgba(255,255,255,.055) 2px,
+            transparent 2px, transparent 7px);
           z-index: 1000;
           display: flex;
           flex-direction: column;
@@ -1302,8 +1307,8 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           <path fill-rule="evenodd" d="M0 18 H22 V23 H0 Z M4.6 19.3 H6.6 V21.3 H4.6 Z M15.4 19.3 H17.4 V21.3 H15.4 Z"/>
         </svg>
         <span class="t-slash">//</span>
-        <h1>后台管理系统</h1>
-        <span class="t-sub">MANAGEMENT SYSTEM</span>
+        <h1 id="pageTitle">后台管理系统</h1>
+        <span class="t-sub" id="pageSub">MANAGEMENT SYSTEM</span>
       </div>
       <div class="user-info">
         <span id="userEmailSpan" style="color: var(--text-muted);">已登录: 检查中...</span>
@@ -2112,12 +2117,12 @@ cn 点数 金额
     <div class="tab-content" id="tabCalc">
     <div class="card" style="margin-bottom:12px;">
       <div class="tabbar">
-        <button class="tab-btn active" onclick="pane('kanpei')">✂️ 砍配计算</button>
-        <button class="tab-btn" onclick="pane('erdiao')">♻️ 盲抽二调</button>
-        <button class="tab-btn" onclick="pane('export')">📤 台账</button>
-      <button class="tab-btn" onclick="pane('refund')">💰 退款补录</button>
-      <button class="tab-btn" onclick="pane('deposit')">💰 定金设置</button>
-      <button class="tab-btn" onclick="pane('piggy')">🐷 零钱罐</button>
+        <button class="tab-btn active" data-pane="kanpei" onclick="pane('kanpei')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg>砍配计算</button>
+        <button class="tab-btn" data-pane="erdiao" onclick="pane('erdiao')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 14 4 4-4 4"/><path d="m18 2 4 4-4 4"/><path d="M2 18h1.97a4 4 0 0 0 3.3-1.7l5.45-8.6a4 4 0 0 1 3.3-1.7H22"/><path d="M2 6h1.97a4 4 0 0 1 3.6 2.2"/><path d="M22 18h-6.04a4 4 0 0 1-3.3-1.8l-.36-.45"/></svg>盲抽二调</button>
+        <button class="tab-btn" data-pane="export" onclick="pane('export')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>台账</button>
+        <button class="tab-btn" data-pane="refund" onclick="pane('refund')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/></svg>退款补录</button>
+        <button class="tab-btn" data-pane="deposit" onclick="pane('deposit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>定金设置</button>
+        <button class="tab-btn" data-pane="piggy" onclick="pane('piggy')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z"/><path d="M2 9v1c0 1.1.9 2 2 2h1"/><path d="M16 11h.01"/></svg>零钱罐</button>
       </div>
       <p style="font-size:0.8rem;color:var(--text-muted);">用表格填，不用写代码。金额自动按“分”计算，防浮点误差；计算/写库有防重复锁；校验不通过不会改动数据。</p>
     </div>
@@ -2979,12 +2984,34 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
     window.uploadQrCode = uploadQrCode;
 
+    /* 顶部标题跟随导航（2026-10-26）：一级导航 / 算账中心二级选项 都会改标题。
+       中文进 h1，英文进右侧小字；刚进后台时保持「后台管理系统」不动。 */
+    var TAB_META = {
+      tabItems:     ['排表管理',   'ITEM LIST'],
+      tabLogistics: ['国际运费',   'INTERNATIONAL SHIPPING'],
+      tabPayReview: ['交款审核',   'PAYMENT REVIEW'],
+      tabQrCodes:   ['收款码',     'PAYMENT QR'],
+      tabDispatch:  ['排发工作台', 'DISPATCH'],
+      tabCalc:      ['算账中心',   'ACCOUNTING'],
+      tabPayStats:  ['收款对账',   'PAYMENT STATS'],
+      tabFeedback:  ['反馈与团务', 'FEEDBACK']
+    };
+    function setPageTitle(zh, en) {
+      var h = document.getElementById('pageTitle');
+      var s = document.getElementById('pageSub');
+      if (h) h.textContent = zh;
+      if (s) s.textContent = en || '';
+    }
+    window.setPageTitle = setPageTitle;
+
     function switchTab(tabId) {
       document.querySelectorAll('.side-nav .tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       if (event && event.currentTarget) event.currentTarget.classList.add('active');
       const targetEl = document.getElementById(tabId);
       if (targetEl) targetEl.classList.add('active');
+      const _meta = TAB_META[tabId];
+      if (_meta) setPageTitle(_meta[0], _meta[1]);
       if (tabId === 'tabItems') { renderTable(); loadBatches(); }
       if (tabId === 'tabLogistics') renderLogistics();
       if (tabId === 'tabBatches') loadBatches();
@@ -8768,12 +8795,19 @@ function _out(id,t){ var el=document.getElementById(id); if(el) el.textContent=t
 function pane(name){
   document.querySelectorAll('.tab-content#tabCalc .card.pane').forEach(function(x){x.classList.remove('active');});
   var t=document.getElementById('pane-'+name); if(t) t.classList.add('active');
-  document.querySelectorAll('.tab-content#tabCalc .tabbar .tab-btn').forEach(function(b){b.classList.remove('active');});
-  var map={kanpei:'砍配',erdiao:'二调',export:'台账',refund:'退款补录',deposit:'定金设置',piggy:'零钱罐'};
+  /* 选中态改用 data-pane 精确匹配：原来靠 textContent 找中文子串，
+     一旦改文案或加图标就会静默点不亮。 */
+  document.querySelectorAll('.tab-content#tabCalc .tabbar .tab-btn').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-pane') === name);
+  });
+  /* 二级选项也改顶部标题：「算账中心 · 砍配计算」 */
+  var meta={kanpei:['砍配计算','CUT ALLOCATION'],erdiao:['盲抽二调','BLIND DRAW'],
+            export:['台账','LEDGER'],refund:['退款补录','REFUND ENTRY'],
+            deposit:['定金设置','DEPOSIT SETTINGS'],piggy:['零钱罐','PIGGY BANK']};
+  if(meta[name] && typeof setPageTitle==='function') setPageTitle('算账中心 · '+meta[name][0], meta[name][1]);
   if(name==='refund'&&typeof loadRefundList==='function') loadRefundList();
   if(name==='deposit'&&typeof renderBatchPlans==='function') renderBatchPlans();
   if(name==='piggy'&&typeof renderPiggyBank==='function') renderPiggyBank();
-  document.querySelectorAll('.tab-content#tabCalc .tabbar .tab-btn').forEach(function(b){ if(b.textContent.indexOf(map[name])>=0) b.classList.add('active'); });
 }
 function addOrderRow(){
   var tb=document.getElementById('kOrderRows'), tr=document.createElement('tr');
@@ -9627,18 +9661,20 @@ function importLedger(e){
     .btn-purple:hover { background-color: #eddbff; }
     .btn-success, .btn-danger, .btn-secondary { border: none; }
 
-    /* ── 侧边导航：M3 导航胶囊选中态（取代左黄条）── */
+    /* ── 侧边导航：终末地 HUD 直角黄块选中态（取代 M3 胶囊）──
+       黄块色 #FFEF00 取自参考图实测；直角无圆角，文字/图标随 currentColor 变黑。 */
     .side-nav .tab-btn {
-      margin: 2px 5px;
+      margin: 2px 0;
       padding: 8px 2px;
       border-left: none;
-      border-radius: var(--m3e-r-full);
+      border-radius: 0;
     }
-    .side-nav .tab-btn:hover { background: rgba(254,254,44,.10); color: var(--primary-yellow); }
+    .side-nav .tab-btn:hover { background: rgba(255,239,0,.12); color: #FFEF00; }
     .side-nav .tab-btn.active {
-      background: var(--primary-yellow);
-      color: #111;
+      background: #FFEF00;
+      color: #141414;
       border-left: none;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.5), inset 0 -1px 0 rgba(0,0,0,.12);
     }
 
     /* ── 卡片：M3 圆角 + 柔和描边 + 双层低影 ── */
@@ -9734,26 +9770,54 @@ function importLedger(e){
       transition: opacity .3s var(--m3e-ease), transform .3s var(--m3e-spring);
     }
 
-    /* ── 算账中心子标签：之前无样式，补 M3 分段控件 ── */
+    /* ── 算账中心子标签：终末地 HUD 斜纹条（深底 #1B2630 + 45° 斜纹 + 直角黄块）
+       参数按团长给的参考图实测：底 #1B2630 / 选中块 #FFEF00 / 未选中白字白图标。
+       按钮内容 = 图标 + 文字，已去掉原 emoji。 ── */
     .tabbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .tab-content#tabCalc .tabbar {
+      display: flex;
+      gap: 0;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+      padding: 0;
+      background-color: #1B2630;
+      background-image: repeating-linear-gradient(135deg,
+        rgba(255,255,255,.055) 0, rgba(255,255,255,.055) 2px,
+        transparent 2px, transparent 7px);
+      border-radius: 0;
+    }
     .tab-content#tabCalc .tabbar .tab-btn {
-      padding: 9px 20px;
-      border-radius: var(--m3e-r-full);
-      border: 1px solid rgba(0,0,0,.12);
-      background: #f4f3ee;
-      color: #444;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px 18px;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      color: #E9ECEE;
       font-size: .88rem;
       font-weight: 600;
+      letter-spacing: .01em;
       cursor: pointer;
-      transition: all var(--m3e-dur) var(--m3e-ease);
+      transition: background-color .15s ease, color .15s ease;
     }
-    .tab-content#tabCalc .tabbar .tab-btn:hover { background: #edece3; }
+    .tab-content#tabCalc .tabbar .tab-btn svg {
+      width: 17px;
+      height: 17px;
+      flex: none;
+      stroke-width: 2;
+    }
+    .tab-content#tabCalc .tabbar .tab-btn:hover {
+      background: rgba(255,239,0,.13);
+      color: #FFEF00;
+    }
     .tab-content#tabCalc .tabbar .tab-btn.active {
-      background: var(--primary-yellow);
-      border-color: var(--primary-yellow);
-      color: #1a1a1a;
+      background: #FFEF00;
+      border-color: #FFEF00;
+      color: #141414;
       font-weight: 700;
-      box-shadow: 0 3px 10px rgba(254,254,44,.35);
+      box-shadow: none;
     }
 
     /* ── 计算结果输出框（.box 此前无样式）── */
@@ -9824,6 +9888,23 @@ function importLedger(e){
       .side-nav .tab-btn svg { width: 15px; height: 15px; vertical-align: -2.5px; margin-right: 0; }
       .container { margin: 0 12px !important; }
       .tab-content#tabCalc { margin: 0 12px !important; }
+
+      /* 标题跟着导航变之后文案变长（如「算账中心 · 退款补录」10 个字），
+         390px 下原字号 + 右侧英文副标会把 header 顶成一倍高 → 收小字号并藏掉英文副标。 */
+      .terminal-title h1 { font-size: 1.12rem; }
+      .terminal-title .t-sub { display: none; }
+      .terminal-title .t-slash { font-size: 1.15rem; margin: 0 8px 5px 2px; }
+      .terminal-title .t-mark { width: 24px; height: 17px; margin-bottom: 5px; }
+
+      /* 算账中心二级导航：6 个按钮折成 3 行会占 126px、且深色块太高，
+         手机上改单行横滑（与左侧主导航的横滑条一致）。 */
+      .tab-content#tabCalc .tabbar {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+      }
+      .tab-content#tabCalc .tabbar .tab-btn { flex: 0 0 auto; padding: 10px 15px; }
       /* 💰 定金设置表：手机上四列挤成一条横线、只看得见「批次」→ 改成每行竖排成一坨。
          ⚠️ 必须推翻全站两条：`table{min-width:900px}`（否则表格还是 900 宽、被横向裁掉）
             与 `td{white-space:nowrap}`（否则说明文字不换行、溢出看不见）。
