@@ -916,6 +916,12 @@
     }
     .result-item .r-apply:hover { background:#166534; transform: translateY(-1px); }
     .result-empty { text-align:center; padding:32px; color:var(--ink-soft); font-size:13px; background:rgba(250,250,246,0.82); border-radius:8px; white-space:pre-line; line-height:1.7; }
+    /* 🔁 查询失败时的重试按钮（2026-10-26）：原来失败只弹 3 秒 toast，
+       结果区永远停在「正在连接数据库，查询中……」的转圈上（苹果手机弱网实测） */
+    .result-empty .retry-btn { display:inline-block; margin-top:14px; padding:10px 22px; border:none; border-radius:6px;
+      background:var(--ink); color:var(--paper); font-family:var(--sans); font-size:13px; font-weight:700;
+      letter-spacing:0.04em; cursor:pointer; box-shadow:3px 3px 0 rgba(33,33,33,0.18); }
+    .result-empty .retry-btn:active { transform:translateY(1px); box-shadow:1px 1px 0 rgba(33,33,33,0.18); }
     .stat-pill { display:inline-block; background:rgba(22,24,28,0.72); color:#f5f4ec; padding:8px 16px; border-radius:999px; font-size:13px; font-weight:600; letter-spacing:0.06em; backdrop-filter:blur(3px); }
     .batch-label-pill { display:inline-block; background:rgba(22,24,28,0.72); color:#f5f4ec; padding:8px 12px; border-radius:999px; font-size:11px; letter-spacing:0.12em; backdrop-filter:blur(3px); }
     .r-batch { font-size:11px; color:#7a756a; margin-top:4px; letter-spacing:0.02em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
@@ -1480,11 +1486,29 @@
     const SB_PROXY = '/sb';
     let SB_BASE = SB_PROXY;          // 首选恒为同源反代（它不会被 SNI 阻断影响）
     let _sbProbing = null;
+    /* ⏱️ 带超时的 fetch（2026-10-26 团长反馈「苹果手机查完一直转」）───────
+       原实现完全依赖浏览器默认超时：iPhone 在 Wi-Fi/蜂窝切换、信号弱、锁屏回来时，
+       fetch 可能十几分钟都不 resolve 也不 reject → 结果区永远停在「查询中……」。
+       现在一律封顶：读请求 12s、写/上传 90s，到点 abort 并报 TIMEOUT。 */
+    async function fetchOnce(url, opts, ms){
+      const opt = Object.assign({}, opts || {});
+      if (typeof AbortController === 'undefined') return fetch(url, opt);
+      const ctrl = new AbortController();
+      let hit = false;
+      const timer = setTimeout(function(){ hit = true; try { ctrl.abort(); } catch(e){} }, ms);
+      opt.signal = ctrl.signal;
+      try { return await fetch(url, opt); }
+      catch (e) {
+        if (hit) { const t = new Error('TIMEOUT'); t.name = 'TimeoutError'; throw t; }
+        throw e;
+      }
+      finally { clearTimeout(timer); }
+    }
     async function sbBase(){
       if (_sbProbing) { await _sbProbing; return SB_BASE; }
       _sbProbing = (async function(){
         try {
-          const r = await fetch(SB_PROXY + '/__health', { cache: 'no-store' });
+          const r = await fetchOnce(SB_PROXY + '/__health', { cache: 'no-store' }, 6000);
           if (r.ok) { const j = await r.json(); if (j && j.ok) { SB_BASE = SB_PROXY; return; } }
         } catch (e) {}
         // ⚠️ 探测失败**不改**首选：/sb 是同源，最可能通；真连不上还有 sbFetch 的第二层兜底。
@@ -1494,14 +1518,21 @@
     }
     /* 所有数据请求的统一入口：先走首选通道；**网络层**失败（压根没连上）自动换另一条再试一次。
        HTTP 4xx/5xx 不换通道 —— 那说明请求已经到服务端了，换通道也没用。
+       ⚠️ 超时**不换通道**：弱网下 1.37MB 再走一遍只会让团员多等一倍时间，直接报错让他重试。
        （这里的写操作都是 PATCH / 上传，重试是幂等的，不会重复下单） */
     async function sbFetch(path, opts){
       await sbBase();
       const order = (SB_BASE === SUPABASE_DIRECT) ? [SUPABASE_DIRECT, SB_PROXY] : [SB_PROXY, SUPABASE_DIRECT];
+      const method = String((opts && opts.method) || 'GET').toUpperCase();
+      const isWrite = (method !== 'GET' && method !== 'HEAD');
+      const ms = isWrite ? 90000 : 12000;   // 手机拍照凭证 5–10MB，上传要给足时间
       let lastErr = null;
       for (let i = 0; i < order.length; i++) {
-        try { return await fetch(order[i] + path, opts); }
-        catch (e) { lastErr = e; }
+        try { return await fetchOnce(order[i] + path, opts, ms); }
+        catch (e) {
+          lastErr = e;
+          if (e && e.name === 'TimeoutError') throw e;   // 超时：不再换通道重试
+        }
       }
       throw lastErr || new Error('网络连不上');
     }
@@ -1561,13 +1592,20 @@
       if (!cn) return showToast('请输入您的 CN');
       const _qbtn = document.getElementById('queryBtn');
       if (_qbtn) _qbtn.disabled = true;
+      // 📱 iOS：点查询先收起键盘。否则结果区被键盘挡在下面，看着就像「点了没反应」
+      try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch(e){}
       if (resBox && list) {
         resBox.style.display = 'block';
         list.innerHTML = '<div class="result-empty"><span class="qspin"></span>正在连接数据库，查询中……</div>';
       }
       try {
         const data = await fetchLeaderData(key);
-        if (!data || !data.length) return showToast('未找到该密钥数据');
+        if (!data || !data.length) {
+          // ⚠️ 不能只弹 toast：结果区会永远停在转圈上（弱网下 toast 3 秒就没了）
+          if (list) list.innerHTML = '<div class="result-empty">没找到这个查询密钥的数据\n请确认密钥是否输对，或联系团长</div>';
+          if (stat) stat.innerText = '';
+          return showToast('未找到该密钥数据');
+        }
         window.__LAST_ROW = data[0];
         const gd = data[0].group_data || [];
         const active = Array.isArray(gd) ? gd : (typeof gd==='string' ? JSON.parse(gd) : []);
@@ -1664,7 +1702,22 @@
         // 手机端：出结果后自动收起查询表单，首屏直接让给收款码（桌面端表单在左栏，不折叠）
         autoFoldFormOnMobile();
         if (mode === 'fee') await renderPayBox(items, key, cn); else hidePayBox();
-      } catch(e){ showToast('查询异常: '+e.message); }
+      } catch(e){
+        const em = String((e && e.message) || e || '');
+        const isTimeout = (e && e.name === 'TimeoutError') || em === 'TIMEOUT';
+        // 🔴 2026-10-26 苹果手机实测复现：断网/弱网时结果区永远停在转圈，
+        //    只剩一条 3 秒就消失的 toast → 用户看到的就是「一直转、一直加载」。
+        //    所以失败必须把转圈换掉，并给一个能点的重试。已有卡片时不覆盖列表。
+        const hasCards = !!(list && list.querySelector('.result-item'));
+        if (list && !hasCards) {
+          list.innerHTML = '<div class="result-empty">'
+            + (isTimeout ? '网络有点慢，这次查询没完成' : '查询没成功：网络连接中断')
+            + '\n请检查网络后点下面重新查询'
+            + '<br><button class="retry-btn" onclick="doQuery(\'' + mode + '\')">重新查询</button></div>';
+          if (stat) stat.innerText = '';
+        }
+        showToast(isTimeout ? '查询超时，请点「重新查询」' : '网络不畅，请点「重新查询」');
+      }
       finally { if (typeof _qbtn !== 'undefined' && _qbtn) _qbtn.disabled = false; }
     }
 
