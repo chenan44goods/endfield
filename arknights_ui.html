@@ -1557,7 +1557,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
               <input type="checkbox" id="filterIncludeArchived" onchange="onFilterIncludeArchivedChange()"> 显示已收款完结批次
             </label>
           
-          <select id="filterCountry" style="max-width: 140px;" onchange="onFilterChange()">
+          <select id="filterCountry" style="max-width: 150px;" onchange="onFilterChange()">
             <!-- 动态生成 -->
           </select>
           
@@ -2604,7 +2604,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       // 4. 渲染筛选器的地区 select（分组，含全部国家）
       const filterCountry = document.getElementById('filterCountry');
       if (filterCountry) {
-        filterCountry.innerHTML = countryOptionsHtml('全部地区 (country)');
+        filterCountry.innerHTML = countryOptionsHtml('全部地区');
       }
     }
 
