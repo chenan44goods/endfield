@@ -1275,8 +1275,12 @@
         <div class="qp-title" id="panelTitle">交肾核算</div>
 
         <div class="field" style="margin-top: 32px;">
-          <label for="panelKey">Query Key · 查询密钥</label>
-          <input id="panelKey" placeholder="输入团长提供的密钥" oninput="if(typeof currentPanel!=='undefined'){ if(currentPanel==='fbreply') renderMyFbCodes(); if(currentPanel==='piggy') piggyDebouncedLoad(); }">
+          <label for="panelKey">Password · 个人密码</label>
+          <input id="panelKey" placeholder="你自己的密码（没设过就填 4goods）" oninput="if(typeof currentPanel!=='undefined'){ if(currentPanel==='fbreply') renderMyFbCodes(); if(currentPanel==='piggy') piggyDebouncedLoad(); }">
+          <div style="font-size:0.72rem; line-height:1.75; color:var(--ink-soft); margin-top:8px;">
+            就是你在 QQ 私聊机器人发「<b>/绑定 圈名 密码</b>」时设的那个密码。<br>
+            忘了就再发一次 <b>/绑定 你的圈名 新密码</b>；从没设过就填 <b>4goods</b>。
+          </div>
         </div>
         <div class="field">
           <label for="panelCn">CN · 圈名</label>
@@ -1360,7 +1364,7 @@
           <span>PROCEED SEARCH</span>
         </button>
         <!-- 🔑 2026-10-26：密钥与 CN 会记在本机（下次打开自动填好）。
-             密钥是全团共用的一个串，不是个人密码；但共用设备时仍要能一键抹掉。 -->
+             密码是每人自己的（没设过的用统一密钥 4goods）；共用设备时仍要能一键抹掉。 -->
         <div id="clearRememberRow" style="display:none; margin-top:16px; text-align:center;">
           <span id="clearRememberBtn" onclick="clearRememberedId()"
                 style="font-size:11px; letter-spacing:.3px; color:rgba(22,24,28,0.42); cursor:pointer; text-decoration:underline; text-underline-offset:3px;">共用设备？清除本机记录和当前查询结果</span>
@@ -1573,10 +1577,67 @@
     }
     window.imgFallback = imgFallback;
     const SUPABASE_ANON = 'sb_publishable_UW9cgyBOeV6zIZCicI2SlQ_bqm0MeJa';
+    /* 🔑 数据行定位键：leader_data 里只有一行（query_key='4goods'），全团共用这一行。
+       2026-10-29 起「密钥」变成每人自己的校验密码 —— 但那只用于验明身份，
+       定位数据行永远是这个固定值，否则用个人密码去查会查不到任何东西。 */
+    const DATA_KEY = '4goods';
+    /* 🔐 个人密码校验（2026-10-29 团长口径）：
+       密钥从「全团共用的 4goods」改成「每人自己的密码」——就是机器人在 QQ 里 /绑定 时设的那个。
+       没绑定过 / 绑定但没设过密码的人，仍然用统一密钥 4goods。
+
+       ⚠️ 校验必须放服务端（Supabase 函数 verify_member）：
+          qq_bindings 里存的是所有人**明文密码**，前端只要读得到就等于把密码公开了。
+          所以前端只问「这个密码对不对」，拿回一个 true / false，密码本身不出库。
+       通过后本机缓存 10 分钟，翻页、切面板不会反复验。 */
+    const __MEMBER_AUTH = {};
+    async function verifyMember(cn, pwd){
+      const c = String(cn || '').trim();
+      const p = String(pwd || '');
+      if (!c) return false;
+      const ck = c + '\u0001' + p;
+      const t = __MEMBER_AUTH[ck];
+      if (t && (Date.now() - t) < 10 * 60 * 1000) return true;
+      try {
+        const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json' };
+        const res = await sbFetch('/rest/v1/rpc/verify_member', {
+          method: 'POST', headers: h, cache: 'no-store',
+          body: JSON.stringify({ p_cn: c, p_pwd: p })
+        });
+        /* 404 / 5xx：数据库那边还没装校验函数，或服务端出错 —— 返回 null 让调用方提示「稍后再试」，
+           绝不能在没验过的情况下放行（那就等于这道门不存在）。 */
+        if (!res.ok) return null;
+        const j = await res.json();
+        const ok = (j === true) || (j && j.ok === true);
+        if (ok) { __MEMBER_AUTH[ck] = Date.now(); return true; }
+        return false;
+      } catch (e) {
+        return null;                    // 网络断了：也是「验不了」，不放行
+      }
+    }
+    window.verifyMember = verifyMember;
+
+    function _pwdHintHtml(){
+      return '<div class="result-empty" style="line-height:1.95;">'
+        + '<b style="color:#b45309;">密码不对</b><br>'
+        + '这里填的是<b>你自己的密码</b>，不是以前那个 4goods。<br>'
+        + '就是你私聊机器人发「<b>/绑定 圈名 密码</b>」时设的那个。<br><br>'
+        + '· 忘了密码？私聊机器人发：<b>/绑定 你的圈名 新密码</b>（同一个 QQ 才能改）<br>'
+        + '· 从来没设过？直接填 <b>4goods</b><br>'
+        + '· 还是不行就找团长重置'
+        + '</div>';
+    }
+    function _authDownHtml(){
+      return '<div class="result-empty" style="line-height:1.95;">'
+        + '<b style="color:#b45309;">密码校验暂时用不了</b><br>'
+        + '网站刚升级完，数据库那边可能还没装好。<br>'
+        + '请过几分钟重试；一直这样就把这张截图发给团长。'
+        + '</div>';
+    }
+
     // 直接用原生 fetch 调 Supabase REST API，不依赖外部 CDN 脚本
-    async function fetchLeaderData(key){
+    async function fetchLeaderData(key){   // key 参数保留兼容调用方，实际不参与定位（见 DATA_KEY）
       const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer '+SUPABASE_ANON };
-      const res = await sbFetch('/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key) + '&select=*', { headers: h, cache: 'no-store' });
+      const res = await sbFetch('/rest/v1/leader_data?query_key=eq.' + DATA_KEY + '&select=*', { headers: h, cache: 'no-store' });
       if (!res.ok) { throw new Error('HTTP ' + res.status); }
       return await res.json();
     }
@@ -1588,7 +1649,7 @@
       const resBox = document.getElementById('queryResultOverlay');
       const list = document.getElementById('resultList');
       const stat = document.getElementById('resultStat');
-      if (!key) return showToast('请输入查询密钥');
+      if (!key) return showToast('请输入个人密码');
       if (!cn) return showToast('请输入您的 CN');
       const _qbtn = document.getElementById('queryBtn');
       if (_qbtn) _qbtn.disabled = true;
@@ -1599,12 +1660,20 @@
         list.innerHTML = '<div class="result-empty"><span class="qspin"></span>正在连接数据库，查询中……</div>';
       }
       try {
+        // 🔐 先验「这个人 + 这个密码」对不对，再决定要不要把档案读下去
+        const _auth = await verifyMember(cn, key);
+        if (_auth !== true) {
+          if (list) list.innerHTML = (_auth === false) ? _pwdHintHtml() : _authDownHtml();
+          if (stat) stat.innerText = '';
+          showToast(_auth === false ? '密码不对，看下面的提示' : '校验服务暂时不可用，请稍后重试');
+          return;
+        }
         const data = await fetchLeaderData(key);
         if (!data || !data.length) {
           // ⚠️ 不能只弹 toast：结果区会永远停在转圈上（弱网下 toast 3 秒就没了）
-          if (list) list.innerHTML = '<div class="result-empty">没找到这个查询密钥的数据\n请确认密钥是否输对，或联系团长</div>';
+          if (list) list.innerHTML = '<div class="result-empty">没找到「这个密码 + 圈名」对应的档案\n请确认圈名和密码有没有写错，或联系团长</div>';
           if (stat) stat.innerText = '';
-          return showToast('未找到该密钥数据');
+          return showToast('没查到档案，请确认圈名和密码');
         }
         window.__LAST_ROW = data[0];
         const gd = data[0].group_data || [];
@@ -1934,7 +2003,7 @@
       if (window.__APPLY_SUBMITTING) return showToast('正在提交，请勿重复点击！');
       const key = (document.getElementById('panelKey').value||'').trim();
       const cn = (document.getElementById('panelCn').value||'').trim();
-      if (!key) return showToast('请输入查询密钥');
+      if (!key) return showToast('请输入个人密码');
       if (!cn) return showToast('请输入您的 CN');
       if (!items || !items.length) return showToast('没有可排发的谷子');
       // 🚧 兜底闸门：万一绕过了按钮（或浏览器缓存了旧页面），这里再拦一次。
@@ -1975,7 +2044,7 @@
             status: '待处理'
           });
           const body = { group_data: groupData, image_data: imgData };
-          let url = '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key);
+          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY;
           if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
           const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
           if (!res.ok) { throw new Error('HTTP ' + res.status); }
@@ -2820,15 +2889,21 @@
       const balEl = document.getElementById('piggyBalance');
       const recEl = document.getElementById('piggyRecords');
       if (!key || !cn){
-        if (balEl) balEl.innerHTML = '<div style="line-height:1.9; margin-top:24px;">填好上面的<b>查询密钥</b>和<b>圈名</b>，这里就会显示你的零钱罐余额和存入记录。</div>';
+        if (balEl) balEl.innerHTML = '<div style="line-height:1.9; margin-top:24px;">填好上面的<b>个人密码</b>和<b>圈名</b>，这里就会显示你的零钱罐余额和存入记录。</div>';
         if (recEl) recEl.innerHTML = '';
         return;
       }
       if (balEl) balEl.innerHTML = '<span class="qspin"></span> 正在读你的零钱罐…';
       if (recEl) recEl.innerHTML = '';
       try {
+        const _auth = await verifyMember(cn, key);
+        if (_auth !== true) {
+          if (balEl) balEl.innerHTML = (_auth === false) ? _pwdHintHtml() : _authDownHtml();
+          if (recEl) recEl.innerHTML = '';
+          return;
+        }
         const fresh = await fetchLeaderData(key);
-        if (!fresh || !fresh.length) throw new Error('这个查询密钥查不到档案，请确认没写错');
+        if (!fresh || !fresh.length) throw new Error('这个密码查不到档案，请确认圈名和密码没写错');
         window.__PIGGY_ROW = fresh[0];
         renderPiggyInfo(parseImgData(fresh[0]), cn);
       } catch (e) {
@@ -2931,7 +3006,7 @@
       const blob = window.__PIGGY_FILE;
       const resEl = document.getElementById('piggyResult');
       const btn = document.getElementById('piggySubmitBtn');
-      if (!key) return showToast('请填查询密钥');
+      if (!key) return showToast('请填个人密码');
       if (!cn) return showToast('请填你的圈名');
       if (!(amt > 0)) return showToast('请填要存的金额');
       if (amt > 100000) return showToast('单笔金额太大了，请分几次存');
@@ -2982,7 +3057,7 @@
             refund_at: ''
           });
           const body = { image_data: imgData };
-          let url = '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key);
+          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY;
           if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
           const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
           if (!res.ok) throw new Error('登记失败（HTTP ' + res.status + '）');
@@ -3098,7 +3173,7 @@
             withdrawn_at: ''
           });
           const body = { image_data: imgData };
-          let url = '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(ctx.key);
+          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY;
           if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
           const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
           if (!res.ok) throw new Error('登记失败（HTTP ' + res.status + '）');
@@ -3158,7 +3233,7 @@
           hit.status = '已撤回';
           hit.withdrawn_at = new Date().toLocaleString('zh-CN');
           const body = { image_data: imgData };
-          let url = '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key);
+          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY;
           if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
           const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
           if (!res.ok) throw new Error('撤销失败（' + res.status + '），请重试');
@@ -3467,7 +3542,7 @@
       const isFeedback = type === 'feedback';
       const isFbReply = type === 'fbreply';
       const isPiggy = type === 'piggy';   // 💰 零钱罐：同样要「密钥 + 圈名」来定位档案
-      // 自助查询/交肾核算/排发调度/零钱罐 需要 密钥+CN；匿名反馈与查回复仅需要查询密钥（用于定位写入的数据行），不需要 CN
+      // 自助查询/交肾核算/排发调度/零钱罐 需要 个人密码+CN；匿名反馈与查回复只需要密码（用来定位写入的数据行），不需要 CN
       const needKey = (type === 'query' || type === 'fee' || type === 'dispatch' || type === 'feedback' || type === 'fbreply' || isPiggy);
       const needCn = (type === 'query' || type === 'fee' || type === 'dispatch' || isPiggy);
       if (q) q.parentElement.style.display = needKey ? 'block' : 'none';
@@ -3505,7 +3580,7 @@
       const key = (document.getElementById('panelKey').value || '').trim();
       const category = document.getElementById('fbCategory').value;
       const content = (document.getElementById('fbContent').value || '').trim();
-      if (!key) return showToast('请输入查询密钥');
+      if (!key) return showToast('请输入个人密码');
       if (!content) return showToast('请填写反馈内容');
       window.__FEEDBACK_SUBMITTING = true;
       try {
@@ -3536,7 +3611,7 @@
             reply: ''
           });
           const body = { image_data: imgData };
-          let url = '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key);
+          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY;
           if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
           const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
           if (!res.ok) { throw new Error('HTTP ' + res.status); }
@@ -3686,13 +3761,13 @@
       const key = (document.getElementById('panelKey').value || '').trim();
       const code = normCode(document.getElementById('fbCode').value);
       const box = document.getElementById('fbReplyResult');
-      if (!key) return showToast('请输入查询密钥');
+      if (!key) return showToast('请输入个人密码');
       if (!code) return showToast('请输入反馈编号');
       if (box) { box.style.display = 'block'; box.innerHTML = '<div style="font-size:13px; color:var(--ink-soft);">🛰️ 正在调取档案……</div>'; }
       try {
         const data = await fetchLeaderData(key);
         if (!data || !data.length) {
-          if (box) box.innerHTML = '<div style="font-size:13px; color:var(--ink-soft);">未找到该密钥的数据，请核对查询密钥。</div>';
+          if (box) box.innerHTML = '<div style="font-size:13px; color:var(--ink-soft);">未找到档案，请核对圈名和个人密码。</div>';
           return;
         }
         let imgData = data[0].image_data;
@@ -3740,7 +3815,7 @@
     }
     /* ===== 🔑 记住查询密钥 / CN（2026-10-26）=====
        团长反馈：团员每次打开网站都要把密钥和 CN 重打一遍。
-       密钥是全团共用的一个串（leader_data 只有一行 query_key=4goods），不是个人密码，
+       密码默认记住，省得每次重打（2026-10-29 起每人用自己的密码，没设过的用 4goods），
        所以默认记在本机；共用设备的人点面板底部的「清除」就能抹掉。
        ⚠️ 只做「预填」，不做「自动查询」—— 打开页面不会自动把人家的账单摊在屏幕上。 */
     const LS_QKEY = 'shantu_qkey';
@@ -3912,7 +3987,7 @@
 
     // ===== 页面初始化 =====
     (function initPage(){
-      // 支持 admin 后台复制的 ?key=xxx 专属链接：自动填入查询密钥
+      // 支持 admin 后台复制的 ?key=xxx 专属链接：自动填入个人密码
       try {
         const k = new URLSearchParams(location.search).get('key');
         if (k && k.trim()) {
