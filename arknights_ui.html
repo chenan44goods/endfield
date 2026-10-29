@@ -2179,8 +2179,8 @@ cn 点数 金额
       <button class="btn btn-secondary" style="margin-bottom:8px; margin-left:6px;" onclick="loadRefundList()">🔄 重画列表</button>
       <div style="overflow:auto;max-height:620px;border:1px solid var(--line);border-radius:10px;">
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
-          <thead><tr style="background:#f1f5f9;"><th style="width:36px;padding:6px;text-align:center;"><input type="checkbox" id="refAll" onclick="toggleAllRef()"></th><th style="padding:6px;text-align:left;">团员CN</th><th style="padding:6px;text-align:center;">金额</th><th style="padding:6px;text-align:center;">收款码</th><th style="padding:6px;text-align:center;">类型</th><th style="padding:6px;text-align:center;">原因</th><th style="padding:6px;text-align:center;">录于</th></tr></thead>
-          <tbody id="refRows"><tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:12px;">加载中…</td></tr></tbody>
+          <thead><tr style="background:#f1f5f9;"><th style="width:36px;padding:6px;text-align:center;"><input type="checkbox" id="refAll" onclick="toggleAllRef()"></th><th style="padding:6px;text-align:left;">团员CN</th><th style="padding:6px;text-align:center;">金额</th><th style="padding:6px;text-align:center;">收款码</th><th style="padding:6px;text-align:center;">类型</th><th style="padding:6px;text-align:center;">原因</th><th style="padding:6px;text-align:center;">录于</th><th style="width:54px;padding:6px;text-align:center;">操作</th></tr></thead>
+          <tbody id="refRows"><tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:12px;">加载中…</td></tr></tbody>
         </table>
       </div>
       <pre id="refListMsg" class="box" style="margin-top:8px;"></pre>
@@ -9530,7 +9530,7 @@ function refRowClick(ev, tr){
 
 function _refBigRow(r, q){
   var amt = Number(r.refund_amount || 0).toFixed(2);
-  return '<tr><td colspan="7" style="padding:14px; background:#f8fafc; border-top:1px dashed var(--line);">' +
+  return '<tr><td colspan="8" style="padding:14px; background:#f8fafc; border-top:1px dashed var(--line);">' +
     '<div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">' +
       '<img src="' + escapeHtml(sbImg(_refQrDirect(q.name))) + '" data-orig="' + escapeHtml(_refQrDirect(q.name)) + '" ' +
         'onerror="imgFallback(this)" alt="收款码" ' +
@@ -9548,7 +9548,7 @@ function _refBigRow(r, q){
 function _refRenderRows(){
   var tb = document.getElementById('refRows'); if (!tb) return;
   var rows = REF_LIST_CACHE || [];
-  if (!rows.length){ tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:12px;">没有待退款的记录了 🎉</td></tr>'; _refreshRefAllState(); return; }
+  if (!rows.length){ tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:12px;">没有待退款的记录了 🎉</td></tr>'; _refreshRefAllState(); return; }
   tb.innerHTML = rows.map(function(r){
     var id = String(r.id), q = REF_QR_MAP[id], cell;
     if (!REF_QR_OK){
@@ -9571,7 +9571,13 @@ function _refRenderRows(){
       '<td style="padding:6px;text-align:center;">' + cell + '</td>' +
       '<td style="padding:6px;text-align:center;">' + _rc_esc(r.kanpei_type || '') + '</td>' +
       '<td style="padding:6px;text-align:center;">' + _rc_esc(r.kanpei_reason || '') + '</td>' +
-      '<td style="padding:6px;text-align:center;font-size:11px;color:var(--text-muted);">' + _rc_esc((r.created_at || '').slice(0, 10)) + '</td></tr>';
+      '<td style="padding:6px;text-align:center;font-size:11px;color:var(--text-muted);">' + _rc_esc((r.created_at || '').slice(0, 10)) + '</td>' +
+      /* 删除按钮只用来纠错（补录时搞错人）。stopPropagation 必须留着，
+         否则点删除会先触发整行勾选（refRowClick 的 tag 判断只是第二道保险）。 */
+      '<td style="padding:6px;text-align:center;">' +
+        '<button class="btn btn-secondary" style="padding:2px 7px;font-size:11px;line-height:1.6;color:#b42318;border-color:#f0c2bd;" ' +
+        'title="删掉这条退款记录（纠错用）" ' +
+        'onclick="event.stopPropagation(); delRefundRecord(\'' + _rc_esc(id) + '\')">删除</button></td></tr>';
     if (REF_OPEN_ID === id && q && REF_QR_OK) tr += _refBigRow(r, q);
     return tr;
   }).join('');
@@ -9628,6 +9634,36 @@ async function batchMarkRefunded(){
     msg.textContent='✅ 已将 '+ids.length+' 条标记为已退'; loadRefundList(); showToast('已标记已退'); }
   catch(err){ msg.textContent='❌ '+err.message; }
 }
+
+/* 🗑 删除一条退款记录（2026-10-29 团长需求：补录时搞错人，要能删掉重录）
+   · 只删 refunds 表这一行 —— 不动排表、不动凭证、不动已收的钱。
+   · 确认框走自绘 adminConfirm（手机微信内置浏览器屏蔽原生 confirm）。
+   · .select('id') 是关键：RLS 静默拒绝时 supabase 不报错，只有拿回行数才证明真删了。 */
+async function delRefundRecord(id){
+  var r = (REF_LIST_CACHE || []).filter(function(x){ return String(x.id) === String(id); })[0];
+  if(!r){ showToast('这条已不在列表里，点「🔄 重画列表」刷新一下'); return; }
+  var amt = Number(r.refund_amount || 0).toFixed(2);
+  var hasQr = !!REF_QR_MAP[String(id)];
+  var ok = await adminConfirm({
+    title: '删除这条退款记录？',
+    body: '团员：' + (r.member_cn || '(未填)') +
+          '\n应退：￥' + amt +
+          (r.kanpei_type ? ('\n类型：' + r.kanpei_type) : '') +
+          (r.kanpei_reason ? ('\n原因：' + r.kanpei_reason) : '') +
+          (hasQr ? '\n\n⚠️ 这笔已经收到收款码了，删掉之后码就对不上号了。' : '') +
+          '\n\n删了不能恢复，排表和已收的钱都不会跟着变。\n只是名字填错的话，删掉再重新补录一条就行。',
+    okText: '删除'
+  });
+  if(!ok) return;
+  try{
+    var re = await supabaseClient.from('refunds').delete().eq('id', id).select('id');
+    if(re.error) throw new Error(re.error.message);
+    if(!re.data || !re.data.length) throw new Error('数据库一行都没删掉（可能没有删除权限），请刷新后重试');
+    showToast('已删除 ' + (r.member_cn || '') + ' ￥' + amt);
+    loadRefundList();
+  }catch(err){ showToast('❌ ' + err.message); }
+}
+window.delRefundRecord = delRefundRecord;
 function exportLedger(){
   var rows=RAW_ITEMS.map(function(it){ return [it.name,it.cn,it.quantity,it.price,it.country,it.batch_name,it.status,it.item_id,it.settled_price]; });
   var ws=XLSX.utils.aoa_to_sheet([['名称','CN','数量','单价','地区','批次','状态','item_id','二调结算价']].concat(rows));
@@ -10055,5 +10091,51 @@ function importLedger(e){
     /* 📐 布局修复（保留）：算账中心区块原本在 .container 外，补齐同样边距 */
     .tab-content#tabCalc { margin: 0 calc(var(--rail-w) + 16px) 0 88px; }
   </style>
+  <!-- 🗑 删除退款记录的自绘确认框（2026-10-29 团长需求：补录时搞错人，要能删掉重来）
+       ⚠️ 绝不能用原生 confirm：手机微信/QQ 内置浏览器会静默屏蔽 → 点了没反应。
+       命名 adminConfirm 是为了不和团员端的 askConfirm 混。 -->
+  <div id="admConfirmMask" style="display:none; position:fixed; inset:0; background:rgba(27,38,48,.55); z-index:99999; padding:18px; align-items:center; justify-content:center;">
+    <div style="background:#fff; color:#1B2630; width:100%; max-width:430px; border-radius:14px; padding:20px 22px; box-shadow:0 18px 50px rgba(0,0,0,.28);">
+      <div id="admConfirmTitle" style="font-weight:700; font-size:1.02rem; margin-bottom:10px;">确认操作</div>
+      <div id="admConfirmBody" style="font-size:.88rem; line-height:1.85; color:#44536b; white-space:pre-wrap; word-break:break-word;"></div>
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
+        <button type="button" class="btn btn-secondary" id="admConfirmNo">取消</button>
+        <button type="button" class="btn btn-primary" id="admConfirmYes" style="background:#b42318; border-color:#b42318;">确定删除</button>
+      </div>
+    </div>
+  </div>
+  <script>
+  (function () {
+    var _resolve = null;
+    function close(v) {
+      var m = document.getElementById('admConfirmMask');
+      if (m) m.style.display = 'none';
+      var r = _resolve; _resolve = null;
+      if (r) r(v);
+    }
+    window.adminConfirm = function (opts) {
+      opts = opts || {};
+      return new Promise(function (resolve) {
+        var m = document.getElementById('admConfirmMask');
+        if (!m) { resolve(false); return; }      /* 弹窗没挂上 → 当作取消，绝不默认放行 */
+        if (_resolve) close(false);              /* 上一张没关干净 */
+        _resolve = resolve;
+        document.getElementById('admConfirmTitle').textContent = opts.title || '确认操作';
+        document.getElementById('admConfirmBody').textContent = opts.body || '';
+        document.getElementById('admConfirmYes').textContent = opts.okText || '确定';
+        m.style.display = 'flex';
+        setTimeout(function () { try { document.getElementById('admConfirmNo').focus(); } catch (e) {} }, 30);
+      });
+    };
+    document.getElementById('admConfirmNo').addEventListener('click', function () { close(false); });
+    document.getElementById('admConfirmYes').addEventListener('click', function () { close(true); });
+    document.getElementById('admConfirmMask').addEventListener('click', function (e) {
+      if (e.target === this) close(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (_resolve && e.key === 'Escape') close(false);
+    });
+  })();
+  </script>
 </body>
 </html>
