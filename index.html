@@ -2006,6 +2006,11 @@
       if (!key) return showToast('请输入个人密码');
       if (!cn) return showToast('请输入您的 CN');
       if (!items || !items.length) return showToast('没有可排发的谷子');
+      /* 🔐 写操作也验一遍（2026-10-29）：否则「4goods + 别人圈名」就能替别人提交排发申请。
+         服务端校验不可用（null）时放行 —— 不能因为校验接口抽风把正常业务挡死，
+         真伪最后还有团长人工过目；但密码明确不对（false）必须拦。 */
+      const _authA = await verifyMember(cn, key);
+      if (_authA === false) { showToast('密码不对，不能提交'); return; }
       // 🚧 兜底闸门：万一绕过了按钮（或浏览器缓存了旧页面），这里再拦一次。
       //    已查过一次的话（applyDispatchItem/applyAllDispatchable 里）也重查 —— 多一次请求换「绝不漏拦」。
       const _guard2 = await checkUnpaidFeeBeforeApply(cn);
@@ -3011,6 +3016,8 @@
       if (!(amt > 0)) return showToast('请填要存的金额');
       if (amt > 100000) return showToast('单笔金额太大了，请分几次存');
       if (!blob) return showToast('请上传转账截图');
+      // 🔐 与交款/申请同一口径：密码明确不对就拦，校验服务抽风放行
+      { const _authG = await verifyMember(cn, key); if (_authG === false) return showToast('密码不对，不能提交'); }
       window.__PIGGY_SUBMITTING = true;
       if (btn) btn.disabled = true;
       if (resEl) { resEl.style.display = 'block'; resEl.innerHTML = '<div style="font-size:12px; color:var(--ink-soft);">正在上传截图…</div>'; }
@@ -3089,6 +3096,10 @@
     async function submitPayProof(){
       const ctx = window.__PAY_CTX_BATCH;
       if (!ctx || !ctx.key) return showToast('请先查询待交款');
+      /* 🔐 写操作验一次（2026-10-29）：防止「4goods + 别人圈名」替别人登记交款。
+         与 submitApply 同一口径：密码明确不对才拦，校验服务抽风（null）放行。 */
+      const _authP = await verifyMember(ctx.cn, ctx.key);
+      if (_authP === false) return showToast('密码不对，不能提交');
       if (window.__PAY_SUBMITTING) return showToast('正在提交，请稍候…');
       const blob = window.__PAY_FILE;   // 可能是 'PIGGY_FULL' = 零钱罐全额抵扣，不需要截图
       const piggyUsed = Math.round(Number((ctx && ctx.piggyUsed) || 0) * 100) / 100;
@@ -3208,6 +3219,13 @@
         cancelText: '算了'
       });
       if (!ok) return;
+      /* 🔐 撤销也验一遍（2026-10-29，与交款/申请同口径）：密码明确不对就拦，校验服务抽风放行 */
+      {
+        const _k = String((window.__PAY_CTX || {}).key || (document.getElementById('panelKey').value || '')).trim();
+        const _c = String((window.__PAY_CTX || {}).cn || (document.getElementById('panelCn').value || '')).trim();
+        const _authW = await verifyMember(_c, _k);
+        if (_authW === false) { showToast('密码不对，不能撤销'); return; }
+      }
       window.__PAY_WITHDRAWING = true;
       try {
         const key = String((window.__PAY_CTX || {}).key || (document.getElementById('panelKey').value || '')).trim();
