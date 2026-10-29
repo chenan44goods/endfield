@@ -1592,7 +1592,11 @@
     const __MEMBER_AUTH = {};
     async function verifyMember(cn, pwd){
       const c = String(cn || '').trim();
-      const p = String(pwd || '');
+      let p = String(pwd || '');
+      /* 🔡 统一密钥 4goods 不做大小写区分（2026-10-29 全员重置为 4goods 后发现）：
+         iOS 键盘会把英文首字母自动大写，输成 4Goods / 4GOODS 一样得能进。
+         只归一「正好是 4goods 的变体」，别人自己设的密码一个字都不动。 */
+      if (p.trim().toLowerCase() === '4goods') p = '4goods';
       if (!c) return false;
       const ck = c + '\u0001' + p;
       const t = __MEMBER_AUTH[ck];
