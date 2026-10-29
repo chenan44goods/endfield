@@ -1275,11 +1275,11 @@
         <div class="qp-title" id="panelTitle">交肾核算</div>
 
         <div class="field" style="margin-top: 32px;">
-          <label for="panelKey">Password · 个人密码</label>
-          <input id="panelKey" placeholder="你自己的密码（没设过就填 4goods）" oninput="if(typeof currentPanel!=='undefined'){ if(currentPanel==='fbreply') renderMyFbCodes(); if(currentPanel==='piggy') piggyDebouncedLoad(); }">
+          <label for="panelKey">Password · 查询密码</label>
+          <input id="panelKey" placeholder="全团统一密码：4goods" oninput="if(typeof currentPanel!=='undefined'){ if(currentPanel==='fbreply') renderMyFbCodes(); if(currentPanel==='piggy') piggyDebouncedLoad(); }">
           <div style="font-size:0.72rem; line-height:1.75; color:var(--ink-soft); margin-top:8px;">
-            就是你在 QQ 私聊机器人发「<b>/绑定 圈名 密码</b>」时设的那个密码。<br>
-            忘了就再发一次 <b>/绑定 你的圈名 新密码</b>；从没设过就填 <b>4goods</b>。
+            全团统一密码是 <b>4goods</b>（大小写不影响）。<br>
+            以前自己改过密码的，就用你改的那个；忘了就私聊机器人发 <b>/绑定 你的圈名 4goods</b> 重置回来。
           </div>
         </div>
         <div class="field">
@@ -1623,11 +1623,10 @@
     function _pwdHintHtml(){
       return '<div class="result-empty" style="line-height:1.95;">'
         + '<b style="color:#b45309;">密码不对</b><br>'
-        + '这里填的是<b>你自己的密码</b>，不是以前那个 4goods。<br>'
-        + '就是你私聊机器人发「<b>/绑定 圈名 密码</b>」时设的那个。<br><br>'
-        + '· 忘了密码？私聊机器人发：<b>/绑定 你的圈名 新密码</b>（同一个 QQ 才能改）<br>'
-        + '· 从来没设过？直接填 <b>4goods</b><br>'
-        + '· 还是不行就找团长重置'
+        + '现在全团统一用 <b>4goods</b>（大小写、前后空格都不影响）。<br><br>'
+        + '· 直接填 <b>4goods</b> 再试<br>'
+        + '· 以前自己改过密码？用你改的那个；想回到统一密码就私聊机器人发：<b>/绑定 你的圈名 4goods</b><br>'
+        + '· 还是进不去就找团长'
         + '</div>';
     }
     function _authDownHtml(){
@@ -1653,7 +1652,7 @@
       const resBox = document.getElementById('queryResultOverlay');
       const list = document.getElementById('resultList');
       const stat = document.getElementById('resultStat');
-      if (!key) return showToast('请输入个人密码');
+      if (!key) return showToast('请输入密码');
       if (!cn) return showToast('请输入您的 CN');
       const _qbtn = document.getElementById('queryBtn');
       if (_qbtn) _qbtn.disabled = true;
@@ -2007,7 +2006,7 @@
       if (window.__APPLY_SUBMITTING) return showToast('正在提交，请勿重复点击！');
       const key = (document.getElementById('panelKey').value||'').trim();
       const cn = (document.getElementById('panelCn').value||'').trim();
-      if (!key) return showToast('请输入个人密码');
+      if (!key) return showToast('请输入密码');
       if (!cn) return showToast('请输入您的 CN');
       if (!items || !items.length) return showToast('没有可排发的谷子');
       /* 🔐 写操作也验一遍（2026-10-29）：否则「4goods + 别人圈名」就能替别人提交排发申请。
@@ -2898,7 +2897,7 @@
       const balEl = document.getElementById('piggyBalance');
       const recEl = document.getElementById('piggyRecords');
       if (!key || !cn){
-        if (balEl) balEl.innerHTML = '<div style="line-height:1.9; margin-top:24px;">填好上面的<b>个人密码</b>和<b>圈名</b>，这里就会显示你的零钱罐余额和存入记录。</div>';
+        if (balEl) balEl.innerHTML = '<div style="line-height:1.9; margin-top:24px;">填好上面的<b>密码</b>和<b>圈名</b>，这里就会显示你的零钱罐余额和存入记录。</div>';
         if (recEl) recEl.innerHTML = '';
         return;
       }
@@ -3015,7 +3014,7 @@
       const blob = window.__PIGGY_FILE;
       const resEl = document.getElementById('piggyResult');
       const btn = document.getElementById('piggySubmitBtn');
-      if (!key) return showToast('请填个人密码');
+      if (!key) return showToast('请填密码');
       if (!cn) return showToast('请填你的圈名');
       if (!(amt > 0)) return showToast('请填要存的金额');
       if (amt > 100000) return showToast('单笔金额太大了，请分几次存');
@@ -3602,7 +3601,7 @@
       const key = (document.getElementById('panelKey').value || '').trim();
       const category = document.getElementById('fbCategory').value;
       const content = (document.getElementById('fbContent').value || '').trim();
-      if (!key) return showToast('请输入个人密码');
+      if (!key) return showToast('请输入密码');
       if (!content) return showToast('请填写反馈内容');
       window.__FEEDBACK_SUBMITTING = true;
       try {
@@ -3783,13 +3782,13 @@
       const key = (document.getElementById('panelKey').value || '').trim();
       const code = normCode(document.getElementById('fbCode').value);
       const box = document.getElementById('fbReplyResult');
-      if (!key) return showToast('请输入个人密码');
+      if (!key) return showToast('请输入密码');
       if (!code) return showToast('请输入反馈编号');
       if (box) { box.style.display = 'block'; box.innerHTML = '<div style="font-size:13px; color:var(--ink-soft);">🛰️ 正在调取档案……</div>'; }
       try {
         const data = await fetchLeaderData(key);
         if (!data || !data.length) {
-          if (box) box.innerHTML = '<div style="font-size:13px; color:var(--ink-soft);">未找到档案，请核对圈名和个人密码。</div>';
+          if (box) box.innerHTML = '<div style="font-size:13px; color:var(--ink-soft);">未找到档案，请核对圈名和密码。</div>';
           return;
         }
         let imgData = data[0].image_data;
