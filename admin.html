@@ -4688,6 +4688,21 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return '<span class="badge" style="background:' + bg + '; color:' + color + '; border:1px solid ' + color + '44;">' + escapeHtml(s) + '</span>';
     }
 
+    /* 🔴 强制删除按钮（统一样式，2026-10-29）
+       待审核用大号（推到行尾），已驳回/已撤回用小号（跟在文字后面）。
+       ⚠️ 颜色/描边/阴影是团长明确要求的「必须标红、必须醒目」，别调淡。 */
+    function _forceDelBtnHtml(id, small) {
+      const pad = small ? '4px 11px' : '7px 16px';
+      const fs = small ? '0.78rem' : '0.9rem';
+      const ml = small ? 'margin-left:10px;' : 'margin-left:auto;';
+      const label = small ? '删除记录' : '强制删除';
+      return '<button class="btn btn-danger" title="钱交对了但系统审核不上时，直接抹掉这条记录（不可恢复）" ' +
+        'style="' + ml + 'padding:' + pad + '; font-size:' + fs + '; font-weight:800; letter-spacing:0.5px; ' +
+        'background:#b91c1c !important; color:#fff !important; border:2px solid #7f1d1d !important; ' +
+        'box-shadow:0 2px 12px rgba(153,27,27,.5);" ' +
+        'onclick="forceDeletePayProof(\'' + id + '\')">🗑 ' + label + '</button>';
+    }
+
     function _payProofCardHtml(p) {
       const id = String(p.id || '');
       const names = Array.isArray(p.batch_names) ? p.batch_names.join('、') : String(p.batch_names || '');
@@ -4787,15 +4802,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               (isIntl ? ' 项国际运费标为「已交」'
                       : (chk.plan === 'deposit' ? ' 条订单变为「已交定金」（尾款以后再补）'
                                                 : (chk.plan === 'balance' ? ' 条订单补清，变为「已下单」' : ' 条订单变为「已下单」'))) + '</span>' +
-            /* 🔴 强制删除：钱交对了但系统不给过时的唯一出口。
-               必须比「驳回」更扎眼 —— 深红实心 + 白字 + 2px 深红描边 + 阴影 + 加粗，
-               并且 margin-left:auto 推到行尾，跟「确认收款 / 驳回」拉开距离，防误点。
-               ⚠️ 别改成小字或藏进菜单，团长明确要求「必须标红、必须醒目」。 */
-            '<button class="btn btn-danger" title="临时绕过：钱交对了但系统审核不上时，直接抹掉这条记录（不可恢复）" ' +
-            'style="margin-left:auto; padding:7px 16px; font-size:0.9rem; font-weight:800; letter-spacing:0.5px; ' +
-            'background:#b91c1c !important; color:#fff !important; border:2px solid #7f1d1d !important; ' +
-            'box-shadow:0 2px 12px rgba(153,27,27,.5);" ' +
-            'onclick="forceDeletePayProof(\'' + id + '\')">🗑 强制删除</button>' +
+            /* 🔴 强制删除：钱交对了但系统不给过时的唯一出口（样式统一在 _forceDelBtnHtml） */
+            _forceDelBtnHtml(id) +
           '</div>' +
           '<div id="rejectBox_' + id + '" style="display:none; margin-top:10px;">' +
             '<input id="rejectReason_' + id + '" placeholder="驳回原因（必填，团员能看到。例如：金额不符，截图只付了 20，还差 10 元）" oninput="this.style.borderColor=\'\'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();rejectPayProof(\'' + id + '\');}" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; box-sizing:border-box;">' +
@@ -4807,9 +4815,12 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           '</div>';
       } else if (st === '已撤回') {
         actions = '<div style="margin-top:8px; font-size:0.85rem; color:#64748b;">团员已自行撤销这次提交' +
-                  (p.withdrawn_at ? ('（' + escapeHtml(p.withdrawn_at) + '）') : '') + '。</div>';
-      } else if (p.reject_reason) {
-        actions = '<div style="margin-top:8px; font-size:0.85rem; color:#dc2626;">驳回原因：' + escapeHtml(p.reject_reason) + '</div>';
+                  (p.withdrawn_at ? ('（' + escapeHtml(p.withdrawn_at) + '）') : '') + '。' +
+                  /* 已撤回的记录也要能清掉（2026-10-29：团长抱怨「删不掉」） */
+                  _forceDelBtnHtml(id, true) + '</div>';
+      } else if (st === '已驳回' || p.reject_reason) {
+        actions = '<div style="margin-top:8px; font-size:0.85rem; color:#dc2626;">驳回原因：' + escapeHtml(p.reject_reason || '(未填)') +
+                  _forceDelBtnHtml(id, true) + '</div>';
       }
 
       const thumbInner = p.img_path ? '加载中…'
