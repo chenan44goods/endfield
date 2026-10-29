@@ -2762,6 +2762,32 @@
     }
     function piggySameCn(a, b){ return !!_piggyNormCn(a) && _piggyNormCn(a) === _piggyNormCn(b); }
 
+    /* 🥇 网站优先（2026-10-29 团长口径：收款永远以网站提交为准）
+
+       网站一提交成功，就把他**同一个人 + 同一批次 + 同一订单类型**还挂着的
+       「来自 QQ 机器人」待审记录一并作废 —— 后台只剩网站这一份，
+       不会同一笔被审两次、也不会点错哪条。
+       只动待审核的 bot 记录：已通过 / 已驳回 / 网站自己交的 / 别的批次，一律不碰。
+       返回作废条数（0 = 没有可作废的）。 */
+    function voidBotProofsOnWebSubmit(imgData, ctx) {
+      if (!imgData || !Array.isArray(imgData.pay_proofs) || !ctx) return 0;
+      const nowStr = new Date().toLocaleString('zh-CN');
+      let n = 0;
+      imgData.pay_proofs.forEach(function (p) {
+        if (!p || typeof p !== 'object') return;
+        if (String(p.source || '') !== 'bot') return;
+        if (String(p.status || '待审核') !== '待审核') return;
+        if (String(p.batch_key || '') !== String(ctx.batchKey || '')) return;
+        if (String(p.order_type || '普通') !== String(ctx.orderType || '普通')) return;
+        if (!piggySameCn(p.cn, ctx.cn)) return;
+        p.status = '已撤回';
+        p.withdrawn_at = nowStr;
+        p.withdraw_reason = '已在网站提交，QQ 那条自动作废';
+        n++;
+      });
+      return n;
+    }
+
     /* 单条存款现在还剩多少可用的钱（待审核 / 已驳回 / 已退回 = 0）
        ⚠️ 必须与后台 admin.html 的 piggyRemain 口径一致，否则团员看到的余额会虚高 */
     function piggyRemain(rec){
@@ -3044,6 +3070,10 @@
           if (imgData.pay_proofs.some(function (p) { return String((p && p.id) || '') === proofId; })) {
             window.__LAST_ROW = row; written = true; break;
           }
+          /* 🥇 网站优先（2026-10-29 团长口径）：网站提交永远优先于 QQ 私聊 #已付。
+             同一个人 + 同一批次 + 同一订单类型，如果还挂着一条「来自 QQ 机器人」的待审记录，
+             就在这里把它作废 —— 后台只剩网站这一份，不会同一笔被审两次。 */
+          voidBotProofsOnWebSubmit(imgData, ctx);
           imgData.pay_proofs.unshift({
             id: proofId,
             cn: ctx.cn,

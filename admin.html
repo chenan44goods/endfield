@@ -3240,6 +3240,43 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return out;
     }
 
+    /* 💳 凭证合并（2026-10-29 团长口径：收款审核永远以网站提交为优先）
+
+       mergeById 是「后台内存优先」，会把别人刚写的状态盖回去。对 pay_proofs 会出这种事故：
+       后台页面一直开着不动 → 团员在网站重新提交（同批次那条「来自QQ」的待审记录被自动
+       作废成「已撤回」）→ 团长随后点保存 → 用内存里的旧「待审核」把它覆盖回来 →
+       后台又冒出一条重复待审，还可能被审第二次。
+
+       所以凭证不能按「谁有 id 用谁」，必须先看状态：
+         · 服务器那份已经是终态（已通过 / 已驳回 / 已撤回），本地还停在「待审核」→ 用服务器
+         · 本地已经处理过（本次刚点通过 / 驳回）→ 用本地，避免把团长刚做的操作冲掉
+         · 其余按本地，服务器多出来的 id 追加进来 */
+    function _proofIsFinal(st) {
+      const s = String(st || '待审核');
+      return s === '已通过' || s === '已驳回' || s === '已撤回';
+    }
+    function mergePayProofs(mine, theirs) {
+      const out = [], seen = {}, theirMap = {};
+      (theirs || []).forEach(function (x) { if (x) theirMap[String(x.id)] = x; });
+      (mine || []).forEach(function (x) {
+        if (!x) return;
+        const k = String(x.id);
+        if (seen[k]) return;
+        seen[k] = true;
+        const t = theirMap[k];
+        if (t && _proofIsFinal(t.status) && !_proofIsFinal(x.status)) { out.push(t); return; }
+        out.push(x);
+      });
+      (theirs || []).forEach(function (x) {
+        if (!x) return;
+        const k = String(x.id);
+        if (seen[k]) return;
+        seen[k] = true;
+        out.push(x);
+      });
+      return out;
+    }
+
     // 🚀 申请记录合并（比 mergeById 严格，专治 applications 的「状态错位」）：
     //   ① 墓碑优先：本次明确删掉的一律不保留（否则并集会把删掉的复活）
     //   ② 脏标记优先：本次改过状态的申请，用我这边的
@@ -3494,7 +3531,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               //    不合并的话，冲突分支会用服务器旧数据把刚做的修改冲掉 ——
               //    2026-09-24 踩到：派发后申请被冲回「待处理」，谷子却已「已排发」→ 两边状态不一致。
               // ⚠️ 合并后必须再剔除「本次明确删掉的」—— 否则并集会把删掉的记录复活（2026-09-25 团长要真删）
-              freshImg2.pay_proofs = mergeById(RAW_PAY_PROOFS, freshImg2.pay_proofs).filter(function (p) {
+              freshImg2.pay_proofs = mergePayProofs(RAW_PAY_PROOFS, freshImg2.pay_proofs).filter(function (p) {
                 return !MY_PROOF_DELETED.has(String(p && p.id));
               });
               // 💰 零钱罐：同样按 id 合并（我这边优先 + 服务器多出来的保留）——
