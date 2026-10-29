@@ -4787,6 +4787,15 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               (isIntl ? ' 项国际运费标为「已交」'
                       : (chk.plan === 'deposit' ? ' 条订单变为「已交定金」（尾款以后再补）'
                                                 : (chk.plan === 'balance' ? ' 条订单补清，变为「已下单」' : ' 条订单变为「已下单」'))) + '</span>' +
+            /* 🔴 强制删除：钱交对了但系统不给过时的唯一出口。
+               必须比「驳回」更扎眼 —— 深红实心 + 白字 + 2px 深红描边 + 阴影 + 加粗，
+               并且 margin-left:auto 推到行尾，跟「确认收款 / 驳回」拉开距离，防误点。
+               ⚠️ 别改成小字或藏进菜单，团长明确要求「必须标红、必须醒目」。 */
+            '<button class="btn btn-danger" title="临时绕过：钱交对了但系统审核不上时，直接抹掉这条记录（不可恢复）" ' +
+            'style="margin-left:auto; padding:7px 16px; font-size:0.9rem; font-weight:800; letter-spacing:0.5px; ' +
+            'background:#b91c1c !important; color:#fff !important; border:2px solid #7f1d1d !important; ' +
+            'box-shadow:0 2px 12px rgba(153,27,27,.5);" ' +
+            'onclick="forceDeletePayProof(\'' + id + '\')">🗑 强制删除</button>' +
           '</div>' +
           '<div id="rejectBox_' + id + '" style="display:none; margin-top:10px;">' +
             '<input id="rejectReason_' + id + '" placeholder="驳回原因（必填，团员能看到。例如：金额不符，截图只付了 20，还差 10 元）" oninput="this.style.borderColor=\'\'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();rejectPayProof(\'' + id + '\');}" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; box-sizing:border-box;">' +
@@ -4990,6 +4999,51 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       showToast('已删除「' + name + '」的 ' + removed.length + ' 条记录（不可恢复）');
     }
     window.deletePayReviewGroup = deletePayReviewGroup;
+
+    /* 🗑 强制删除单条交款记录（2026-10-29 团长需求）
+       场景：钱其实交对了，但截图上的订单编号失效 / 数据对不上，系统不给过，
+             驳回也解决不了问题 —— 需要一个能把这条待审核记录直接抹掉的出口。
+       与「驳回」的区别：驳回会留一条记录并显示原因给团员；强制删除是彻底消失。
+       落库机制与 deletePayReviewGroup 完全同源：墓碑集合 + 按引用摘除 + 失败回滚
+       （不回滚墓碑，下次保存会被 mergeProofs 合并回来）。 */
+    async function forceDeletePayProof(id) {
+      const all = Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : [];
+      const p = all.filter(function (x) { return String(x.id) === String(id); })[0];
+      if (!p) return showToast('这条记录已不存在，请点刷新');
+      const amt = Number(p.amount || 0).toFixed(2);
+      const names = Array.isArray(p.batch_names) ? p.batch_names.join('、') : String(p.batch_names || '');
+      const ok = await adminConfirm({
+        title: '强制删除这条交款记录？',
+        body: '团员：' + (p.cn || '(未填CN)') +
+              '\n金额：￥' + amt +
+              (names ? ('\n批次：' + names) : '') +
+              (p.note ? ('\n备注：' + p.note) : '') +
+              '\n\n⚠️ 删掉之后：\n' +
+              '· 记录彻底消失，团员那边也看不到\n' +
+              '· 不会改任何订单状态，也不会退钱\n' +
+              '· 删了不能恢复\n\n' +
+              '如果只是想退回去让他重交，用「驳回」更好 —— 他能看到原因。',
+        okText: '强制删除'
+      });
+      if (!ok) return;
+
+      const k = String(p.id || '');
+      const hasId = !!(k && k !== 'undefined' && k !== 'null');
+      if (hasId) PAY_PROOF_DELETED_IDS.add(k);
+      RAW_PAY_PROOFS = all.filter(function (x) { return x !== p; });   /* 按引用摘，老数据没 id 也能删 */
+      renderPayReview(); renderPayStats();
+
+      const saved = await saveDataToSupabase();
+      if (!saved) {                       /* 没落库就恢复原样，别让团长以为删了 */
+        if (hasId) PAY_PROOF_DELETED_IDS.delete(k);
+        RAW_PAY_PROOFS = all;
+        renderPayReview(); renderPayStats();
+        return showToast('删除失败，已恢复原样 —— 请检查网络后重试');
+      }
+      renderPayReview(); renderPayStats();
+      showToast('已强制删除 ' + (p.cn || '') + ' ￥' + amt + '（不可恢复）');
+    }
+    window.forceDeletePayProof = forceDeletePayProof;
 
     /* 一个批次 = 一张折叠卡（头部分组小计 + 操作，下面挂凭证卡） */
     function _payReviewGroupHtml(g, idx) {
