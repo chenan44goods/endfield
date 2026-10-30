@@ -903,6 +903,7 @@
     }
     .r-badge.st-未出荷    { background:#eef1f4; color:#52606d; }
     .r-badge.st-已下单    { background:#dceffb; color:#0369a1; }
+    .r-badge.st-收国际中  { background:#fce7f3; color:#be185d; font-weight:700; }
     .r-badge.st-国际运输中 { background:#fdecc8; color:#b45309; }
     .r-badge.st-可排发    { background:#d6f5df; color:#15803d; font-weight:700; }
     .r-badge.st-待发货    { background:#efe2fb; color:#7e22ce; }
@@ -1697,6 +1698,7 @@
         const arr = active.concat(Array.isArray(arc) ? arc : []);   // 合并已排发归档区：数据完整保留
         const lower = cn.toLowerCase();
         let items;
+        window.__COLLECT_INTL = [];   // 🌍 每次查询先清空，避免上一次的批次残留到这次
         if (mode === 'fee') {
           // 交肾核算：该 CN 未付款/未交
           // 💰 「已交定金」也要收进来 —— 否则审核一过这单就从交肾核算里消失，
@@ -1723,6 +1725,24 @@
         if (mode === 'fee') {
           // 国际运费不在普通订单表里，必须单独并进来，否则这类欠款团员永远看不到
           items = items.concat(collectIntlUnpaid(data[0], lower));
+
+          /* 🌍 「收国际中」（2026-10-31 团长新增状态）：
+             含义 = 这批谷子已经下单、团长**正在收本批的国际运费**。
+             ⚠️ 这个状态**绝不能进上面的 items**：这批谷子的货款早就收过了，
+                再把「单价×数量」算一遍等于让团员重复交一次谷子费。
+                真正的金额走 image_data.logistics_data 的国际运费（collectIntlUnpaid），
+                这里只把"哪几个批次在收"捞出来，给交款区顶部出一张提示卡。 */
+          const _ciSeen = {};
+          arr.forEach(function(it){
+            const c = String(it.cn || '').trim().toLowerCase();
+            if (c !== lower) return;
+            if (String(it.status || '').trim() !== '收国际中') return;
+            const bn = String(it.batch_name || '默认批次').trim();
+            const k = _normBatch(bn);
+            if (!k || _ciSeen[k]) return;
+            _ciSeen[k] = 1;
+            (window.__COLLECT_INTL = window.__COLLECT_INTL || []).push({ key: k, name: bn });
+          });
         }
         resBox.style.display = 'block';
         // 保存完整结果供名称筛选复用
@@ -1885,7 +1905,7 @@
 
     function getStatusBadgeClass(status){
       const s = String(status||'').trim();
-      const known = ['未出荷','已下单','国际运输中','可排发','待发货','已排发','未付款'];
+      const known = ['未出荷','已下单','收国际中','国际运输中','可排发','待发货','已排发','未付款'];
       if (known.indexOf(s) !== -1) return 'st-'+s;
       const legacy = {
         '已下单未到货':'st-已下单',
@@ -2253,6 +2273,7 @@
       window.__PAY_CTX = null;
       window.__PAY_BATCHES = [];
       window.__PAY_CTX_BATCH = null;
+      window.__COLLECT_INTL = [];
     }
     function _payBadge(status){
       const s = String(status || '待审核');
@@ -2359,11 +2380,31 @@
         g.balanceDue = Math.max(0, Math.round((owed - paid) * 100) / 100);
       });
 
-      if (!order.length) { hidePayBox(); return; }
+      /* 🌍 收国际中提示卡（2026-10-31）：只告知，不带按钮、不计金额。
+         这笔钱怎么交取决于团长有没有把国际运费录进「物流费用」：
+           · 录了 → 下面那张国际运费卡片自带金额和「上传截图」按钮，这里只做指引；
+           · 没录 → 只说正在核算，不让团员瞎交（避免交了个对不上的数）。 */
+      const _ciBatches = (Array.isArray(window.__COLLECT_INTL) ? window.__COLLECT_INTL : []);
+      let _ciHtml = '';
+      _ciBatches.forEach(function(b){
+        const g = groups[b.key];
+        const hasIntlDue = !!(g && (g.dueItems || g.items || []).some(function(it){
+          return it && it.__intl && !it.__island;
+        }));
+        _ciHtml += '<div style="margin:16px 0; padding:14px 16px; border-radius:12px; border:1px solid rgba(190,24,93,0.30); background:rgba(252,231,243,0.55);">'
+          + '<div style="font-weight:700; color:#be185d; font-size:14px; margin-bottom:6px;">🌍 正在收国际运费 · ' + esc(b.name) + '</div>'
+          + '<div style="font-size:13px; color:#44403c; line-height:1.75;">'
+          + (hasIntlDue
+              ? '本批国际运费已经算好了，金额在下面这张卡里 —— 交完点卡片上的按钮上传付款截图就行。'
+              : '团长正在核算本批国际运费的金额，算好后会显示在下面，<b>现在先不用交</b>。')
+          + '</div></div>';
+      });
+
+      if (!order.length && !_ciHtml) { hidePayBox(); return; }
 
       window.__PAY_BATCHES = order.map(function(k){ return groups[k]; });
 
-      let html = '';
+      let html = _ciHtml;
       order.forEach(function(k, idx){
         const g = groups[k];
         const proofs = mine.filter(function(p){ return proofKey(p) === k; });

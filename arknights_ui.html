@@ -816,6 +816,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     /* ==================== 🎨 7 大专业流转状态新颜色体系 ==================== */
     .badge-status-未出荷 { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; } /* 浅灰：安静等待 */
     .badge-status-已下单 { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; } /* 天蓝：采购完成 */
+    .badge-status-收国际中 { background-color: #fce7f3; color: #be185d; border: 1px solid #f9a8d4; font-weight: 700; } /* 玫红：正在收国际运费 */
     .badge-status-国际运输中 { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; } /* 暖橙黄：途中 */
     .badge-status-可排发 { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; font-weight: 700; } /* 翠绿：可排发 */
     .badge-status-待发货 { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; } /* 紫色：打包准备中 */
@@ -2241,6 +2242,7 @@ cn 点数 金额
     const STATUS_OPTIONS = [
       { value: '未出荷', label: '未出荷 (预售商品)', colorClass: 'badge-status-未出荷' },
       { value: '已下单', label: '已下单 (采购完成)', colorClass: 'badge-status-已下单' },
+      { value: '收国际中', label: '收国际中 (已下单，正在收国际运费)', colorClass: 'badge-status-收国际中' },
       { value: '国际运输中', label: '国际运输中 (跨国途中)', colorClass: 'badge-status-国际运输中' },
       { value: '可排发', label: '可排发 (已到国内/清点完毕)', colorClass: 'badge-status-可排发' },
       { value: '待发货', label: '待发货 (团员已申请/打包中)', colorClass: 'badge-status-待发货' },
