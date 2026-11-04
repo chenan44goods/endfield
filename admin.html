@@ -935,6 +935,16 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     .cascade-arrow { font-size: 0.7rem; color: var(--text-muted); transition: transform 0.15s; }
     .cascade-trigger.open .cascade-arrow { transform: rotate(180deg); }
 
+    /* 🧭 状态筛选（2026-11-04）：漏斗图标 + 「已筛选」高亮 */
+    .fs-funnel { width: 13px; height: 13px; flex: none; color: var(--text-muted); }
+    .cascade-trigger.on {
+      border-color: #cfc46a;
+      background: var(--primary-yellow-soft);
+      color: var(--text-main);
+      font-weight: 600;
+    }
+    .cascade-trigger.on .fs-funnel { color: var(--text-main); }
+
     /* 下拉面板：绝对定位，z-index 1000 */
     .cascade-panel {
       position: absolute;
@@ -1640,10 +1650,19 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
             <!-- 动态生成 -->
           </select>
           
-          <input type="text" id="filterStatus" list="filterStatusPresets" placeholder="全部状态" style="max-width: 140px;" oninput="onFilterChange()">
-          <datalist id="filterStatusPresets">
-            <!-- 动态从 STATUS_OPTIONS 生成 -->
-          </datalist>
+          <!-- 🧭 状态筛选（2026-11-04）：原来是手打输入框 → 改成漏斗图标 + 点选面板（单选）。
+               真实值仍写在这只隐藏 input 里，保存/恢复/渲染一共三处逻辑都不用改。 -->
+          <div class="cascade-wrap" id="filterStatusWrap">
+            <button type="button" class="cascade-trigger" id="filterStatusTrigger" onclick="toggleFilterStatusPanel()" title="按状态筛选：只显示符合条件的行">
+              <svg class="fs-funnel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18l-7 8v6l-4 2v-8L3 4z"/></svg>
+              <span class="cascade-trigger-text" id="filterStatusText">全部状态</span>
+              <span class="cascade-arrow">▾</span>
+            </button>
+            <div class="cascade-panel" id="filterStatusPanel">
+              <div class="cascade-options" id="filterStatusOptions"></div>
+            </div>
+            <input type="hidden" id="filterStatus" value="">
+          </div>
         </div>
 
         <div style="font-size:0.78rem; color:var(--text-muted); margin:8px 0 2px;">
@@ -3865,10 +3884,91 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
     window.filterByBatch = filterByBatch;
 
+    /* 🧭 状态筛选（2026-11-04）：团长要的是「点漏斗 → 选一个状态 → 只显示这些行」，
+       不用再记「可排发」「国际运输中」到底怎么写的。
+       ⚠️ 单选。真实值写回隐藏的 #filterStatus.value，
+          所以 saveFilterState / restoreFilterState / renderTable 三处全都不用动。 */
+    function _statusFilterValues() {
+      /* 只列当前数据里真的出现过的状态（免得点进去一堆空状态），
+         顺序按 STATUS_OPTIONS 走，历史遗留的怪状态排在后面。 */
+      var order = STATUS_OPTIONS.map(function (o) { return o.value; });
+      var seen = {};
+      var extras = [];
+      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it) {
+        var s = String((it && it.status) || '未出荷').trim();
+        if (!s || seen[s]) return;
+        seen[s] = 1;
+        if (order.indexOf(s) < 0) extras.push(s);
+      });
+      var list = order.filter(function (v) { return seen[v]; });
+      extras.sort();
+      var all = list.concat(extras);
+      var cur = String((document.getElementById('filterStatus') || {}).value || '').trim();
+      if (cur && all.indexOf(cur) < 0) all.push(cur);
+      return all;
+    }
+    window._statusFilterValues = _statusFilterValues;
+
+    function _syncFilterStatusUI() {
+      var input = document.getElementById('filterStatus');
+      var text = document.getElementById('filterStatusText');
+      var trig = document.getElementById('filterStatusTrigger');
+      var v = String((input && input.value) || '').trim();
+      if (text) text.textContent = v || '全部状态';
+      if (trig) {
+        trig.classList.toggle('on', !!v);
+        trig.title = v
+          ? ('当前只显示「' + v + '」的行，点开可换或清空')
+          : '按状态筛选：只显示符合条件的行';
+      }
+    }
+    window._syncFilterStatusUI = _syncFilterStatusUI;
+
+    function closeFilterStatusPanel() {
+      var p = document.getElementById('filterStatusPanel');
+      var t = document.getElementById('filterStatusTrigger');
+      if (p) p.classList.remove('open');
+      if (t) t.classList.remove('open');
+    }
+    window.closeFilterStatusPanel = closeFilterStatusPanel;
+
+    function toggleFilterStatusPanel() {
+      var panel = document.getElementById('filterStatusPanel');
+      var trig = document.getElementById('filterStatusTrigger');
+      if (!panel) return;
+      var opening = !panel.classList.contains('open');
+      closeFilterStatusPanel();
+      if (typeof closeFilterBatchCascade === 'function') closeFilterBatchCascade();
+      if (!opening) return;
+      var cur = String((document.getElementById('filterStatus') || {}).value || '').trim();
+      var html = '<div class="cascade-option' + (cur ? '' : ' selected') + '" data-v="" onclick="pickFilterStatus(this)">全部状态</div>';
+      _statusFilterValues().forEach(function (v) {
+        html += '<div class="cascade-option' + (v === cur ? ' selected' : '') + '" data-v="' + escapeHtml(v) + '" onclick="pickFilterStatus(this)">' + escapeHtml(v) + '</div>';
+      });
+      var box = document.getElementById('filterStatusOptions');
+      if (box) box.innerHTML = html;
+      panel.classList.add('open');
+      if (trig) trig.classList.add('open');
+    }
+    window.toggleFilterStatusPanel = toggleFilterStatusPanel;
+
+    function pickFilterStatus(el) {
+      var v = String((el && el.getAttribute('data-v')) || '');
+      var input = document.getElementById('filterStatus');
+      if (input) input.value = v;
+      _syncFilterStatusUI();
+      closeFilterStatusPanel();
+      onFilterChange();   /* 回到第 1 页 + 存本机 + 重画表格 */
+      return false;
+    }
+    window.pickFilterStatus = pickFilterStatus;
+
     // 点击页面空白处关闭所有级联面板
     document.addEventListener('click', function(e){
       const wrap = document.getElementById('filterBatchCascade');
       if (wrap && !wrap.contains(e.target)) closeFilterBatchCascade();
+      const swrap = document.getElementById('filterStatusWrap');
+      if (swrap && !swrap.contains(e.target)) closeFilterStatusPanel();
     });
 
     function _syncSearchClearBtn() {
@@ -3905,6 +4005,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const tag = String(el.tagName || '').toLowerCase();
       const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
       if (e.key === 'Escape') {
+        const sp = document.getElementById('filterStatusPanel');
+        if (sp && sp.classList.contains('open')) { closeFilterStatusPanel(); return; }
         if (el.id === 'filterSearch') { clearSearch(); el.blur(); }
         return;
       }
@@ -4060,6 +4162,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (c && s.country && Array.prototype.some.call(c.options, function (o) { return o.value === s.country; })) c.value = s.country;
       const st = document.getElementById('filterStatus');
       if (st && s.status) st.value = s.status;
+      _syncFilterStatusUI();
       // 真的恢复了「有内容」的筛选才返回 true（全是空的不算，免得每次开都弹一句废话）
       const _c = (c && c.value) || '';
       const _s = (st && st.value) || '';
