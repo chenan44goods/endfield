@@ -957,13 +957,24 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       border: 1px solid #e8e8e8;
       border-radius: 4px;
       box-shadow: 0 3px 10px rgba(0,0,0,0.12);
-      display: none;
       max-height: 280px;
       overflow-y: auto;
       padding: 4px;
+      /* 下拉面板属于「页面内移动」：已在屏幕上，只是展开/收起 */
+      visibility: hidden; opacity: 0;
+      transform: translateY(-4px);
+      pointer-events: none;
+      transition: opacity var(--mo-dur-move) var(--mo-move),
+                  transform var(--mo-dur-move) var(--mo-move),
+                  visibility 0s linear var(--mo-dur-move);
     }
     .cascade-panel--level2 { left: 100%; top: -5px; }  /* 二级面板在右侧展开 */
-    .cascade-panel.open { display: block; }
+    .cascade-panel.open {
+      visibility: visible; opacity: 1; transform: none; pointer-events: auto;
+      transition: opacity var(--mo-dur-move) var(--mo-move),
+                  transform var(--mo-dur-move) var(--mo-move),
+                  visibility 0s linear 0s;
+    }
     .cascade-options { padding: 0; }
 
     /* 选项行 */
@@ -1123,12 +1134,15 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           z-index: 20;
           opacity: 0;
           pointer-events: none;
-          transition: opacity 0.2s;
+          transition: opacity var(--mo-dur-out) var(--mo-out),
+                      z-index 0s linear var(--mo-dur-out);
         }
 
         .modal-overlay.active {
           opacity: 1;
           pointer-events: auto;
+          transition: opacity var(--mo-dur-in) var(--mo-in),
+                      z-index 0s linear 0s;
           z-index: 10000;  /* 动画结束后提升到最顶层，确保弹窗不被主界面遮挡 */
         }
 
@@ -1801,6 +1815,19 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
 
     <!-- 标签页 1.5：国际运费 -->
     <div class="tab-content" id="tabLogistics">
+      <!-- 🌍 国际掉落告警条（2026-11-04）：常驻，不自动消失、没有关闭按钮；
+           黄条=还没到期，红条=今日到期/已过期。没有内容时整块 display:none。 -->
+      <div id="intlAlertBars" style="display:none;">
+        <div class="intl-alert intl-alert-yellow" id="intlAlertYellow" style="display:none;">
+          <span class="intl-alert-ic">⏳</span>
+          <div class="intl-alert-body" id="intlAlertYellowBody"></div>
+        </div>
+        <div class="intl-alert intl-alert-red" id="intlAlertRed" style="display:none;">
+          <span class="intl-alert-ic">⚠️</span>
+          <div class="intl-alert-body" id="intlAlertRedBody"></div>
+          <button class="btn btn-danger intl-alert-btn" onclick="openIntlDropList()">查看名单</button>
+        </div>
+      </div>
       <div class="card">
         <div class="card-title">
           <span>🌍 国际运费导入 (logistics_data)</span>
@@ -1809,6 +1836,17 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           <div>
             <label style="font-size:0.82rem; color:var(--text-muted); font-weight:600;">粘贴格式：第一行批次名，第二行表头 cn / 柄图 / 数量 / 国际，之后每行一个团员</label>
             <textarea id="logisticsInputText" rows="10" style="width:100%; font-family:monospace; font-size:0.82rem; margin-top:6px;" placeholder="加拿大加开ax展亚克力砖国际&#10;cn&#9;柄图&#9;数量&#9;国际&#10;et&#9;加开ax展亚克力砖伊冯&#9;1&#9;24.65"></textarea>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; padding:12px; background:#f8fafc; border:1px solid var(--border, #e2e8f0); border-radius:8px;">
+            <div>
+              <label for="logisticsDueDate" style="font-size:0.82rem; color:var(--text-muted); font-weight:600; display:block; margin-bottom:4px;">国际掉落到期日</label>
+              <input type="date" id="logisticsDueDate" style="width:180px;">
+            </div>
+            <button class="btn btn-secondary" style="padding:7px 12px;" onclick="fillLogisticsDueDate(3)">今天 +3 天</button>
+            <div style="flex:1; min-width:220px; font-size:0.78rem; color:var(--text-muted); line-height:1.7;">
+              到期日当天红条提醒；<b>过了到期日</b>，下次打开后台会把「这批 + 没交的人」的谷子状态自动改成
+              <b>未交国际掉落</b>（只改状态，谷子保留、金额不动）。留空 = 不计时、不告警。
+            </div>
           </div>
           <div style="display:flex; justify-content:flex-end; gap:8px;">
             <button class="btn btn-primary" onclick="submitLogisticsImport()">解析并导入 logistics_data</button>
@@ -1911,6 +1949,7 @@ cn 点数 金额
                 <th>免交</th>
                 <th>应收 (元)</th>
                 <th>实收 (元)</th>
+                <th>国际掉落</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -2036,6 +2075,45 @@ cn 点数 金额
           <thead><tr><th>CN</th><th>支付方式</th><th>柄图</th><th>数量</th><th>应收 (元)</th><th>状态</th><th>操作</th></tr></thead>
           <tbody id="logisticsDetailBody"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🌍 国际掉落到期日 Modal -->
+  <div class="modal-overlay" id="intlDueModal">
+    <div class="modal" style="max-width:430px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="font-size:1.05rem; font-weight:700;">🌍 国际掉落到期日</h3>
+        <button class="btn btn-secondary" style="padding:4px 8px;" onclick="closeIntlDueModal()">✕</button>
+      </div>
+      <div id="intlDueBatchName" style="font-size:0.9rem; font-weight:600; margin-bottom:10px;"></div>
+      <div style="font-size:0.8rem; color:var(--text-muted); line-height:1.75; margin-bottom:12px; padding:10px 12px; background:#f8fafc; border-radius:8px;">
+        到期日当天<b>红条提醒</b>；<b>过了到期日</b>，下次打开后台会把「这批 + 没交的人」的谷子状态
+        自动改成 <b>未交国际掉落</b>（只改状态，谷子保留、金额不动）。<br>
+        留空并保存 = 不计时、不告警。
+      </div>
+      <input type="date" id="intlDueDateInput" style="width:100%;">
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px;">
+        <button class="btn btn-secondary" onclick="clearIntlDueDate()">清除计时</button>
+        <button class="btn btn-secondary" onclick="closeIntlDueModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveIntlDueDate()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🌍 到期未交名单 Modal -->
+  <div class="modal-overlay" id="intlDropListModal">
+    <div class="modal" style="max-width:620px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="font-size:1.05rem; font-weight:700;">⚠️ 国际运费到期未交名单</h3>
+        <button class="btn btn-secondary" style="padding:4px 8px;" onclick="closeIntlDropList()">✕</button>
+      </div>
+      <div class="table-container" style="max-height:60vh; overflow:auto;">
+        <div id="intlDropListBody" style="padding:2px;"></div>
+      </div>
+      <div style="font-size:0.78rem; color:var(--text-muted); margin-top:10px; line-height:1.7;">
+        名单只算<b>国际运费</b>（岛内运费不参与掉落）。谷子被标「未交国际掉落」后，团员补交并审核通过，
+        原有规则会把该批次该 CN 的谷子自动改回「可排发」。
       </div>
     </div>
   </div>
@@ -2344,7 +2422,9 @@ cn 点数 金额
       { value: '可排发', label: '可排发 (已到国内/清点完毕)', colorClass: 'badge-status-可排发' },
       { value: '待发货', label: '待发货 (团员已申请/打包中)', colorClass: 'badge-status-待发货' },
       { value: '已排发', label: '已排发 (已发货寄出)', colorClass: 'badge-status-已排发' },
-      { value: '未付款', label: '未付款 (待交谷子费)', colorClass: 'badge-status-未付款' }
+      { value: '未付款', label: '未付款 (待交谷子费)', colorClass: 'badge-status-未付款' },
+      /* 🌍 由「国际运费到期」自动写入，也可手动改；补交后走审核会自动变回可排发 */
+      { value: '未交国际掉落', label: '未交国际掉落 (国际运费到期未交)', colorClass: 'badge-status-未交国际掉落' }
     ];
 
     // —— 囤货 / 3 个月到期 ——
@@ -2699,6 +2779,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       // 3.5 渲染录入表单的批次 select（加载数据后由 updateBatchDropdownOptions 刷新）
       const inputBatchId = document.getElementById('inputBatchId');
       if (inputBatchId) { inputBatchId.innerHTML = '<option value="">请选择批次</option>'; }
+
+      // 3.8 🌍 国际运费导入卡的掉落日默认填「今天+3 天」（团长手选，清空即不计时）
+      try { fillLogisticsDueDate(3, true); } catch (e) {}
+      try { _syncAdminNavH(); } catch (e) {}
 
       // 4. 渲染筛选器的地区 select（分组，含全部国家）
       const filterCountry = document.getElementById('filterCountry');
@@ -3277,6 +3361,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
         renderPayReview(); renderPayStats(); renderQrCodes(); renderBatchPlans(); renderPiggyBank();
         loadBatches();
+        scheduleIntlDropCheck();   // 🌍 国际运费到期结算（只在真的改到东西时才写库）
       } catch (err) { showToast('数据加载网络异常'); }
     }
     window.loadDataByQueryKey = loadDataByQueryKey;
@@ -8417,6 +8502,12 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         }
         // 批次已存在：批次级字段以 local 优先（保留团长编辑），再合并成员
         const existing = byName[name];
+        /* 到期日要允许「清空」生效：'' 也算有效值，否则合并时旧日期会复活 */
+        if (Object.prototype.hasOwnProperty.call(b, 'intl_due_date')) {
+          existing.intl_due_date = b.intl_due_date;
+          existing.intl_dropped_at = b.intl_dropped_at || '';
+          existing.intl_dropped_on = b.intl_dropped_on || '';
+        }
         Object.keys(b).forEach(function (k) {
           if (k === 'batch_name' || k === 'fee_members') return;
           if (b[k] !== undefined && b[k] !== null && b[k] !== '') existing[k] = b[k];
@@ -8515,16 +8606,23 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (!parsed) return showToast('解析失败！请按格式粘贴：第一行批次名，第二行 cn 柄图 数量 国际，后面是数据行');
       LOGISTICS_DELETED_BATCHES.delete(parsed.batch_name);
       const existingIdx = RAW_LOGISTICS.findIndex(b => b && b.batch_name === parsed.batch_name);
+      const _dueEl = document.getElementById('logisticsDueDate');
+      const _dueVal = String((_dueEl && _dueEl.value) || '').trim();
       if (existingIdx !== -1) {
         if (!confirm('批次「' + parsed.batch_name + '」已存在，确定用本次数据整批替换吗？')) return;
-        RAW_LOGISTICS[existingIdx].fee_members = parsed.fee_members;
-        RAW_LOGISTICS[existingIdx].updated_at = new Date().toISOString();
+        const _b = RAW_LOGISTICS[existingIdx];
+        _b.fee_members = parsed.fee_members;
+        _b.updated_at = new Date().toISOString();
+        _applyIntlDue(_b, _dueVal);
       } else {
-        RAW_LOGISTICS.push({ batch_name: parsed.batch_name, fee_members: parsed.fee_members, created_at: new Date().toISOString() });
+        const _nb = { batch_name: parsed.batch_name, fee_members: parsed.fee_members, created_at: new Date().toISOString() };
+        _applyIntlDue(_nb, _dueVal);
+        RAW_LOGISTICS.push(_nb);
       }
       await saveDataToSupabase();
       renderLogistics();
-      showToast('✅ 国际运费批次「' + parsed.batch_name + '」已导入 ' + parsed.fee_members.length + ' 条记录！');
+      showToast('✅ 国际运费批次「' + parsed.batch_name + '」已导入 ' + parsed.fee_members.length + ' 条记录！'
+        + (_dueVal ? ('｜掉落日 ' + _dueVal + '（' + _intlDaysLeft(_dueVal) + ' 天后）') : '｜未设掉落日，不计时'));
     }
     window.submitLogisticsImport = submitLogisticsImport;
 
@@ -8544,6 +8642,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
 
     function renderLogistics() {
+      renderIntlAlerts();          // 🌍 黄/红条跟着数据一起刷（涨跌都在这里统一）
       const tbody = document.getElementById('logisticsTableBody');
       const mobileView = document.getElementById('logisticsMobileCardsView');
       const statsEl = document.getElementById('logisticsStats');
@@ -8552,7 +8651,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       RAW_LOGISTICS.forEach(b => { const s = logisticsBatchStats(b); totalMembers += s.total; unpaidTotal += s.unpaid; dueTotal += s.due; });
       if (statsEl) statsEl.innerText = '共 ' + RAW_LOGISTICS.length + ' 个批次 / ' + totalMembers + ' 人 / 未交 ' + unpaidTotal + ' 人 / 应收 ￥' + dueTotal.toFixed(2);
       if (RAW_LOGISTICS.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);">暂无国际运费数据，请先在上方导入</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--text-muted);">暂无国际运费数据，请先在上方导入</td></tr>';
         if (mobileView) mobileView.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted);">暂无国际运费数据</div>';
         renderIslandBatchOptions();
         return;
@@ -8561,8 +8660,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       RAW_LOGISTICS.forEach((batch, index) => {
         const s = logisticsBatchStats(batch);
         const batchName = batch.batch_name || '未命名批次';
-        html += '<tr><td style="font-weight:600;">' + escapeHtml(batchName) + '</td><td>' + s.total + '</td><td style="color:#dc2626; font-weight:600;">' + s.unpaid + '</td><td style="color:#16a34a;">' + s.paid + '</td><td style="color:#64748b;">' + s.free + '</td><td>￥' + s.due.toFixed(2) + '</td><td>￥' + s.recv.toFixed(2) + '</td><td><button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem;" onclick="openLogisticsDetail(' + index + ')">明细</button> <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogisticsBatch(' + index + ')">删除</button></td></tr>';
-        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(batchName) + '</span><span class="badge ' + (s.unpaid > 0 ? 'badge-status-未付款' : 'badge-status-可排发') + '">未交 ' + s.unpaid + '</span></div><div style="font-size:0.9rem; padding:6px 0;">共 ' + s.total + ' 人 | 未交 ' + s.unpaid + ' | 应收 ￥' + s.due.toFixed(2) + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openLogisticsDetail(' + index + ')">📋 明细</button> <button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteLogisticsBatch(' + index + ')">🗑️ 删除</button></div></div>';
+        html += '<tr><td style="font-weight:600;">' + escapeHtml(batchName) + '</td><td>' + s.total + '</td><td style="color:#dc2626; font-weight:600;">' + s.unpaid + '</td><td style="color:#16a34a;">' + s.paid + '</td><td style="color:#64748b;">' + s.free + '</td><td>￥' + s.due.toFixed(2) + '</td><td>￥' + s.recv.toFixed(2) + '</td><td>' + intlDueCellHtml(batch, index) + '</td><td><button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem;" onclick="openLogisticsDetail(' + index + ')">明细</button> <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogisticsBatch(' + index + ')">删除</button></td></tr>';
+        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(batchName) + '</span><span class="badge ' + (s.unpaid > 0 ? 'badge-status-未付款' : 'badge-status-可排发') + '">未交 ' + s.unpaid + '</span></div><div style="font-size:0.9rem; padding:6px 0;">共 ' + s.total + ' 人 | 未交 ' + s.unpaid + ' | 应收 ￥' + s.due.toFixed(2) + '</div><div style="font-size:0.82rem; padding:0 0 6px;">' + intlDueCellHtml(batch, index) + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openLogisticsDetail(' + index + ')">📋 明细</button> <button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteLogisticsBatch(' + index + ')">🗑️ 删除</button></div></div>';
       });
       tbody.innerHTML = html;
       if (mobileView) mobileView.innerHTML = cardsHtml;
@@ -8640,6 +8739,326 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       showToast('国际运费批次已删除！');
     }
     window.deleteLogisticsBatch = deleteLogisticsBatch;
+
+    /* ══ 🌍 国际运费「掉落」告警条 + 到期自动改状态（2026-11-04 团长需求）══
+       团长口径（逐条确认过）：
+         · 到期日＝**导入国际运费时手选**；页面默认填「今天+3 天」，清空 = 不计时、不告警。
+         · 黄条 = 还没到期的批次倒计时（常驻，不自动消失，也没有关闭按钮）。
+         · 红条 = **今日到期 / 已过期**且还有人未交的批次；条上只写人数，点「查看名单」看 CN。
+         · 到期日当天**只提醒、不动数据**；**过了到期日**，下次打开/刷新后台时自动把这批
+           没交的人的谷子状态改成「未交国际掉落」——只改状态，谷子保留、金额不变。
+           补交之后走原有那条「审核通过 → 该批次该 CN 自动可排发」的规则就恢复了。
+       ⚠️ 岛内运费（fee_type='island'）挂在同一份 logistics_data 里，绝不参与掉落。
+       ⚠️ 只动 RAW_ITEMS（不碰归档区），只改「已下单 / 收国际中 / 国际运输中」这三种在途状态；
+          「未付款 / 可排发 / 待发货 / 已排发 / 已到货」一律不碰。
+       ⚠️ 写库走 saveDataToSupabase（带版本锁），且只在真的改到东西时才调用。 */
+    var INTL_DROP_STATUS = '未交国际掉落';
+    var INTL_DROP_SRC = ['已下单', '收国际中', '国际运输中'];
+
+    function _intlYmd(dt) {
+      var y = dt.getFullYear();
+      var m = String(dt.getMonth() + 1).padStart(2, '0');
+      var d = String(dt.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + d;
+    }
+    function _intlTodayStr() { var d = new Date(); d.setHours(0, 0, 0, 0); return _intlYmd(d); }
+    function _intlYmdPlus(n) {
+      var d = new Date(); d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() + (n === undefined ? 0 : Number(n) || 0));
+      return _intlYmd(d);
+    }
+    function _intlParseYmd(s) {
+      var p = String(s || '').trim().split('-');
+      if (p.length !== 3) return null;
+      var y = Number(p[0]), m = Number(p[1]), d = Number(p[2]);
+      if (!y || !m || !d) return null;
+      var dt = new Date(y, m - 1, d);
+      dt.setHours(0, 0, 0, 0);
+      return isNaN(dt.getTime()) ? null : dt;
+    }
+    /* 距到期还有几天：>0 还没到，0 = 今天到期，<0 已过期；null = 没有/解析不了 */
+    function _intlDaysLeft(dateStr) {
+      var dt = _intlParseYmd(dateStr);
+      if (!dt) return null;
+      var t = new Date(); t.setHours(0, 0, 0, 0);
+      return Math.round((dt.getTime() - t.getTime()) / 86400000);
+    }
+    function _intlMd(dateStr) {
+      var p = String(dateStr || '').split('-');
+      return p.length === 3 ? (p[1] + '-' + p[2]) : String(dateStr || '');
+    }
+
+    /* 国际运费成员（排除岛内那一段）。岛内记录带 fee_type='island'。 */
+    function _intlFeeMembers(batch) {
+      var arr = (batch && Array.isArray(batch.fee_members)) ? batch.fee_members : [];
+      return arr.filter(function (m) { return m && String(m.fee_type || '').trim() !== 'island'; });
+    }
+    /* 未交的人，按 CN 去重（一个人多条合并金额） */
+    function _intlUnpaidList(batch) {
+      var out = [], seen = {};
+      _intlFeeMembers(batch).forEach(function (m) {
+        if (String(m.status || '').trim() !== '未交') return;
+        var cn = String(m.cn || '').trim();
+        if (!cn) return;
+        var k = cn.toLowerCase();
+        if (seen[k]) { seen[k].amount += Number(m.amount_due || 0); return; }
+        seen[k] = { cn: cn, amount: Number(m.amount_due || 0) };
+        out.push(seen[k]);
+      });
+      return out;
+    }
+    function _intlSumAmount(list) {
+      var t = 0;
+      (list || []).forEach(function (x) { t += Number(x.amount || 0); });
+      return Math.round(t * 100) / 100;
+    }
+
+    /* 写日期：'' = 不计时。日期一变就把「已掉落」标记清掉，允许按新日期重算。 */
+    function _applyIntlDue(batch, due) {
+      if (!batch) return;
+      var d = String(due || '').trim();
+      var prev = String(batch.intl_due_date || '').trim();
+      batch.intl_due_date = d;
+      if (!d || d !== prev) { batch.intl_dropped_at = ''; batch.intl_dropped_on = ''; }
+    }
+    function fillLogisticsDueDate(days, onlyIfEmpty) {
+      var el = document.getElementById('logisticsDueDate');
+      if (!el) return;
+      if (onlyIfEmpty && el.value) return;
+      el.value = _intlYmdPlus(days === undefined ? 3 : days);
+    }
+    window.fillLogisticsDueDate = fillLogisticsDueDate;
+
+    /* 手机端顶部导航是 position:sticky 的横条 → 告警条吸顶要避让它。
+       宽度 >768 时导航是左侧固定栏，不占顶部高度，置 0。 */
+    function _syncAdminNavH() {
+      var nav = document.querySelector('.side-nav');
+      var h = 0;
+      if (nav && window.innerWidth <= 768) h = Math.round(nav.getBoundingClientRect().height) || 0;
+      document.documentElement.style.setProperty('--admin-nav-h', h + 'px');
+    }
+    window._syncAdminNavH = _syncAdminNavH;
+    window.addEventListener('resize', function () { try { _syncAdminNavH(); } catch (e) {} });
+    window.addEventListener('orientationchange', function () { setTimeout(function () { try { _syncAdminNavH(); } catch (e) {} }, 200); });
+
+    /* ── 黄/红条 ────────────────────────────────────────────────────── */
+    function renderIntlAlerts() {
+      try { _syncAdminNavH(); } catch (e) {}
+      var wrap = document.getElementById('intlAlertBars');
+      var yEl = document.getElementById('intlAlertYellow');
+      var rEl = document.getElementById('intlAlertRed');
+      var yBody = document.getElementById('intlAlertYellowBody');
+      var rBody = document.getElementById('intlAlertRedBody');
+      if (!wrap || !yEl || !rEl || !yBody || !rBody) return;
+
+      var yellow = [], red = [];
+      (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+        if (!b || !b.batch_name) return;
+        var due = String(b.intl_due_date || '').trim();
+        if (!due) return;                       // 没设置期 = 不计时，不打扰
+        var days = _intlDaysLeft(due);
+        if (days === null) return;
+        var unpaid = _intlUnpaidList(b);
+        if (!unpaid.length) return;             // 都交清了就不显示
+        var row = {
+          name: b.batch_name, due: due, days: days, unpaid: unpaid,
+          dropped: !!String(b.intl_dropped_at || '').trim()
+        };
+        (days > 0 ? yellow : red).push(row);
+      });
+      yellow.sort(function (a, b) { return a.days - b.days; });
+      red.sort(function (a, b) { return a.days - b.days; });
+
+      var hasAny = (yellow.length + red.length) > 0;
+      wrap.style.display = hasAny ? 'flex' : 'none';
+      if (!hasAny) { yEl.style.display = 'none'; rEl.style.display = 'none'; return; }
+
+      if (yellow.length) {
+        yEl.style.display = '';
+        yBody.innerHTML = '<div class="intl-alert-head">国际运费还在收 · 到期会掉落</div>'
+          + yellow.map(function (it) {
+              return '<div class="intl-alert-line"><b>「' + escapeHtml(it.name) + '」国际 ' + it.days + ' 天后掉落</b>'
+                + '<span class="intl-alert-meta">' + _intlMd(it.due) + ' 到期 · ' + it.unpaid.length + ' 人未交 · 尚欠 ￥'
+                + _intlSumAmount(it.unpaid).toFixed(2) + '</span></div>';
+            }).join('');
+      } else { yEl.style.display = 'none'; }
+
+      if (red.length) {
+        rEl.style.display = '';
+        rBody.innerHTML = '<div class="intl-alert-head">国际运费已到期 · 还有人没交</div>'
+          + red.map(function (it) {
+              var when = (it.days === 0) ? '今日到期' : ('已过期 ' + (-it.days) + ' 天');
+              return '<div class="intl-alert-line"><b>' + when + '「' + escapeHtml(it.name) + '」' + it.unpaid.length + ' 人未交</b>'
+                + '<span class="intl-alert-meta">' + _intlMd(it.due) + ' 到期 · 尚欠 ￥' + _intlSumAmount(it.unpaid).toFixed(2)
+                + (it.dropped ? ' · 谷子已标「' + INTL_DROP_STATUS + '」' : '') + '</span></div>';
+            }).join('');
+      } else { rEl.style.display = 'none'; }
+    }
+    window.renderIntlAlerts = renderIntlAlerts;
+
+    /* 批次列表里的那一格 */
+    function intlDueCellHtml(batch, index) {
+      var due = String((batch && batch.intl_due_date) || '').trim();
+      var days = due ? _intlDaysLeft(due) : null;
+      var btn = '<button class="btn btn-secondary" style="padding:1px 7px;font-size:.74rem;margin-top:3px;" onclick="openIntlDueModal(' + index + ')">'
+              + (days === null ? '设置' : '改期') + '</button>';
+      if (days === null) return '<span style="color:var(--text-muted);font-size:.8rem;">未设置</span><div>' + btn + '</div>';
+      var cls, txt;
+      if (days > 0) { cls = 'background:#fef3c7;color:#b45309;border:1px solid #fde68a;'; txt = days + ' 天后'; }
+      else if (days === 0) { cls = 'background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;'; txt = '今日到期'; }
+      else { cls = 'background:#e5e7eb;color:#374151;border:1px solid #d1d5db;'; txt = '已过期 ' + (-days) + ' 天'; }
+      return '<span style="display:inline-block;padding:1px 6px;border-radius:6px;font-weight:600;font-size:.78rem;' + cls + '">' + txt + '</span>'
+           + '<div style="font-size:.72rem;color:#64748b;margin-top:2px;">' + _intlMd(due) + ' 到期</div>' + btn;
+    }
+
+    /* ── 到期日弹窗 ─────────────────────────────────────────────────── */
+    var INTL_DUE_INDEX = -1;
+    function openIntlDueModal(index) {
+      var b = RAW_LOGISTICS[index];
+      if (!b) return;
+      INTL_DUE_INDEX = index;
+      document.getElementById('intlDueBatchName').innerText = '「' + (b.batch_name || '未命名批次') + '」';
+      document.getElementById('intlDueDateInput').value = String(b.intl_due_date || '').trim();
+      document.getElementById('intlDueModal').classList.add('active');
+    }
+    window.openIntlDueModal = openIntlDueModal;
+    function closeIntlDueModal() { document.getElementById('intlDueModal').classList.remove('active'); }
+    window.closeIntlDueModal = closeIntlDueModal;
+
+    async function saveIntlDueDate() {
+      var b = RAW_LOGISTICS[INTL_DUE_INDEX];
+      if (!b) return;
+      var v = String(document.getElementById('intlDueDateInput').value || '').trim();
+      if (v && !_intlParseYmd(v)) return showToast('日期格式不对，请重新选');
+      _applyIntlDue(b, v);
+      await saveDataToSupabase();
+      closeIntlDueModal();
+      renderLogistics();
+      var days = v ? _intlDaysLeft(v) : null;
+      showToast(v
+        ? ('✅ 「' + b.batch_name + '」国际掉落日：' + v + (days !== null && days < 0 ? '（已过期，马上结算）' : '（' + days + ' 天后）'))
+        : ('已清除「' + b.batch_name + '」的掉落计时'));
+      if (v && days !== null && days < 0) {
+        var n = await checkIntlDropExpiry();
+        if (n > 0) { try { renderTable(); } catch (e) {} renderLogistics(); }
+      }
+    }
+    window.saveIntlDueDate = saveIntlDueDate;
+
+    async function clearIntlDueDate() {
+      var b = RAW_LOGISTICS[INTL_DUE_INDEX];
+      if (!b) return;
+      _applyIntlDue(b, '');
+      await saveDataToSupabase();
+      closeIntlDueModal();
+      renderLogistics();
+      showToast('已清除「' + b.batch_name + '」的掉落计时');
+    }
+    window.clearIntlDueDate = clearIntlDueDate;
+
+    /* ── 红条「查看名单」 ───────────────────────────────────────────── */
+    function openIntlDropList() {
+      var body = document.getElementById('intlDropListBody');
+      if (!body) return;
+      var rows = [];
+      (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+        if (!b || !b.batch_name) return;
+        var due = String(b.intl_due_date || '').trim();
+        if (!due) return;
+        var days = _intlDaysLeft(due);
+        if (days === null || days > 0) return;
+        var unpaid = _intlUnpaidList(b);
+        if (!unpaid.length) return;
+        rows.push({ name: b.batch_name, due: due, days: days, unpaid: unpaid,
+                    dropped: !!String(b.intl_dropped_at || '').trim() });
+      });
+      rows.sort(function (a, b) { return a.days - b.days; });
+      if (!rows.length) {
+        body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);">没有到期未交的批次 ✅</div>';
+      } else {
+        body.innerHTML = rows.map(function (r) {
+          var when = (r.days === 0) ? '今日到期' : ('已过期 ' + (-r.days) + ' 天');
+          return '<div style="margin-bottom:16px;">'
+            + '<div style="font-weight:700;font-size:.92rem;margin-bottom:6px;">' + escapeHtml(r.name)
+            + ' <span style="font-weight:400;font-size:.8rem;color:var(--text-muted);">· ' + when + ' · '
+            + _intlMd(r.due) + ' 到期 · ' + r.unpaid.length + ' 人 · 尚欠 ￥' + _intlSumAmount(r.unpaid).toFixed(2)
+            + (r.dropped ? ' · 谷子已标「' + INTL_DROP_STATUS + '」' : '') + '</span></div>'
+            + '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
+            + r.unpaid.map(function (u) {
+                return '<span style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:6px;padding:2px 8px;font-size:.82rem;font-weight:600;">'
+                  + escapeHtml(u.cn) + ' ￥' + Number(u.amount || 0).toFixed(2) + '</span>';
+              }).join('')
+            + '</div></div>';
+        }).join('');
+      }
+      document.getElementById('intlDropListModal').classList.add('active');
+    }
+    window.openIntlDropList = openIntlDropList;
+    function closeIntlDropList() { document.getElementById('intlDropListModal').classList.remove('active'); }
+    window.closeIntlDropList = closeIntlDropList;
+
+    /* ── 到期结算：过期即掉落（只改状态）───────────────────────────── */
+    async function checkIntlDropExpiry() {
+      if (!Array.isArray(RAW_LOGISTICS) || !RAW_LOGISTICS.length) return 0;
+      if (!Array.isArray(RAW_ITEMS)) return 0;
+
+      var jobs = [];
+      RAW_LOGISTICS.forEach(function (b) {
+        if (!b || !b.batch_name) return;
+        var due = String(b.intl_due_date || '').trim();
+        if (!due) return;
+        var days = _intlDaysLeft(due);
+        if (days === null || days >= 0) return;                     // 到期日当天只提醒，不落刀
+        if (String(b.intl_dropped_on || '').trim() === due) return; // 这个到期日已经掉过了
+        var unpaid = _intlUnpaidList(b);
+        if (!unpaid.length) return;
+        jobs.push({ b: b, due: due, unpaid: unpaid });
+      });
+      if (!jobs.length) return 0;
+
+      var total = 0, notes = [];
+      jobs.forEach(function (job) {
+        var bk = _normBatchKey(job.b.batch_name || '');
+        var cnMap = {};
+        job.unpaid.forEach(function (u) { cnMap[String(u.cn || '').trim().toLowerCase()] = 1; });
+        var n = 0;
+        RAW_ITEMS.forEach(function (it) {
+          if (!it || typeof it !== 'object') return;
+          if (_normBatchKey(it.batch_name || '') !== bk) return;
+          var ck = String(it.cn || '').trim().toLowerCase();
+          if (!ck || !cnMap[ck]) return;
+          if (INTL_DROP_SRC.indexOf(String(it.status || '').trim()) < 0) return;
+          it.status = INTL_DROP_STATUS;
+          DIRTY_ITEM_IDS.add(String(it.item_id || it.id || ''));
+          n++;
+        });
+        job.b.intl_dropped_at = new Date().toISOString();
+        job.b.intl_dropped_on = job.due;
+        job.b.intl_dropped_count = n;
+        total += n;
+        notes.push('「' + job.b.batch_name + '」' + n + ' 件');
+      });
+
+      await saveDataToSupabase();
+      if (total > 0) {
+        showToast('⚠️ 国际运费到期：' + notes.join('、') + ' 谷子已自动标为「' + INTL_DROP_STATUS + '」', 9000);
+      }
+      return total;
+    }
+    window.checkIntlDropExpiry = checkIntlDropExpiry;
+
+    /* 每次数据加载完跑一次（错开首屏渲染，别跟开场动画抢帧） */
+    var _intlDropRunning = false;
+    function scheduleIntlDropCheck() {
+      if (_intlDropRunning) return;
+      _intlDropRunning = true;
+      setTimeout(function () {
+        checkIntlDropExpiry().then(function (n) {
+          if (n > 0) { try { renderTable(); } catch (e) {} renderLogistics(); }
+        }).catch(function () {}).then(function () { _intlDropRunning = false; });
+      }, 800);
+    }
+    window.scheduleIntlDropCheck = scheduleIntlDropCheck;
 
     /* ─────────────── 🧮 岛内运费（2026-09-27 团长要求） ───────────────
        数据源：**「排表管理」group_data 里的批次**（2026-09-27 团长指正后改正 ——
@@ -10309,6 +10728,19 @@ function importLedger(e){
       --m3e-ease: cubic-bezier(0.2, 0, 0, 1);
       --m3e-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
       --m3e-dur: 220ms;
+      /* ── 弹窗动效令牌（2026-11-04）────────────────────────────────
+         全站弹窗/浮层只准引用下面三条曲线，组件里不要再写 cubic-bezier。
+           --mo-in   进场：快起 → 缓停，收尾轻微过冲（峰值 ~6.6%）
+           --mo-out  离场：慢起 → 快收（M3 accelerate），走的时候不黏
+           --mo-move 页面内移动：对称 ease-in-out，用于「已经在屏幕上」的元素
+         ⚠️ 机制：CSS transition 取「变化之后」那条曲线 —— 所以
+            默认态写 --mo-out、.active/.open 态写 --mo-in，才有真正的离场曲线。 */
+      --mo-in: cubic-bezier(0.30, 1.45, 0.50, 1);
+      --mo-out: cubic-bezier(0.30, 0, 0.80, 0.15);
+      --mo-move: cubic-bezier(0.40, 0, 0.20, 1);
+      --mo-dur-in: 300ms;
+      --mo-dur-out: 160ms;
+      --mo-dur-move: 200ms;
       /* ── 状态层 State layer（M3 悬停 8% / 按压 14%）── */
       --m3e-state-hover: linear-gradient(rgba(0,0,0,.08), rgba(0,0,0,.08));
       --m3e-state-press: linear-gradient(rgba(0,0,0,.14), rgba(0,0,0,.14));
@@ -10434,11 +10866,16 @@ function importLedger(e){
       border-radius: var(--m3e-r-sheet);
       padding: 28px;
       box-shadow: 0 12px 40px rgba(0,0,0,.30);
-      transform: translateY(14px) scale(.97);
+      transform: translateY(16px) scale(.94);
       opacity: 0;
-      transition: transform 260ms var(--m3e-ease), opacity 200ms var(--m3e-ease);
+      transition: transform var(--mo-dur-out) var(--mo-out),
+                  opacity   var(--mo-dur-out) var(--mo-out);
     }
-    .modal-overlay.active .modal { transform: translateY(0) scale(1); opacity: 1; }
+    .modal-overlay.active .modal {
+      transform: translateY(0) scale(1); opacity: 1;
+      transition: transform var(--mo-dur-in) var(--mo-in),
+                  opacity   var(--mo-dur-in) var(--mo-in);
+    }
 
     /* ── Toast ── */
     .toast {
@@ -10538,7 +10975,8 @@ function importLedger(e){
 
     /* ── 无障碍：跟随系统减少动效 ── */
     @media (prefers-reduced-motion: reduce) {
-      .btn, .modal, .toast, .page-btn, .tab-content#tabCalc .tabbar .tab-btn { transition-duration: 1ms; }
+      .btn, .modal, .modal-overlay, .cascade-panel, .toast, .page-btn,
+      .tab-content#tabCalc .tabbar .tab-btn { transition-duration: 1ms; }
     }
 
     /* ── 移动端适配（≤768px）：导航变顶部横滑条，隐藏右侧装饰条 ── */
@@ -10610,6 +11048,47 @@ function importLedger(e){
 
     /* 📐 布局修复（保留）：算账中心区块原本在 .container 外，补齐同样边距 */
     .tab-content#tabCalc { margin: 0 calc(var(--rail-w) + 16px) 0 88px; }
+
+    /* ══ 🌍 国际运费「掉落」告警条（2026-11-04）═════════════════════════
+       常驻：不自动消失、不给关闭按钮；没有任何内容时整块隐藏。
+       sticky 让长页面滚下去时也一直贴在内容区顶部（body 是滚动容器，
+       祖先没有 overflow 容器，所以 sticky 生效）。背景取页面底色 #f1f5f9，
+       滚动时不透明、不会透出下面的卡片。 */
+    #intlAlertBars {
+      /* --admin-nav-h 由 _syncAdminNavH() 按实际导航高度写入：
+         手机端顶部导航是 sticky 横条（z-index 1000），top:0 会被它盖住。 */
+      position: sticky; top: var(--admin-nav-h, 0px); z-index: 45;
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 10px 0 10px; margin: -10px 0 4px;
+      background: #f1f5f9;
+    }
+    .intl-alert {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 14px; border-radius: 10px; border: 1px solid;
+      font-size: .86rem; line-height: 1.65;
+      box-shadow: 0 2px 10px rgba(15,23,42,.07);
+    }
+    .intl-alert-ic { flex: 0 0 auto; font-size: 1.05rem; line-height: 1.35; }
+    .intl-alert-body { flex: 1 1 auto; min-width: 0; }
+    .intl-alert-head { font-weight: 800; margin-bottom: 3px; letter-spacing: .2px; }
+    .intl-alert-line + .intl-alert-line { margin-top: 3px; }
+    .intl-alert-line b { font-weight: 700; }
+    .intl-alert-meta { opacity: .8; font-size: .79rem; margin-left: 8px; white-space: nowrap; }
+    .intl-alert-yellow { background: #fffaeb; border-color: #f0cf7d; color: #7a5600; }
+    .intl-alert-yellow .intl-alert-head { color: #8a6100; }
+    .intl-alert-red { background: #fdf0f0; border-color: #efadad; color: #8c1f1f; }
+    .intl-alert-red .intl-alert-head { color: #9b1c1c; }
+    .intl-alert-btn { flex: 0 0 auto; align-self: center; white-space: nowrap; padding: 5px 12px !important; font-size: .8rem !important; }
+
+    /* 「未交国际掉落」徽章：比「未付款」更重的暗红，一眼看出是掉过刀的 */
+    .badge-status-未交国际掉落 { background-color: #f8dada; color: #8c1f1f; border: 1px solid #e9a5a5; font-weight: 700; }
+
+    @media (max-width: 768px) {
+      #intlAlertBars { gap: 6px; padding: 8px 0; margin: -8px 0 4px; }
+      .intl-alert { font-size: .82rem; padding: 9px 11px; gap: 8px; flex-wrap: wrap; }
+      .intl-alert-meta { display: block; margin: 2px 0 0; white-space: normal; }
+      .intl-alert-btn { align-self: flex-start; margin-left: 22px; }
+    }
   </style>
   <!-- 🗑 删除退款记录的自绘确认框（2026-10-29 团长需求：补录时搞错人，要能删掉重来）
        ⚠️ 绝不能用原生 confirm：手机微信/QQ 内置浏览器会静默屏蔽 → 点了没反应。

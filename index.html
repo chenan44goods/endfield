@@ -23,6 +23,19 @@
 <noscript><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"></noscript>
   <style>
     :root {
+      /* ═══ 动效令牌 · 弹窗专用（2026-11-04）══════════════════════════
+         全站弹窗/浮层只准引用下面三条曲线，组件里不要再写 cubic-bezier。
+           --mo-in   进场：快起 → 缓停，收尾轻微过冲（峰值 ~6.6%）
+           --mo-out  离场：慢起 → 快收（M3 accelerate），走的时候不黏
+           --mo-move 页面内移动：对称 ease-in-out，用于「已经在屏幕上」的元素
+         ⚠️ 机制：CSS transition 取「变化之后」那条曲线 —— 所以
+            默认态写 --mo-out、.open/.active 态写 --mo-in，才有真正的离场曲线。 */
+      --mo-in: cubic-bezier(0.30, 1.45, 0.50, 1);
+      --mo-out: cubic-bezier(0.30, 0, 0.80, 0.15);
+      --mo-move: cubic-bezier(0.40, 0, 0.20, 1);
+      --mo-dur-in: 300ms;
+      --mo-dur-out: 160ms;
+      --mo-dur-move: 200ms;
       --ink: #212121;
       --ink-soft: #212121;
       --muted: #7b7e83;
@@ -909,6 +922,8 @@
     .r-badge.st-待发货    { background:#efe2fb; color:#7e22ce; }
     .r-badge.st-已排发    { background:#e3e7ec; color:#64748b; }
     .r-badge.st-未付款    { background:#fbdcdc; color:#991b1b; }
+    /* 🌍 国际运费到期未交（后台自动写入）：暗红，比未付款更重 */
+    .r-badge.st-未交国际掉落 { background:#8c1f1f; color:#fff; }
     .r-badge.st-custom   { background:rgba(28,32,38,0.9); color:#fff; }
     .result-item .r-apply {
       border: none; background:#15803d; color:#fff; font-size:12px; font-weight:700;
@@ -949,17 +964,30 @@
     .taotie-overlay {
       position: fixed; inset: 0; z-index: 2600;
       background: rgba(33,33,33,0.45); backdrop-filter: blur(3px);
-      display: none; align-items: center; justify-content: center; padding: 16px;
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+      opacity: 0; visibility: hidden; pointer-events: none;
+      transition: opacity var(--mo-dur-out) var(--mo-out),
+                  visibility 0s linear var(--mo-dur-out);
     }
-    .taotie-overlay.open { display: flex; }
+    .taotie-overlay.open {
+      opacity: 1; visibility: visible; pointer-events: auto;
+      transition: opacity var(--mo-dur-in) var(--mo-in),
+                  visibility 0s linear 0s;
+    }
     .taotie-card {
       position: relative; width: min(440px, 94vw); max-height: 84vh;
       display: flex; flex-direction: column;
       background: #fffdf6; border: 3px solid #212121; border-radius: 24px;
       box-shadow: 8px 10px 0 rgba(33,33,33,0.85);
-      animation: ttPop .32s cubic-bezier(.34,1.56,.64,1);
+      opacity: 0; transform: scale(.72) rotate(-3deg);
+      transition: transform var(--mo-dur-out) var(--mo-out),
+                  opacity   var(--mo-dur-out) var(--mo-out);
     }
-    @keyframes ttPop { from { transform: scale(.7) rotate(-2deg); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .taotie-overlay.open .taotie-card {
+      opacity: 1; transform: scale(1) rotate(0deg);
+      transition: transform var(--mo-dur-in) var(--mo-in),
+                  opacity   var(--mo-dur-in) var(--mo-in);
+    }
     .taotie-close {
       position: absolute; top: 12px; right: 14px; width: 32px; height: 32px;
       border-radius: 50%; border: 2px solid #212121; background: #FEFE2C;
@@ -1086,9 +1114,13 @@
       display: flex; align-items: center; justify-content: center;
       padding: 20px;
       -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
-      animation: qmodalFade 0.16s ease-out;
+      opacity: 0; pointer-events: none;
+      transition: opacity var(--mo-dur-out) var(--mo-out);
     }
-    @keyframes qmodalFade { from { opacity: 0; } to { opacity: 1; } }
+    .qmodal-mask.open {
+      opacity: 1; pointer-events: auto;
+      transition: opacity var(--mo-dur-in) var(--mo-in);
+    }
     .qmodal {
       width: 100%; max-width: 420px;
       background: #fffdf7;
@@ -1096,11 +1128,17 @@
       border-radius: 16px;
       box-shadow: 0 18px 50px rgba(0,0,0,0.35);
       padding: 16px 16px 16px;
-      animation: qmodalPop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+      opacity: 0; transform: scale(0.94) translateY(10px);
+      transition: transform var(--mo-dur-out) var(--mo-out),
+                  opacity   var(--mo-dur-out) var(--mo-out);
       max-height: 86vh; overflow-y: auto;
       -webkit-overflow-scrolling: touch;
     }
-    @keyframes qmodalPop { from { transform: scale(0.94) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+    .qmodal-mask.open .qmodal {
+      opacity: 1; transform: none;
+      transition: transform var(--mo-dur-in) var(--mo-in),
+                  opacity   var(--mo-dur-in) var(--mo-in);
+    }
     .qmodal-title { font-size: 16px; font-weight: 800; color: var(--ink, #212121); margin-bottom: 8px; letter-spacing: 0.01em; }
     .qmodal-desc { font-size: 13px; line-height: 1.6; color: var(--ink-soft, #555); margin-bottom: 12px; word-break: break-word; }
     .qmodal-input {
@@ -1136,6 +1174,15 @@
       .qmodal-title { font-size: 17px; }
       .qmodal-btn { padding: 12px 8px; font-size: 15px; }   /* 加大点击区，避免误触 */
     }
+
+    /* 系统开了「减少动态效果」→ 弹窗直接到位，不做位移/淡入 */
+    @media (prefers-reduced-motion: reduce) {
+      .modal-overlay, .modal, .cascade-panel,
+      .qmodal-mask, .qmodal, .taotie-overlay, .taotie-card {
+        transition-duration: 1ms !important;
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -1905,7 +1952,7 @@
 
     function getStatusBadgeClass(status){
       const s = String(status||'').trim();
-      const known = ['未出荷','已下单','收国际中','国际运输中','可排发','待发货','已排发','未付款'];
+      const known = ['未出荷','已下单','收国际中','国际运输中','可排发','待发货','已排发','未付款','未交国际掉落'];
       if (known.indexOf(s) !== -1) return 'st-'+s;
       const legacy = {
         '已下单未到货':'st-已下单',
@@ -3390,6 +3437,19 @@
       document.body.appendChild(m);
     }
 
+    // ===== 弹窗动效辅助：进场靠加 .open 触发，离场等 --mo-dur-out 放完再摘节点 =====
+    // 时长必须与 :root 里 --mo-dur-out 一致（160ms + 30ms 余量）
+    var QMODAL_OUT_MS = 190;
+    function _qmodalOpen(mask){
+      void mask.offsetWidth;           // 强制先落一次「关」的样式，否则浏览器会合并成一帧、没有过渡
+      mask.classList.add('open');
+    }
+    function _qmodalClose(mask){
+      if (!mask) return;
+      mask.classList.remove('open');
+      setTimeout(function(){ if (mask.parentNode) mask.parentNode.removeChild(mask); }, QMODAL_OUT_MS);
+    }
+
     // ===== 📱 自定义弹窗（手机端 prompt/confirm 会被浏览器屏蔽，必须自绘）=====
     // 微信/QQ 内置浏览器、iOS Safari 会静默屏蔽原生 prompt()/confirm()，
     // 表现为"点了没反应、页面卡住"。排发申请要填备注，因此全部改为自绘 UI。
@@ -3412,13 +3472,14 @@
           '</div>';
         mask.appendChild(box);
         document.body.appendChild(mask);
+        _qmodalOpen(mask);
         const ta = box.querySelector('.qmodal-input');
         // 手机上自动聚焦会顶起键盘遮挡按钮，改为不自动聚焦；桌面端才聚焦
         if (window.innerWidth > 900) { try { ta.focus(); } catch(e){} }
         function finish(val){
           if (done) return; done = true;
           document.removeEventListener('keydown', onKey);
-          if (mask.parentNode) mask.parentNode.removeChild(mask);
+          _qmodalClose(mask);
           resolve(val);
         }
         function onKey(e){ if (e.key === 'Escape') finish(null); }
@@ -3445,10 +3506,11 @@
           '</div>';
         mask.appendChild(box);
         document.body.appendChild(mask);
+        _qmodalOpen(mask);
         function finish(val){
           if (done) return; done = true;
           document.removeEventListener('keydown', onKey);
-          if (mask.parentNode) mask.parentNode.removeChild(mask);
+          _qmodalClose(mask);
           resolve(val);
         }
         function onKey(e){ if (e.key === 'Escape') finish(false); }
@@ -3477,10 +3539,11 @@
           '</div>';
         mask.appendChild(box);
         document.body.appendChild(mask);
+        _qmodalOpen(mask);
         function finish(){
           if (done) return; done = true;
           document.removeEventListener('keydown', onKey);
-          if (mask.parentNode) mask.parentNode.removeChild(mask);
+          _qmodalClose(mask);
           resolve(true);
         }
         function onKey(e){ if (e.key === 'Escape' || e.key === 'Enter') finish(); }
