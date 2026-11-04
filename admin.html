@@ -5239,6 +5239,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       let changed = 0, alreadyPaid = 0, notFound = 0, filled = 0, recoveredN = 0;
       const nowStr = new Date().toLocaleString('zh-CN');
       let intlPrev = [];   // 国际条目改动前的值：保存失败必须回滚，否则重试会被误判成「已经改过」
+      let intlGoodsPrev = [];   // 🔧 国际审核通过→自动改「可排发」的谷子旧状态（保存失败一起回滚）
+      let intlGoodsTouched = 0; // 本次联动改了几件谷子状态
 
       /* 🐷 用零钱罐抵扣的订单，支付方式该怎么记（2026-10-15 团长口径）：
            · 全额罐抵（没另外转账）→ 「零钱罐」
@@ -5313,6 +5315,33 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         });
       }
 
+      /* 🔧 国际审核通过 → 自动把「该批次 + 该圈名」的谷子改成「可排发」（团长 2026-11-04 定的口径：
+         交一笔国际运费，就把这笔对应的那一批谷子自动变成可排发；只改对应批次，闸门照旧保留）。
+         规则：
+           · 只动「这个 fee_members 所在的 logistics 批次」+「这条 fee_members 的 cn」的谷子；
+           · 只把状态改成「可排发」；已经到终态（待发货/已排发/已到货/到货）的绝不回退去改；
+           · 未付款的谷子（还没采购）不碰 —— 还没买的东西谈不上排发。 */
+      function _intlAutoDispatch(batchName, cn) {
+        if (!batchName || !cn) return 0;
+        const bk = _normBatchKey(batchName);
+        const pool = RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []);
+        let n = 0;
+        pool.forEach(function (it) {
+          if (!it || typeof it !== 'object') return;
+          if (_normBatchKey(it.batch_name || '') !== bk) return;
+          if (String(it.cn || '').trim() !== String(cn).trim()) return;
+          const st = String(it.status || '').trim();
+          // 已经是终态/可排发/未付款的跳过：只把「采购完成、正在收国际/运输中」这批往前推
+          if (st === '可排发' || st === '待发货' || st === '已排发' || st === '已到货' || st === '到货') return;
+          if (st === '未付款') return;
+          intlGoodsPrev.push({ it: it, status: it.status, stock_date: it.stock_date, stock_expiry: it.stock_expiry });
+          it.status = '可排发';
+          ensureStockDate(it, st);
+          DIRTY_ITEM_IDS.add(String(it.item_id || it.id || ''));
+          n++;
+        });
+        return n;
+      }
       if (isIntl) {
         // 国际运费：改 image_data.logistics_data 里对应条目的状态 → 已交
         // （改的是机器人 /已付国际 同一份数据，两边不会打架）
@@ -5330,6 +5359,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               m.paid_at = nowStr;
               m.amount_paid = Number(m.amount_due) || 0;
               changed++;
+              // 🔧 联动：这一笔国际运费交清了 → 这批这个人的谷子自动可排发
+              intlGoodsTouched += _intlAutoDispatch(b.batch_name, m.cn);
             } else {
               alreadyPaid++;
             }
@@ -5506,6 +5537,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         intlPrev.forEach(function (r) {
           r.m.status = r.status; r.m.pay_method = r.pay_method;
           r.m.paid_at = r.paid_at; r.m.amount_paid = r.amount_paid;
+        });
+        intlGoodsPrev.forEach(function (r) {
+          r.it.status = r.status; r.it.stock_date = r.stock_date; r.it.stock_expiry = r.stock_expiry;
         });
         rollbackOrderPatch();
         return;
