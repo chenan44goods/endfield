@@ -1057,24 +1057,40 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       }
     }
 
-    /* 桌面宽屏表头吸顶（2026-10-26）：排表明细 14 列、20 行要滚两屏，
-       滚下去就分不清哪列是哪列。
-       ⚠️ 关键点：`position:sticky` 只有在「最近的滚动容器不裁剪纵向」时才跟页面走。
-       `.table-container` 原来是 `overflow-x:auto`，它自己就成了滚动容器，sticky 会失效。
-       所以宽度 ≥1200 时干脆放弃容器横向滚动、让页面本体滚；列 padding 收到 9px，
-       14 列能塞进 1200（实测 1203 → 约 1119），不会横溢。
-       窄屏仍然保留横向滚动，只是没有吸顶。 */
-    @media (min-width: 1200px) {
-      .table-container.desktop-table-view { overflow-x: visible; }
-      .desktop-table-view table { min-width: 0; }
-      .desktop-table-view th, .desktop-table-view td { padding-left: 9px; padding-right: 9px; }
-      .desktop-table-view thead th {
+    /* 排表明细：卡片头（标题/批量按钮/搜索筛选/提示）+ 列名 全部常驻（2026-11-04 重做）
+       团长的要求：往下翻列表时，上面这几行一个都不许滚走。
+       做法：把这张卡片变成「一屏高的竖向 flex」—— 头部几行不参与滚动（flex 固定），
+             只有表格区自己滚，表头在表格区里 sticky 钉住。
+       ⚠️ 为什么不用「页面滚动 + thead sticky」：
+         sticky 只认最近的滚动容器；而 14 列在窄窗口必须横向滚动，
+         `.table-container` 一旦 `overflow-x:auto` 本身就成了滚动容器 → 表头根本钉不住。
+         让表格区同时当「横向 + 纵向」唯一的滚动区，两个需求才不打架。
+       ⚠️ 高度交给 flex，不写死偏移量：筛选栏换行、按钮换行都不会错位。
+       ⚠️ 旧版这条只在 ≥1200 生效，1178 这类窗口（团长就是）表头是死的，等于没做。 */
+    @media (min-width: 769px) {
+      .items-card {
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100vh - 24px);
+      }
+      .items-card > * { flex: 0 0 auto; }
+      .items-card > .table-container.desktop-table-view {
+        flex: 1 1 auto;
+        min-height: 220px;
+        overflow: auto;
+      }
+      .items-card .desktop-table-view thead th {
         position: sticky;
         top: 0;
         z-index: 3;
         background-color: #f8fafc;
         box-shadow: inset 0 -1px 0 var(--border);
       }
+    }
+
+    /* ≥1200 列间距收到 9px：14 列多数屏幕能一屏塞下，少出横向滚动条 */
+    @media (min-width: 1200px) {
+      .desktop-table-view th, .desktop-table-view td { padding-left: 9px; padding-right: 9px; }
     }
 
     /* ↕️ 可排序表头（2026-10-26）：没排序的列灰箭头，排上的列实心箭头
@@ -1579,7 +1595,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       </div>
 
       <!-- 数据表格与批量操作 -->
-      <div class="card">
+      <div class="card items-card">
         <div class="card-title">
           <span>📦 谷子排表明细 (group_data) <span class="sel-count-badge" id="selCountBadge">未选</span></span>
           <!-- 批量操作栏（批量改状态、改批次、改地区全部升级为下拉弹窗） -->
@@ -4059,9 +4075,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const tb = document.getElementById('itemsTableBody');
         if (!tb) return;
         const isMobile = window.matchMedia('(max-width: 768px)').matches;
+        /* 桌面端：整张卡片头（标题/批量按钮/筛选栏/列名）都常驻 → 滚到「卡片顶」，
+           滚到「表格顶」会正好把卡片头切在屏幕外面。 */
         const box = isMobile
           ? (document.getElementById('mobileSelBar') || document.getElementById('adminMobileCardsView'))
-          : (tb.closest('.table-container') || tb);
+          : (tb.closest('.items-card') || tb.closest('.table-container') || tb);
         /* 表格容器的内部滚动也要归零（桌面端表头吸顶后它自己有滚动条） */
         const container = tb.closest('.table-container');
         if (container) container.scrollTop = 0;
