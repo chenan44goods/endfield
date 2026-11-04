@@ -8119,6 +8119,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     const DISPATCH_MARK_REMOVED = new Set();  // 本次明确取消的键（并集合并会把取消的勾复活，必须显式剔除）
     let _dmUnsynced = false;
     let _dmTimer = null, _dmSaving = false, _dmAgain = false;
+    let _dmRevision = 0;   // 每次点选 +1：写库4秒内又有人点了，回来时不能拿服务器那份盖掉新点的
 
     function _pickKey(cn, itemKey) { return String(cn || '').trim() + '||' + String(itemKey || ''); }
     function _pickLsKey() { return 'gtbot_dispatch_marks_' + (CURRENT_QUERY_KEY || 'default'); }
@@ -8174,6 +8175,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (!CURRENT_QUERY_KEY || CURRENT_RECORD_ID === null || CURRENT_RECORD_ID === undefined) return false;
       if (_dmSaving) { _dmAgain = true; return false; }
       _dmSaving = true;
+      const _revAtStart = _dmRevision;
       try {
         for (let i = 0; i < 4; i++) {
           const { data, error } = await supabaseClient.from('leader_data')
@@ -8190,11 +8192,20 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             .update({ image_data: img, version: ver + 1 })
             .eq('id', rec.id).eq('version', ver).select('id');
           if (!uerr && up && up.length) {
-            RAW_DISPATCH_MARKS = img.dispatch_marks;
-            DISPATCH_MARK_REMOVED.clear();
             CURRENT_VERSION = ver + 1;   // 主保存靠这个版本锁，不跟着更新会让它白冲突一次
-            _dmUnsynced = false;
-            _saveDispatchMarksLocal();
+            if (_dmRevision === _revAtStart) {
+              RAW_DISPATCH_MARKS = img.dispatch_marks;
+              DISPATCH_MARK_REMOVED.clear();
+              _dmUnsynced = false;
+              _saveDispatchMarksLocal();
+            } else {
+              /* ⏱ 写库这 4 秒里团长又点了几件：服务器那份是「旧的新数据」，
+                 拿它盖回去会把刚点的勾抹掉（勾会自己跳回去，像失灵）。
+                 保留内存现状，立刻再写一次把新点的带上。 */
+              _dmUnsynced = true;
+              _saveDispatchMarksLocal();
+              _scheduleDispatchMarksSave(300);
+            }
             return true;
           }
           await new Promise(function (r) { setTimeout(r, 250); });   // 有人同时在写：重读再试
@@ -8221,6 +8232,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         }
       });
       if (!changed) return;
+      _dmRevision++;
       _dmUnsynced = true;
       _saveDispatchMarksLocal();
       _scheduleDispatchMarksSave();
@@ -8305,6 +8317,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         async () => {
           Object.keys(RAW_DISPATCH_MARKS).forEach(function (k) { DISPATCH_MARK_REMOVED.add(k); });
           RAW_DISPATCH_MARKS = {};
+          _dmRevision++;
           _dmUnsynced = true;
           _saveDispatchMarksLocal();
           await _saveDispatchMarksNow();
