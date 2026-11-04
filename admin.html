@@ -1310,6 +1310,47 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       text-align: center;
     }
 
+    /* ✅ 排发勾选（2026-11-05）：点一下 = 划掉一件，团长打包时用来分辨「这件装了没」
+       只做视觉标记，不动谷子状态 / 金额 / 申请。 */
+    .grid-item-chip {
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      word-break: break-word;
+      transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease;
+    }
+    .grid-item-chip:hover { border-color: #93c5fd; box-shadow: 0 1px 4px rgba(37,99,235,.12); }
+    .grid-item-chip .gip-tick {
+      position: absolute; top: 2px; right: 3px;
+      font-size: 0.72rem; font-weight: 800; color: #16a34a;
+      opacity: 0; transform: scale(.6);
+      transition: opacity .16s ease, transform .16s ease;
+    }
+    .grid-item-chip .gip-name { padding-right: 12px; }   /* 给右上角 ✓ 留位，别压住名字 */
+    .grid-item-chip.is-picked { background: #f1f5f9; border-color: #cbd5e1; }
+    .grid-item-chip.is-picked .gip-name,
+    .grid-item-chip.is-picked .gip-qty { text-decoration: line-through; color: #94a3b8; }
+    .grid-item-chip.is-picked .gip-tick { opacity: 1; transform: scale(1); }
+    .app-card.is-picked-all { border-color: #86efac; box-shadow: inset 0 0 0 1px rgba(134,239,172,.55); }
+    .gip-pick-bar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      margin: 6px 0 0; font-size: 0.78rem; color: var(--text-muted);
+    }
+    .gip-pick-btn {
+      border: 1px solid var(--border); background: #fff; color: var(--text-main);
+      border-radius: 6px; padding: 2px 9px; font-size: 0.76rem; line-height: 1.7;
+      cursor: pointer; font-family: inherit;
+    }
+    .gip-pick-btn:hover { border-color: #93c5fd; color: var(--primary); }
+    .gip-pick-btn.on { background: #ecfdf5; border-color: #86efac; color: #15803d; font-weight: 700; }
+    .gip-pick-count { font-variant-numeric: tabular-nums; }
+    /* 📱 手机上一行挤 5 个会把名字压成竖排，勾选圈太小 -> 改 3 个一行（只影响 ≤600px） */
+    @media (max-width: 600px) {
+      .items-grid-10 { grid-template-columns: repeat(3, 1fr); gap: 5px; }
+      .grid-item-chip { padding: 5px 4px; font-size: 0.72rem; }
+    }
+
     .app-card {
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -1978,6 +2019,7 @@ cn 点数 金额
           <button class="btn btn-secondary" id="btnSubCompleted" onclick="switchDispatchSubTab('completed')">已完成记录列表</button>
           <button class="btn btn-secondary" id="btnSubLogs" onclick="showDispatchLogs()">🔄 转单日志</button>
           <button class="btn btn-success" id="btnDispatchAll" onclick="openDispatchAllConfirm()" style="display:none;">🚀 全部一键派发</button>
+          <button class="btn btn-secondary" id="btnClearPicks" onclick="clearDispatchPicks()" style="display:none;">🧹 清空勾选</button>
         </div>
         <div id="dispatchMergeHint" style="display:none; margin-bottom: 12px; padding: 10px 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; font-size: 0.84rem; color: #166534;">
           🔗 同一 CN 的多条待处理申请已自动合并为一张卡，点卡片右下角「🚀 一键派发」可一次发完这人的全部。
@@ -3350,6 +3392,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         // 💰 批次定金计划（键 = 归一化批次名）
         RAW_BATCH_PLANS = (iData.batch_plans && typeof iData.batch_plans === 'object' && !Array.isArray(iData.batch_plans)) ? iData.batch_plans : {};
         RAW_ARCHIVED = Array.isArray(iData.archived_items) ? iData.archived_items : [];
+        _loadDispatchMarks(iData.dispatch_marks);   // ✅ 排发勾选（image_data.dispatch_marks）
         CURRENT_PAGE = 1;
         updateBatchDropdownOptions();
         /* 💾 数据到位后再恢复上次的筛选（批次要在 RAW_ITEMS 上校验过才敢用）。
@@ -3821,7 +3864,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           // ⚠️ 下面每个字段都是「后台整份回写」的：
           //    以后往 image_data 里加新字段，必须同步加进这一行，
           //    否则后台一保存就会把它抹掉（2026-09-22 pay_proofs 踩过一次）。
-          image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK, logistics_data: (mergedLogi || RAW_LOGISTICS), archived_items: mergedArch, pay_proofs: RAW_PAY_PROOFS, batch_plans: RAW_BATCH_PLANS, piggy_bank: RAW_PIGGY }
+          image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK, logistics_data: (mergedLogi || RAW_LOGISTICS), archived_items: mergedArch, pay_proofs: RAW_PAY_PROOFS, batch_plans: RAW_BATCH_PLANS, piggy_bank: RAW_PIGGY, dispatch_marks: RAW_DISPATCH_MARKS }
         };
         _saveStage('正在保存 ' + (RAW_ITEMS ? RAW_ITEMS.length : 0) + ' 条谷子…');
         if (CURRENT_VERSION !== null) {
@@ -3880,6 +3923,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               //    审核/驳回/退回都是「改我自己那几条」，mergeById 以 mine 为准，改动能保住。
               freshImg2.piggy_bank = mergeById(RAW_PIGGY, freshImg2.piggy_bank);
               freshImg2.applications = mergeApplications(RAW_APPLICATIONS, freshImg2.applications, MY_APP_DIRTY, MY_APP_DELETED);
+              // ✅ 排发勾选：服务器 ∪ 我这次的增删（不能直接用服务器那份，会丢我刚勾的）
+              freshImg2.dispatch_marks = _mergeDispatchMarks(freshImg2.dispatch_marks);
               freshImg2.transfer_logs = mergeById(RAW_LOGS, freshImg2.transfer_logs);
               freshImg2.feedback = mergeById(RAW_FEEDBACK, freshImg2.feedback);
               const retry = await supabaseClient.from('leader_data')
@@ -8057,6 +8102,218 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     if (!_cutFillSelects()) document.addEventListener('DOMContentLoaded', _cutFillSelects);
 
     /* --- 标签页 2：排发工作台 --- */
+
+    /* ══════════════════════════════════════════════════════════════════
+       ✅ 排发勾选（团长 2026-11-05 要求）
+       打包时点一下就把这件划掉，方便分辨「这件我到底装进去了没有」。
+       · 单个品项可勾；卡片上「☑ 全部勾选」一键勾/取消这张卡的全部；
+       · 状态存在 image_data.dispatch_marks（键 = CN + '||' + 品项键），
+         所以关页面、换手机、换电脑都还在；
+       · 「一键派发」成功派发这位 CN 后自动清掉他的勾，避免下次同名谷子带着旧勾；
+       · 写库走「只写 image_data + 版本锁」的轻量通道，不弹全屏遮罩；
+         连点几下会被 1.2 秒防抖合并成一次，不打断打包节奏。
+       ⚠️ image_data 是后台整份回写：以后再加子字段，务必同时加进
+          _saveDataToSupabase 的 payload 与冲突合并分支（这一行就是提醒）。
+       ══════════════════════════════════════════════════════════════════ */
+    let RAW_DISPATCH_MARKS = {};              // { 'CN||品项键': 时间戳 }
+    const DISPATCH_MARK_REMOVED = new Set();  // 本次明确取消的键（并集合并会把取消的勾复活，必须显式剔除）
+    let _dmUnsynced = false;
+    let _dmTimer = null, _dmSaving = false, _dmAgain = false;
+
+    function _pickKey(cn, itemKey) { return String(cn || '').trim() + '||' + String(itemKey || ''); }
+    function _pickLsKey() { return 'gtbot_dispatch_marks_' + (CURRENT_QUERY_KEY || 'default'); }
+
+    /* 库里最新 marks + 我这次的增删 → 真正写回的对象。
+       ⚠️ 必须是并集：A 手机勾了 3 件、B 电脑勾了 2 件，谁的都不能丢。 */
+    function _mergeDispatchMarks(theirs) {
+      const base = (theirs && typeof theirs === 'object' && !Array.isArray(theirs)) ? Object.assign({}, theirs) : {};
+      DISPATCH_MARK_REMOVED.forEach(function (k) { delete base[k]; });
+      Object.keys(RAW_DISPATCH_MARKS).forEach(function (k) { base[k] = RAW_DISPATCH_MARKS[k]; });
+      return base;
+    }
+
+    /* 读库后调用：以服务器为准，本机缓存只接住「勾了但还没写进去」的那几下。
+       反过来（缓存盖服务器）会把别的设备取消掉的勾复活。 */
+    function _loadDispatchMarks(serverMarks) {
+      DISPATCH_MARK_REMOVED.clear();
+      const base = (serverMarks && typeof serverMarks === 'object' && !Array.isArray(serverMarks))
+        ? Object.assign({}, serverMarks) : {};
+      try {
+        const raw = localStorage.getItem(_pickLsKey());
+        if (raw) {
+          const obj = JSON.parse(raw);
+          if (obj && obj.marks && typeof obj.marks === 'object') {
+            if (obj.dirty) {
+              Object.keys(obj.marks).forEach(function (k) { if (!(k in base)) base[k] = obj.marks[k]; });
+              _dmUnsynced = true;
+              setTimeout(function () { _saveDispatchMarksNow(); }, 1500);
+            } else if (!serverMarks) {
+              Object.assign(base, obj.marks);
+            }
+          }
+        }
+      } catch (e) {}
+      RAW_DISPATCH_MARKS = base;
+    }
+
+    function _saveDispatchMarksLocal() {
+      try {
+        localStorage.setItem(_pickLsKey(), JSON.stringify({ dirty: _dmUnsynced ? 1 : 0, marks: RAW_DISPATCH_MARKS }));
+      } catch (e) {}
+    }
+
+    function _scheduleDispatchMarksSave(delay) {
+      if (_dmTimer) clearTimeout(_dmTimer);
+      _dmTimer = setTimeout(function () { _dmTimer = null; _saveDispatchMarksNow(); }, typeof delay === 'number' ? delay : 1200);
+    }
+
+    /* 轻量写库：只写 image_data（约 320KB），带版本锁 + 冲突重读重试。
+       故意不走 saveDataToSupabase —— 那条路会整份写 1.5MB 并弹全屏遮罩，
+       打包时每勾一下就卡 4 秒显然不行。 */
+    async function _saveDispatchMarksNow() {
+      if (!CURRENT_QUERY_KEY || CURRENT_RECORD_ID === null || CURRENT_RECORD_ID === undefined) return false;
+      if (_dmSaving) { _dmAgain = true; return false; }
+      _dmSaving = true;
+      try {
+        for (let i = 0; i < 4; i++) {
+          const { data, error } = await supabaseClient.from('leader_data')
+            .select('id,version,image_data').eq('id', CURRENT_RECORD_ID);
+          if (error || !data || !data.length) break;
+          const rec = data[0];
+          if (rec.version === undefined || rec.version === null) break;
+          let img = rec.image_data;
+          if (typeof img === 'string') { try { img = JSON.parse(img); } catch (e) { img = {}; } }
+          if (!img || typeof img !== 'object') img = {};
+          img.dispatch_marks = _mergeDispatchMarks(img.dispatch_marks);
+          const ver = Number(rec.version);
+          const { data: up, error: uerr } = await supabaseClient.from('leader_data')
+            .update({ image_data: img, version: ver + 1 })
+            .eq('id', rec.id).eq('version', ver).select('id');
+          if (!uerr && up && up.length) {
+            RAW_DISPATCH_MARKS = img.dispatch_marks;
+            DISPATCH_MARK_REMOVED.clear();
+            CURRENT_VERSION = ver + 1;   // 主保存靠这个版本锁，不跟着更新会让它白冲突一次
+            _dmUnsynced = false;
+            _saveDispatchMarksLocal();
+            return true;
+          }
+          await new Promise(function (r) { setTimeout(r, 250); });   // 有人同时在写：重读再试
+        }
+      } catch (e) {
+        /* 勾选状态掉线不弹窗打扰打包：保留 _dmUnsynced，下次点击 / 切页再试 */
+      } finally {
+        _dmSaving = false;
+        if (_dmAgain) { _dmAgain = false; _scheduleDispatchMarksSave(300); }
+      }
+      return false;
+    }
+    window._saveDispatchMarksNow = _saveDispatchMarksNow;
+
+    /* 勾 / 取消一批键（整卡勾选 = 批量传进来） */
+    function _setDispatchPicks(keys, on) {
+      let changed = false;
+      (keys || []).forEach(function (k) {
+        if (!k) return;
+        if (on) {
+          if (!RAW_DISPATCH_MARKS[k]) { RAW_DISPATCH_MARKS[k] = Date.now(); DISPATCH_MARK_REMOVED.delete(k); changed = true; }
+        } else if (RAW_DISPATCH_MARKS[k]) {
+          delete RAW_DISPATCH_MARKS[k]; DISPATCH_MARK_REMOVED.add(k); changed = true;
+        }
+      });
+      if (!changed) return;
+      _dmUnsynced = true;
+      _saveDispatchMarksLocal();
+      _scheduleDispatchMarksSave();
+    }
+
+    /* 按 DOM 重算一张卡的勾选态（不重画整页，保住滚动位置和展开的明细） */
+    function _refreshPickCard(card) {
+      if (!card) return;
+      const chips = Array.prototype.slice.call(card.querySelectorAll('[data-pick]'));
+      let on = 0;
+      chips.forEach(function (c) {
+        const picked = !!RAW_DISPATCH_MARKS[c.dataset.pick];
+        c.classList.toggle('is-picked', picked);
+        if (picked) on++;
+      });
+      const cnt = card.querySelector('.gip-pick-count');
+      if (cnt) cnt.textContent = on === 0 ? '一件都没勾' : ('已勾 ' + on + ' / ' + chips.length);
+      const btn = card.querySelector('[data-pick-all]');
+      if (btn) {
+        const all = chips.length > 0 && on === chips.length;
+        btn.classList.toggle('on', all);
+        btn.textContent = all ? '☑ 取消全勾' : '☑ 全部勾选';
+      }
+      card.classList.toggle('is-picked-all', chips.length > 0 && on === chips.length);
+    }
+
+    /* 事件委托绑在 #dispatchSubContent 上（它本身不会被 innerHTML 换掉，
+       重画卡片不用重新绑）。只认带 data-pick / data-pick-all 的元素。 */
+    function _bindDispatchPickHost() {
+      const host = document.getElementById('dispatchSubContent');
+      if (!host || host.dataset.pickBound === '1') return;
+      host.dataset.pickBound = '1';
+      host.addEventListener('click', function (e) {
+        const t = e.target;
+        if (!t || !t.closest) return;
+        const allBtn = t.closest('[data-pick-all]');
+        if (allBtn) {
+          e.preventDefault(); e.stopPropagation();
+          const card = allBtn.closest('.app-card');
+          if (!card) return;
+          const keys = Array.prototype.slice.call(card.querySelectorAll('[data-pick]'))
+            .map(function (c) { return c.dataset.pick; });
+          const allOn = keys.length > 0 && keys.every(function (k) { return !!RAW_DISPATCH_MARKS[k]; });
+          _setDispatchPicks(keys, !allOn);
+          _refreshPickCard(card);
+          return;
+        }
+        const chip = t.closest('[data-pick]');
+        if (chip) {
+          e.preventDefault();
+          const k = chip.dataset.pick;
+          _setDispatchPicks([k], !RAW_DISPATCH_MARKS[k]);
+          _refreshPickCard(chip.closest('.app-card'));
+        }
+      }, true);
+    }
+
+    /* 派发成功后清掉这位 CN 的勾（团长口径：发出去了划线就没意义了） */
+    function _clearPicksForCns(cns) {
+      const prefixes = {};
+      (cns || []).forEach(function (c) { prefixes[String(c || '').trim() + '||'] = 1; });
+      const pfx = Object.keys(prefixes);
+      if (!pfx.length) return 0;
+      let removed = 0;
+      Object.keys(RAW_DISPATCH_MARKS).forEach(function (k) {
+        for (let i = 0; i < pfx.length; i++) {
+          if (k.indexOf(pfx[i]) === 0) { delete RAW_DISPATCH_MARKS[k]; DISPATCH_MARK_REMOVED.add(k); removed++; return; }
+        }
+      });
+      if (removed) { _dmUnsynced = true; _saveDispatchMarksLocal(); }
+      return removed;
+    }
+
+    function clearDispatchPicks() {
+      const n = Object.keys(RAW_DISPATCH_MARKS).length;
+      if (!n) { showToast('当前没有勾选过的谷子'); return; }
+      _showDispatchModal('清空全部勾选？',
+        '<div style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:0.86rem;">'
+        + '<div>当前共勾选（划线）了 <b>' + n + '</b> 个品项。</div>'
+        + '<div style="margin-top:8px; color:#991b1b;">清空只是取消划线标记，<b>不会改动任何谷子状态、金额和申请</b>。</div>'
+        + '</div>', '确认清空', 'btn-danger',
+        async () => {
+          Object.keys(RAW_DISPATCH_MARKS).forEach(function (k) { DISPATCH_MARK_REMOVED.add(k); });
+          RAW_DISPATCH_MARKS = {};
+          _dmUnsynced = true;
+          _saveDispatchMarksLocal();
+          await _saveDispatchMarksNow();
+          renderDispatchWorkbench();
+          showToast('🧹 已清空勾选');
+        });
+    }
+    window.clearDispatchPicks = clearDispatchPicks;
+
     function switchDispatchSubTab(sub) {
       CURRENT_DISPATCH_SUBTAB = sub;
       document.getElementById('btnSubPending').classList.toggle('btn-primary', sub === 'pending');
@@ -8093,19 +8350,27 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       (apps || []).forEach(app => {
         (app.items || []).forEach(it => {
           const key = String(it.item_id || it.id || ('n:' + (it.name || '')));
-          if (!map.has(key)) map.set(key, { name: it.name || '(未命名)', quantity: 0 });
+          if (!map.has(key)) map.set(key, { name: it.name || '(未命名)', quantity: 0, pick_key: key });
           map.get(key).quantity += (Number(it.quantity) || 1);
         });
       });
       return Array.from(map.values());
     }
 
-    function renderItemsGrid(items) {
+    /* ✅ 品项小方块：点一下 = 勾掉/取消（团长分拣时标记「这件已经装进去了」）。
+       data-pick 的键 = CN + '||' + 品项键，落库到 image_data.dispatch_marks。 */
+    function renderItemsGrid(items, cn) {
       let html = '';
       chunkArray(items, 10).forEach(chunk => {
         html += '<div class="items-grid-10">';
         chunk.forEach(it => {
-          html += `<div class="grid-item-chip"><div style="font-weight:600;">${escapeHtml(it.name)}</div><div style="color:var(--primary); font-weight:700;">x ${it.quantity || 1}</div></div>`;
+          const _ik = it.pick_key || it.item_id || it.id || ('n:' + (it.name || ''));
+          const key = _pickKey(cn, _ik);
+          const picked = !!RAW_DISPATCH_MARKS[key];
+          html += `<div class="grid-item-chip${picked ? ' is-picked' : ''}" data-pick="${escapeHtml(key)}" title="点一下勾掉 / 取消（只做标记，不改谷子状态）">`
+            + `<span class="gip-tick">✓</span>`
+            + `<div class="gip-name" style="font-weight:600;">${escapeHtml(it.name)}</div>`
+            + `<div class="gip-qty" style="color:var(--primary); font-weight:700;">x ${it.quantity || 1}</div></div>`;
         });
         html += '</div>';
       });
@@ -8166,7 +8431,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         }
 
         html += `
-          <div class="app-card">
+          <div class="app-card" data-pick-card="${escapeHtml(g.cn)}">
             <div class="app-header" style="flex-wrap: wrap; gap: 4px;">
               <div style="min-width:0; flex:1 1 auto;">
                 <strong>CN: ${escapeHtml(g.cn)}</strong>
@@ -8177,7 +8442,12 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             </div>
             <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:6px;">📝 备注: ${escapeHtml(noteText)}</div>
             <div style="font-size:0.82rem; color:var(--text-muted); margin-bottom:2px;">合计 ${g.apps.length} 条申请 · ${merged.length} 个品项 · ${totalQty} 件</div>
-            <div>${renderItemsGrid(merged)}</div>
+            <div>${renderItemsGrid(merged, g.cn)}</div>
+            <div class="gip-pick-bar">
+              <button type="button" class="gip-pick-btn" data-pick-all="1">☑ 全部勾选</button>
+              <span class="gip-pick-count">一件都没勾</span>
+              <span style="opacity:.7;">（点方块勾掉一件，只做标记，不影响派发）</span>
+            </div>
             ${detailHtml}
             <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
               <button class="btn btn-success" onclick="confirmDispatchCn(${gi})">🚀 一键派发${multi ? '该 CN 全部' : ''}（${g.apps.length} 条）</button>
@@ -8261,6 +8531,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (btnAll) btnAll.style.display = (isPending && pendingApps.length > 1) ? '' : 'none';
       const hint = document.getElementById('dispatchMergeHint');
       if (hint) hint.style.display = (isPending && pendingApps.length > 0) ? '' : 'none';
+      const _clrPick = document.getElementById('btnClearPicks');
+      if (_clrPick) _clrPick.style.display = isPending ? '' : 'none';
+      _bindDispatchPickHost();
 
       if (targetList.length === 0) {
         window.APP_GROUPS = [];   // 清掉陈旧分组，避免空列表时被误用
@@ -8270,6 +8543,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (isPending) {
         const _mis = findMisalignedApps(pendingApps);
         container.innerHTML = (_mis.length ? _misalignedBannerHtml(_mis) : '') + renderPendingGrouped(pendingApps);
+        Array.prototype.forEach.call(container.querySelectorAll('.app-card'), _refreshPickCard);
         return;
       }
 
@@ -8301,6 +8575,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         `;
       });
       container.innerHTML = html;
+      Array.prototype.forEach.call(container.querySelectorAll('.app-card'), _refreshPickCard);
     }
 
     /* --- 🚀 合并派发：确认弹窗（自绘，规避微信/QQ 内置浏览器屏蔽原生 confirm） --- */
@@ -8334,6 +8609,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
 
     // 真正写库：申请标记「已完成」+ 对应谷子状态改「已排发」
     async function _applyDispatchApps(apps) {
+      /* ✅ 派发后清掉这些 CN 的勾选划线（团长口径：货发出去了，划线留着只会误导） */
+      _clearPicksForCns((apps || []).map(function (a) { return a && a.cn; }));
       const targetItemIds = new Set();
       apps.forEach(app => {
         app.status = '已完成';
@@ -8349,7 +8626,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           DIRTY_ITEM_IDS.add(k);
         }
       });
-      await saveDataToSupabase();
+      const _ok = await saveDataToSupabase();
+      if (_ok !== false) { _dmUnsynced = false; DISPATCH_MARK_REMOVED.clear(); _saveDispatchMarksLocal(); }
       renderDispatchWorkbench();
       renderTable();
     }
