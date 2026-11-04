@@ -716,6 +716,62 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       color: var(--text-muted);
     }
 
+    /* ── 谷子图片拖拽上传区（2026-11-04）──────────────────────────────
+       浅色后台里的虚线投放框：平时灰虚线，拖进来变黑边 + 主黄淡底。
+       字号/密度沿用表单原有尺度，不改其它控件。 */
+    .img-dropzone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 16px 12px;
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      background: var(--c-paper-dim, #f7f7f4);
+      cursor: pointer;
+      text-align: center;
+      transition: border-color .15s ease, background .15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .img-dropzone:hover { border-color: #b8b8b2; background: #f2f2ee; }
+    .img-dropzone.dz-over { border-color: #1a1a1a; background: rgba(254,254,44,.16); }
+    .img-dropzone.dz-busy { pointer-events: none; opacity: .55; }
+    .dz-icon { font-size: 22px; line-height: 1; }
+    .dz-title { font-size: 0.88rem; color: #1a1a1a; }
+    .dz-link { text-decoration: underline; font-weight: 700; }
+    .dz-hint { font-size: 0.76rem; color: var(--text-muted); }
+
+    .img-file {
+      margin-top: 8px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: #ffffff;
+    }
+    .img-file-top { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; }
+    .img-file-name {
+      flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; font-weight: 600;
+    }
+    .img-file-meta { color: var(--text-muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+    .img-file-del {
+      border: 0; background: transparent; color: #c81e1e; font-size: 0.8rem;
+      cursor: pointer; padding: 2px 6px; border-radius: 6px; flex-shrink: 0;
+    }
+    .img-file-del:hover { background: rgba(200,30,30,.08); }
+    .img-file-bar {
+      height: 6px; border-radius: 99px; background: #ececea;
+      margin-top: 6px; overflow: hidden;
+    }
+    .img-file-bar > i {
+      display: block; height: 100%; width: 0%; border-radius: 99px;
+      background: #1a1a1a; transition: width .18s ease;
+    }
+    .img-file.is-ok .img-file-bar > i { background: #16794a; }
+    .img-file.is-err .img-file-bar > i { background: #c81e1e; }
+    .img-file-err { font-size: 0.76rem; color: #c81e1e; margin-top: 4px; }
+
     input[type="text"], input[type="number"], select, textarea {
       width: 100%;
       padding: 8px 12px;
@@ -1400,7 +1456,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
               </datalist>
             </div>
 
-            <!-- 图片上传区域 -->
+            <!-- 谷子图片上传（2026-11-04 重写：拖拽 + 点击 / 真实进度条 / 删除） -->
             <div class="form-group" style="grid-column: 1 / -1;">
               <label>谷子图片</label>
               <div style="display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;">
@@ -1408,11 +1464,17 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
                   <input type="text" id="inputImageUrl" placeholder="粘贴图片链接（如 https://...）" style="margin-bottom: 6px;" oninput="handleImageUrlInput(this.value)">
                   <div style="font-size: 0.8rem; color: var(--text-muted);">支持直接粘贴网络图片链接</div>
                 </div>
-                <div style="flex: 1; min-width: 200px;">
-                  <label class="btn btn-secondary" style="cursor: pointer; margin: 0; width: 100%; justify-content: center;">
-                    📁 选择本地图片上传
-                    <input type="file" id="inputImageFile" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
-                  </label>
+                <div style="flex: 1; min-width: 260px;">
+                  <!-- 真正的 file 控件藏起来：点框、拖进来都走它 -->
+                  <input type="file" id="inputImageFile" accept=".jpg,.jpeg,.png,image/jpeg,image/png" style="display: none;" onchange="handleImageUpload(event)">
+                  <div id="imgDropZone" class="img-dropzone" role="button" tabindex="0"
+                       onclick="pickImageFile()"
+                       ondragover="imgDragOver(event)" ondragleave="imgDragLeave(event)" ondrop="imgDrop(event)">
+                    <div class="dz-icon">🖼️</div>
+                    <div class="dz-title">拖拽图片到这里，或 <span class="dz-link">点击选择</span></div>
+                    <div class="dz-hint">仅支持 jpg / png，单张 ≤ 10MB</div>
+                  </div>
+                  <div id="imgFileList" style="display: none;"></div>
                   <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;" id="uploadStatusText">自动上传到 Supabase 图床</div>
                 </div>
                 <div id="imagePreviewBox" style="width: 80px; height: 80px; border: 1px dashed var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #f8fafc; overflow: hidden; position: relative; flex-shrink: 0;">
@@ -4056,29 +4118,264 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       else { img.src = ''; img.removeAttribute('data-orig'); img.style.display = 'none'; txt.style.display = 'block'; }
     }
 
-    async function handleImageUpload(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = evt => updateImagePreview(evt.target.result);
-      reader.readAsDataURL(file);
-      document.getElementById('uploadStatusText').innerText = '⏳ 上传中...';
-      IS_IMAGE_UPLOADING = true;
+    /* ══════════════════════════════════════════════════════════════════════
+       谷子图片上传（2026-11-04 重写：拖拽 + 点击 / 真实进度条 / 删除）
+       ── 为什么用 XHR 而不是 supabaseClient.storage.upload() ──
+          supabase-js 的 upload() 不返回进度事件，只能做假的定时动画。
+          这里直接 POST 同源反代 /sb 的 Storage 接口，监听 xhr.upload.onprogress，
+          进度是**真实已上传字节数**（大图才看得出差别）。
+       ── 约束（团长定的口径）──
+          只收 jpg / png；单张 ≤ 10MB；超了**直接拒绝并说清原因**，绝不偷偷压缩。
+          这个框只挂 1 张图（数据里就是 image_url 单字段），一次选多张只取第一张。
+       ══════════════════════════════════════════════════════════════════════ */
+    const IMG_MAX_BYTES = 10 * 1024 * 1024;
+    const IMG_MAX_COUNT = 1;
+    let IMG_TASK = null;              /* 正在上传：{ xhr, file, path } */
+
+    /* 点框选择 —— 手机上只有这条路（iOS Safari 不支持 HTML5 拖拽） */
+    function pickImageFile() {
+      if (IMG_TASK) return showToast('上一张还在上传，稍等一下');
+      const el = document.getElementById('inputImageFile');
+      if (el) el.click();
+    }
+    window.pickImageFile = pickImageFile;
+
+    function _imgExtOf(name) {
+      const s = String(name || '');
+      const i = s.lastIndexOf('.');
+      return i >= 0 ? s.slice(i + 1).toLowerCase() : '';
+    }
+    function _imgSizeText(n) {
+      const b = Number(n) || 0;
+      if (b >= 1048576) return (b / 1048576).toFixed(b >= 10485760 ? 0 : 1) + 'MB';
+      if (b >= 1024) return Math.round(b / 1024) + 'KB';
+      return b + 'B';
+    }
+    /* 扩展名 + MIME 双判：Windows 上偶尔 file.type 为空，只看 MIME 会把好图误杀 */
+    function _imgCheck(file) {
+      const ext = _imgExtOf(file.name);
+      const mime = String(file.type || '').toLowerCase();
+      const okExt = ext === 'jpg' || ext === 'jpeg' || ext === 'png';
+      const okMime = mime === '' || mime === 'image/jpeg' || mime === 'image/png';
+      if (!okExt || !okMime) return { ok: false, msg: '只支持 jpg / png，这张是 ' + (ext ? '.' + ext : '未知格式') };
+      if (file.size > IMG_MAX_BYTES) return { ok: false, msg: '单张不能超过 10MB，这张是 ' + _imgSizeText(file.size) };
+      return { ok: true, ext: (ext === 'jpeg' ? 'jpg' : ext) };
+    }
+
+    /* ── 拖拽三件套（dragover 必须 preventDefault，否则浏览器直接打开图片） ── */
+    function imgDragOver(e) {
+      e.preventDefault(); e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      const z = document.getElementById('imgDropZone');
+      if (z) z.classList.add('dz-over');
+    }
+    function imgDragLeave(e) {
+      e.preventDefault(); e.stopPropagation();
+      const z = document.getElementById('imgDropZone');
+      if (z) z.classList.remove('dz-over');
+    }
+    function imgDrop(e) {
+      e.preventDefault(); e.stopPropagation();
+      const z = document.getElementById('imgDropZone');
+      if (z) z.classList.remove('dz-over');
+      const dt = e.dataTransfer;
+      const files = dt && dt.files ? dt.files : null;
+      if (!files || !files.length) return;
+      if (files.length > IMG_MAX_COUNT) showToast('这个框只挂 1 张图，已取第一张「' + files[0].name + '」');
+      startImageUpload(files[0]);
+    }
+    window.imgDragOver = imgDragOver; window.imgDragLeave = imgDragLeave; window.imgDrop = imgDrop;
+
+    function showImgFileRow(file) {
+      const box = document.getElementById('imgFileList');
+      if (!box) return;
+      box.style.display = 'block';
+      box.innerHTML =
+        '<div class="img-file">' +
+          '<div class="img-file-top">' +
+            '<span class="img-file-name" title="' + escapeHtml(file.name) + '">' + escapeHtml(file.name) + '</span>' +
+            '<span class="img-file-meta">' + _imgSizeText(file.size) + '</span>' +
+            '<span class="img-file-meta" data-pct>0%</span>' +
+            '<button type="button" class="img-file-del" onclick="removeImageFile(event)">✕ 删除</button>' +
+          '</div>' +
+          '<div class="img-file-bar"><i style="width:0%"></i></div>' +
+          '<div class="img-file-err" style="display:none;"></div>' +
+        '</div>';
+    }
+    function setImgFileState(pct, state, errMsg) {
+      const el = document.querySelector('#imgFileList .img-file');
+      if (!el) return;
+      const p = Math.max(0, Math.min(100, Math.round(pct || 0)));
+      const bar = el.querySelector('.img-file-bar > i');
+      const lab = el.querySelector('[data-pct]');
+      if (bar) bar.style.width = (state === 'err' ? 100 : p) + '%';
+      if (lab) lab.textContent = (state === 'err' ? '失败' : p + '%');
+      el.classList.toggle('is-ok', state === 'ok');
+      el.classList.toggle('is-err', state === 'err');
+      const er = el.querySelector('.img-file-err');
+      if (er) { er.style.display = errMsg ? 'block' : 'none'; er.textContent = errMsg || ''; }
+    }
+    function imgResetUploader() {
+      const box = document.getElementById('imgFileList');
+      if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+      const z = document.getElementById('imgDropZone');
+      if (z) z.classList.remove('dz-over', 'dz-busy');
+      const st = document.getElementById('uploadStatusText');
+      if (st) st.textContent = '自动上传到 Supabase 图床';
+      const inp = document.getElementById('inputImageFile');
+      if (inp) inp.value = '';
+    }
+    window.imgResetUploader = imgResetUploader;
+
+    /* 删除：自绘两步（第一次变「确认删除？」，4 秒内再点才真删）。
+       ⚠️ 不删云端对象 —— 它可能已被保存的条目引用，删了就是永久裂图。
+       这里只把它从「当前表单」上摘掉，点保存后才真正生效。 */
+    function removeImageFile(e) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      const btn = e && e.currentTarget ? e.currentTarget : null;
+      if (btn && btn.getAttribute('data-arm') !== '1') {
+        btn.setAttribute('data-arm', '1');
+        btn.textContent = '确认删除？';
+        clearTimeout(btn._armT);
+        btn._armT = setTimeout(function () {
+          btn.setAttribute('data-arm', '');
+          btn.textContent = '✕ 删除';
+        }, 4000);
+        return;
+      }
+      if (btn) clearTimeout(btn._armT);
+      if (IMG_TASK && IMG_TASK.xhr) { try { IMG_TASK.xhr.abort(); } catch (_) {} }
+      IMG_TASK = null;
+      IS_IMAGE_UPLOADING = false;
+      imgResetUploader();
+      const u = document.getElementById('inputImageUrl');
+      if (u) u.value = '';
+      updateImagePreview('');
+      showToast('已移除这张图（保存后才生效）');
+    }
+    window.removeImageFile = removeImageFile;
+
+    function _imgUploadErrText(xhr) {
+      let msg = '';
       try {
-        const ext = file.name.split('.').pop() || 'png';
-        const filePath = `${CURRENT_QUERY_KEY}/${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
-        const { error } = await supabaseClient.storage.from('goods-images').upload(filePath, file, { cacheControl: '3600', upsert: true });
-        if (error) throw error;
-        const { data: pubData } = supabaseClient.storage.from('goods-images').getPublicUrl(filePath);
-        if (pubData && pubData.publicUrl) {
-          document.getElementById('inputImageUrl').value = pubData.publicUrl;
-          updateImagePreview(pubData.publicUrl);
-          document.getElementById('uploadStatusText').innerText = '✅ 上传成功';
+        const j = JSON.parse(xhr.responseText || '{}');
+        msg = j.message || j.error || '';
+      } catch (_) {}
+      if (!msg) msg = 'HTTP ' + xhr.status;
+      if (xhr.status === 413) msg = '文件太大，被服务端拒绝了（' + msg + '）';
+      if (xhr.status === 401 || xhr.status === 403) msg = '没有上传权限，请重新登录后台（' + msg + '）';
+      return msg;
+    }
+
+    async function startImageUpload(file) {
+      if (!file) return;
+      if (IMG_TASK) return showToast('上一张还在上传，稍等一下');
+      const statusEl = document.getElementById('uploadStatusText');
+
+      const chk = _imgCheck(file);
+      if (!chk.ok) {
+        showImgFileRow(file);
+        setImgFileState(0, 'err', chk.msg);
+        if (statusEl) statusEl.textContent = '❌ ' + chk.msg;
+        showToast(chk.msg);
+        return;
+      }
+
+      /* 先挂本地预览：上传失败时也能看清自己选的是哪张 */
+      try {
+        const reader = new FileReader();
+        reader.onload = function (evt) { updateImagePreview(evt.target.result); };
+        reader.readAsDataURL(file);
+      } catch (_) {}
+
+      showImgFileRow(file);
+      if (statusEl) statusEl.textContent = '⏳ 上传中 0%';
+      IS_IMAGE_UPLOADING = true;
+      const zone = document.getElementById('imgDropZone');
+      if (zone) zone.classList.add('dz-busy');
+
+      const ext = chk.ext || 'jpg';
+      const objPath = String(CURRENT_QUERY_KEY || 'public') + '/' + Date.now() + '_' + Math.floor(Math.random() * 100000) + '.' + ext;
+
+      /* 必须用登录态 token：goods-images 桶对匿名是 403，只有登录的管理能写 */
+      let token = SUPABASE_KEY;
+      try {
+        const sess = await supabaseClient.auth.getSession();
+        const at = sess && sess.data && sess.data.session && sess.data.session.access_token;
+        if (at) token = at;
+      } catch (_) {}
+
+      const base = SB_ACTIVE_BASE || sbPageBase();
+      const url = base + '/storage/v1/object/goods-images/' + objPath.split('/').map(encodeURIComponent).join('/');
+
+      const xhr = new XMLHttpRequest();
+      IMG_TASK = { xhr: xhr, file: file, path: objPath };
+
+      const done = function () {
+        IMG_TASK = null;
+        IS_IMAGE_UPLOADING = false;
+        const z = document.getElementById('imgDropZone');
+        if (z) z.classList.remove('dz-busy');
+        const inp = document.getElementById('inputImageFile');
+        if (inp) inp.value = '';
+      };
+
+      xhr.open('POST', url, true);
+      xhr.setRequestHeader('apikey', SUPABASE_KEY);
+      xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+      xhr.setRequestHeader('x-upsert', 'true');
+      xhr.setRequestHeader('Content-Type', file.type || (ext === 'png' ? 'image/png' : 'image/jpeg'));
+
+      xhr.upload.onprogress = function (ev) {
+        if (!ev || !ev.lengthComputable) return;
+        const pct = Math.round(ev.loaded / ev.total * 100);
+        setImgFileState(pct, 'up');
+        if (statusEl) statusEl.textContent = '⏳ 上传中 ' + pct + '%';
+      };
+      xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const pub = supabaseClient.storage.from('goods-images').getPublicUrl(objPath);
+          const publicUrl = pub && pub.data ? pub.data.publicUrl : '';
+          setImgFileState(100, 'ok');
+          if (publicUrl) {
+            document.getElementById('inputImageUrl').value = publicUrl;
+            updateImagePreview(publicUrl);
+            if (statusEl) statusEl.textContent = '✅ 上传成功';
+            showToast('图片上传成功');
+          } else {
+            if (statusEl) statusEl.textContent = '⚠️ 传上去了但没拿到图片地址';
+            showToast('图片传上去了，但没拿到地址，请重试一次');
+          }
+        } else {
+          const msg = _imgUploadErrText(xhr);
+          setImgFileState(100, 'err', msg);
+          if (statusEl) statusEl.textContent = '❌ 上传失败：' + msg;
+          updateImagePreview('');
+          showToast('图片上传失败：' + msg);
         }
-      } catch (err) {
-        showToast('图片上传失败: ' + err.message);
-        document.getElementById('uploadStatusText').innerText = '❌ 上传失败';
-      } finally { IS_IMAGE_UPLOADING = false; e.target.value = ''; }
+        done();
+      };
+      xhr.onerror = function () {
+        const msg = '网络中断，传到一半断了';
+        setImgFileState(100, 'err', msg);
+        if (statusEl) statusEl.textContent = '❌ 上传失败：' + msg;
+        updateImagePreview('');
+        showToast('图片上传失败：' + msg);
+        done();
+      };
+      xhr.onabort = function () {
+        if (statusEl) statusEl.textContent = '已取消上传';
+        done();
+      };
+      xhr.send(file);
+    }
+    window.startImageUpload = startImageUpload;
+
+    function handleImageUpload(e) {
+      const files = e && e.target && e.target.files ? e.target.files : null;
+      if (!files || !files.length) return;
+      if (files.length > IMG_MAX_COUNT) showToast('这个框只挂 1 张图，已取第一张「' + files[0].name + '」');
+      startImageUpload(files[0]);
     }
     window.handleImageUpload = handleImageUpload;
 
@@ -5239,6 +5536,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       let changed = 0, alreadyPaid = 0, notFound = 0, filled = 0, recoveredN = 0;
       const nowStr = new Date().toLocaleString('zh-CN');
       let intlPrev = [];   // 国际条目改动前的值：保存失败必须回滚，否则重试会被误判成「已经改过」
+      let intlGoodsPrev = [];   // 🔧 国际审核通过→自动改「可排发」的谷子旧状态（保存失败一起回滚）
+      let intlGoodsTouched = 0; // 本次联动改了几件谷子状态
 
       /* 🐷 用零钱罐抵扣的订单，支付方式该怎么记（2026-10-15 团长口径）：
            · 全额罐抵（没另外转账）→ 「零钱罐」
@@ -5313,6 +5612,33 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         });
       }
 
+      /* 🔧 国际审核通过 → 自动把「该批次 + 该圈名」的谷子改成「可排发」（团长 2026-11-04 定的口径：
+         交一笔国际运费，就把这笔对应的那一批谷子自动变成可排发；只改对应批次，闸门照旧保留）。
+         规则：
+           · 只动「这个 fee_members 所在的 logistics 批次」+「这条 fee_members 的 cn」的谷子；
+           · 只把状态改成「可排发」；已经到终态（待发货/已排发/已到货/到货）的绝不回退去改；
+           · 未付款的谷子（还没采购）不碰 —— 还没买的东西谈不上排发。 */
+      function _intlAutoDispatch(batchName, cn) {
+        if (!batchName || !cn) return 0;
+        const bk = _normBatchKey(batchName);
+        const pool = RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []);
+        let n = 0;
+        pool.forEach(function (it) {
+          if (!it || typeof it !== 'object') return;
+          if (_normBatchKey(it.batch_name || '') !== bk) return;
+          if (String(it.cn || '').trim() !== String(cn).trim()) return;
+          const st = String(it.status || '').trim();
+          // 已经是终态/可排发/未付款的跳过：只把「采购完成、正在收国际/运输中」这批往前推
+          if (st === '可排发' || st === '待发货' || st === '已排发' || st === '已到货' || st === '到货') return;
+          if (st === '未付款') return;
+          intlGoodsPrev.push({ it: it, status: it.status, stock_date: it.stock_date, stock_expiry: it.stock_expiry });
+          it.status = '可排发';
+          ensureStockDate(it, st);
+          DIRTY_ITEM_IDS.add(String(it.item_id || it.id || ''));
+          n++;
+        });
+        return n;
+      }
       if (isIntl) {
         // 国际运费：改 image_data.logistics_data 里对应条目的状态 → 已交
         // （改的是机器人 /已付国际 同一份数据，两边不会打架）
@@ -5330,6 +5656,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               m.paid_at = nowStr;
               m.amount_paid = Number(m.amount_due) || 0;
               changed++;
+              // 🔧 联动：这一笔国际运费交清了 → 这批这个人的谷子自动可排发
+              intlGoodsTouched += _intlAutoDispatch(b.batch_name, m.cn);
             } else {
               alreadyPaid++;
             }
@@ -5506,6 +5834,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         intlPrev.forEach(function (r) {
           r.m.status = r.status; r.m.pay_method = r.pay_method;
           r.m.paid_at = r.paid_at; r.m.amount_paid = r.amount_paid;
+        });
+        intlGoodsPrev.forEach(function (r) {
+          r.it.status = r.status; r.it.stock_date = r.stock_date; r.it.stock_expiry = r.stock_expiry;
         });
         rollbackOrderPatch();
         return;
@@ -6049,6 +6380,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       document.getElementById('inputOrderDate').value = item.order_date || '';
       document.getElementById('inputOrderPlatform').value = item.order_platform || '';
       updateImagePreview(item.image_url || '');
+      imgResetUploader();
       document.getElementById('formTitle').innerText = '✏️ 修改谷子信息';
       document.getElementById('btnClearForm').style.display = 'inline-block';
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -6066,7 +6398,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       setDefaultOrderDate();
       document.getElementById('inputOrderPlatform').value = '';
       updateImagePreview('');
-      document.getElementById('uploadStatusText').innerText = '自动上传到 Supabase 图床';
+      imgResetUploader();
       IS_IMAGE_UPLOADING = false;
       document.getElementById('formTitle').innerText = '📝 录入/编辑谷子';
       document.getElementById('btnClearForm').style.display = 'none';
