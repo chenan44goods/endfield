@@ -3508,10 +3508,27 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     // 🗄️ 保存前与数据库归档区做并集合并，防止旧页面保存时覆盖归档数据
     async function _mergedArchivedItems() {
       try {
-        const { data } = await supabaseClient.from('leader_data').select('image_data').eq('query_key', CURRENT_QUERY_KEY);
-        let fresh = (data && data[0] && data[0].image_data) || {};
-        if (typeof fresh === 'string') { try { fresh = JSON.parse(fresh); } catch (e) { fresh = {}; } }
-        const freshArr = Array.isArray(fresh.archived_items) ? fresh.archived_items : [];
+        /* 🔻 2026-11-05：只取归档那一段（PostgREST 的 jsonb 路径选择）。
+           原来 select('image_data') 每次保存都要拉 325KB（实测 4.87 秒），
+           而实际只用到 archived_items（当前 0 条）。改成路径选择后
+           只回 24 字节、1.21 秒 —— 每次删改省掉约 3.5 秒。 */
+        let freshArr = [];
+        const { data, error } = await supabaseClient
+          .from('leader_data')
+          .select('image_data->archived_items')
+          .eq('query_key', CURRENT_QUERY_KEY);
+        const row = (data && data[0]) || {};
+        /* ⚠️ 新团这条记录的 image_data 里压根没有 archived_items 字段（返回 null），
+           用 Array.isArray 判断会误走兜底整份读 → 所以要判「字段存在」而不是「是不是数组」。 */
+        if (!error && ('archived_items' in row)) {
+          freshArr = Array.isArray(row.archived_items) ? row.archived_items : [];
+        } else {
+          /* 兼容退路：PostgREST 不认路径选择 / 返回结构变了 → 整份读（原来的做法） */
+          const fb = await supabaseClient.from('leader_data').select('image_data').eq('query_key', CURRENT_QUERY_KEY);
+          let fresh = (fb.data && fb.data[0] && fb.data[0].image_data) || {};
+          if (typeof fresh === 'string') { try { fresh = JSON.parse(fresh); } catch (e) { fresh = {}; } }
+          freshArr = Array.isArray(fresh.archived_items) ? fresh.archived_items : [];
+        }
         const seen = {};
         RAW_ARCHIVED.forEach(function (it) { seen[String(it.item_id || it.id)] = true; });
         const out = RAW_ARCHIVED.slice();
@@ -3629,11 +3646,109 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
     window.saveBatchPlans = saveBatchPlans;
 
+
+    /* ==========================================
+       🕓 保存遮罩控制器（2026-11-05）
+       计数式：连点两次删除时第二次在队列里等，遮罩不闪、不会提前消失。
+       ========================================== */
+    let _saveJobs = 0;
+    let _saveT0 = 0;
+    let _saveTick = null;
+    let _saveStageText = '正在准备保存…';
+
+    function _saveMaskEl() {
+      let el = document.getElementById('saveMask');
+      if (el) return el;
+      el = document.createElement('div');
+      el.id = 'saveMask';
+      el.innerHTML =
+        '<div class="save-card">' +
+          '<div class="save-spin"></div>' +
+          '<div class="save-txt">' +
+            '<div class="save-title">正在保存…</div>' +
+            '<div class="save-sub" id="saveMaskSub"></div>' +
+            '<div class="save-warn" id="saveMaskWarn"></div>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(el);
+      return el;
+    }
+
+    function _saveMaskPaint() {
+      const sub = document.getElementById('saveMaskSub');
+      const warn = document.getElementById('saveMaskWarn');
+      if (!sub || !warn) return;
+      const sec = Math.max(0, (Date.now() - _saveT0) / 1000);
+      sub.textContent = _saveStageText + ' · 已用 ' + sec.toFixed(1) + ' 秒';
+      if (sec >= 25) {
+        warn.style.display = 'block';
+        warn.textContent = '已经 ' + Math.round(sec) + ' 秒，仍在写入/重试。请不要关闭或刷新页面。';
+      } else if (sec >= 10) {
+        warn.style.display = 'block';
+        warn.textContent = '网络较慢，仍在写入。请不要关闭或刷新页面。';
+      } else {
+        warn.style.display = 'none';
+      }
+    }
+
+    /* 保存分几个阶段（读最新 → 写整份 → 冲突重试），文字要跟着走，
+       否则团长只看到秒数在涨，不知道卡在哪一步。 */
+    function _saveStage(t) {
+      if (typeof t === 'string' && t) _saveStageText = t;
+      _saveMaskPaint();
+    }
+
+    function _saveMaskBegin() {
+      _saveJobs++;
+      if (_saveJobs > 1) { _saveMaskPaint(); return; }
+      _saveT0 = Date.now();
+      _saveStageText = '正在准备保存…';
+      const el = _saveMaskEl();
+      el.style.display = 'flex';
+      void el.offsetWidth;
+      el.classList.add('show');
+      _saveMaskPaint();
+      clearInterval(_saveTick);
+      _saveTick = setInterval(_saveMaskPaint, 100);
+    }
+
+    function _saveMaskEnd(force) {
+      _saveJobs = Math.max(0, _saveJobs - 1);
+      if (_saveJobs > 0) return;
+      clearInterval(_saveTick);
+      _saveTick = null;
+      const el = document.getElementById('saveMask');
+      if (!el) return;
+      const elapsed = Date.now() - _saveT0;
+      /* 极快的保存（<320ms）也让它露一脸，避免"闪一下"；失败时立刻收，
+         否则会挡住失败提示的 toast。 */
+      const wait = force ? 0 : Math.max(0, 320 - elapsed);
+      setTimeout(function () {
+        if (_saveJobs > 0) return;
+        el.classList.remove('show');
+        setTimeout(function () {
+          if (_saveJobs === 0) el.style.display = 'none';
+        }, 200);
+      }, wait);
+    }
+
     function saveDataToSupabase() {
       const run = function () { return _saveDataToSupabase(); };
+      /* 遮罩从「进入队列」就开始计时：连点两下时，第二下等的这段时间也是用户在等。 */
+      _saveMaskBegin();
       const next = _saveChain.then(run, run);
       _saveChain = next.then(function () {}, function () {});
-      return next;
+      return next.then(
+        function (r) {
+          /* _saveDataToSupabase 失败是 return false（不抛错），也要立刻收遮罩 */
+          _saveMaskEnd(r === false);
+          return r;
+        },
+        function (e) {
+          _saveMaskEnd(true);
+          throw e;
+        }
+      );
     }
 
     async function _saveDataToSupabase() {
@@ -3655,6 +3770,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           MY_APP_DIRTY.forEach(function (x) { APP_STATUS_DIRTY.delete(x); });
           MY_APP_DELETED.forEach(function (x) { APP_DELETED_IDS.delete(x); });
         };
+        _saveStage('正在读取最新归档…');
         const mergedArch = await _mergedArchivedItems();
         RAW_ARCHIVED = mergedArch;
         // 写库前清理囤货日期，但只清「本次动过的条目」（MY_DIRTY），
@@ -3667,6 +3783,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           //    否则后台一保存就会把它抹掉（2026-09-22 pay_proofs 踩过一次）。
           image_data: { applications: RAW_APPLICATIONS, transfer_logs: RAW_LOGS, feedback: RAW_FEEDBACK, logistics_data: RAW_LOGISTICS, archived_items: mergedArch, pay_proofs: RAW_PAY_PROOFS, batch_plans: RAW_BATCH_PLANS, piggy_bank: RAW_PIGGY }
         };
+        _saveStage('正在保存 ' + (RAW_ITEMS ? RAW_ITEMS.length : 0) + ' 条谷子…');
         if (CURRENT_VERSION !== null) {
           const nextVersion = (Number(CURRENT_VERSION) || 0) + 1;
           payload.version = nextVersion;
@@ -3678,6 +3795,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             let mergedApplied = false;
             let mergeResult = null;
             for (let mi = 0; mi < 6; mi++) {
+              _saveStage('有人同时在改，正在合并重试（第 ' + (mi + 1) + '/6 次）…');
               const fresh = await supabaseClient.from('leader_data').select('*').eq('query_key', CURRENT_QUERY_KEY);
               if (fresh.error || !fresh.data || fresh.data.length === 0) break;
               const freshRec = fresh.data[0];
@@ -11089,6 +11207,59 @@ function importLedger(e){
       .intl-alert-meta { display: block; margin: 2px 0 0; white-space: normal; }
       .intl-alert-btn { align-self: flex-start; margin-left: 22px; }
     }
+
+    /* ==========================================
+       🕓 保存遮罩（2026-11-05）
+       为什么需要：一次删改 = 整份 1.5MB 回写，实测 4~9 秒。
+       没反馈时团长会以为页面卡死，然后重复点击（越点越慢）。
+       ========================================== */
+    #saveMask {
+      position: fixed; inset: 0; z-index: 12000;
+      display: none; align-items: center; justify-content: center;
+      background: rgba(12, 14, 18, 0.55);
+      -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+      padding: 20px;
+      opacity: 0;
+      transition: opacity var(--mo-dur-out, 160ms) var(--mo-out, ease-out);
+    }
+    #saveMask.on { display: flex; }
+    #saveMask.show { opacity: 1; transition: opacity var(--mo-dur-in, 300ms) var(--mo-in, ease); }
+    #saveMask .save-card {
+      background: #fff; color: #1c2026;
+      border-radius: 14px; padding: 18px 20px;
+      min-width: 250px; max-width: 360px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, .28);
+      display: flex; gap: 13px; align-items: flex-start;
+      transform: translateY(10px) scale(.97);
+      transition: transform var(--mo-dur-out, 160ms) var(--mo-out, ease-out);
+    }
+    #saveMask.show .save-card {
+      transform: none;
+      transition: transform var(--mo-dur-in, 300ms) var(--mo-in, ease);
+    }
+    #saveMask .save-spin {
+      width: 22px; height: 22px; flex: 0 0 22px; margin-top: 2px;
+      border-radius: 50%;
+      border: 2.5px solid rgba(28, 32, 38, .16);
+      border-top-color: #1c2026;
+      animation: saveSpin .8s linear infinite;
+    }
+    @keyframes saveSpin { to { transform: rotate(360deg); } }
+    #saveMask .save-txt { min-width: 0; }
+    #saveMask .save-title { font-size: .95rem; font-weight: 700; line-height: 1.3; }
+    #saveMask .save-sub {
+      font-size: .8rem; color: #5b6472; margin-top: 4px;
+      font-variant-numeric: tabular-nums;
+    }
+    #saveMask .save-warn {
+      font-size: .78rem; color: #b45309; margin-top: 6px; line-height: 1.4;
+      display: none;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #saveMask, #saveMask .save-card { transition-duration: 1ms; }
+      #saveMask .save-spin { animation: none; }
+    }
+
   </style>
   <!-- 🗑 删除退款记录的自绘确认框（2026-10-29 团长需求：补录时搞错人，要能删掉重来）
        ⚠️ 绝不能用原生 confirm：手机微信/QQ 内置浏览器会静默屏蔽 → 点了没反应。
