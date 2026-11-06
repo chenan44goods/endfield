@@ -1422,7 +1422,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     <div class="nav-group-label">货物</div>
     <button class="tab-btn active" onclick="switchTab('tabItems')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-table-2" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18" /></svg> 排表管理</button>
     <button class="tab-btn" onclick="switchTab('tabLogistics')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-plane" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /></svg> 国际运费</button>
-    <button class="tab-btn" onclick="switchTab('tabPayReview')"><svg class="lucide-ic ic-check-circle" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> 交款审核</button>
+    <button class="tab-btn" onclick="switchTab('tabPayReview')"><svg class="lucide-ic ic-check-circle" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> 交款审核<span id="payReviewBadge" style="display:none; margin-left:6px; min-width:18px; padding:1px 6px; border-radius:9px; background:#dc2626; color:#fff; font-size:11px; font-weight:700; line-height:16px; text-align:center; vertical-align:middle;"></span></button>
     <button class="tab-btn" onclick="switchTab('tabQrCodes')"><svg class="lucide-ic ic-qr-code" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg> 收款码</button>
     <div class="nav-group-label">排发</div>
     <button class="tab-btn" onclick="switchTab('tabDispatch')"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-package" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" /><path d="M12 22V12" /><path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7" /><path d="m7.5 4.27 9 5.15" /></svg> 排发工作台</button>
@@ -5806,6 +5806,85 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       '</div>';
     }
 
+    /* ==========================================================
+       🔄 静默自动刷新交款凭证（2026-11-06）
+       团长反复反馈的老问题：「人家明明交了，后台里却没有」「她那边截图也消失了」。
+       查库证明凭证一直在 —— 根因是**后台页面从不刷新**：团长开着页面收一晚上钱，
+       之后谁再提交，只有 Ctrl+F5 才看得见，于是被当成「没交 / 没传成功」。
+       这里每 45 秒（以及切回标签页、窗口获得焦点时）静默查一次版本号：
+         · 版本没变 → 一个字节都不动（不重画、不打扰）
+         · 有变化   → 只把 image_data.pay_proofs 并回来、重画审核区、弹一句提示
+         · 有弹窗（团长正在审核/填驳回理由）→ 只更新角标，不重画，绝不清掉他正在写的东西
+       ⚠️ 只碰凭证数组，不碰订单/物流/勾选；保存仍按版本锁重读，所以不会反向覆盖别人。
+       ========================================================== */
+    let _proofPollBusy = false, _proofPollStarted = false, _proofPollTimer = null;
+
+    function _parseImgOf(o) {
+      let v = o && o.image_data;
+      if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { v = {}; } }
+      return (v && typeof v === 'object') ? v : {};
+    }
+
+    /* 待审核角标：挂在侧边栏「交款审核」上，不用点进去也知道有几笔没核 */
+    function _paintPayReviewBadge(list) {
+      const el = document.getElementById('payReviewBadge');
+      if (!el) return;
+      const n = (Array.isArray(list) ? list : []).filter(function (p) {
+        return String((p && p.status) || '待审核') === '待审核';
+      }).length;
+      el.textContent = n ? String(n) : '';
+      el.style.display = n ? 'inline-block' : 'none';
+    }
+
+    async function refreshPayProofsSilently(force) {
+      if (_proofPollBusy) return;
+      if (!CURRENT_QUERY_KEY || !CURRENT_RECORD_ID) return;
+      const busyModal = !!document.querySelector('.modal-overlay.active');
+      if (busyModal && !force) return;              // 团长正在操作：等下个周期再说
+      _proofPollBusy = true;
+      try {
+        // ① 先只取版本号（几百字节）；没变就立刻结束，不白拉 300KB 的 image_data
+        const vs = await supabaseClient.from('leader_data').select('version').eq('query_key', CURRENT_QUERY_KEY);
+        if (vs.error || !vs.data || !vs.data.length) return;
+        const v = vs.data[0].version;
+        if (v !== undefined && v !== null && CURRENT_VERSION !== null && Number(v) === Number(CURRENT_VERSION)) return;
+
+        // ② 版本变了才拉整份 image_data，按 id 合并（服务器新的、我本地的，都保留）
+        const { data, error } = await supabaseClient.from('leader_data')
+          .select('version,image_data').eq('query_key', CURRENT_QUERY_KEY);
+        if (error || !data || !data.length) return;
+        const rec = data[0];
+        const img = _parseImgOf(rec);
+        const fresh = Array.isArray(img.pay_proofs) ? img.pay_proofs : [];
+        const known = {};
+        (RAW_PAY_PROOFS || []).forEach(function (p) { if (p && p.id) known[String(p.id)] = 1; });
+        const freshNew = fresh.filter(function (p) { return p && (!p.id || !known[String(p.id)]); });
+
+        RAW_PAY_PROOFS = mergePayProofs(RAW_PAY_PROOFS, fresh);
+        if (rec.version !== undefined && rec.version !== null) CURRENT_VERSION = Number(rec.version);
+
+        const pendNew = freshNew.filter(function (p) { return String(p.status || '待审核') === '待审核'; });
+        if (busyModal) { _paintPayReviewBadge(RAW_PAY_PROOFS); return; }
+        renderPayReview();
+        if (pendNew.length) showToast('🔔 有 ' + pendNew.length + ' 笔新的交款凭证 —— 已自动刷新');
+      } catch (e) {
+        /* 静默失败：网络抖动不该弹窗打扰；下个周期会再试 */
+      } finally {
+        _proofPollBusy = false;
+      }
+    }
+
+    function _startProofPoll() {
+      _paintPayReviewBadge(RAW_PAY_PROOFS);
+      if (_proofPollStarted) return;
+      _proofPollStarted = true;
+      _proofPollTimer = setInterval(function () { refreshPayProofsSilently(false); }, 45000);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') refreshPayProofsSilently(false);
+      });
+      window.addEventListener('focus', function () { refreshPayProofsSilently(false); });
+    }
+
     function renderPayReview() {
       const listEl = document.getElementById('payReviewList');
       const sumEl = document.getElementById('payReviewSummary');
@@ -5818,6 +5897,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const pendAmt = _proofSum(pending);
       const passAmt = _proofSum(passed);
       const mismatch = pending.filter(function (p) { return _payProofCheck(p).state === 'mismatch'; });
+      _startProofPoll();
 
       if (sumEl) {
         sumEl.innerHTML =
