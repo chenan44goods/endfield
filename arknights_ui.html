@@ -641,6 +641,13 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           text-align: center;
         }
 
+        /* 🔴 待审核角标（2026-11-06）：竖向侧边栏只有 68px 宽，行内排会挤到第二行，
+           桌面端改成贴按钮右上角的绝对定位；手机端仍是行内（见上方内联样式）。 */
+        @media (min-width: 769px) {
+          .side-nav .tab-btn { position: relative; }
+          .side-nav .tab-btn > #payReviewBadge { position: absolute; top: 5px; right: 5px; margin-left: 0; }
+        }
+
         .side-nav .tab-btn:hover {
           color: #FEFE2C;
           background: rgba(254,254,44,0.08);
