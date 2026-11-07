@@ -2236,6 +2236,47 @@
       return (d && typeof d === 'object') ? d : {};
     }
 
+    /* 🌍 国际掉落到期日（2026-11-07 团长要求）：在「交肾核算」的批次卡片上附带显示。
+       数据源与后台完全一致：image_data.logistics_data[].intl_due_date（YYYY-MM-DD，留空＝不计时、不告警）。
+       ⚠️ 纯显示：不改数据、不改状态；岛内运费(fee_type='island')不出现「国际」字样。
+       ⚠️ 只认含「非岛内成员」的批次记录；同一 batch_name 有多条时取最早的日期（最紧迫）。 */
+    function intlDueDateForBatch(batchName){
+      const bn = String(batchName || '').trim();
+      if (!bn) return '';
+      const img = parseImgData(window.__LAST_ROW);
+      let logi = img.logistics_data;
+      if (typeof logi === 'string') { try { logi = JSON.parse(logi); } catch(e){ logi = []; } }
+      if (!Array.isArray(logi)) return '';
+      let best = '';
+      logi.forEach(function(b){
+        if (!b || typeof b !== 'object') return;
+        if (String(b.batch_name || '').trim() !== bn) return;
+        const fm = Array.isArray(b.fee_members) ? b.fee_members : [];
+        const hasIntlMember = fm.some(function(m){ return m && String(m.fee_type || '').trim() !== 'island'; });
+        if (!hasIntlMember) return;
+        const d = String(b.intl_due_date || '').trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d) && (!best || d < best)) best = d;
+      });
+      return best;
+    }
+    function intlDueHtml(dateStr){
+      const d = String(dateStr || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '';
+      const p = d.split('-');
+      const dt = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+      dt.setHours(0, 0, 0, 0);
+      if (isNaN(dt.getTime())) return '';
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const days = Math.round((dt.getTime() - today.getTime()) / 86400000);
+      const md = p[1] + '-' + p[2];
+      let color = 'var(--ink-soft)', extra = '', tail = '还有 ' + days + ' 天';
+      if (days < 0)        { color = '#991b1b'; extra = 'font-weight:800;'; tail = '已过期，请联系团长'; }
+      else if (days === 0) { color = '#991b1b'; extra = 'font-weight:800;'; tail = '今天到期，请尽快交'; }
+      else if (days <= 3)  { color = '#b45309'; tail = '还有 ' + days + ' 天，请尽快交'; }
+      return '<div style="margin-top:4px; font-size:12px; line-height:1.7; color:' + color + ';' + extra + ';">'
+           + '🌍 国际掉落 <b>' + esc(md) + '</b> 到期 · ' + esc(tail) + '</div>';
+    }
+
     /* 物流费用（image_data.logistics_data）里的待交条目 —— 它是独立的一份数据，
        普通订单表里根本没有，所以「交肾核算」必须单独把它并进来，否则团员看不到。
        口径必须与机器人 logistics_fee.unpaid_logistics_members 完全一致：
@@ -2515,6 +2556,15 @@
 
         if (due) {
           html += '<div style="margin-top:4px; font-size:12px; color:var(--ink-soft);">待交款 ' + due + (g.intl ? ' 项' : ' 条') + ' · 应付 ￥' + g.total.toFixed(2) + '</div>';
+          // 🌍 国际掉落到期日（2026-11-07 团长要求）：只给该批次确有「未交国际运费」的人显示。
+          //    g.items 里的 __intl 条目来自 collectIntlUnpaid（只收 status='未交' 且 amount_due>0），
+          //    所以已交 / 免交 / 无关批次都不会出现；岛内那段(__island)也不显示。
+          //    没设到期日的批次不显示（与后台「留空＝不计时、不告警」一致）。
+          const _hasIntlUnpaid = (g.items || []).some(function(x){ return x && x.__intl && !x.__island; });
+          if (_hasIntlUnpaid) {
+            const _dueLine = intlDueHtml(intlDueDateForBatch(g.name));
+            if (_dueLine) html += _dueLine;
+          }
           if (pendingAmt > 0) {
             html += '<div style="margin-top:4px; font-size:12px; color:#a16207; line-height:1.7;">⏳ 你已经提交了 <b>￥' + pendingAmt.toFixed(2) + '</b> 在等团长确认'
                  + (payGap > 0 ? ('，<b>还需补交 ￥' + payGap.toFixed(2) + '</b>（两张加起来正好对上）。') : '，金额已经够了，先不用再交。')
