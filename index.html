@@ -1445,15 +1445,6 @@
         <div class="entry-line"></div>
       </div>
 
-      <div class="entry" onclick="openPanel('fbreply')">
-        <div class="entry-icon"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-mail-search" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></div>
-        <div class="entry-meta">
-          <div class="entry-sub">AS / FEEDBACK · REPLY</div>
-          <div class="entry-name">查反馈回复</div>
-        </div>
-        <div class="entry-line"></div>
-      </div>
-
     </div>
     <div class="mobile-contact">此系统为 山团进大观园谷团 专用 · 负责人：辰安 · 3153199243 · 版本 2026-10-22</div>
   </div>
@@ -1478,7 +1469,7 @@
 
         <div class="field" style="margin-top: 32px;">
           <label for="panelKey">Password · 查询密码</label>
-          <input id="panelKey" placeholder="全团统一密码：4goods" oninput="if(typeof currentPanel!=='undefined'){ if(currentPanel==='fbreply') renderMyFbCodes(); if(currentPanel==='piggy') piggyDebouncedLoad(); }">
+          <input id="panelKey" placeholder="全团统一密码：4goods" oninput="if(typeof currentPanel!=='undefined'){ if(currentPanel==='feedback') loadMyFeedback(); if(currentPanel==='piggy') piggyDebouncedLoad(); }">
           <div style="font-size:0.72rem; line-height:1.75; color:var(--ink-soft); margin-top:8px;">
             全团统一密码是 <b>4goods</b>（大小写不影响）。<br>
             以前自己改过密码的，就用你改的那个；忘了就私聊机器人发 <b>/绑定 你的圈名 4goods</b> 重置回来。
@@ -1510,18 +1501,30 @@
           <div id="fbSubmitResult" style="display:none;"></div>
         </div>
 
-        <!-- 查反馈回复字段（默认隐藏） -->
-        <div id="fbReplyFields" style="display:none;">
-          <div class="field" style="margin-top: 32px;">
-            <label for="fbCode">反馈编号 · 取件码</label>
-            <input id="fbCode" placeholder="提交反馈时给你的 6 位编号" style="text-transform:uppercase; letter-spacing:2px;" autocomplete="off">
+        <!-- 我的反馈 · 团长回复（2026-11-09：合并进匿名反馈，不再单设独立入口） -->
+        <div id="fbMyFeedback" style="display:none;">
+          <div style="margin-top: 32px;">
+            <div style="font-size:0.8rem; font-weight:600; letter-spacing:1px; color:var(--ink);">MY FEEDBACK · 我的反馈与回复</div>
+            <div style="font-size:12px; line-height:1.8; color:var(--ink-soft); margin-top:6px;">
+              在这台手机上提交过的反馈会自动列在下面；团长回复了也直接显示，不用再记编号。
+            </div>
           </div>
-          <div id="fbMyCodes" style="font-size:12px; color:var(--ink-soft); margin:8px 0 4px; line-height:1.8;"></div>
-          <button class="panel-btn" id="fbQueryBtn" onclick="queryFeedbackReply()">
-            <span class="scan"></span>
-            <span>CHECK REPLY</span>
-          </button>
-          <div id="fbReplyResult" style="display:none; margin-top:16px;"></div>
+          <div id="fbMyList" style="margin-top:12px;"></div>
+          <div style="margin-top:14px; border-top:1px dashed rgba(33,33,33,0.18); padding-top:12px;">
+            <span onclick="toggleFbFind()" style="font-size:12px; color:var(--ink-soft); text-decoration:underline; cursor:pointer;">在别的手机上提过？用反馈编号找回 ▾</span>
+            <div id="fbFindBox" style="display:none; margin-top:10px;">
+              <div class="field" style="margin-top:0;">
+                <label for="fbCode">反馈编号</label>
+                <input id="fbCode" placeholder="6 位编号" style="text-transform:uppercase; letter-spacing:2px;" autocomplete="off">
+              </div>
+              <div id="fbMyCodes" style="font-size:12px; color:var(--ink-soft); margin:8px 0 4px; line-height:1.8;"></div>
+              <button class="panel-btn" id="fbQueryBtn" onclick="queryFeedbackReply()">
+                <span class="scan"></span>
+                <span>FIND BY CODE</span>
+              </button>
+              <div id="fbReplyResult" style="display:none; margin-top:16px;"></div>
+            </div>
+          </div>
         </div>
 
         <!-- 💰 零钱罐 · 存钱表单（默认隐藏）2026-10-14 团长需求
@@ -3792,7 +3795,6 @@
       fee: '交肾核算',
       dispatch: '排发调度',
       feedback: '匿名反馈',
-      fbreply: '查反馈回复',
       piggy: '零钱罐 · 我要存钱'
     };
     const PANEL_SUBS = {
@@ -3800,7 +3802,6 @@
       fee: 'AS / PAYMENT · FEE',
       dispatch: 'AS / SHIPPING · DISPATCH',
       feedback: 'AS / FEEDBACK',
-      fbreply: 'AS / FEEDBACK · REPLY',
       piggy: 'AS / PIGGY BANK · DEPOSIT'
     };
     const PANEL_ACTIONS = {
@@ -3890,17 +3891,16 @@
       const fb = document.getElementById('fbFields');
       const isQuery = type === 'query';
       const isFeedback = type === 'feedback';
-      const isFbReply = type === 'fbreply';
       const isPiggy = type === 'piggy';   // 💰 零钱罐：同样要「密钥 + 圈名」来定位档案
-      // 自助查询/交肾核算/排发调度/零钱罐 需要 个人密码+CN；匿名反馈与查回复只需要密码（用来定位写入的数据行），不需要 CN
-      const needKey = (type === 'query' || type === 'fee' || type === 'dispatch' || type === 'feedback' || type === 'fbreply' || isPiggy);
+      // 自助查询/交肾核算/排发调度/零钱罐 需要 个人密码+CN；匿名反馈只需要密码（用来定位写入的数据行），不需要 CN
+      const needKey = (type === 'query' || type === 'fee' || type === 'dispatch' || type === 'feedback' || isPiggy);
       const needCn = (type === 'query' || type === 'fee' || type === 'dispatch' || isPiggy);
       if (q) q.parentElement.style.display = needKey ? 'block' : 'none';
       if (cn) cn.parentElement.style.display = needCn ? 'block' : 'none';
       if (qBtn) qBtn.style.display = (needCn && !isPiggy) ? 'block' : 'none';
       if (fb) fb.style.display = isFeedback ? 'block' : 'none';
-      const fbr = document.getElementById('fbReplyFields');
-      if (fbr) fbr.style.display = isFbReply ? 'block' : 'none';
+      const fbm = document.getElementById('fbMyFeedback');
+      if (fbm) fbm.style.display = isFeedback ? 'block' : 'none';
       const pgy = document.getElementById('piggyFields');
       if (pgy) pgy.style.display = isPiggy ? 'block' : 'none';
       if (isPiggy) {
@@ -3913,7 +3913,7 @@
         if (pp) pp.innerHTML = '';
         loadPiggyPanel();
       }
-      if (isFbReply) renderMyFbCodes();
+      if (isFeedback) { renderMyFbCodes(); loadMyFeedback(); }
       // 每次打开面板清掉上一次的残留结果
       const fbs = document.getElementById('fbSubmitResult');
       if (fbs) { fbs.style.display = 'none'; fbs.innerHTML = ''; }
@@ -3975,14 +3975,15 @@
         saveMyFbCode(key, newCode);
         showFbSubmitResult(newCode);
         document.getElementById('fbContent').value = '';
-        showToast('✅ 反馈已提交，请截图保存编号！');
+        showToast('✅ 反馈已提交，回复会直接显示在下面');
+        try { loadMyFeedback(); } catch(e){}
       } catch(e){
         showToast('提交失败: ' + e.message);
       } finally {
         window.__FEEDBACK_SUBMITTING = false;
       }
     }
-    /* ===== 匿名反馈取件码：给匿名反馈一个回执凭据，团员凭码查团长的回复 ===== */
+    /* ===== 匿名反馈回执编号：本机自动记住，只在跨设备找回时才需要手输 ===== */
     function esc(s){
       return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
         return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
@@ -4018,28 +4019,77 @@
     function renderMyFbCodes(){
       const kEl = document.getElementById('panelKey');
       const box = document.getElementById('fbMyCodes');
-      const input = document.getElementById('fbCode');
       if (!box) return;
       const codes = getMyFbCodes(((kEl && kEl.value) || '').trim());
-      if (!codes.length) { box.innerHTML = '<span style="opacity:.75;">在这台手机上提交过反馈的话，编号会自动填好。</span>'; return; }
-      box.innerHTML = '本机提交过的编号（点一下自动填入）：<br>' + codes.map(function(c){
+      if (!codes.length) { box.innerHTML = ''; return; }
+      box.innerHTML = '本机记着的编号（点一下填入）：<br>' + codes.map(function(c){
         return '<span onclick="var i=document.getElementById(\'fbCode\'); if(i) i.value=\'' + c + '\';" style="display:inline-block; margin:4px 8px 4px 0; padding:4px 8px; border:1px solid rgba(33,33,33,0.25); border-radius:8px; cursor:pointer; letter-spacing:1px;">' + esc(c) + '</span>';
       }).join('');
-      if (input && !input.value) input.value = codes[0];
     }
+
+    /* 打开「匿名反馈」时自动列出本机提交过的反馈与团长回复（编号退到幕后） */
+    async function loadMyFeedback(){
+      const box = document.getElementById('fbMyList');
+      if (!box) return;
+      const keyEl = document.getElementById('panelKey');
+      const key = ((keyEl && keyEl.value) || '').trim();
+      if (!key) {
+        box.innerHTML = '<div style="padding:14px; border-radius:12px; background:rgba(33,33,33,0.04); font-size:13px; line-height:1.8; color:var(--ink-soft);">填好查询密码后，这台手机上提交过的反馈会自动列出来。</div>';
+        return;
+      }
+      const codes = getMyFbCodes(key);
+      if (!codes.length) {
+        box.innerHTML = '<div style="padding:14px; border-radius:12px; background:rgba(33,33,33,0.04); font-size:13px; line-height:1.8; color:var(--ink-soft);">这台手机上还没有提交过反馈。<br>团长回复后会自动出现在这里；如果是在别的手机上提的，点下面「用反馈编号找回」。</div>';
+        return;
+      }
+      box.innerHTML = '<div style="padding:14px; font-size:13px; color:var(--ink-soft);">🛰️ 正在调取我的反馈……</div>';
+      try {
+        const data = await fetchLeaderData(key);
+        if (!data || !data.length) { box.innerHTML = '<div style="padding:14px; font-size:13px; color:var(--ink-soft);">没查到档案，请确认查询密码。</div>'; return; }
+        let imgData = data[0].image_data;
+        if (typeof imgData === 'string') { try { imgData = JSON.parse(imgData); } catch(e){ imgData = {}; } }
+        const list = (imgData && Array.isArray(imgData.feedback)) ? imgData.feedback : [];
+        const mine = codes.map(function(c){ return list.filter(function(f){ return fbCodeOf(f) === c; })[0]; }).filter(Boolean);
+        if (!mine.length) { box.innerHTML = '<div style="padding:14px; font-size:13px; color:var(--ink-soft);">本机记着的编号在档案里没找到对应反馈，可能已经清理过了。</div>'; return; }
+        box.innerHTML = mine.map(function(fb){
+          const st = fb.status || '未读';
+          const stColor = (st === '已处理') ? '#15803d' : ((st === '已读') ? '#185FA5' : '#a16207');
+          const replyHtml = (fb.reply && String(fb.reply).trim())
+            ? '<div style="margin-top:10px; padding:10px 12px; border-radius:8px; background:rgba(21,128,61,0.08); border:1px solid rgba(21,128,61,0.25); font-size:13px; line-height:1.8; white-space:pre-wrap;">💬 <b>团长回复：</b><br>' + esc(fb.reply) + '</div>'
+            : '<div style="margin-top:10px; font-size:12px; color:var(--ink-soft);">团长还没回复这条，过几天再来看看。</div>';
+          return '<div style="margin-bottom:12px; padding:14px; border-radius:12px; background:rgba(33,33,33,0.04); border:1px solid rgba(33,33,33,0.12);">'
+            + '<div style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; align-items:center;">'
+            + '<span style="font-size:13px; font-weight:600;">' + esc(fb.category || '其他') + ' · 编号 ' + esc(fbCodeOf(fb)) + '</span>'
+            + '<span style="font-size:11px; padding:3px 8px; border-radius:20px; border:1px solid ' + stColor + '55; color:' + stColor + ';">' + esc(st) + '</span></div>'
+            + '<div style="margin-top:6px; font-size:11px; color:var(--ink-soft);">' + esc(fb.created_at || '') + '</div>'
+            + '<div style="margin-top:8px; font-size:13px; line-height:1.8; color:var(--ink-soft); white-space:pre-wrap;">📝 <b>我的反馈：</b><br>' + esc(fb.content || '') + '</div>'
+            + replyHtml + '</div>';
+        }).join('');
+      } catch(e){
+        box.innerHTML = '<div style="padding:14px; font-size:13px; line-height:1.8; color:var(--ink-soft);">加载失败：' + esc(String((e && e.message) || e || '网络中断')) + '<br>再点一次「匿名反馈」就好。</div>';
+      }
+    }
+
+    function toggleFbFind(){
+      const b = document.getElementById('fbFindBox');
+      if (!b) return;
+      const on = (b.style.display === 'none' || !b.style.display);
+      b.style.display = on ? 'block' : 'none';
+    }
+
     function showFbSubmitResult(code){
       const box = document.getElementById('fbSubmitResult');
       if (!box) return;
       box.style.display = 'block';
       box.innerHTML =
         '<div style="margin-top:16px; padding:16px; border:1px dashed rgba(33,33,33,0.3); border-radius:12px; background:rgba(33,33,33,0.04);">' +
-        '<div style="font-size:12px; letter-spacing:1px; color:var(--ink-soft);">YOUR FEEDBACK CODE · 反馈编号</div>' +
+        '<div style="font-size:12px; letter-spacing:1px; color:var(--ink-soft);">FEEDBACK SENT · 反馈已提交</div>' +
         '<div id="fbNewCode" style="margin:8px 0 8px; font-size:28px; font-weight:700; letter-spacing:5px; color:var(--accent);">' + esc(code) + '</div>' +
         '<div style="font-size:12px; line-height:1.75; color:var(--ink-soft);">' +
-        '团长回复后，回首页点「查反馈回复」，输入密钥 + 这个编号就能看到答复。<br>' +
-        '⚠️ 这个编号只显示这一次，请截图保存；弄丢了只能重新提一条。</div>' +
+        '团长回复后，打开「匿名反馈」就能直接看到，不用再输编号。<br>' +
+        '编号已自动记在这台设备上；换手机时可以用它把回复找回来。</div>' +
         '<div style="margin-top:12px;">' +
-        '<button type="button" onclick="copyFbCode()" style="padding:8px 16px; border-radius:8px; border:1px solid rgba(33,33,33,0.3); background:transparent; color:var(--ink); font-size:13px; cursor:pointer;">复制编号</button>' +
+        '<button type="button" onclick="copyFbCode()" style="padding:8px 16px; border-radius:8px; border:1px solid rgba(33,33,33,0.3); background:transparent; color:var(--ink); font-size:13px; cursor:pointer;">复制编号（换手机时用）</button>' +
         '</div></div>';
     }
     /* 复制应付金额：只要纯数字，粘到微信/支付宝的转账金额框就能直接用 */
@@ -4272,7 +4322,6 @@
           if (e.key !== 'Enter' && e.keyCode !== 13) return;
           e.preventDefault();
           el.blur();                       // 手机上顺手收起键盘，结果才看得见
-          if (currentPanel === 'fbreply') return queryFeedbackReply();
           if (currentPanel === 'feedback') return;
           panelAction();
         });
@@ -4479,7 +4528,7 @@
           + '<div class="todo-s">' + (typeof intlDueHtml === 'function' ? intlDueHtml(t.due).replace(/<[^>]+>/g, '') : '') + '</div></div></div>');
       }
       if (t.replyCount > 0) {
-        cards.push('<div class="todo-card" onclick="todoGo(\'fbreply\')" style="border-color:rgba(21,128,61,.35); background:rgba(220,252,231,.7);">'
+        cards.push('<div class="todo-card" onclick="todoGo(\'feedback\')" style="border-color:rgba(21,128,61,.35); background:rgba(220,252,231,.7);">'
           + '<div class="todo-ic">💬</div><div><div class="todo-t">团长回复了 ' + t.replyCount + ' 条反馈</div>'
           + '<div class="todo-s">点这里看回复内容</div></div></div>');
       }
