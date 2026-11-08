@@ -1184,8 +1184,151 @@
     }
 
   </style>
+
+  <!-- 🔑 整站登录样式（2026-11-08 上线版）：只作用于登录名片 / 状态栏 / 待办红点 -->
+  <style>
+
+    /* ===== 🔑 登录名片（2026-11-08 定稿交接包）=====
+       色值 / 尺寸 / 圆角 / 字重 / 字距 / 文案逐项按 00-交接说明.md 第 4、5 节锁死。
+       只作用于登录卡片本体：#loginGate 全屏背景、待办红点、首页样式一律不动。
+       登录态条另有 B 档定稿（见下方 #loginBadge 段），同样只换自身 DOM/CSS。
+       背景图团长自备：丢进 images\ 命名 login_bg.png/.jpg/.webp 会自动顶上，
+       没给图时用网站现有的首页背景垫底（本包明确不管背景，不引入新图）。 */
+    #loginGate{position:fixed; inset:0; z-index:99998; display:flex; align-items:center;
+      justify-content:center; padding:18px; font-family:var(--sans);
+      background-color:#151b26;
+      background-image:url('images/bg_topo_light_v2.jpg?v=2');
+      background-size:cover; background-position:center;}
+    #loginGate.hidden{display:none;}
+    #loginGate::before{content:''; position:absolute; inset:0; background:rgba(10,15,24,.55);}
+    /* 卡片：411px / 22px / 阴影，锁死 */
+    #loginGate .login-card{position:relative; z-index:1; width:411px;
+      background:#FFFFFF; border-radius:22px; overflow:hidden;
+      box-shadow:0 18px 48px rgba(14,15,18,.16); color:#1A1E23;}
+    /* 黑栏：70px / #0E0F12 / 底部 3px 天蓝细线 */
+    #loginGate .login-topbar{position:relative; height:70px; box-sizing:border-box;
+      background:#0E0F12; border-bottom:3px solid #1B9CF0;
+      display:flex; align-items:center; justify-content:center;}
+    /* 黑栏暗菱形点阵：18px 网格、#2B2C2F，属于名片本体 */
+    #loginGate .login-topbar::before{content:''; position:absolute; inset:0; pointer-events:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18'%3E%3Cpath d='M9 6.7 11.3 9 9 11.3 6.7 9Z' fill='%232B2C2F'/%3E%3C/svg%3E");
+      background-size:18px 18px;}
+    /* 顶部标：烧进 PNG 的「猫头 + 山团团 + SHAN TUAN TUAN」，不再叠一行英文 */
+    #loginGate .login-brand{position:relative; z-index:1; text-align:center;}
+    #loginGate .login-brand img{display:inline-block; height:60px; width:auto;}
+    #loginGate .login-x{position:absolute; right:16px; top:18px; z-index:2;
+      width:32px; height:32px; padding:0; border:0; border-radius:50%;
+      background:rgba(255,255,255,.12); color:#fff; font-size:19px; line-height:32px;
+      text-align:center; cursor:pointer; font-family:var(--sans);}
+    #loginGate .login-body{padding:26px 22px 22px;}
+    /* 胶囊输入框：52px / 1px #E4E6EA / 999px / gap 12px / padding 0 20px / 下间距 18px */
+    #loginGate .login-field{display:flex; align-items:center; gap:12px; height:52px;
+      box-sizing:border-box; padding:0 20px; margin-bottom:18px; border:1px solid #E4E6EA;
+      border-radius:999px; background:#FFFFFF; color:#6B7280; font-size:14px;}
+    /* 定稿里的 .inp.focus 是演示态，落地由真实 :focus-within 驱动（2px 蓝边 + 字色同步变蓝） */
+    #loginGate .login-field:focus-within{border:2px solid #1B9CF0; color:#1B9CF0;}
+    #loginGate .login-field .ficon{flex:none; width:18px; height:18px; color:currentColor;}
+    #loginGate .login-field input{flex:1; min-width:0; border:0; outline:0; background:none;
+      font-size:14px; font-family:var(--sans); color:#1A1E23;}
+    #loginGate .login-field input::placeholder{color:#6B7280; opacity:1;}
+    #loginGate .login-eye{flex:none; width:26px; height:26px; border:0; background:none;
+      padding:0; color:#9AA3AD; cursor:pointer;}
+    #loginGate .login-eye svg{width:18px; height:18px; display:block;}
+    #loginGate .login-eye[data-on="1"] .eye-slash{display:none;}
+    /* 浅灰提示块：12px / 12px 圆角 / 14px 16px / 12px 字 / 1.7 行高 */
+    #loginGate .login-note{margin:2px 0 22px; padding:14px 16px; border-radius:12px;
+      background:#F4F5F7; color:#6B7280; font-size:12px; line-height:1.7;}
+    /* 主按钮：52px / #FEFE2C / 16px 700 / 字距 .08em */
+    #loginGate .login-btn{display:block; width:100%; height:52px; border:0; border-radius:999px;
+      background:#FEFE2C; color:#0E0F12; font-size:16px; font-weight:700; letter-spacing:.08em;
+      cursor:pointer; font-family:var(--sans);}
+    /* 备用样式：本地演示页的一键登录按钮；上线版不放该按钮，不影响视觉。 */
+    #loginGate .login-btn.ghost{height:46px; margin-top:14px; padding:0;
+      border:1px solid #E4E6EA; border-radius:999px; background:#FFFFFF;
+      font-size:13px; font-weight:400; letter-spacing:normal; color:#3A4149;}
+    /* 错误提示属登录逻辑反馈，不属于名片视觉层，保持原样 */
+    #loginGate .login-err{display:none; margin-top:12px; padding:9px 11px; border-radius:9px;
+      background:#FEE2E2; color:#991B1B; font-size:12px; line-height:1.6;}
+    #loginGate .login-err.on{display:block;}
+    /* ===== 登录状态栏（B 档「无边框行内」定稿片段）=====
+       ⚠️ 首页 :root 已有 --ink / --muted / --line，但值不同；--blue / --hint / --panel 根本没定义。
+       直接抄定稿的 var(--blue) 会解析到首页同名变量或直接失效 → 蓝点不显示、细线看不见。
+       因此 6 个色板变量只定义在本组件作用域内，绝不覆盖全局 :root（不动首页原有配色）。
+       位置仍保持右上 fixed 悬浮（团长这轮选定），不碰首页布局。
+       ⚠️ B 档透明无底色，原 top:10px 会和首页原有 .hud-panel（top:30 / 高约 89，底部≈119）
+       透叠成两团字。只把 top 下移到 132px 避开，色值尺寸文案一个不改，也不动 HUD 本身。 */
+    #loginBadge{
+      --ink:#0E0F12; --blue:#1B9CF0; --panel:#FFFFFF;
+      --hint:#F4F5F7; --line:#E4E6EA; --muted:#6B7280;
+      position:fixed; top:132px; right:12px; z-index:99997;
+      display:flex; align-items:center; font-family:var(--sans);
+      background:transparent; border:0; border-radius:0; box-shadow:none;}
+    #loginBadge.hidden{display:none;}
+    #loginBadge .sb-dot{flex:none; width:7px; height:7px; border-radius:50%;
+      background:var(--blue); margin-right:9px;}
+    /* 未登录态灰点：用色板内 --line，不引入新色值；蓝点始终配「已登录：」文字 */
+    #loginBadge .sb-dot.off{background:var(--line);}
+    #loginBadge .sb-lbl{font-size:11px; color:var(--muted); white-space:nowrap;}
+    #loginBadge .sb-name{font-size:14px; font-weight:600; color:var(--ink);
+      white-space:nowrap; margin-left:3px;}
+    #loginBadge .sb-out{margin-left:auto; flex:none; min-width:44px; height:44px;
+      display:flex; align-items:center; justify-content:center; padding:0 14px;
+      border:0; background:transparent; cursor:pointer; font-family:var(--sans);
+      font-size:12px; color:var(--muted); white-space:nowrap;}
+    #loginBadge .sb-out:hover{color:var(--blue);}
+    #loginBadge.sb-b{min-height:44px; padding:0 4px; border-bottom:1px solid var(--line);}
+    #loginBadge.sb-b .sb-out{border-radius:8px;}
+    #loginBadge.sb-b .sb-out:hover{background:var(--hint);}
+    /* 图标左上角红点：挂在 .entry 上（.entry-icon 自带 clip-path 会裁掉内侧红点） */
+    .todo-dot{position:absolute; top:2px; left:-4px; width:12px; height:12px;
+      border-radius:50%; background:#e11d48; border:2px solid #fff;
+      box-shadow:0 0 0 2px rgba(225,29,72,.28); display:none; z-index:5;}
+    .todo-dot.on{display:block;}
+    /* 团长确认：桌面严格锁死 411px，仅窄屏加这一条保护，其余规格一个不动 */
+    /* 粥团站顶栏用团名文字（团长定：不串山团团标识），与 60px logo 区等高 */
+    #loginGate .login-brand .brand-text{display:block; height:60px; line-height:60px;
+      color:#FFFFFF; font-size:19px; font-weight:800; letter-spacing:.16em;}
+    @media (max-width:443px){
+      #loginGate .login-card{width:calc(100vw - 28px);}
+    }
+  </style>
 </head>
 <body>
+  <!-- 🔑 登录名片（定稿交接包）：黑栏 + 暗菱形点阵 + 顶部标 PNG + 白卡表单。
+       只留右上 ×；不搬参考图的三份协议 / 别家商标 / 游戏场景图。
+       顶部标按站分流：正式站用定稿 PNG，粥团站用本站团名文字（不串标识）。 -->
+  <div id="loginGate">
+    <div class="login-card">
+      <div class="login-topbar">
+        <div class="login-brand"><img src="images/logo_shantuan_en.png" alt="山团团"></div>
+        <button type="button" class="login-x" id="loginClose" onclick="authCloseGate()" aria-label="关闭">&times;</button>
+      </div>
+      <div class="login-body">
+        <div class="login-field">
+          <svg class="ficon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c0-4 3.4-6.5 7.5-6.5s7.5 2.5 7.5 6.5"/></svg>
+          <input id="loginCn" autocomplete="off" placeholder="请输入 CN / 团员编号">
+        </div>
+        <div class="login-field">
+          <svg class="ficon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
+          <input id="loginKey" type="password" autocomplete="off" placeholder="请输入查询密钥">
+          <button type="button" class="login-eye" id="loginEye" data-on="0" onclick="authToggleKey()" aria-label="显示密钥">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/><path class="eye-slash" d="M3 21 21 3"/></svg>
+          </button>
+        </div>
+        <div class="login-note">仅用于查询本团账目，不会新建账号。密钥就是你现在用的查询密码，没设过的用统一密钥。</div>
+        <button class="login-btn" onclick="authDoLogin()">登录</button>
+        <div class="login-err" id="loginErr"></div>
+      </div>
+    </div>
+  </div>
+  <!-- 登录状态栏 B 档：无边框 / 无底色 / 无投影，只留底部 1px 细线。
+       用户名是运行时数据，不硬编码；未登录态沿用「点此登录」把人带回登录页。 -->
+  <div id="loginBadge" class="hidden sb sb-b">
+    <span class="sb-dot off" id="loginBadgeDot" aria-hidden="true"></span>
+    <span class="sb-lbl" id="loginBadgeLbl">未登录 · 只读</span><span class="sb-name" id="loginBadgeName"></span>
+    <button type="button" class="sb-out" id="loginBadgeBtn" onclick="authLogout()">退出登录</button>
+  </div>
+
   <!-- 终末地工业 HUD 装饰层 -->
   <div class="hud">
     <div class="hud-corner tl"></div>
@@ -1242,6 +1385,17 @@
     <div class="right">
       <div class="topo" id="topo"></div>
       <div class="network" id="network"></div>
+
+      <!-- 📌 我的待办（2026-11-08）：整站登录后，首页自动查一次「有没有待办」，
+           有待办才在图标左上角挂红点；点开才看内容，不显示金额。 -->
+      <div class="entry" id="myTodoEntry" onclick="openMyTodo()">
+        <div class="entry-icon"><svg class="lucide-ic" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div><span class="todo-dot" id="todoDot" aria-hidden="true"></span>
+        <div class="entry-meta">
+          <div class="entry-sub">AS / MY TODO</div>
+          <div class="entry-name">查看我的待办</div>
+        </div>
+        <div class="entry-line"></div>
+      </div>
 
       <div class="entry" onclick="openPanel('fee')">
         <div class="entry-icon"><!-- @license lucide-static v0.462.0 - ISC --><svg class="lucide-ic ic-japanese-yen" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 9.5V21m0-11.5L6 3m6 6.5L18 3" /><path d="M6 15h12" /><path d="M6 11h12" /></svg></div>
@@ -1443,6 +1597,26 @@
   </div>
 
   <div class="toast" id="toast"></div>
+  <!-- 📌 我的待办浮层（2026-11-08） -->
+  <div class="taotie-overlay" id="myTodoOverlay" onclick="if(event.target===this)closeMyTodo()">
+    <div class="taotie-card" style="width:min(480px,94vw);">
+      <button class="taotie-close" onclick="closeMyTodo()" aria-label="关闭">✕</button>
+      <div class="taotie-head">
+        <span class="taotie-mascot">📌</span>
+        <div>
+          <div class="taotie-title">我的待办</div>
+          <div class="taotie-sub" id="myTodoWho">登录后自动看一眼有没有待办，点开才看内容</div>
+        </div>
+      </div>
+      <div style="padding:0 18px 10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <span id="todoLoginName" style="font-size:12px; color:var(--ink-soft);">🔒 未登录</span>
+        <button type="button" onclick="authLogout()" style="padding:7px 12px; border:1px solid rgba(33,33,33,.3); border-radius:999px; background:#fff; font-size:12px; cursor:pointer; font-family:var(--sans);">退出登录 / 换人</button>
+      </div>
+      <div class="taotie-list" id="myTodoBody"></div>
+      <div class="taotie-foot">这张卡只数「有几笔、哪天到期」，准确金额以「交肾核算」为准；共用设备看完请点「退出登录」。</div>
+    </div>
+  </div>
+
 
   <!-- 🏆 饕餮榜 -->
   <div class="taotie-overlay" id="taotieOverlay" onclick="if(event.target===this)closeTaotie()">
@@ -3696,6 +3870,7 @@
     });
 
     function openPanel(type){
+      if (typeof closeMyTodo === 'function') closeMyTodo();   // 📌 换面板时别把上一个人的待办留在屏幕上
       // 切换面板时先隐藏并清空遗留的查询结果，避免数据表卡住
       const overlay = document.getElementById('queryResultOverlay');
       if (overlay) { overlay.style.display = 'none'; }
@@ -4019,6 +4194,7 @@
        ⚠️ 这里的清理目标与 openPanel() 开头那段**是同一批**（overlay / resultList / payBox /
           batchFilter / piggy / 反馈回执）；以后新增「跟人绑定」的结果区，两个地方都要加。 */
     function resetPanelResults() {
+      if (typeof closeMyTodo === 'function') closeMyTodo();   // 📌 身份清了，待办结果也一起清掉
       const overlay = document.getElementById('queryResultOverlay');
       if (overlay) overlay.style.display = 'none';
       const rList = document.getElementById('resultList');
@@ -4108,6 +4284,230 @@
       const fn = PANEL_ACTIONS[currentPanel];
       if (fn) fn();
     }
+    /* ===== 📌 我的待办（2026-11-08 上线版）=====
+       ⚠️ 整站登录后：首页自动查一次「有没有待办」，只取条数用于亮红点，
+          绝不把账单明细 / 金额摊在屏幕上；未登录时一次都不查。
+       ⚠️ 点开待办卡才渲染内容；纯只读聚合，不写库、不改状态、不重算金额。
+          交肾核算里定金/尾款/凭证抵扣口径很复杂，这里另算一个「欠多少」
+          会和卡片上的数字对不上，所以只给「有几笔 / 哪天到期」+ 直达入口。 */
+    function todoNormCn(s){ return String(s || '').trim().toLowerCase(); }
+
+    /* 从整行档案里聚合待办。抽出来是为了能单独真跑验证，不依赖 DOM。 */
+    function todoCollect(row, cn, codes){
+      const lower = todoNormCn(cn);
+      const img = (typeof parseImgData === 'function') ? parseImgData(row) : {};
+      let gd = row && row.group_data;
+      if (typeof gd === 'string') { try { gd = JSON.parse(gd); } catch(e){ gd = []; } }
+      if (!Array.isArray(gd)) gd = [];
+      let arc = img.archived_items;
+      if (typeof arc === 'string') { try { arc = JSON.parse(arc); } catch(e){ arc = []; } }
+      if (!Array.isArray(arc)) arc = [];
+      const arr = gd.concat(arc);
+      // 与 doQuery('fee') 完全相同的筛选口径：未付款 / 未交 / 已交定金
+      let items = arr.filter(function(it){
+        return todoNormCn(it && it.cn) === lower &&
+          ['未付款','未交','已交定金'].indexOf(String((it && it.status) || '').trim()) >= 0;
+      });
+      // 国际/岛内运费在另一份数据里，复用现成函数补进来（与主查询一致）
+      if (typeof collectIntlUnpaid === 'function') items = items.concat(collectIntlUnpaid(row, lower));
+      const batches = [], seen = {};
+      items.forEach(function(it){
+        const bn = String((it && it.batch_name) || '默认批次').trim();
+        if (!seen[bn]) { seen[bn] = 1; batches.push(bn); }
+      });
+      const proofs = Array.isArray(img.pay_proofs) ? img.pay_proofs : [];
+      const pending = proofs.filter(function(p){
+        return todoNormCn(p && p.cn) === lower && String((p && p.status) || '待审核') === '待审核';
+      });
+      /* 最近一个「非岛内」批次的国际到期日。
+         ⚠️ 正式站的 intlDueDateForBatch 读的是 window.__LAST_ROW（全局，服务交肾核算卡片）；
+            这里改成从传入的 row 直接算，判断口径与它完全一致（同批取最早 / 只认含非岛内成员的批次），
+            但 todoCollect 不再隐式依赖任何全局状态，可以单独真跑验证。 */
+      let due = '';
+      let logi = img.logistics_data;
+      if (typeof logi === 'string') { try { logi = JSON.parse(logi); } catch(e){ logi = []; } }
+      if (Array.isArray(logi)) {
+        const want = {};
+        items.forEach(function(it){
+          if (it && it.__intl && it.__island) return;   // 岛内绝不出现「国际」字样
+          want[String((it && it.batch_name) || '默认批次').trim()] = 1;
+        });
+        logi.forEach(function(b){
+          if (!b || typeof b !== 'object') return;
+          const bn = String(b.batch_name || '').trim();
+          if (!want[bn]) return;
+          const fm = Array.isArray(b.fee_members) ? b.fee_members : [];
+          if (!fm.some(function(m){ return m && String(m.fee_type || '').trim() !== 'island'; })) return;
+          const d = String(b.intl_due_date || '').trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(d) && (!due || d < due)) due = d;
+        });
+      }
+      const fb = Array.isArray(img.feedback) ? img.feedback : [];
+      const myCodes = (codes || []).map(function(c){ return normCode(c); });
+      const replies = fb.filter(function(f){
+        return myCodes.indexOf(fbCodeOf(f)) >= 0 && String((f && f.reply) || '').trim();
+      });
+      return {
+        feeCount: items.length, batches: batches, pendingCount: pending.length,
+        due: due, replyCount: replies.length
+      };
+    }
+
+    function closeMyTodo(){
+      const ov = document.getElementById('myTodoOverlay');
+      if (ov) ov.classList.remove('open');
+      const box = document.getElementById('myTodoBody');
+      if (box) box.innerHTML = '';
+    }
+
+    /* ===== 🔑 整站登录后（2026-11-08）：待办只读「当前登录身份」 =====
+       不再有单独的 CN / 密码输入页；登录那层把身份记在本机，这里取来用。
+       ⚠️ todoRefreshDot 是首页自动跑的那一次：只判断「有没有待办」，
+          绝不渲染账单、绝不显示金额；未登录时一个字节都不查。 */
+    function todoIdentity(){
+      return { cn: _lsGet(LS_QCN), key: _lsGet(LS_QKEY) };
+    }
+
+    function todoSetDot(on){
+      const d = document.getElementById('todoDot');
+      if (d) d.className = 'todo-dot' + (on ? ' on' : '');
+    }
+
+    function todoHasAny(t){
+      return !!(t && (t.feeCount + t.pendingCount + (t.due ? 1 : 0) + t.replyCount) > 0);
+    }
+
+    async function todoRefreshDot(){
+      const id = todoIdentity();
+      if (!id.cn || !id.key) { todoSetDot(false); return null; }
+      try {
+        const auth = await verifyMember(id.cn, id.key);
+        if (auth !== true) { todoSetDot(false); return null; }
+        const data = await fetchLeaderData(id.key);
+        if (!data || !data.length) { todoSetDot(false); return null; }
+        window.__LAST_ROW = data[0];
+        const t = todoCollect(data[0], id.cn, getMyFbCodes(id.key));
+        todoSetDot(todoHasAny(t));
+        return t;
+      } catch(e){
+        todoSetDot(false);
+        return null;
+      }
+    }
+
+    function todoSwitchPerson(){
+      _lsSet(LS_QCN, ''); _lsSet(LS_QKEY, '');
+      closeMyTodo();
+      todoSetDot(false);
+      const n = document.getElementById('todoLoginName');
+      if (n) n.textContent = '🔒 未登录';
+      if (typeof authShowLogin === 'function') authShowLogin();
+    }
+
+    function openMyTodo(){
+      closeMyTodo();
+      const ov = document.getElementById('myTodoOverlay');
+      if (!ov) return;
+      ov.classList.add('open');
+      const id = todoIdentity();
+      const who = document.getElementById('myTodoWho');
+      if (who) who.textContent = id.cn
+        ? ('正在查看：' + id.cn + '（不是你？退出登录换人）') : '还没登录';
+      const n = document.getElementById('todoLoginName');
+      if (n) n.textContent = id.cn ? ('🔓 已登录：' + id.cn) : '🔒 未登录';
+      const box = document.getElementById('myTodoBody');
+      if (!box) return;
+      if (!id.cn || !id.key) {
+        box.innerHTML = '<div style="padding:18px; font-size:13px; line-height:1.9; color:var(--ink-soft);">请先登录（CN + 密钥），登录后才会查你自己的待办。</div>';
+        return;
+      }
+      loadMyTodo();
+    }
+
+    async function loadMyTodo(){
+      const box = document.getElementById('myTodoBody');
+      if (!box) return;
+      const id = todoIdentity();
+      if (!id.cn || !id.key) {
+        box.innerHTML = '<div style="padding:18px; font-size:13px; color:var(--ink-soft);">请先登录。</div>';
+        return;
+      }
+      box.innerHTML = '<div class="taotie-loading"><span class="qspin"></span>正在查你自己的账……</div>';
+      try {
+        const auth = await verifyMember(id.cn, id.key);
+        if (auth !== true) {
+          box.innerHTML = (auth === false)
+            ? '<div style="padding:18px; font-size:13px; line-height:1.9; color:var(--ink-soft);"><b style="color:#b45309;">密码不对。</b><br>不确定用哪个密码就私聊团长问一声；改过密码的用自己改的那个。</div>'
+            : '<div style="padding:18px; font-size:13px; line-height:1.9; color:var(--ink-soft);">密码校验暂时用不了，请过几分钟再点一次待办卡。</div>';
+          return;
+        }
+        const data = await fetchLeaderData(id.key);
+        if (!data || !data.length) {
+          box.innerHTML = '<div style="padding:18px; font-size:13px; color:var(--ink-soft);">没查到档案，请确认 CN 和密钥有没有填错。</div>';
+          return;
+        }
+        window.__LAST_ROW = data[0];
+        const t = todoCollect(data[0], id.cn, getMyFbCodes(id.key));
+        renderMyTodo(t, id.cn);
+        todoSetDot(todoHasAny(t));
+      } catch(e){
+        box.innerHTML = '<div style="padding:18px; font-size:13px; line-height:1.9; color:var(--ink-soft);">查询没成功：'
+          + escapeHtml(String((e && e.message) || e || '网络中断'))
+          + '<br>检查网络后再点一次待办卡。</div>';
+      }
+    }
+
+    function renderMyTodo(t, cn){
+      const box = document.getElementById('myTodoBody');
+      if (!box) return;
+      const who = document.getElementById('myTodoWho');
+      if (who) who.textContent = '正在查看：' + cn + '（不是你？点「退出登录」换人）';
+      const cards = [];
+      if (t.feeCount > 0) {
+        cards.push('<div class="todo-card" onclick="todoGo(\'fee\')" style="border-color:rgba(220,38,38,.35); background:rgba(253,242,242,.85);">'
+          + '<div class="todo-ic">🟡</div><div><div class="todo-t">有 ' + t.feeCount + ' 笔待交款</div>'
+          + '<div class="todo-s">分在 ' + t.batches.length + ' 个批次里 · 点这里打开交肾核算看准确金额和交款按钮</div></div></div>');
+      }
+      if (t.pendingCount > 0) {
+        cards.push('<div class="todo-card" onclick="todoGo(\'fee\')" style="border-color:rgba(161,98,7,.35); background:rgba(254,243,199,.7);">'
+          + '<div class="todo-ic">⏳</div><div><div class="todo-t">' + t.pendingCount + ' 笔截图等团长确认</div>'
+          + '<div class="todo-s">已经传上去了，团长还没核；不用重复交</div></div></div>');
+      }
+      if (t.due) {
+        cards.push('<div class="todo-card" onclick="todoGo(\'fee\')" style="border-color:rgba(190,24,93,.3); background:rgba(252,231,243,.7);">'
+          + '<div class="todo-ic">🌍</div><div><div class="todo-t">最近一批国际掉落 ' + t.due.slice(5) + ' 到期</div>'
+          + '<div class="todo-s">' + (typeof intlDueHtml === 'function' ? intlDueHtml(t.due).replace(/<[^>]+>/g, '') : '') + '</div></div></div>');
+      }
+      if (t.replyCount > 0) {
+        cards.push('<div class="todo-card" onclick="todoGo(\'fbreply\')" style="border-color:rgba(21,128,61,.35); background:rgba(220,252,231,.7);">'
+          + '<div class="todo-ic">💬</div><div><div class="todo-t">团长回复了 ' + t.replyCount + ' 条反馈</div>'
+          + '<div class="todo-s">点这里看回复内容</div></div></div>');
+      }
+      if (!cards.length) {
+        cards.push('<div style="padding:22px; text-align:center; font-size:14px; line-height:2; color:var(--ink-soft);">'
+          + '<div style="font-size:26px;">✅</div><b>目前没有待办</b><br>该交的都交了，有新批次或新回复时这里会再出现。</div>');
+      }
+      box.innerHTML = cards.join('');
+    }
+
+    function todoGo(panel){
+      closeMyTodo();
+      if (typeof openPanel === 'function') openPanel(panel);
+    }
+
+    /* 待办卡的几条样式，挂在这里避免动原有大段 CSS */
+    (function injectTodoCss(){
+      if (document.getElementById('myTodoCss')) return;
+      const st = document.createElement('style');
+      st.id = 'myTodoCss';
+      st.textContent = '.todo-card{display:flex; gap:12px; align-items:flex-start; margin:10px 18px; padding:13px 14px; border:2px solid; border-radius:14px; cursor:pointer; transition:transform .18s ease;}'
+        + '.todo-card:hover{transform:translateX(3px);}'
+        + '.todo-ic{font-size:20px; line-height:1.2; flex:none;}'
+        + '.todo-t{font-size:14px; font-weight:700; color:var(--ink);}'
+        + '.todo-s{font-size:12px; line-height:1.75; color:var(--ink-soft); margin-top:3px;}';
+      document.head.appendChild(st);
+    })();
+
     function enterConsole(){
       window.location.href = 'admin.html';
     }
@@ -4185,6 +4585,137 @@
       //    首页有入口卡 `.entry` → openPanel('fee')，团员点一下就能进，别在这里恢复自动跳转。
       //    否则带 ?key= 的专属链接也会被吃掉，团员一进来就看不到首页。
     })();
-  </script>
+  
+    /* ===== 🔑 整站登录（2026-11-08 上线版）=====
+       复用网站原有的 verifyMember / fetchLeaderData / _lsGet / _lsSet：
+       不新增密码体系、不覆盖任何原有函数、不拦 fetch、不写数据库。
+       登录后自动查一次「有没有待办」只取条数，不渲染账单、不显示金额。
+       未登录时一次都不查；× 收起登录页 = 只读首页，「点此登录」可回来。 */
+    window.__LOGGED_IN__ = false;
+    function authBadge(mode, cn, btnText, fn){
+      var d = document.getElementById('loginBadgeDot');
+      var l = document.getElementById('loginBadgeLbl');
+      var n = document.getElementById('loginBadgeName');
+      var b = document.getElementById('loginBadgeBtn');
+      if (d) d.className = 'sb-dot' + (mode === 'on' ? '' : ' off');
+      if (l) l.textContent = (mode === 'on' ? '已登录：' : '未登录 · 只读');
+      if (n) n.textContent = cn || '';
+      if (b) { b.textContent = btnText; b.setAttribute('onclick', fn + '()'); }
+    }
+    function authShowLogin(){
+      var g = document.getElementById('loginGate');
+      if (g) g.classList.remove('hidden');
+      var b = document.getElementById('loginBadge');
+      if (b) b.classList.add('hidden');
+      var e = document.getElementById('loginErr');
+      if (e) { e.textContent = ''; e.className = 'login-err'; }
+      window.__LOGGED_IN__ = false;
+      authBadge('off', '', '退出登录', 'authLogout');
+      if (typeof closeMyTodo === 'function') closeMyTodo();
+      if (typeof todoSetDot === 'function') todoSetDot(false);
+    }
+    function authHideLogin(cn){
+      var g = document.getElementById('loginGate');
+      if (g) g.classList.add('hidden');
+      var b = document.getElementById('loginBadge');
+      if (b) b.classList.remove('hidden');
+      authBadge('on', cn, '退出登录', 'authLogout');
+      var t = document.getElementById('todoLoginName');
+      if (t) t.textContent = '🔓 已登录：' + cn;
+      window.__LOGGED_IN__ = true;
+    }
+    /* 右上 ×：收起登录页 → 未登录只读首页，不查账、不亮红点 */
+    function authCloseGate(){
+      var g = document.getElementById('loginGate');
+      if (g) g.classList.add('hidden');
+      var b = document.getElementById('loginBadge');
+      if (b) b.classList.remove('hidden');
+      authBadge('off', '', '点此登录', 'authShowLogin');
+      window.__LOGGED_IN__ = false;
+      if (typeof closeMyTodo === 'function') closeMyTodo();
+      if (typeof todoSetDot === 'function') todoSetDot(false);
+    }
+    function authToggleKey(){
+      var k = document.getElementById('loginKey'), b = document.getElementById('loginEye');
+      if (!k || !b) return;
+      var show = (k.type === 'password');
+      k.type = show ? 'text' : 'password';
+      b.setAttribute('data-on', show ? '1' : '0');
+      b.setAttribute('aria-label', show ? '隐藏密钥' : '显示密钥');
+    }
+    async function authEnter(cn, key){
+      cn = String(cn || '').trim(); key = String(key || '').trim();
+      var e = document.getElementById('loginErr');
+      if (!cn || !key) {
+        if (e) { e.textContent = 'CN 和密钥都要填。'; e.className = 'login-err on'; }
+        return false;
+      }
+      var auth;
+      try { auth = await verifyMember(cn, key); } catch(err){ auth = null; }
+      if (auth !== true) {
+        /* 与主查询一致：false=密码错、null=服务端暂时不可用，绝不在没验过的情况下放行 */
+        if (e) {
+          e.textContent = (auth === false)
+            ? '登录没成功：CN 或密钥不对。不确定用哪个密钥就私聊团长问一声。'
+            : '密钥校验暂时用不了，请过几分钟再点一次「登录」。';
+          e.className = 'login-err on';
+        }
+        return false;
+      }
+      if (e) { e.textContent = ''; e.className = 'login-err'; }
+      _lsSet(LS_QCN, cn); _lsSet(LS_QKEY, key);
+      /* 顺手把查询面板里的 CN / 密钥预填同步成当前登录身份。
+         沿用网站原有「只预填、不自动查询」的规矩，不替团员点查询。 */
+      try { if (typeof restoreQueryId === 'function') restoreQueryId(); } catch(err){}
+      authHideLogin(cn);
+      /* 登录后只自动查一次：只更新红点，不摊开任何账单 */
+      try { await todoRefreshDot(); } catch(err){}
+      return true;
+    }
+    function authDoLogin(){
+      var cn = (document.getElementById('loginCn') || {}).value || '';
+      var key = (document.getElementById('loginKey') || {}).value || '';
+      authEnter(cn, key);
+    }
+    function authLogout(){
+      _lsSet(LS_QCN, ''); _lsSet(LS_QKEY, '');
+      var pk = document.getElementById('panelKey'), pc = document.getElementById('panelCn');
+      if (pk) pk.value = '';
+      if (pc) pc.value = '';
+      try { if (typeof syncClearRememberLink === 'function') syncClearRememberLink(); } catch(e){}
+      var ce = document.getElementById('loginCn'), ke = document.getElementById('loginKey');
+      if (ce) ce.value = '';
+      if (ke) ke.value = '';
+      var n = document.getElementById('todoLoginName');
+      if (n) n.textContent = '🔒 未登录';
+      authShowLogin();
+    }
+
+    /* 首屏：本机记住过 CN/密钥 → 自动校验登录；否则显示登录门。
+       自动登录失败时门保持显示，不会静默放行。 */
+    var __savedCn = _lsGet(LS_QCN), __savedKey = _lsGet(LS_QKEY);
+    if (__savedCn && __savedKey) { authEnter(__savedCn, __savedKey); }
+    else { authShowLogin(); }
+
+    /* ===== 🖼 团长自备登录背景图：丢进 images\ 命名 login_bg.* 即自动生效 ===== */
+    (function(){
+      var names = ['login_bg.webp','login_bg.png','login_bg.jpg','login_bg.jpeg'];
+      var el = document.getElementById('loginGate');
+      if (!el) return;
+      var i = 0;
+      function next(){
+        if (i >= names.length) return;
+        var im = new Image();
+        im.onload = function(){
+          el.style.backgroundImage = "url('images/" + names[i] + "')";
+          el.setAttribute('data-bg', 'custom');
+        };
+        im.onerror = function(){ i++; next(); };
+        im.src = 'images/' + names[i] + '?v=' + Date.now();
+      }
+      next();
+    })();
+
+</script>
 </body>
 </html>
