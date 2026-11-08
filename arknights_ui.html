@@ -2223,7 +2223,7 @@ cn 点数 金额
         <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closePayDetail()">✕</button>
       </div>
       <div id="payDetailSummary" style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;"></div>
-      <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:8px;">应收=该批次全部订单金额；实收=已标记付款（非「未付款」）的订单金额；未收=差额。付款方式来自团员 /已付 上报。</p>
+      <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:8px;">应收=该批次全部订单金额；实收=已标记付款（非「未付款」）的订单金额；未收=差额。付款方式来自团员 /已付 上报。<br>💳 下面按主要支付方式把人分成「微信 / 支付宝 / 其他」几排，每排顶部有小计；一个人用过多种方式时按金额最多的那排归，行内仍列出全部方式。每排小计＝这几行相加，跟上面的总数对得上；页面顶部的「平台分账」是按每笔订单拆的，口径不同，别两边相加减。</p>
       <div class="table-container" style="max-height:60vh; overflow:auto;">
         <table>
           <thead><tr><th>CN</th><th>支付方式</th><th>应收 (元)</th><th>已付 (元)</th><th>未付 (元)</th></tr></thead>
@@ -4964,6 +4964,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     function computePayStats(includeArchived) {
       const batches = {};
       const methods = { '微信': 0, '支付宝': 0, '零钱罐': 0, '其他': 0, '未注明': 0 };   // 🐷 零钱罐单列，别和"其他"混
+      /* 💳 平台分账人数（2026-11-08）：每个平台各自对 CN 去重。
+         同一个人两个平台都付过 → 两边各算 1 人，人数相加可能大于总人数，这是有意的。 */
+      const methodMembers = { '微信': new Set(), '支付宝': new Set(), '零钱罐': new Set(), '其他': new Set(), '未注明': new Set() };
       const overallMembers = new Set();
       let due = 0, recv = 0, cnt = 0, unpaidCnt = 0;
       const r2 = function (n) { return Math.round(n * 100) / 100; };
@@ -4986,6 +4989,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           b.recv += amt; recv += amt;
           const k = _payMethodKey(it.pay_method);
           b.methods[k] += amt; methods[k] += amt;
+          methodMembers[k].add(String(it.cn || ''));
         } else {
           b.unpaidCnt += 1; unpaidCnt += 1;
         }
@@ -5001,7 +5005,25 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         return (b.due - a.due) || (b.unpaid - a.unpaid);
       });
       Object.keys(methods).forEach(function (k) { methods[k] = r2(methods[k]); });
-      return { list: list, overall: { cnt: cnt, members: overallMembers.size, due: r2(due), recv: r2(recv), unpaid: r2(due - recv), unpaidCnt: unpaidCnt, methods: methods } };
+      const methodPeople = {};
+      Object.keys(methodMembers).forEach(function (k) { methodPeople[k] = methodMembers[k].size; });
+      return { list: list, overall: { cnt: cnt, members: overallMembers.size, due: r2(due), recv: r2(recv), unpaid: r2(due - recv), unpaidCnt: unpaidCnt, methods: methods, methodPeople: methodPeople } };
+    }
+
+    /* 💳 平台分账小计条（2026-11-08 团长要求）：上下排布，微信 / 支付宝 / 其他各一块。
+       ⚠️ 纯显示：金额直接取 computePayStats 已算好的 methods，一个数没改、没新增算法。 */
+    function _payOtherAmt(m) {
+      return (Number(m && m['零钱罐']) || 0) + (Number(m && m['其他']) || 0) + (Number(m && m['未注明']) || 0);
+    }
+    function _payOtherPeople(p) {
+      return (Number(p && p['零钱罐']) || 0) + (Number(p && p['其他']) || 0) + (Number(p && p['未注明']) || 0);
+    }
+    function _paySplitRow(label, icon, color, bg, amt, people) {
+      return '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:7px 10px; border-left:4px solid ' + color + '; background:' + bg + '; border-radius:6px; font-size:0.88rem;">' +
+        '<span style="font-weight:700; color:' + color + ';">' + icon + ' ' + label +
+          ' <span style="font-weight:500; color:var(--text-muted);">' + (Number(people) || 0) + ' 人</span></span>' +
+        '<strong style="font-size:1rem; color:' + color + ';">￥' + (Number(amt) || 0).toFixed(2) + '</strong>' +
+      '</div>';
     }
 
     function renderPayStats() {
@@ -5018,13 +5040,15 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           '应收 <strong style="font-size:1.05rem;">￥' + o.due.toFixed(2) + '</strong> ｜ ' +
           '实收 <strong style="color:#16a34a; font-size:1.05rem;">￥' + o.recv.toFixed(2) + '</strong> ｜ ' +
           '未收 <strong style="color:' + (o.unpaid > 0.0000001 ? '#dc2626' : '#64748b') + '; font-size:1.05rem;">￥' + o.unpaid.toFixed(2) + '</strong>' +
-          '<br><span style="font-size:0.82rem; color:var(--text-muted);">平台分账：微信 ￥' + o.methods['微信'].toFixed(2) +
-          ' ｜ 支付宝 ￥' + o.methods['支付宝'].toFixed(2) +
-          ((o.methods['零钱罐'] || 0) ? ' ｜ <span style="color:#7e22ce;">零钱罐 ￥' + o.methods['零钱罐'].toFixed(2) + '</span>' : '') +
-          (o.methods['其他'] ? ' ｜ 其他 ￥' + o.methods['其他'].toFixed(2) : '') +
-          (o.methods['未注明'] ? ' ｜ 未注明 ￥' + o.methods['未注明'].toFixed(2) : '') +
-          '</span>' +
-          (o.methods['未注明'] > 0.0000001 ? '<br><span style="font-size:0.78rem; color:var(--text-muted);">「未注明」= 早期订单或团长手动改的状态，没记支付方式；团员用 /已付 上报后会自动归类到微信/支付宝。</span>' : '');
+          '<div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">' +
+            _paySplitRow('微信', '💚', '#16a34a', '#f0fdf4', o.methods['微信'], (o.methodPeople || {})['微信']) +
+            _paySplitRow('支付宝', '💙', '#1d4ed8', '#eff6ff', o.methods['支付宝'], (o.methodPeople || {})['支付宝']) +
+            (_payOtherAmt(o.methods) > 0.0000001
+              ? _paySplitRow('其他 · 零钱罐 / 未注明 / 其他', '⬜', '#64748b', '#f8fafc', _payOtherAmt(o.methods), _payOtherPeople(o.methodPeople))
+              : '') +
+          '</div>' +
+          (o.methods['未注明'] > 0.0000001 ? '<div style="margin-top:6px; font-size:0.78rem; color:var(--text-muted);">「未注明」= 早期订单或团长手动改的状态，没记支付方式；团员用 /已付 上报后会自动归类到微信/支付宝。</div>' : '') +
+          '<div style="margin-top:4px; font-size:0.76rem; color:var(--text-muted);">金额按每笔订单的支付方式拆；人数按平台各自去重。点「明细」可按人分排看，每排也有小计。</div>';
       }
       if (s.list.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--text-muted);">暂无订单数据</td></tr>';
@@ -5081,9 +5105,14 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         const cn = String(it.cn || '(未填CN)');
         const amt = (Number(it.price) || 0) * (Number(it.quantity) || 1);
         let g = byCn[cn];
-        if (!g) { g = { cn: cn, cnt: 0, due: 0, recv: 0, unpaid: 0, methods: {} }; byCn[cn] = g; }
+        if (!g) { g = { cn: cn, cnt: 0, due: 0, recv: 0, unpaid: 0, methods: {}, pmAmt: {} }; byCn[cn] = g; }
         g.cnt += 1; g.due += amt;
-        if (isOrderPaid(it)) { g.recv += amt; const k = _payMethodKey(it.pay_method); g.methods[k] = (g.methods[k] || 0) + 1; }
+        if (isOrderPaid(it)) {
+          g.recv += amt;
+          const k = _payMethodKey(it.pay_method);
+          g.methods[k] = (g.methods[k] || 0) + 1;
+          g.pmAmt[k] = (g.pmAmt[k] || 0) + amt;   /* 💳 归排依据：哪个平台付的钱最多 */
+        }
         else { g.unpaid += amt; }
       });
       const rows = Object.keys(byCn).map(function (k) { return byCn[k]; })
@@ -5106,7 +5135,31 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">该批次暂无订单</td></tr>';
       } else {
-        tbody.innerHTML = rows.map(function (r) {
+        /* 💳 按主要支付方式把人分成上下几排（2026-11-08 团长要求）：
+           微信 / 支付宝 / 其他各一块，每块顶部一条「N 人 ｜ 应收 / 已付 / 未付」小计条。
+           ⚠️ 只改显示分组，不改任何金额算法：
+              · 一个人用过多种方式 → 按「已付金额最多的平台」归排，行内仍把用过的方式全列出来
+              · 完全没付款 / 没记方式 → 归「其他」，不会从页面上消失
+              · 每排小计＝该排各行的数值相加，三排相加＝上方总计 */
+        const _grpOf = function (r) {
+          const a = r.pmAmt || {};
+          let best = '', bestV = 0;
+          ['微信', '支付宝', '零钱罐', '其他', '未注明'].forEach(function (k) {
+            const v = Number(a[k]) || 0;
+            if (v > bestV + 0.0000001) { bestV = v; best = k; }
+          });
+          return (best === '微信' || best === '支付宝') ? best : '其他';
+        };
+        const _grpMeta = {
+          '微信':   { label: '微信',   icon: '💚', color: '#16a34a', bg: '#f0fdf4' },
+          '支付宝': { label: '支付宝', icon: '💙', color: '#1d4ed8', bg: '#eff6ff' },
+          '其他':   { label: '其他（零钱罐 / 未注明 / 未付款）', icon: '⬜', color: '#64748b', bg: '#f8fafc' }
+        };
+        const _buckets = { '微信': [], '支付宝': [], '其他': [] };
+        rows.forEach(function (r) { _buckets[_grpOf(r)].push(r); });
+
+        /* 一行 = 一个人，HTML 与改前完全一样（零钱罐余额、支付方式标签都在），只是搬成可复用函数 */
+        const _payDetailRowHtml = function (r) {
           const pmKeys = Object.keys(r.methods).sort(function (a, b) { return r.methods[b] - r.methods[a]; });
           const pmHtml = pmKeys.length ? pmKeys.map(function (k) { return getPayMethodBadge(k) + (r.methods[k] > 1 ? '<span style="font-size:0.72rem;color:var(--text-muted);">×' + r.methods[k] + '</span>' : ''); }).join(' ') : '<span style="color:var(--text-muted);font-size:0.8rem;">—</span>';
           /* 🐷 零钱罐挂在「支付方式」下面一行：有余额才显示，余额为 0 什么都不加（老账目一字不变） */
@@ -5116,7 +5169,25 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             : '';
           const un = r.unpaid > 0.0000001;
           return '<tr><td><strong>' + escapeHtml(r.cn) + '</strong></td><td>' + pmHtml + pgHtml + '</td><td>￥' + r.due.toFixed(2) + '</td><td style="color:#16a34a;">￥' + r.recv.toFixed(2) + '</td><td style="color:' + (un ? '#dc2626' : '#64748b') + '; font-weight:' + (un ? '700' : '400') + ';">￥' + r.unpaid.toFixed(2) + '</td></tr>';
-        }).join('');
+        };
+
+        let out = '';
+        ['微信', '支付宝', '其他'].forEach(function (key) {
+          const arr = _buckets[key];
+          if (!arr.length && key === '其他') return;   /* 微信/支付宝没人也照样显示一排，省得以为漏了 */
+          const m = _grpMeta[key];
+          const sDue = arr.reduce(function (a, r) { return a + r.due; }, 0);
+          const sRecv = arr.reduce(function (a, r) { return a + r.recv; }, 0);
+          const sUnpaid = arr.reduce(function (a, r) { return a + r.unpaid; }, 0);
+          out += '<tr><td colspan="5" style="padding:8px 10px; background:' + m.bg + '; border-left:4px solid ' + m.color + '; font-weight:700; font-size:0.88rem; color:' + m.color + ';">' +
+            m.icon + ' ' + m.label + ' · ' + arr.length + ' 人' +
+            ' <span style="font-weight:500; color:var(--text-muted);">｜ 应收 ￥' + sDue.toFixed(2) +
+            ' ｜ 已付 ￥' + sRecv.toFixed(2) + ' ｜ 未付 ￥' + sUnpaid.toFixed(2) + '</span></td></tr>';
+          out += arr.length
+            ? arr.map(_payDetailRowHtml).join('')
+            : '<tr><td colspan="5" style="text-align:center; padding:10px; color:var(--text-muted); font-size:0.82rem;">这一排暂时没有人</td></tr>';
+        });
+        tbody.innerHTML = out;
       }
       document.getElementById('payDetailModal').classList.add('active');
     }
