@@ -60,14 +60,14 @@ export async function onRequest(context) {
   // 让 Supabase 看到真实来源（它据此回显 CORS 头）
   if (!headers.has('origin')) headers.set('origin', url.origin);
 
-  /* ── 🛡 整批消失护栏（2026-11-09）──────────────────────────────────
-     事故复盘：后台「轻量写库」会推进 CURRENT_VERSION，却不刷新手上的
-     RAW_ITEMS；旧页面再点主保存时版本锁直接通过，一份没有新批次的旧排表
-     整份盖回去。11-07 深夜越南小盘 / 洛茜徽章盘 8 条就是这样在 11-08
-     下午消失的。这里在服务端兜底：PATCH leader_data 且带 group_data 时，
-     先读库中现有排表，若某批次在库里有 >=3 条、这次提交的排表里一条都没有，
-     就拒绝这次保存并要求刷新页面。正常保存、单条删除、只改 image_data 全部
-     放行；读不到库中数据时 fail-open，绝不因护栏故障让全站保存不了。      */
+  /* ── 🛡 整批消失护栏（2026-11-09，14:35 改为按 item_id 判定）─────────
+     事故复盘：后台「轻量写库」会推进 CURRENT_VERSION 却不刷新 RAW_ITEMS，
+     旧页面再点主保存时版本锁通过，一份没有新批次的旧排表整份盖回去。
+     这里在服务端兜底：PATCH leader_data 且带 group_data 时，先读库中现有
+     排表；库中某批次 >=3 条、且这批的 item_id 在本次提交里一条都不存在，
+     才判定「整批消失」并 409。按批次名判会误伤「整批改批次名」（id 还在、
+     名字变了），所以改按 id 判。正常保存、单条删除、只改 image_data、
+     整批改批次名全部放行；读库失败 fail-open。                            */
   const _sbPath = url.pathname.replace(/^\/sb/, '');
   if (request.method === 'PATCH' && _sbPath.indexOf('/rest/v1/leader_data') === 0) {
     try {
@@ -83,16 +83,12 @@ export async function onRequest(context) {
         let _body = null;
         try { _body = JSON.parse(_raw); } catch (e) { _body = null; }
         if (_body && Array.isArray(_body.group_data)) {
-          const _count = function (arr) {
-            const m = {};
-            for (const it of arr) {
-              if (!it || typeof it !== 'object') continue;
-              const n = String(it.batch_name || '').trim();
-              if (n) m[n] = (m[n] || 0) + 1;
-            }
-            return m;
-          };
-          const _after = _count(_body.group_data);
+          const _idsIn = Object.create(null);
+          for (const it of _body.group_data) {
+            if (!it || typeof it !== 'object') continue;
+            const _id = String(it.item_id || it.id || '');
+            if (_id) _idsIn[_id] = true;
+          }
           const _curResp = await fetch(
             ORIGIN + '/rest/v1/leader_data?select=group_data&' + _filter,
             { method: 'GET', headers, redirect: 'manual' });
@@ -102,14 +98,27 @@ export async function onRequest(context) {
             if (typeof _cur === 'string') {
               try { _cur = JSON.parse(_cur); } catch (e) { _cur = []; }
             }
-            const _before = _count(Array.isArray(_cur) ? _cur : []);
-            const _lost = Object.keys(_before).filter(function (n) {
-              return _before[n] >= 3 && !_after[n];
-            });
+            const _byName = Object.create(null);
+            for (const it of (Array.isArray(_cur) ? _cur : [])) {
+              if (!it || typeof it !== 'object') continue;
+              const n = String(it.batch_name || '').trim();
+              const _id = String(it.item_id || it.id || '');
+              if (!n || !_id) continue;
+              if (!_byName[n]) _byName[n] = [];
+              _byName[n].push(_id);
+            }
+            const _lost = [];
+            for (const n of Object.keys(_byName)) {
+              const _ids = _byName[n];
+              if (_ids.length < 3) continue;
+              let _any = false;
+              for (const _id of _ids) { if (_idsIn[_id]) { _any = true; break; } }
+              if (!_any) _lost.push([n, _ids.length]);
+            }
             if (_lost.length) {
-              const _names = _lost.slice(0, 3).join('、');
-              const _detail = _lost.slice(0, 3).map(function (n) {
-                return n + '（' + _before[n] + ' 条）';
+              const _names = _lost.slice(0, 3).map(function (p) { return p[0]; }).join('、');
+              const _detail = _lost.slice(0, 3).map(function (p) {
+                return p[0] + '（' + p[1] + ' 条）';
               }).join('，');
               return new Response(JSON.stringify({
                 message: '保存已拦下：这次会把「' + _names + '」整批删掉（'
