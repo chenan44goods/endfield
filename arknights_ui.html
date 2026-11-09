@@ -3966,6 +3966,18 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               dispatch_marks: RAW_DISPATCH_MARKS
             })
         };
+        /* 🛡 删除墓碑（2026-11-09 16:20）：把本次明确删掉的编号写进
+           image_data.deleted_item_ids。服务端代理会把它与库中已有名单合并，
+           之后任何设备（包括没刷新的旧页面）保存时都会自动剔除这些编号 ——
+           以前「删除只记在当前页内存里，别的设备一保存就带回来」就是这么丢的。
+           没有删除时这个字段一个字节都不写，保持原有 image_data 结构不变。 */
+        if (MY_DELETED.size > 0) {
+          const _tombBase = (RAW_IMAGE_DATA_BASE && Array.isArray(RAW_IMAGE_DATA_BASE.deleted_item_ids))
+            ? RAW_IMAGE_DATA_BASE.deleted_item_ids : [];
+          const _tombAll = new Set(_tombBase.map(String));
+          MY_DELETED.forEach(function (x) { _tombAll.add(String(x)); });
+          payload.image_data.deleted_item_ids = Array.from(_tombAll);
+        }
         /* 🛡 2026-11-09（14:35 改为按 item_id 静默自动对齐）
            原做法按「批次名」比对，服务器有整批、本地没有就直接中止保存、让人刷新：
            手机刷新会丢掉刚录入未保存的内容，不刷新又永远存不进去；整批改
@@ -4060,6 +4072,14 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               freshImg2.applications = mergeApplications(RAW_APPLICATIONS, freshImg2.applications, MY_APP_DIRTY, MY_APP_DELETED);
               // ✅ 排发勾选：服务器 ∪ 我这次的增删（不能直接用服务器那份，会丢我刚勾的）
               freshImg2.dispatch_marks = _mergeDispatchMarks(freshImg2.dispatch_marks);
+              /* 🛡 删除墓碑：冲突分支也要带上本次删除，否则代理无从得知 */
+              if (MY_DELETED.size > 0) {
+                const _t2 = Array.isArray(freshImg2.deleted_item_ids) ? freshImg2.deleted_item_ids : [];
+                const _s2 = new Set(_t2.map(String));
+                MY_DELETED.forEach(function (x) { _s2.add(String(x)); });
+                freshImg2.deleted_item_ids = Array.from(_s2);
+              }
+
               freshImg2.transfer_logs = mergeById(RAW_LOGS, freshImg2.transfer_logs);
               freshImg2.feedback = mergeById(RAW_FEEDBACK, freshImg2.feedback);
               const retry = await supabaseClient.from('leader_data')

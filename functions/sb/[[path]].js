@@ -67,7 +67,16 @@ export async function onRequest(context) {
      排表；库中某批次 >=3 条、且这批的 item_id 在本次提交里一条都不存在，
      才判定「整批消失」并 409。按批次名判会误伤「整批改批次名」（id 还在、
      名字变了），所以改按 id 判。正常保存、单条删除、只改 image_data、
-     整批改批次名全部放行；读库失败 fail-open。                            */
+     整批改批次名全部放行；读库失败 fail-open。
+
+     ── 🛡 删除墓碑（2026-11-09 16:20）──────────────────────────────
+     后台是「整份 group_data 覆盖」，删除只记在当前页内存里，别的设备
+     不知道，一保存就把已删条目原样带回来（11-09 15:10 删 4 条、16:10
+     复活即是）。现在把删除编号存进 image_data.deleted_item_ids：
+     每次 PATCH 都把库中已有名单 ∪ 本次提交的名单合并写回，并从提交的
+     group_data 里剔除命中的条目 —— 旧页面（连旧版前端）也带不回来。
+     读库失败 fail-open，不改原代理流程。                              */
+  let _patchedBody = null;
   const _sbPath = url.pathname.replace(/^\/sb/, '');
   if (request.method === 'PATCH' && _sbPath.indexOf('/rest/v1/leader_data') === 0) {
     try {
@@ -82,57 +91,98 @@ export async function onRequest(context) {
         const _raw = await _probe.text();
         let _body = null;
         try { _body = JSON.parse(_raw); } catch (e) { _body = null; }
-        if (_body && Array.isArray(_body.group_data)) {
-          const _idsIn = Object.create(null);
-          for (const it of _body.group_data) {
-            if (!it || typeof it !== 'object') continue;
-            const _id = String(it.item_id || it.id || '');
-            if (_id) _idsIn[_id] = true;
+        if (_body && typeof _body === 'object') {
+          if (typeof _body.image_data === 'string') {
+            try { _body.image_data = JSON.parse(_body.image_data); } catch (e) { /* 保持原样 */ }
           }
           const _curResp = await fetch(
-            ORIGIN + '/rest/v1/leader_data?select=group_data&' + _filter,
+            ORIGIN + '/rest/v1/leader_data?select=group_data,image_data&' + _filter,
             { method: 'GET', headers, redirect: 'manual' });
           if (_curResp.ok) {
             const _curArr = await _curResp.json();
-            let _cur = (_curArr && _curArr[0] && _curArr[0].group_data) || [];
+            const _curRow = (_curArr && _curArr[0]) || {};
+            let _cur = _curRow.group_data || [];
             if (typeof _cur === 'string') {
               try { _cur = JSON.parse(_cur); } catch (e) { _cur = []; }
             }
-            const _byName = Object.create(null);
-            for (const it of (Array.isArray(_cur) ? _cur : [])) {
-              if (!it || typeof it !== 'object') continue;
-              const n = String(it.batch_name || '').trim();
-              const _id = String(it.item_id || it.id || '');
-              if (!n || !_id) continue;
-              if (!_byName[n]) _byName[n] = [];
-              _byName[n].push(_id);
+            let _curImg = _curRow.image_data || {};
+            if (typeof _curImg === 'string') {
+              try { _curImg = JSON.parse(_curImg); } catch (e) { _curImg = {}; }
             }
-            const _lost = [];
-            for (const n of Object.keys(_byName)) {
-              const _ids = _byName[n];
-              if (_ids.length < 3) continue;
-              let _any = false;
-              for (const _id of _ids) { if (_idsIn[_id]) { _any = true; break; } }
-              if (!_any) _lost.push([n, _ids.length]);
+
+            /* ① 原整批消失护栏，判定逻辑一字未改 */
+            if (Array.isArray(_body.group_data)) {
+              const _idsIn = Object.create(null);
+              for (const it of _body.group_data) {
+                if (!it || typeof it !== 'object') continue;
+                const _id = String(it.item_id || it.id || '');
+                if (_id) _idsIn[_id] = true;
+              }
+              const _byName = Object.create(null);
+              for (const it of (Array.isArray(_cur) ? _cur : [])) {
+                if (!it || typeof it !== 'object') continue;
+                const n = String(it.batch_name || '').trim();
+                const _id = String(it.item_id || it.id || '');
+                if (!n || !_id) continue;
+                if (!_byName[n]) _byName[n] = [];
+                _byName[n].push(_id);
+              }
+              const _lost = [];
+              for (const n of Object.keys(_byName)) {
+                const _ids = _byName[n];
+                if (_ids.length < 3) continue;
+                let _any = false;
+                for (const _id of _ids) { if (_idsIn[_id]) { _any = true; break; } }
+                if (!_any) _lost.push([n, _ids.length]);
+              }
+              if (_lost.length) {
+                const _names = _lost.slice(0, 3).map(function (p) { return p[0]; }).join('、');
+                const _detail = _lost.slice(0, 3).map(function (p) {
+                  return p[0] + '（' + p[1] + ' 条）';
+                }).join('，');
+                return new Response(JSON.stringify({
+                  message: '保存已拦下：这次会把「' + _names + '」整批删掉（'
+                    + _detail + '）。当前页面可能是旧的，请刷新后台后重新保存；'
+                    + '确实要删整批请联系维护者。',
+                  error: 'batch_guard', hint: 'refresh'
+                }), {
+                  status: 409,
+                  headers: {
+                    'content-type': 'application/json; charset=utf-8',
+                    'access-control-allow-origin': '*',
+                    'cache-control': 'no-store',
+                  },
+                });
+              }
             }
-            if (_lost.length) {
-              const _names = _lost.slice(0, 3).map(function (p) { return p[0]; }).join('、');
-              const _detail = _lost.slice(0, 3).map(function (p) {
-                return p[0] + '（' + p[1] + ' 条）';
-              }).join('，');
-              return new Response(JSON.stringify({
-                message: '保存已拦下：这次会把「' + _names + '」整批删掉（'
-                  + _detail + '）。当前页面可能是旧的，请刷新后台后重新保存；'
-                  + '确实要删整批请联系维护者。',
-                error: 'batch_guard', hint: 'refresh'
-              }), {
-                status: 409,
-                headers: {
-                  'content-type': 'application/json; charset=utf-8',
-                  'access-control-allow-origin': '*',
-                  'cache-control': 'no-store',
-                },
-              });
+
+            /* ② 删除墓碑：库中已有 ∪ 本次提交 */
+            const _tomb = Object.create(null);
+            const _addTomb = function (arr) {
+              if (!Array.isArray(arr)) return;
+              for (const t of arr) { const s = String(t || ''); if (s) _tomb[s] = true; }
+            };
+            if (_curImg && typeof _curImg === 'object') _addTomb(_curImg.deleted_item_ids);
+            if (_body.image_data && typeof _body.image_data === 'object') {
+              _addTomb(_body.image_data.deleted_item_ids);
+            }
+            const _tombList = Object.keys(_tomb);
+            if (_tombList.length) {
+              let _changed = false;
+              if (Array.isArray(_body.group_data)) {
+                const _filtered = _body.group_data.filter(function (it) {
+                  if (!it || typeof it !== 'object') return true;
+                  return !_tomb[String(it.item_id || it.id || '')];
+                });
+                if (_filtered.length !== _body.group_data.length) {
+                  _body.group_data = _filtered; _changed = true;
+                }
+              }
+              if (_body.image_data && typeof _body.image_data === 'object') {
+                _body.image_data.deleted_item_ids = _tombList;
+                _changed = true;
+              }
+              if (_changed) _patchedBody = JSON.stringify(_body);
             }
           }
         }
@@ -142,7 +192,10 @@ export async function onRequest(context) {
     }
   }
   const init = { method: request.method, headers, redirect: 'manual' };
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
+  if (_patchedBody !== null) {
+    init.body = _patchedBody;
+    headers.delete('content-length');   // body 改过，旧长度会让上游等字节
+  } else if (request.method !== 'GET' && request.method !== 'HEAD') {
     init.body = request.body;
   }
 
