@@ -3966,6 +3966,43 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               dispatch_marks: RAW_DISPATCH_MARKS
             })
         };
+        /* 🛡 2026-11-09 保存前自检（配合服务端 /sb 护栏，双保险）
+           轻量写库（勾排发、刷凭证）只推进 CURRENT_VERSION、不刷新 RAW_ITEMS，
+           旧页面的版本号跟上了但排表还是旧的；主保存「版本对得上就直接写」
+           那条路不合并，于是整份旧排表盖掉别人刚导入的批次。
+           这里在写库前读一次服务器最新排表：若某批次在服务器 >=3 条、
+           我这边一条都没有，说明手上这份是旧快照 —— 中止保存，请团长刷新。
+           不改任何数据、不复活明确删掉的条目；读不到就照原样保存，
+           由服务端护栏兜底。 */
+        try {
+          _saveStage('正在核对服务器最新排表…');
+          const _g = await supabaseClient.from('leader_data')
+            .select('group_data').eq('id', CURRENT_RECORD_ID);
+          if (!_g.error && _g.data && _g.data.length) {
+            let _sv = _g.data[0].group_data;
+            if (typeof _sv === 'string') { try { _sv = JSON.parse(_sv); } catch (e) { _sv = []; } }
+            if (Array.isArray(_sv) && Array.isArray(RAW_ITEMS)) {
+              const _cnt = function (arr) {
+                const m = {};
+                arr.forEach(function (it) {
+                  if (!it || typeof it !== 'object') return;
+                  const n = String(it.batch_name || '').trim();
+                  if (n) m[n] = (m[n] || 0) + 1;
+                });
+                return m;
+              };
+              const _svc = _cnt(_sv), _myc = _cnt(RAW_ITEMS);
+              const _lost = Object.keys(_svc).filter(function (n) {
+                return _svc[n] >= 3 && !_myc[n];
+              });
+              if (_lost.length) {
+                showToast('保存已中止：服务器上有「' + _lost.slice(0, 3).join('、')
+                  + '」这批谷子，你当前页面是旧的。请刷新后台后重新保存。');
+                return false;
+              }
+            }
+          }
+        } catch (e) { /* 读不到就照原样保存，服务端护栏兜底 */ }
         _saveStage('正在保存 ' + (RAW_ITEMS ? RAW_ITEMS.length : 0) + ' 条谷子…');
         if (CURRENT_VERSION !== null) {
           const nextVersion = (Number(CURRENT_VERSION) || 0) + 1;

@@ -60,6 +60,78 @@ export async function onRequest(context) {
   // 让 Supabase 看到真实来源（它据此回显 CORS 头）
   if (!headers.has('origin')) headers.set('origin', url.origin);
 
+  /* ── 🛡 整批消失护栏（2026-11-09）──────────────────────────────────
+     事故复盘：后台「轻量写库」会推进 CURRENT_VERSION，却不刷新手上的
+     RAW_ITEMS；旧页面再点主保存时版本锁直接通过，一份没有新批次的旧排表
+     整份盖回去。11-07 深夜越南小盘 / 洛茜徽章盘 8 条就是这样在 11-08
+     下午消失的。这里在服务端兜底：PATCH leader_data 且带 group_data 时，
+     先读库中现有排表，若某批次在库里有 >=3 条、这次提交的排表里一条都没有，
+     就拒绝这次保存并要求刷新页面。正常保存、单条删除、只改 image_data 全部
+     放行；读不到库中数据时 fail-open，绝不因护栏故障让全站保存不了。      */
+  const _sbPath = url.pathname.replace(/^\/sb/, '');
+  if (request.method === 'PATCH' && _sbPath.indexOf('/rest/v1/leader_data') === 0) {
+    try {
+      const _qp = new URLSearchParams(url.search);
+      let _filter = '';
+      for (const _k of ['query_key', 'id']) {
+        const _v = _qp.get(_k);
+        if (_v) { _filter = _k + '=' + encodeURIComponent(_v); break; }
+      }
+      if (_filter) {
+        const _probe = request.clone();
+        const _raw = await _probe.text();
+        let _body = null;
+        try { _body = JSON.parse(_raw); } catch (e) { _body = null; }
+        if (_body && Array.isArray(_body.group_data)) {
+          const _count = function (arr) {
+            const m = {};
+            for (const it of arr) {
+              if (!it || typeof it !== 'object') continue;
+              const n = String(it.batch_name || '').trim();
+              if (n) m[n] = (m[n] || 0) + 1;
+            }
+            return m;
+          };
+          const _after = _count(_body.group_data);
+          const _curResp = await fetch(
+            ORIGIN + '/rest/v1/leader_data?select=group_data&' + _filter,
+            { method: 'GET', headers, redirect: 'manual' });
+          if (_curResp.ok) {
+            const _curArr = await _curResp.json();
+            let _cur = (_curArr && _curArr[0] && _curArr[0].group_data) || [];
+            if (typeof _cur === 'string') {
+              try { _cur = JSON.parse(_cur); } catch (e) { _cur = []; }
+            }
+            const _before = _count(Array.isArray(_cur) ? _cur : []);
+            const _lost = Object.keys(_before).filter(function (n) {
+              return _before[n] >= 3 && !_after[n];
+            });
+            if (_lost.length) {
+              const _names = _lost.slice(0, 3).join('、');
+              const _detail = _lost.slice(0, 3).map(function (n) {
+                return n + '（' + _before[n] + ' 条）';
+              }).join('，');
+              return new Response(JSON.stringify({
+                message: '保存已拦下：这次会把「' + _names + '」整批删掉（'
+                  + _detail + '）。当前页面可能是旧的，请刷新后台后重新保存；'
+                  + '确实要删整批请联系维护者。',
+                error: 'batch_guard', hint: 'refresh'
+              }), {
+                status: 409,
+                headers: {
+                  'content-type': 'application/json; charset=utf-8',
+                  'access-control-allow-origin': '*',
+                  'cache-control': 'no-store',
+                },
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // fail-open：护栏自身异常不能拖垮正常保存
+    }
+  }
   const init = { method: request.method, headers, redirect: 'manual' };
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     init.body = request.body;
