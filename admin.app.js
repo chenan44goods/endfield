@@ -1,0 +1,8990 @@
+
+    // ==========================================
+    // 🌟 全局统一配置中心（状态与地区）
+    // ==========================================
+    const STATUS_OPTIONS = [
+      { value: '未出荷', label: '未出荷 (预售商品)', colorClass: 'badge-status-未出荷' },
+      { value: '已下单', label: '已下单 (采购完成)', colorClass: 'badge-status-已下单' },
+      { value: '收国际中', label: '收国际中 (已下单，正在收国际运费)', colorClass: 'badge-status-收国际中' },
+      { value: '国际运输中', label: '国际运输中 (跨国途中)', colorClass: 'badge-status-国际运输中' },
+      { value: '可排发', label: '可排发 (已到国内/清点完毕)', colorClass: 'badge-status-可排发' },
+      { value: '待发货', label: '待发货 (团员已申请/打包中)', colorClass: 'badge-status-待发货' },
+      { value: '已排发', label: '已排发 (已发货寄出)', colorClass: 'badge-status-已排发' },
+      { value: '未付款', label: '未付款 (待交谷子费)', colorClass: 'badge-status-未付款' },
+      /* 🌍 由「国际运费到期」自动写入，也可手动改；补交后走审核会自动变回可排发 */
+      { value: '未交国际掉落', label: '未交国际掉落 (国际运费到期未交)', colorClass: 'badge-status-未交国际掉落' }
+    ];
+
+    // —— 囤货 / 3 个月到期 ——
+    function _fmtDate(d){ var y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0'); return y+'-'+m+'-'+dd; }
+    function todayISO(){ return _fmtDate(new Date()); }
+    function addMonthsStr(dateStr, months){ if(!dateStr) return ''; var p=String(dateStr).split('-').map(Number); if(p.length<3) return dateStr; var dt=new Date(p[0], (p[1]||1)-1, p[2]||1); dt.setMonth(dt.getMonth()+months); return _fmtDate(dt); }
+    function isArrivedStatus(s){ s=String(s||'').trim(); return s==='可排发'||s==='已到货'||s==='到货'; }
+    function ensureStockDate(item, prevStatus){ if(isArrivedStatus(item.status)){ var prev=String(prevStatus||'').trim(); if(!isArrivedStatus(prev) || !item.stock_date){ item.stock_date=todayISO(); item.stock_expiry=addMonthsStr(item.stock_date,3); } } else { item.stock_date=null; item.stock_expiry=null; } }
+    function stockDateInfo(item){ var sd=item.stock_date; if(!sd) return null; return { start:sd, expiry: item.stock_expiry || addMonthsStr(sd,3) }; }
+    // 总闸：不管状态是在哪儿被改的（编辑弹窗/批量改/排发确认/团员页提交），
+    // 只要最终状态不属于"到货组"，入库日与到期日一律清空，避免误点「可排发」后残留。
+    // 传了 onlyIds 就只处理本次动过的条目 —— 库里的历史数据一概不碰。
+    function sanitizeStockDates(items, onlyIds){
+      if(!Array.isArray(items)) return 0;
+      var n=0;
+      for(var i=0;i<items.length;i++){
+        var it=items[i]; if(!it) continue;
+        if(onlyIds && onlyIds.size && !onlyIds.has(String(it.item_id||it.id))) continue;
+        if(!isArrivedStatus(it.status) && (it.stock_date || it.stock_expiry)){ it.stock_date=null; it.stock_expiry=null; n++; }
+      }
+      return n;
+    }
+
+    function stockCellHtml(item){
+      var info=stockDateInfo(item); if(!info) return '<span style="color:#cbd5e1;">—</span>';
+      var exp=info.expiry, today=todayISO(), cls='', tag='';
+      if(exp < today){ cls='background:#fee2e2;color:#991b1b;'; tag='已到期'; }
+      else { var days=Math.round((new Date(exp)-new Date(today))/86400000); if(days<=30){ cls='background:#fef3c7;color:#b45309;'; tag='即将到期'; } else { cls='background:#dcfce7;color:#15803d;'; tag='囤货中'; } }
+      return '<div style="font-size:0.8rem;line-height:1.4;"><span style="display:inline-block;padding:1px 6px;border-radius:6px;'+cls+'font-weight:600;">'+tag+'</span> <span style="color:#334155;font-weight:600;">'+exp+'</span><div style="color:#64748b;font-size:0.72rem;margin-top:2px;">囤货自 '+info.start+'</div></div>';
+    }
+
+    /* ── 地区（2026-10-29 改版）─────────────────────────────────────────
+       ① 全部国家/地区可自选，分组展示，输入即筛（input + datalist）
+       ② 「闲鱼」「淘宝店」已下线，历史数据统一迁移为「中国」
+       ③ 「台湾」历史值统一为「中国台湾」
+       ⚠️ COUNTRY_OPTIONS 是「存储值 = 显示文字」的扁平数组，改它等于改数据集，
+          改动前先确认线上 group_data 的 country 取值分布。 */
+    const COUNTRY_GROUPS = [
+      ['常用', ['中国', '中国台湾', '中国香港', '中国澳门', '日本', '韩国', '泰国', '印尼', '美国']],
+      ['亚洲', ['马来西亚', '新加坡', '越南', '菲律宾', '印度', '巴基斯坦', '孟加拉国', '斯里兰卡',
+                '尼泊尔', '不丹', '马尔代夫', '柬埔寨', '老挝', '缅甸', '文莱', '东帝汶', '蒙古',
+                '哈萨克斯坦', '乌兹别克斯坦', '吉尔吉斯斯坦', '塔吉克斯坦', '土库曼斯坦', '阿富汗',
+                '伊朗', '伊拉克', '叙利亚', '黎巴嫩', '约旦', '以色列', '巴勒斯坦', '沙特阿拉伯',
+                '阿联酋', '卡塔尔', '科威特', '巴林', '阿曼', '也门', '土耳其', '格鲁吉亚',
+                '亚美尼亚', '阿塞拜疆']],
+      ['欧洲', ['俄罗斯', '乌克兰', '白俄罗斯', '摩尔多瓦', '波兰', '捷克', '斯洛伐克', '匈牙利',
+                '罗马尼亚', '保加利亚', '希腊', '塞尔维亚', '克罗地亚', '斯洛文尼亚', '波黑', '黑山',
+                '北马其顿', '阿尔巴尼亚', '英国', '爱尔兰', '法国', '德国', '意大利', '西班牙',
+                '葡萄牙', '荷兰', '比利时', '卢森堡', '瑞士', '奥地利', '丹麦', '瑞典', '挪威',
+                '芬兰', '冰岛', '爱沙尼亚', '拉脱维亚', '立陶宛', '马耳他', '塞浦路斯', '摩纳哥',
+                '安道尔', '圣马力诺', '列支敦士登', '梵蒂冈']],
+      ['北美洲', ['加拿大', '墨西哥', '危地马拉', '伯利兹', '洪都拉斯', '萨尔瓦多', '尼加拉瓜',
+                  '哥斯达黎加', '巴拿马', '古巴', '牙买加', '海地', '多米尼加', '巴哈马',
+                  '特立尼达和多巴哥', '巴巴多斯']],
+      ['南美洲', ['巴西', '阿根廷', '智利', '秘鲁', '哥伦比亚', '委内瑞拉', '厄瓜多尔', '玻利维亚',
+                  '巴拉圭', '乌拉圭', '圭亚那', '苏里南']],
+      ['非洲', ['埃及', '南非', '尼日利亚', '肯尼亚', '埃塞俄比亚', '摩洛哥', '阿尔及利亚', '突尼斯',
+                '利比亚', '苏丹', '加纳', '科特迪瓦', '塞内加尔', '喀麦隆', '坦桑尼亚', '乌干达',
+                '卢旺达', '津巴布韦', '赞比亚', '莫桑比克', '安哥拉', '马达加斯加', '毛里求斯',
+                '纳米比亚', '博茨瓦纳']],
+      ['大洋洲', ['澳大利亚', '新西兰', '斐济', '巴布亚新几内亚']],
+      ['其它', ['其它']]
+    ];
+
+    // 扁平去重（「常用」组里的国家不再在各大洲组重复出现）
+    const COUNTRY_GROUPS_RESOLVED = (function () {
+      const seen = Object.create(null);
+      return COUNTRY_GROUPS.map(function (g) {
+        const items = [];
+        g[1].forEach(function (c) { if (!seen[c]) { seen[c] = 1; items.push(c); } });
+        return { label: g[0], items: items };
+      }).filter(function (g) { return g.items.length > 0; });
+    })();
+    const COUNTRY_OPTIONS = COUNTRY_GROUPS_RESOLVED.reduce(function (a, g) { return a.concat(g.items); }, []);
+
+    // 给 <select> 用的分组选项（placeholder 传空串则不加空选项）
+    function countryOptionsHtml(placeholder) {
+      var h = placeholder ? '<option value="">' + placeholder + '</option>' : '';
+      COUNTRY_GROUPS_RESOLVED.forEach(function (g) {
+        h += '<optgroup label="' + g.label + '">' +
+          g.items.map(function (c) { return '<option value="' + c + '">' + c + '</option>'; }).join('') +
+          '</optgroup>';
+      });
+      return h;
+    }
+
+    // 给 <datalist> 用的建议项（输入即筛）
+    function countryDatalistHtml() {
+      return COUNTRY_OPTIONS.map(function (c) { return '<option value="' + c + '"></option>'; }).join('');
+    }
+
+    /* 数据里如果还残留列表外的写法（旧导入 / 别处写入），追加到筛选器的「历史值」组，
+       否则这些条目永远筛不出来。只追加，不动当前选中项。 */
+    let _COUNTRY_EXTRA_LEN = -1;
+    function syncCountryFilterExtras() {
+      const sel = document.getElementById('filterCountry');
+      if (!sel || !Array.isArray(RAW_ITEMS)) return;
+      if (_COUNTRY_EXTRA_LEN === RAW_ITEMS.length) return;
+      _COUNTRY_EXTRA_LEN = RAW_ITEMS.length;
+      const known = Object.create(null);
+      Array.prototype.forEach.call(sel.options, function (o) { known[o.value] = 1; });
+      const extra = [];
+      RAW_ITEMS.forEach(function (it) {
+        const c = String(it.country || '').trim();
+        if (c && !known[c]) { known[c] = 1; extra.push(c); }
+      });
+      if (!extra.length) return;
+      let g = sel.querySelector('optgroup[data-legacy="1"]');
+      if (!g) {
+        g = document.createElement('optgroup');
+        g.label = '历史值';
+        g.setAttribute('data-legacy', '1');
+        sel.appendChild(g);
+      }
+      extra.forEach(function (c) {
+        const o = document.createElement('option');
+        o.value = c; o.text = '（旧）' + c;
+        g.appendChild(o);
+      });
+    }
+
+    const SUPABASE_KEY = 'sb_publishable_UW9cgyBOeV6zIZCicI2SlQ_bqm0MeJa';
+    /* ── 数据通道（2026-09-25）────────────────────────────────────────────
+       *.supabase.co 在国内部分网络被按域名(SNI)阻断：DNS 正常、TCP 能连，
+       但 TLS 握手一带上该域名就被 RST（团员端实测「查询异常: Failed to fetch」）。
+       后台同样改走本站同源反代 /sb/*（Cloudflare Pages Function → Supabase）。
+       supabase-js 需要绝对地址，故用 location.origin 拼。
+       ⚠️ 显式指定 auth.storageKey：否则键名会跟着 hostname 变，
+          团长已登录的会话会丢失（实测原键为 sb-oknhlfhdqbsukskdxqre-auth-token）。
+       反代探不通（未部署/异常）→ 自动重建客户端指回直连，后台不会因此瘫痪。 */
+    const SUPABASE_DIRECT = 'https://oknhlfhdqbsukskdxqre.supabase.co';
+    const SB_AUTH_STORAGE_KEY = 'sb-oknhlfhdqbsukskdxqre-auth-token';
+    function sbPageBase(){
+      try {
+        if (location.protocol === 'http:' || location.protocol === 'https:') return location.origin + '/sb';
+      } catch (e) {}
+      return SUPABASE_DIRECT;
+    }
+    /* 通道兜底：请求**网络层**失败（压根没连上）时自动换另一条通道再试一次。
+       HTTP 4xx/5xx 不换 —— 那说明服务端已经收到请求了。 */
+    function sbFetchWithFallback(input, init){
+      const url = (typeof input === 'string') ? input : ((input && input.url) || '');
+      let alt = '';
+      try {
+        if (url.indexOf(SUPABASE_DIRECT) === 0) {
+          alt = '/sb' + url.slice(SUPABASE_DIRECT.length);
+        } else {
+          const m = url.match(/^https?:\/\/[^/]+(\/sb\/.*)$/);
+          if (m) alt = SUPABASE_DIRECT + m[1].slice(3);
+        }
+      } catch (e) {}
+      /* 2026-11-07 审查修复：
+         ① 原来没有任何超时 → 弱网下后台会无限转圈（自查页的 fetchOnce 超时只覆盖了团员端）。
+            现在读 20s / 写 90s 封顶，到点 abort，让上层收到明确错误。
+         ② 换通道重试复用同一个 init：若 body 是 ReadableStream / FormData / Blob，
+            第一次 fetch 已把它消费掉，第二次会抛 "body used already"。
+            只放行可安全重放的请求（无 body / 字符串 / ArrayBuffer / URLSearchParams），
+            其余直接把原始错误上抛，由调用方处理，不做注定失败的假重试。
+         ③ 不覆盖调用方已有的 signal。 */
+      const b = init && init.body;
+      const replayable = !b || typeof b === 'string' ||
+        (typeof ArrayBuffer !== 'undefined' && b instanceof ArrayBuffer) ||
+        (typeof URLSearchParams !== 'undefined' && b instanceof URLSearchParams);
+      const withTimeout = function (target, opts) {
+        if ((opts && opts.signal) || typeof AbortController === 'undefined') return fetch(target, opts);
+        const method = String((opts && opts.method) || 'GET').toUpperCase();
+        const ms = (method === 'GET' || method === 'HEAD') ? 20000 : 90000;
+        const ctrl = new AbortController();
+        const timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, ms);
+        const merged = Object.assign({}, opts || {}, { signal: ctrl.signal });
+        return fetch(target, merged).finally(function () { clearTimeout(timer); });
+      };
+      return withTimeout(input, init).catch(function(e){
+        if (!alt || !replayable) throw e;
+        return withTimeout(alt, init);
+      });
+    }
+    function sbNewClient(base){
+      return (window.supabase || supabase).createClient(base, SUPABASE_KEY, {
+        auth: { storageKey: SB_AUTH_STORAGE_KEY, persistSession: true, autoRefreshToken: true },
+        global: { fetch: sbFetchWithFallback },
+      });
+    }
+    let SB_ACTIVE_BASE = sbPageBase();
+    let supabaseClient = sbNewClient(SB_ACTIVE_BASE);
+    (async function(){
+      try {
+        const r = await fetch('/sb/__health', { cache: 'no-store' });
+        if (r.ok) { const j = await r.json(); if (j && j.ok) return; }
+      } catch (e) {}
+      /* ⚠️ 2026-10-01 修：探测失败**不再把 base 锁死成直连**。
+         探测失败 ≠ 反代不可用（超时 / 被 Cloudflare 拦 / 临时 5xx 都会失败），
+         而直连在部分网络被按域名(SNI)阻断 → 一旦锁死，后台**所有**请求全挂。
+         现在：首选恒为同源 /sb；真连不上时由 sbFetchWithFallback 兜底换直连。 */
+      console.warn('[数据通道] /sb 探针未通过，仍走同源反代（失败时自动兜底直连）');
+    })();
+
+    let CURRENT_RECORD_ID = null;
+
+    /* ── 图片地址安全化（2026-10-01）──────────────────────────────────────
+       库里 image_url 有相当一部分存的是**直连** supabase 地址（实测 1136 条），
+       而部分网络把 *.supabase.co 按 SNI 阻断 → 直连的图**一律裂**（本机实测直连返回 000）。
+       显示时统一改写成同源反代；万一 /sb 也取不到，onerror 兜底换回直连再试一次。
+       ⚠️ 只影响**显示**，不动入库数据（存直连是故意的：地址稳定、不占 Pages 额度）。 */
+    const SB_IMG_BASE = (function(){
+      try {
+        if (location.protocol === 'http:' || location.protocol === 'https:') return location.origin + '/sb';
+      } catch (e) {}
+      return SUPABASE_DIRECT;
+    })();
+    function sbImg(url){
+      const s = String(url == null ? '' : url).trim();
+      if (!s) return '';
+      if (s.indexOf(SUPABASE_DIRECT) === 0) return SB_IMG_BASE + s.slice(SUPABASE_DIRECT.length);
+      return s;
+    }
+    /* <img onerror="imgFallback(this)" data-orig="原地址"> 的兜底：换另一条通道再试一次。
+       没给 data-orig 时会自己推导反向地址（/sb ↔ 直连）。 */
+    function imgFallback(el){
+      if (!el) return;
+      const cur = el.src || '';
+      let alt = el.getAttribute('data-orig') || '';
+      if (!alt && cur) {
+        if (cur.indexOf(SB_IMG_BASE) === 0) alt = SUPABASE_DIRECT + cur.slice(SB_IMG_BASE.length);
+        else if (cur.indexOf(SUPABASE_DIRECT) === 0) alt = SB_IMG_BASE + cur.slice(SUPABASE_DIRECT.length);
+      }
+      if (alt && el.getAttribute('data-fb') !== '1' && cur !== alt) {
+        el.setAttribute('data-fb', '1');
+        el.src = alt;
+        return;
+      }
+      el.style.opacity = '.25';
+      el.setAttribute('title', '图片加载失败（网络受限）');
+    }
+    window.imgFallback = imgFallback;
+    let CURRENT_VERSION = null;
+    let DELETED_ITEM_IDS = new Set();
+    let DIRTY_ITEM_IDS = new Set();
+    let CURRENT_QUERY_KEY = '4goods';
+    let RAW_ITEMS = [];
+    /* 2026-11-07：保存时用来「垫底」的完整 image_data 原件。
+       以前保存是按固定字段清单重抄一份，清单外的新字段（机器人 / 自查页写的）会被抹掉。
+       现在以这份完整对象为基底，只覆盖后台真正认识的那几个切片。 */
+    let RAW_IMAGE_DATA_BASE = {};
+let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_items），不参与排表渲染
+    let RAW_APPLICATIONS = [];
+    let RAW_LOGS = [];
+    let RAW_FEEDBACK = [];
+    let RAW_LOGISTICS = [];
+    let RAW_PAY_PROOFS = [];        // 💳 团员在自查页上传的付款凭证（image_data.pay_proofs）
+    // 💰 零钱罐（image_data.piggy_bank）· 2026-10-14 团长需求：
+    //    团员在自查页「我要存钱」提交 → 这里是待审核队列 → 通过后进罐，可抵扣以后的谷子费/运费。
+    //    每条：{ id, cn, amount, note, img_path, status:待审核|可用|已驳回|已退回,
+    //            used(已抵扣), refunded(已退回), used_log[], created_at, reviewed_at, reject_reason }
+    let RAW_PIGGY = [];
+    // 💰 批次「定金计划」（image_data.batch_plans）：{ <归一化批次名>: { ratio: 0.5, enabled: true } }
+    //    ⚠️ 键必须与团员端 index.html 的 _normBatch() 完全一致（两边函数逐字相同）
+    let RAW_BATCH_PLANS = {};
+    let LOGISTICS_DELETED_BATCHES = new Set();
+    // 🚀 排发申请（image_data.applications）的「本地脏标记 + 删除墓碑」。
+    //    2026-10-14 修复：applications 以前既没有脏标记、也没有墓碑 →
+    //    ① 另一份旧页面保存时，mergeById 是「我这边无条件优先」，
+    //       而谷子那侧有 MY_DIRTY 保护 → 出现「谷子已排发、申请却被冲回待处理」的错位；
+    //    ② 删除申请后一刷新就复活（并集把删掉的补回来）。
+    let APP_STATUS_DIRTY = new Set();   // 本次改过状态的申请 id（派发 / 回退）
+    let APP_DELETED_IDS = new Set();    // 本次删除的申请 id（墓碑，保存时 filter 掉）
+    // 🗑 本次保存中「已删除的付款凭证 id」—— 真删需要它：
+    //    保存冲突时会走 mergeById（并集合并），不加墓碑的话删掉的会被服务器旧数据合并回来。
+    //    只活在一次保存过程里，保存成功即清空，不落库、不留痕。
+    let PAY_PROOF_DELETED_IDS = new Set();
+    let LOGISTICS_DETAIL_INDEX = -1;
+    let RAW_BATCHES = [];
+    let PENDING_BATCH_TITLES = [];
+    let PENDING_BATCH_RAW = '';
+    let BATCH_SELECTED_IDS = new Set();
+    let CURRENT_DISPATCH_SUBTAB = 'pending';
+
+    window.ITEM_CACHE = [];
+    window.APP_CACHE = [];
+    window.LOG_CACHE = [];
+    window.FEEDBACK_CACHE = [];
+
+    let CURRENT_PAGE = 1;
+    /* 每页条数可调（2026-10-26）：2645 条 / 20 = 133 页，只能一页页点「下一页」太折磨。
+       可选 20/50/100/200，选择记在 localStorage，下次进来还是这个数。 */
+    let PAGE_SIZE = 20;
+    try {
+      const _ps = parseInt(localStorage.getItem('gtbot_admin_page_size') || '', 10);
+      if ([20, 50, 100, 200].indexOf(_ps) >= 0) PAGE_SIZE = _ps;
+    } catch (e) {}
+    window.__LAST_TOTAL_ITEMS = 0;
+    window.__LAST_TOTAL_PAGES = 1;
+    /* 🔴 已选谷子按 item_id 记（2026-10-26）：以前只读当前页 DOM，
+       翻页/改搜索词一重画就全丢，跨页批量根本做不了。
+       现在勾选状态存在这个 Set 里，重画时回填，翻到第 3 页再翻回来还是勾着的。 */
+    const SELECTED_ITEM_KEYS = new Set();
+    /* ↕️ 表头排序（2026-10-26）：2645 条里想找「这批最贵的一单」只能肉眼扫。
+       规则：数字列第一次点 = 从大到小（找最大值最常用），文字列第一次点 = A→Z；
+       同一列再点反转；第三次点回到「原始顺序」（不排）。 */
+    let SORT_KEY = '';
+    let SORT_DIR = 0;          // 0 = 原序，1 = 升序，-1 = 降序
+    const SORT_NUM_COLS = { price: 1, quantity: 1 };
+    const SORT_COL_LABEL = { name: '谷子名称', cn: '认领 CN', batch_name: '所属批次', price: '单价',
+                             quantity: '数量', country: '地区', status: '状态', order_date: '下单日期' };
+    let searchDebounceTimer = null;
+    let IS_IMAGE_UPLOADING = false;
+    let CURRENT_BATCH_ACTION_TYPE = null; // 'status' | 'country' | 'batch'
+
+    window.addEventListener('DOMContentLoaded', () => {
+          // 终末地加载转场：首次进入播放完整动画，同一会话内再次进入走快速通道
+          var skipIntro = false;
+          try {
+            // 永久记忆：每台设备只完整播放一次开场动画（localStorage 不随标签页/重启重置）
+            skipIntro = localStorage.getItem('INTRO_SEEN') === '1';
+            localStorage.setItem('INTRO_SEEN', '1');
+          } catch (e) {}
+          var intro;
+          if (skipIntro && typeof window.runIntroFast === 'function') {
+            intro = window.runIntroFast();
+          } else {
+            intro = (typeof window.runIntro === 'function') ? window.runIntro() : Promise.resolve();
+          }
+          intro
+            .catch(function () { document.body.classList.add('loaded'); })
+            .then(function () {
+              document.body.classList.add('loaded');
+              initGlobalOptions();
+              // 📅 录入表单的「下单日期」默认填今天（页面打开就是今天，省得每次手选）
+              try { if (typeof window.setDefaultOrderDate === 'function') window.setDefaultOrderDate(); } catch (e) {}
+              const savedKey = localStorage.getItem('ADMIN_QUERY_KEY');
+              if (savedKey) {
+                CURRENT_QUERY_KEY = savedKey;
+                document.getElementById('adminQueryKey').value = savedKey;
+              }
+              checkAuthStatus();
+            });
+        });
+
+    function ensureSelectOption(selectId, value) {
+      const sel = document.getElementById(selectId);
+      if (!sel || !value) return;
+      // 地区已改为 input + datalist（2026-10-29）：非 <select> 直接赋值即可
+      if (sel.tagName !== 'SELECT' || !sel.options) { sel.value = value; return; }
+      let found = false;
+      for (let i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === value) { found = true; break; }
+      }
+      if (!found) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.text = value;
+        sel.add(opt);
+      }
+      sel.value = value;
+    }
+
+    // 动态初始化全页面的选项
+    function initGlobalOptions() {
+      // 1. 渲染录入表单的状态 select
+      const inputStatus = document.getElementById('inputStatus');
+      if (inputStatus) {
+        inputStatus.innerHTML = STATUS_OPTIONS.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
+      }
+
+      // 2. 渲染筛选器的状态 datalist
+      const filterStatusPresets = document.getElementById('filterStatusPresets');
+      if (filterStatusPresets) {
+        filterStatusPresets.innerHTML = '<option value="">全部状态</option>' + STATUS_OPTIONS.map(opt => `<option value="${opt.value}">`).join('');
+      }
+
+      // 3. 渲染录入表单的地区：input + 全局 datalist（可打字搜索）
+      const countryDl = document.getElementById('countryList');
+      if (countryDl) { countryDl.innerHTML = countryDatalistHtml(); }
+      const inputCountry = document.getElementById('inputCountry');
+      if (inputCountry && !inputCountry.value) { inputCountry.value = '日本'; }
+
+      // 3.5 渲染录入表单的批次 select（加载数据后由 updateBatchDropdownOptions 刷新）
+      const inputBatchId = document.getElementById('inputBatchId');
+      if (inputBatchId) { inputBatchId.innerHTML = '<option value="">请选择批次</option>'; }
+
+      // 3.8 🌍 国际运费导入卡的掉落日默认填「今天+3 天」（团长手选，清空即不计时）
+      try { fillLogisticsDueDate(3, true); } catch (e) {}
+      try { _syncAdminNavH(); } catch (e) {}
+
+      // 4. 渲染筛选器的地区 select（分组，含全部国家）
+      const filterCountry = document.getElementById('filterCountry');
+      if (filterCountry) {
+        filterCountry.innerHTML = countryOptionsHtml('全部地区');
+      }
+    }
+
+    let toastTimer = null;
+    function showToast(msg, ms) {
+      const toast = document.getElementById('toast');
+      toast.innerText = msg;
+      toast.classList.add('show');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), ms || 4000);
+    }
+
+    async function login() {
+      const email = (document.getElementById('email')?.value || '').trim();
+      const password = (document.getElementById('password')?.value || '').trim();
+      if (!email || !password) return alert('请填写邮箱和密码！');
+      try {
+        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        if (error) return alert('登录失败: ' + error.message);
+        showToast('🎉 登录成功！');
+        document.getElementById('authOverlay').classList.remove('active');
+        document.getElementById('userEmailSpan').innerText = `已登录: ${data.user.email}`;
+        loadDataByQueryKey();
+      } catch (err) { alert('登录失败: ' + err.message); }
+    }
+    window.login = login;
+
+    async function checkAuthStatus() {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (session && session.user) {
+          document.getElementById('authOverlay').classList.remove('active');
+          document.getElementById('userEmailSpan').innerText = `已登录: ${session.user.email}`;
+          loadDataByQueryKey();
+        } else {
+          document.getElementById('authOverlay').classList.add('active');
+        }
+      } catch (e) { document.getElementById('authOverlay').classList.add('active'); }
+    }
+
+    async function handleSignOut() {
+      await supabaseClient.auth.signOut();
+      document.getElementById('authOverlay').classList.add('active');
+      showToast('已退出登录');
+    }
+    window.handleSignOut = handleSignOut;
+
+    /* ══════════════════════════════════════════════════════════════════════
+       💳 收款码管理（2026-10-03 新增）
+       背景：挂码原先只有机器人的三条 QQ 命令 —— 机器人一掉线，管理组就全卡住。
+       现在后台自己挂：图片传进 pay-qr 桶 + 写 qr_codes 表 → 团员自查页立刻可见。
+
+       ⚠️ 三条不能破的口径（破了就会「两个对象」或「取不到码」）：
+         1. 对象名规则与机器人 batch_payment._qr_web_name 一字不差：
+            qr_{批次名里 ASCII 片段(非字母数字→_，去首尾_，取前20) 或 'batch'}_{md5(强归一化批次名)前8位}.{ext}
+         2. 批次强归一化 _qrBatchKey 与 index.html 的 _normBatch / 机器人 _batch_key 完全一致；
+         3. qr_codes 表 batch_key 是主键 → 写入一律 upsert（覆盖同一批次，绝不新增行）。
+       ══════════════════════════════════════════════════════════════════════ */
+    var QR_CODES_MAP = null;        // batch_key -> {batch_key,batch_name,object_path,updated_at}
+    var QR_CODES_ROWS = [];         // 当前列表（渲染时存，按钮按下标取）
+    var QR_CODES_LOADED = false;
+    var QR_CODES_ERROR = '';
+    var _qrPendingTarget = null;    // 正在等选文件的批次
+    var _qrUploading = false;
+
+    /* 与机器人 clean_str 完全一致：去首尾空白 / 全角空格→空 / ·・•。．→. / 转小写 */
+    function _qrCleanStr(s){
+      return String(s == null ? '' : s).trim()
+        .replace(/\u3000/g, '')
+        .replace(/[\u00b7\u30fb\u2022\u3002\uff0e]/g, '.')
+        .toLowerCase();
+    }
+    /* 与机器人 _batch_key 完全一致：clean_str 再抹掉所有空白 */
+    function _qrBatchKey(s){ return _qrCleanStr(s).replace(/\s+/g, ''); }
+
+    /* UTF-8 编码（把 JS 字符串变成「一字符 = 一字节」，供下面的 MD5 使用） */
+    function _qrUtf8(str){
+      var out = '';
+      for (var i = 0; i < str.length; i++){
+        var c = str.charCodeAt(i);
+        if (c < 0x80) out += String.fromCharCode(c);
+        else if (c < 0x800) out += String.fromCharCode(0xC0 | (c >> 6), 0x80 | (c & 0x3F));
+        else if (c >= 0xD800 && c <= 0xDBFF && i + 1 < str.length){
+          var c2 = str.charCodeAt(++i);
+          var cp = 0x10000 + ((c - 0xD800) << 10) + (c2 - 0xDC00);
+          out += String.fromCharCode(0xF0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3F), 0x80 | ((cp >> 6) & 0x3F), 0x80 | (cp & 0x3F));
+        } else {
+          out += String.fromCharCode(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F));
+        }
+      }
+      return out;
+    }
+    /* MD5（只用来复刻机器人的对象名，结果必须与 Python hashlib.md5 一致） */
+    function _qrMd5Hex(input){
+      var str = _qrUtf8(String(input == null ? '' : input));
+      function rl(n, c){ return (n << c) | (n >>> (32 - c)); }
+      function au(x, y){ var l = (x & 0xFFFF) + (y & 0xFFFF); return (((x >> 16) + (y >> 16) + (l >> 16)) << 16) | (l & 0xFFFF); }
+      function cmn(q, a, b, x, s, t){ return au(rl(au(au(a, q), au(x, t)), s), b); }
+      function ff(a, b, c, d, x, s, t){ return cmn((b & c) | ((~b) & d), a, b, x, s, t); }
+      function gg(a, b, c, d, x, s, t){ return cmn((b & d) | (c & (~d)), a, b, x, s, t); }
+      function hh(a, b, c, d, x, s, t){ return cmn(b ^ c ^ d, a, b, x, s, t); }
+      function ii(a, b, c, d, x, s, t){ return cmn(c ^ (b | (~d)), a, b, x, s, t); }
+      function hex(n){ var s = '', j; for (j = 0; j < 4; j++) s += ('0' + ((n >> (j * 8)) & 0xFF).toString(16)).slice(-2); return s; }
+      var nblk = ((str.length + 8) >> 6) + 1, blks = [], i;
+      for (i = 0; i < nblk * 16; i++) blks[i] = 0;
+      for (i = 0; i < str.length; i++) blks[i >> 2] |= str.charCodeAt(i) << ((i % 4) * 8);
+      blks[i >> 2] |= 0x80 << ((i % 4) * 8);
+      blks[nblk * 16 - 2] = str.length * 8;
+      var a = 1732584193, b = -271733879, c = -1732584194, d = 271733878, x = blks;
+      for (i = 0; i < x.length; i += 16){
+        var oa = a, ob = b, oc = c, od = d;
+        a = ff(a, b, c, d, x[i + 0], 7, -680876936); d = ff(d, a, b, c, x[i + 1], 12, -389564586); c = ff(c, d, a, b, x[i + 2], 17, 606105819); b = ff(b, c, d, a, x[i + 3], 22, -1044525330);
+        a = ff(a, b, c, d, x[i + 4], 7, -176418897); d = ff(d, a, b, c, x[i + 5], 12, 1200080426); c = ff(c, d, a, b, x[i + 6], 17, -1473231341); b = ff(b, c, d, a, x[i + 7], 22, -45705983);
+        a = ff(a, b, c, d, x[i + 8], 7, 1770035416); d = ff(d, a, b, c, x[i + 9], 12, -1958414417); c = ff(c, d, a, b, x[i + 10], 17, -42063); b = ff(b, c, d, a, x[i + 11], 22, -1990404162);
+        a = ff(a, b, c, d, x[i + 12], 7, 1804603682); d = ff(d, a, b, c, x[i + 13], 12, -40341101); c = ff(c, d, a, b, x[i + 14], 17, -1502002290); b = ff(b, c, d, a, x[i + 15], 22, 1236535329);
+        a = gg(a, b, c, d, x[i + 1], 5, -165796510); d = gg(d, a, b, c, x[i + 6], 9, -1069501632); c = gg(c, d, a, b, x[i + 11], 14, 643717713); b = gg(b, c, d, a, x[i + 0], 20, -373897302);
+        a = gg(a, b, c, d, x[i + 5], 5, -701558691); d = gg(d, a, b, c, x[i + 10], 9, 38016083); c = gg(c, d, a, b, x[i + 15], 14, -660478335); b = gg(b, c, d, a, x[i + 4], 20, -405537848);
+        a = gg(a, b, c, d, x[i + 9], 5, 568446438); d = gg(d, a, b, c, x[i + 14], 9, -1019803690); c = gg(c, d, a, b, x[i + 3], 14, -187363961); b = gg(b, c, d, a, x[i + 8], 20, 1163531501);
+        a = gg(a, b, c, d, x[i + 13], 5, -1444681467); d = gg(d, a, b, c, x[i + 2], 9, -51403784); c = gg(c, d, a, b, x[i + 7], 14, 1735328473); b = gg(b, c, d, a, x[i + 12], 20, -1926607734);
+        a = hh(a, b, c, d, x[i + 5], 4, -378558); d = hh(d, a, b, c, x[i + 8], 11, -2022574463); c = hh(c, d, a, b, x[i + 11], 16, 1839030562); b = hh(b, c, d, a, x[i + 14], 23, -35309556);
+        a = hh(a, b, c, d, x[i + 1], 4, -1530992060); d = hh(d, a, b, c, x[i + 4], 11, 1272893353); c = hh(c, d, a, b, x[i + 7], 16, -155497632); b = hh(b, c, d, a, x[i + 10], 23, -1094730640);
+        a = hh(a, b, c, d, x[i + 13], 4, 681279174); d = hh(d, a, b, c, x[i + 0], 11, -358537222); c = hh(c, d, a, b, x[i + 3], 16, -722521979); b = hh(b, c, d, a, x[i + 6], 23, 76029189);
+        a = hh(a, b, c, d, x[i + 9], 4, -640364487); d = hh(d, a, b, c, x[i + 12], 11, -421815835); c = hh(c, d, a, b, x[i + 15], 16, 530742520); b = hh(b, c, d, a, x[i + 2], 23, -995338651);
+        a = ii(a, b, c, d, x[i + 0], 6, -198630844); d = ii(d, a, b, c, x[i + 7], 10, 1126891415); c = ii(c, d, a, b, x[i + 14], 15, -1416354905); b = ii(b, c, d, a, x[i + 5], 21, -57434055);
+        a = ii(a, b, c, d, x[i + 12], 6, 1700485571); d = ii(d, a, b, c, x[i + 3], 10, -1894986606); c = ii(c, d, a, b, x[i + 10], 15, -1051523); b = ii(b, c, d, a, x[i + 1], 21, -2054922799);
+        a = ii(a, b, c, d, x[i + 8], 6, 1873313359); d = ii(d, a, b, c, x[i + 15], 10, -30611744); c = ii(c, d, a, b, x[i + 6], 15, -1560198380); b = ii(b, c, d, a, x[i + 13], 21, 1309151649);
+        a = ii(a, b, c, d, x[i + 4], 6, -145523070); d = ii(d, a, b, c, x[i + 11], 10, -1120210379); c = ii(c, d, a, b, x[i + 2], 15, 718787259); b = ii(b, c, d, a, x[i + 9], 21, -343485551);
+        a = au(a, oa); b = au(b, ob); c = au(c, oc); d = au(d, od);
+      }
+      return hex(a) + hex(b) + hex(c) + hex(d);
+    }
+
+    /* 与机器人 _qr_web_name 完全一致 */
+    function _qrWebName(batchName, mime){
+      var bkey = _qrBatchKey(batchName);
+      var slug = String(batchName == null ? '' : batchName)
+        .replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
+      var digest = _qrMd5Hex(bkey).slice(0, 8);
+      var extMap = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
+      var ext = extMap[String(mime || '').split(';')[0].trim().toLowerCase()] || 'jpg';
+      return 'qr_' + (slug || 'batch') + '_' + digest + '.' + ext;
+    }
+
+    function _qrEsc(s){
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    /* 「这一条还欠钱吗」—— 排表的 status 与国际运费成员的 status 用的是同一套字面量。
+       只有它返回 true 才说明这批还有人没交，需要收款码。 */
+    function _qrIsPendingStatus(s){
+      var t = String(s == null ? '' : s).trim();
+      return t === '未付款' || t === '未交';
+    }
+    function _qrFmtTime(iso){
+      try {
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return String(iso);
+        var p = function(n){ return (n < 10 ? '0' : '') + n; };
+        return (d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+      } catch (e) { return String(iso); }
+    }
+    function _qrObjectUrl(objPath, updatedAt){
+      var safe = String(objPath || '').split('/').map(encodeURIComponent).join('/');
+      var direct = SUPABASE_DIRECT + '/storage/v1/object/public/pay-qr/' + safe;
+      var u = SB_IMG_BASE + '/storage/v1/object/public/pay-qr/' + safe;
+      if (updatedAt) u += '?v=' + encodeURIComponent(String(updatedAt));
+      return { url: u, orig: direct };
+    }
+
+    async function loadQrCodes(force){
+      if (QR_CODES_LOADED && !force) return;
+      if (force){
+        QR_CODES_LOADED = false; QR_CODES_MAP = null;
+        // ⚠️ 这里不能再调 renderQrCodes()：它看到 !QR_CODES_LOADED 又会去调 loadQrCodes(false)，
+        //    一个刷新会打出两次请求。直接画「读取中」即可。
+        var box0 = document.getElementById('qrCodesList');
+        if (box0) box0.innerHTML = '<div style="padding:18px; text-align:center; color:var(--text-muted);">正在读取已挂的收款码…</div>';
+        var sum0 = document.getElementById('qrCodesSummary');
+        if (sum0) sum0.innerHTML = '';
+      }
+      try {
+        var r = await supabaseClient.from('qr_codes').select('batch_key,batch_name,object_path,updated_at');
+        if (r.error) throw r.error;
+        var m = {};
+        (r.data || []).forEach(function(x){ if (x && x.batch_key) m[String(x.batch_key)] = x; });
+        QR_CODES_MAP = m; QR_CODES_ERROR = '';
+      } catch (e) {
+        QR_CODES_MAP = QR_CODES_MAP || {};
+        QR_CODES_ERROR = (e && e.message) ? e.message : String(e);
+      }
+      QR_CODES_LOADED = true;
+      renderQrCodes();
+    }
+    window.loadQrCodes = loadQrCodes;
+
+    function renderQrCodes(){
+      var box = document.getElementById('qrCodesList');
+      if (!box) return;
+      var sum = document.getElementById('qrCodesSummary');
+      if (!QR_CODES_LOADED){
+        if (sum) sum.innerHTML = '';
+        box.innerHTML = '<div style="padding:18px; text-align:center; color:var(--text-muted);">正在读取已挂的收款码…</div>';
+        loadQrCodes(false);
+        return;
+      }
+      if (QR_CODES_ERROR){
+        if (sum) sum.innerHTML = '';
+        box.innerHTML = '<div style="padding:14px; color:#dc2626;">读取收款码失败：' + _qrEsc(QR_CODES_ERROR) +
+          '<br><span style="font-size:0.82rem; color:var(--text-muted);">点右上角「🔄 刷新」重试。</span></div>';
+        return;
+      }
+      var map = QR_CODES_MAP || {};
+      var rows = [], seen = {};
+      /* keyOverride：已挂码的批次**直接用表里的 batch_key**，不要拿 batch_name 重算 ——
+         历史数据里两者可能对不上，重算会让「同一批次显示成两行 / 换了码却仍显示旧行」。 */
+      function addBatch(name, source, keyOverride){
+        var raw = String(name == null ? '' : name).trim();
+        if (!raw) return;
+        var k = keyOverride || _qrBatchKey(raw);
+        if (!k) return;
+        if (seen[k]){
+          if (seen[k].sources.indexOf(source) < 0) seen[k].sources.push(source);
+          return;
+        }
+        var rec = map[k];
+        seen[k] = {
+          key: k,
+          name: (rec && rec.batch_name) ? String(rec.batch_name) : raw,
+          sources: [source],
+          path: rec ? String(rec.object_path || '') : '',
+          updated: rec ? String(rec.updated_at || '') : '',
+          pending: 0
+        };
+        rows.push(seen[k]);
+      }
+      (RAW_ITEMS || []).forEach(function(it){
+        if (!it) return;
+        var bn = String(it.batch_name || '').trim() || '默认批次';
+        addBatch(bn, '排表');
+        if (_qrIsPendingStatus(it.status)){
+          var k = _qrBatchKey(bn);
+          if (seen[k]) seen[k].pending++;
+        }
+      });
+      /* ⚠️ 国际运费的成员必须一起算进「还有人没交」——
+         像「26科隆场贩国际」这种只存在于 logistics_data、排表里没有条目的批次，
+         不把它们算上就会被误判成「已收完」而折叠掉（该挂的码反而不提醒了）。 */
+      (RAW_LOGISTICS || []).forEach(function(b){
+        if (!b) return;
+        var bn = String(b.batch_name || '').trim();
+        if (!bn) return;
+        addBatch(bn, '国际运费');
+        var k = _qrBatchKey(bn);
+        var mem = b.fee_members || b.members || [];
+        for (var mi = 0; mi < mem.length; mi++){
+          if (_qrIsPendingStatus(mem[mi] && mem[mi].status)){ if (seen[k]) seen[k].pending++; }
+        }
+      });
+      Object.keys(map).forEach(function(k){ var r = map[k] || {}; addBatch(r.batch_name || k, '历史存档', k); });
+
+      rows.sort(function(a, b){
+        var am = a.path ? 1 : 0, bm = b.path ? 1 : 0;
+        if (am !== bm) return am - bm;                                 // 没挂码的排最前
+        if (a.pending !== b.pending) return b.pending - a.pending;     // 再按还没交的人多的排前
+        return a.name.localeCompare(b.name, 'zh');
+      });
+
+      var kwEl = document.getElementById('qrSearchInput');
+      var kw = kwEl ? String(kwEl.value || '').trim().toLowerCase() : '';
+      var onlyEl = document.getElementById('qrOnlyMissing');
+      var onlyMissing = !!(onlyEl && onlyEl.checked);
+      var allEl = document.getElementById('qrShowAll');
+      var showAll = !!(allEl && allEl.checked);
+      var list = rows.filter(function(r){
+        /* 默认只留「还有人没交」的批次 —— 收完钱的自动折叠，不再催团长挂码（10-03 团长定的口径）。 */
+        if (!showAll && !(r.pending > 0)) return false;
+        if (onlyMissing && r.path) return false;
+        if (kw){
+          var kk = _qrBatchKey(kw);
+          if (r.name.toLowerCase().indexOf(kw) < 0 && (!kk || r.key.indexOf(kk) < 0)) return false;
+        }
+        return true;
+      });
+      QR_CODES_ROWS = list;
+
+      var nPending = rows.filter(function(r){ return r.pending > 0; }).length;
+      var nDone = rows.length - nPending;
+      var nNeedQr = rows.filter(function(r){ return r.pending > 0 && !r.path; }).length;
+      if (sum){
+        sum.innerHTML = '共 <b>' + rows.length + '</b> 个批次：<b>' + nPending + '</b> 个还有人没交' +
+          (nDone ? '、<b style="color:#16a34a;">' + nDone + ' 个已收完</b>（' + (showAll ? '已展开' : '默认折叠') + '）' : '') +
+          (nNeedQr ? '<br><b style="color:#dc2626;">其中 ' + nNeedQr + ' 个「还有人没交」的批次还没挂收款码</b>' : '') +
+          (list.length !== rows.length ? '<br><span style="font-size:0.82rem;">当前列出 ' + list.length + ' 个</span>' : '');
+      }
+      if (!list.length){
+        var emptyMsg;
+        if (!rows.length) emptyMsg = '当前还没有任何批次数据，先在上面的「切换并加载数据」里加载一个 Key';
+        else if (!showAll && !onlyMissing && !kw) emptyMsg = '🎉 需要收钱的批次都挂好码了 —— 没有别的批次要管。<br>想看全部批次（含已收完的），勾上面的「显示全部批次」。';
+        else emptyMsg = '没有匹配的批次';
+        box.innerHTML = '<div style="padding:18px; text-align:center; color:var(--text-muted); line-height:1.9;">' + emptyMsg + '</div>';
+        return;
+      }
+
+      var html = '';
+      list.forEach(function(r, idx){
+        var thumb, meta;
+        if (r.path){
+          var u = _qrObjectUrl(r.path, r.updated);
+          thumb = '<img src="' + _qrEsc(u.url) + '" data-orig="' + _qrEsc(u.orig) + '" onerror="imgFallback(this)" ' +
+                  'style="width:100%; height:100%; object-fit:contain; background:#fff;" alt="收款码">';
+          meta = '已挂码' + (r.updated ? '，' + _qrFmtTime(r.updated) + ' 更新' : '');
+        } else {
+          thumb = '<span style="font-size:0.72rem; color:var(--text-muted); text-align:center; line-height:1.3;">未<br>挂码</span>';
+          meta = '还没挂收款码';
+        }
+        var src = '来源：' + r.sources.join(' · ');
+        var badge;
+        if (r.pending > 0){
+          badge = '<span style="display:inline-block; font-size:0.72rem; background:#fee2e2; color:#b91c1c; border-radius:4px; padding:1px 6px; margin-left:6px; vertical-align:middle; white-space:nowrap;">还有 ' + r.pending + ' 人没交</span>';
+          src += ' ｜ 还有 ' + r.pending + ' 条待交';
+        } else {
+          badge = '<span style="display:inline-block; font-size:0.72rem; background:#dcfce7; color:#15803d; border-radius:4px; padding:1px 6px; margin-left:6px; vertical-align:middle; white-space:nowrap;">已收完</span>';
+          if (r.path) src += ' ｜ 已经收完钱了，这张码可以撤下';
+        }
+
+        var btns = '<button class="btn ' + (r.path ? 'btn-secondary' : 'btn-primary') + '" style="padding:6px 12px; font-size:0.82rem; white-space:nowrap;" ' +
+              'onclick="qrPickImageAt(' + idx + ')">' + (r.path ? '更换' : '上传收款码') + '</button>';
+        if (r.path){
+          btns += '<button class="btn btn-danger" style="padding:6px 12px; font-size:0.82rem; white-space:nowrap; margin-left:6px;" ' +
+              'onclick="qrAskDelete(' + idx + ')">🗑 删除</button>';
+        }
+
+        /* 删除＝把码从网站上撤下来，会直接影响团员，所以走「内联二次确认」而不是点一下就没 */
+        var delBox = '';
+        if (r.path){
+          delBox = '<div id="qrDelBox_' + idx + '" style="display:none; margin-top:10px; border:1px solid #fecaca; background:#fef2f2; border-radius:8px; padding:10px 12px;">' +
+            '<div style="font-size:0.85rem; color:#b91c1c; line-height:1.85;">确定撤下「' + _qrEsc(r.name) + '」的收款码？' +
+              '<br>撤下后 <b>团员自查页立刻看不到这张码</b>。' +
+              (r.pending > 0 ? '<br>⚠️ <b>这批还有 ' + r.pending + ' 个人没交钱，撤掉后他们就没法扫码交款了。</b>' : '') +
+            '</div>' +
+            '<div style="margin-top:9px; display:flex; gap:8px; flex-wrap:wrap;">' +
+              '<button class="btn btn-danger" style="padding:6px 14px; font-size:0.82rem;" onclick="qrConfirmDelete(' + idx + ')">确认撤下</button>' +
+              '<button class="btn btn-secondary" style="padding:6px 14px; font-size:0.82rem;" onclick="qrHideDelete(' + idx + ')">取消</button>' +
+            '</div></div>';
+        }
+
+        html += '<div style="border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:8px;' +
+            (r.path ? '' : (r.pending > 0 ? ' background:#fffbeb;' : '')) + '">' +
+          '<div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">' +
+            '<div style="flex:0 0 62px; width:62px; height:62px; border-radius:6px; overflow:hidden; border:1px solid var(--border); background:#f8fafc; display:flex; align-items:center; justify-content:center;">' + thumb + '</div>' +
+            '<div style="flex:1 1 200px; min-width:0;">' +
+              '<div style="font-weight:600; word-break:break-all;">' + _qrEsc(r.name) + badge + '</div>' +
+              '<div style="font-size:0.78rem; color:var(--text-muted); margin-top:3px; word-break:break-all;">' + _qrEsc(meta) +
+                '<br>' + _qrEsc(src) + '</div>' +
+            '</div>' +
+            '<div style="flex:0 0 auto; display:flex; align-items:center; flex-wrap:wrap; gap:6px;">' + btns + '</div>' +
+          '</div>' + delBox +
+        '</div>';
+      });
+      box.innerHTML = html;
+    }
+    window.renderQrCodes = renderQrCodes;
+
+    function qrPickImageAt(idx){
+      var r = QR_CODES_ROWS[idx];
+      if (!r) return showToast('列表已刷新，请重新点一次');
+      _qrPendingTarget = { key: r.key, name: r.name };
+      var inp = document.getElementById('qrFileInput');
+      if (!inp) return;
+      inp.value = '';
+      inp.click();
+    }
+    window.qrPickImageAt = qrPickImageAt;
+
+    async function qrHandleFile(e){
+      var inp = e && e.target;
+      var f = inp && inp.files && inp.files[0];
+      var target = _qrPendingTarget;
+      _qrPendingTarget = null;
+      if (inp) inp.value = '';
+      if (!f || !target) return;
+      await uploadQrCode(target, f);
+    }
+    window.qrHandleFile = qrHandleFile;
+
+    function qrAskDelete(idx){
+      var r = QR_CODES_ROWS[idx];
+      if (!r) return showToast('列表已刷新，请重新点一次');
+      var box = document.getElementById('qrDelBox_' + idx);
+      if (box) box.style.display = 'block';
+    }
+    window.qrAskDelete = qrAskDelete;
+
+    function qrHideDelete(idx){
+      var box = document.getElementById('qrDelBox_' + idx);
+      if (box) box.style.display = 'none';
+    }
+    window.qrHideDelete = qrHideDelete;
+
+    /* 🗑 撤下收款码 —— 会影响团员（码立刻从自查页消失），所以必须两步确认。
+       顺序刻意是「先删表行、再删桶图」：
+         表行是「要不要显示」的开关，删掉它团员立刻看不到；
+         万一桶图没删干净，最坏只是留一张孤儿图，不影响任何人交款。
+       反过来的话，中间失败会留下「表里有记录、图已不在」→ 团员看到裂图。 */
+    async function qrConfirmDelete(idx){
+      var r = QR_CODES_ROWS[idx];
+      if (!r || !r.path) return showToast('这条没有挂收款码');
+      var btn = document.querySelector('#qrDelBox_' + idx + ' button');
+      var objPath = String(r.path);
+      if (btn){ btn.disabled = true; btn.innerText = '正在撤下…'; }
+      try {
+        /* ① 删表行。⚠️ 必须 .select() 拿回被删的行：
+              权限不足时 PostgREST 会「静默成功」（返回空数组），不加这个判据会
+              出现「界面显示撤下了、其实码还挂在网站上」的假成功。 */
+        var dr = await supabaseClient.from('qr_codes').delete().eq('batch_key', r.key).select('batch_key');
+        if (dr.error) throw dr.error;
+        if (!dr.data || !dr.data.length) throw new Error('数据库没有真的删掉（可能是权限不足），收款码仍在线上');
+        /* ② 再清桶里的图（只是清垃圾；同名重传会被 upsert 覆盖，失败不影响团员使用） */
+        var rmErr = '';
+        try {
+          var sr = await supabaseClient.storage.from('pay-qr').remove([objPath]);
+          if (sr && sr.error) rmErr = sr.error.message || String(sr.error);
+        } catch (e2){ rmErr = (e2 && e2.message) ? e2.message : String(e2); }
+        if (QR_CODES_MAP) delete QR_CODES_MAP[r.key];
+        QR_CODES_LOADED = true;
+        renderQrCodes();
+        showToast('✅ 已撤下「' + r.name + '」的收款码' +
+          (rmErr ? '（桶里的图没删干净：' + rmErr + '，不影响使用）' : ''));
+      } catch (err){
+        if (btn){ btn.disabled = false; btn.innerText = '确认撤下'; }
+        showToast('❌ 撤下失败：' + ((err && err.message) ? err.message : err));
+      }
+    }
+    window.qrConfirmDelete = qrConfirmDelete;
+
+    async function uploadQrCode(target, file){
+      if (_qrUploading){ showToast('还有一张收款码正在上传，请稍候'); return; }
+      var ct = String((file && file.type) || '').toLowerCase();
+      if (['image/png', 'image/jpeg', 'image/webp', 'image/gif'].indexOf(ct) < 0){
+        showToast('❌ 只支持 jpg / png / webp / gif 格式的图片'); return;
+      }
+      if (file.size > 5 * 1024 * 1024){ showToast('❌ 图片超过 5MB，请压缩后再传'); return; }
+      _qrUploading = true;
+      try {
+        showToast('⏳ 正在上传「' + target.name + '」的收款码…');
+        var objName = _qrWebName(target.name, ct);      // 永远用规范名（与机器人一致）
+        var prev = (QR_CODES_MAP || {})[target.key];
+        var oldPath = (prev && prev.object_path && String(prev.object_path) !== objName) ? String(prev.object_path) : '';
+        var up = await supabaseClient.storage.from('pay-qr')
+          .upload(objName, file, { contentType: ct, upsert: true, cacheControl: '0' });
+        if (up.error) throw up.error;
+        var nowIso = new Date().toISOString();
+        var wr = await supabaseClient.from('qr_codes').upsert(
+          { batch_key: target.key, batch_name: target.name, object_path: objName, updated_at: nowIso },
+          { onConflict: 'batch_key' });
+        if (wr.error) throw wr.error;
+        QR_CODES_MAP = QR_CODES_MAP || {};
+        QR_CODES_MAP[target.key] = { batch_key: target.key, batch_name: target.name, object_path: objName, updated_at: nowIso };
+        if (oldPath){ try { await supabaseClient.storage.from('pay-qr').remove([oldPath]); } catch (e2) {} }
+        QR_CODES_LOADED = true;
+        renderQrCodes();
+        showToast('✅ 「' + target.name + '」的收款码已挂上，团员自查页立刻可见');
+      } catch (err){
+        showToast('❌ 上传失败：' + ((err && err.message) ? err.message : err));
+      } finally { _qrUploading = false; }
+    }
+    window.uploadQrCode = uploadQrCode;
+
+    /* 顶部标题跟随导航（2026-10-26）：一级导航 / 算账中心二级选项 都会改标题。
+       中文进 h1，英文进右侧小字；刚进后台时保持「后台管理系统」不动。 */
+    var TAB_META = {
+      tabItems:     ['排表管理',   'ITEM LIST'],
+      tabLogistics: ['国际运费',   'INTERNATIONAL SHIPPING'],
+      tabPayReview: ['交款审核',   'PAYMENT REVIEW'],
+      tabQrCodes:   ['收款码',     'PAYMENT QR'],
+      tabDispatch:  ['排发工作台', 'DISPATCH'],
+      tabCalc:      ['算账中心',   'ACCOUNTING'],
+      tabPayStats:  ['收款对账',   'PAYMENT STATS'],
+      tabFeedback:  ['反馈与团务', 'FEEDBACK']
+    };
+    function setPageTitle(zh, en) {
+      var h = document.getElementById('pageTitle');
+      var s = document.getElementById('pageSub');
+      if (h) h.textContent = zh;
+      if (s) s.textContent = en || '';
+    }
+    window.setPageTitle = setPageTitle;
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.side-nav .tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      if (event && event.currentTarget) event.currentTarget.classList.add('active');
+      const targetEl = document.getElementById(tabId);
+      if (targetEl) targetEl.classList.add('active');
+      const _meta = TAB_META[tabId];
+      if (_meta) setPageTitle(_meta[0], _meta[1]);
+      if (tabId === 'tabItems') { renderTable(); loadBatches(); }
+      if (tabId === 'tabLogistics') renderLogistics();
+      if (tabId === 'tabBatches') loadBatches();
+      if (tabId === 'tabDispatch') renderDispatchWorkbench();
+      if (tabId === 'tabLogs') renderTransferLogs();
+      if (tabId === 'tabFeedback') renderFeedbackList();
+      if (tabId === 'tabPayStats') renderPayStats();
+      if (tabId === 'tabPayReview') renderPayReview();
+      if (tabId === 'tabQrCodes') renderQrCodes();
+      if (tabId === 'tabCalc') { renderBatchPlans(); renderPiggyBank(); }   // 💰 定金设置 + 🐷 零钱罐 都在算账中心 → 切进来就重画
+      /* 切页回顶部（2026-10-26）：手机上从排表底部（7000px）点别的 tab，
+         新页面会停在半空中，看到的是空白，像"点了没反应"。 */
+      try { window.scrollTo(0, 0); } catch (e) {}
+      /* 手机侧导航是横向滑条，当前 tab 可能滚在屏幕外 → 把它滑到中间 */
+      try {
+        const nav = document.querySelector('.side-nav');
+        const act = document.querySelector('.side-nav .tab-btn.active');
+        if (nav && act && nav.scrollWidth > nav.clientWidth + 4) {
+          const nr = nav.getBoundingClientRect();
+          const ar = act.getBoundingClientRect();
+          const delta = (ar.left - nr.left) - (nav.clientWidth - ar.width) / 2;
+          if (Math.abs(delta) > 2) nav.scrollLeft += delta;
+        }
+      } catch (e) {}
+    }
+    window.switchTab = switchTab;
+
+    async function loadDataByQueryKey() {
+      const keyInput = document.getElementById('adminQueryKey').value.trim();
+      if (!keyInput) return showToast('请输入 Query Key！');
+      DELETED_ITEM_IDS.clear();
+      DIRTY_ITEM_IDS.clear();
+      PAY_PROOF_DELETED_IDS.clear();
+      clearItemSelection(true);   /* 换库了：上一份数据的选中 key 全部作废（item_id 不通用） */
+      CURRENT_QUERY_KEY = keyInput;
+      localStorage.setItem('ADMIN_QUERY_KEY', CURRENT_QUERY_KEY);
+      try {
+        const { data, error } = await supabaseClient.from('leader_data').select('*').eq('query_key', CURRENT_QUERY_KEY);
+        if (error) return showToast('读取失败: ' + error.message);
+        if (!data || data.length === 0) {
+          CURRENT_RECORD_ID = null; CURRENT_VERSION = null; RAW_ITEMS = []; RAW_ARCHIVED = []; RAW_APPLICATIONS = []; RAW_LOGS = []; RAW_FEEDBACK = []; RAW_LOGISTICS = []; RAW_PAY_PROOFS = []; RAW_BATCH_PLANS = {}; RAW_PIGGY = []; RAW_IMAGE_DATA_BASE = {};
+          LOGISTICS_DELETED_BATCHES.clear();
+          renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
+          renderPayReview(); renderPayStats(); renderQrCodes(); renderBatchPlans(); renderPiggyBank();
+          alert('该密钥暂无数据！'); return;
+        }
+        const rec = data[0];
+        CURRENT_RECORD_ID = rec.id;
+        CURRENT_VERSION = (rec.version !== undefined && rec.version !== null) ? Number(rec.version) : null;
+        let gData = rec.group_data;
+        if (typeof gData === 'string') { try { gData = JSON.parse(gData); } catch (e) { gData = []; } }
+        RAW_ITEMS = Array.isArray(gData) ? gData : [];
+        let iData = rec.image_data;
+        if (typeof iData === 'string') { try { iData = JSON.parse(iData); } catch (e) { iData = {}; } }
+        if (!iData || typeof iData !== 'object') iData = {};
+        RAW_IMAGE_DATA_BASE = iData;   // 保留完整原件（含后台不认识的新字段）
+        RAW_APPLICATIONS = Array.isArray(iData.applications) ? iData.applications : [];
+        RAW_LOGS = Array.isArray(iData.transfer_logs) ? iData.transfer_logs : [];
+        RAW_FEEDBACK = Array.isArray(iData.feedback) ? iData.feedback : [];
+        // 老反馈没有取件码：按 id 推导补一个，下次保存时自动写回数据库
+        RAW_FEEDBACK.forEach(function (f) { if (f && !f.code) f.code = fbCodeOf(f); });
+        RAW_LOGISTICS = Array.isArray(iData.logistics_data) ? iData.logistics_data : [];
+        RAW_PAY_PROOFS = Array.isArray(iData.pay_proofs) ? iData.pay_proofs : [];
+        RAW_PIGGY = Array.isArray(iData.piggy_bank) ? iData.piggy_bank : [];   // 💰 零钱罐（2026-10-14）
+        // 💰 批次定金计划（键 = 归一化批次名）
+        RAW_BATCH_PLANS = (iData.batch_plans && typeof iData.batch_plans === 'object' && !Array.isArray(iData.batch_plans)) ? iData.batch_plans : {};
+        RAW_ARCHIVED = Array.isArray(iData.archived_items) ? iData.archived_items : [];
+        _loadDispatchMarks(iData.dispatch_marks);   // ✅ 排发勾选（image_data.dispatch_marks）
+        CURRENT_PAGE = 1;
+        updateBatchDropdownOptions();
+        /* 💾 数据到位后再恢复上次的筛选（批次要在 RAW_ITEMS 上校验过才敢用）。
+           ⚠️ 必须告诉团长「筛选被恢复了」—— 否则他只看到 20 条，会以为数据丢了。 */
+        let _filterRestored = false;
+        try { _filterRestored = restoreFilterState(); } catch (e) {}
+        showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)`
+                  + (_filterRestored ? '｜已恢复上次的筛选条件，看全部点批次框选「全部批次」' : ''));
+        renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
+        renderPayReview(); renderPayStats(); renderQrCodes(); renderBatchPlans(); renderPiggyBank();
+        loadBatches();
+        scheduleIntlDropCheck();   // 🌍 国际运费到期结算（只在真的改到东西时才写库）
+      } catch (err) { showToast('数据加载网络异常'); }
+    }
+    window.loadDataByQueryKey = loadDataByQueryKey;
+
+    // 🔄 真·刷新（2026-09-24 修）：从数据库重新拉一份数据再渲染。
+    // 原先两个「🔄 刷新」按钮只调用 renderPayStats()/renderPayReview()，它们只重画内存里的旧数据，
+    // 从不访问网络 → 别人（团员）新提交的交款凭证永远刷不出来，必须整页 Ctrl+F5 才能看到。
+    async function reloadAllData(btn) {
+      if (DIRTY_ITEM_IDS.size > 0 &&
+          !confirm('还有 ' + DIRTY_ITEM_IDS.size + ' 条改动正在写入数据库，现在刷新可能丢掉它们。\n\n确定要刷新吗？')) {
+        return;
+      }
+      const old = btn ? btn.innerHTML : '';
+      if (btn) { btn.disabled = true; btn.innerHTML = '⏳ 拉取中…'; }
+      try {
+        const inp = document.getElementById('adminQueryKey');
+        if (inp && !inp.value.trim() && CURRENT_QUERY_KEY) inp.value = CURRENT_QUERY_KEY;
+        await loadDataByQueryKey();
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = old; }
+      }
+    }
+    window.reloadAllData = reloadAllData;
+
+    // 🗄️ 归档已排发：从 group_data 移入 image_data.archived_items（数据保留，三端可查）
+    async function archiveShippedItems() {
+      if (!CURRENT_RECORD_ID) return showToast('请先加载数据');
+      const shipped = RAW_ITEMS.filter(function (it) { return String(it.status || '').trim() === '已排发'; });
+      if (!shipped.length) return showToast('当前没有「已排发」状态的谷子，无需归档');
+      if (!confirm('确定归档 ' + shipped.length + ' 条「已排发」谷子吗？\n\n' +
+        '· 排表明细将移除它们（后台更轻快）\n' +
+        '· 团员自查、帝江号大胃袋榜数据不受影响\n' +
+        '· 机器人 /查排发 照常可查\n' +
+        '（当前归档区已有 ' + RAW_ARCHIVED.length + ' 条历史记录）')) return;
+      const now = new Date().toLocaleString('zh-CN');
+      shipped.forEach(function (it) {
+        it._archived_at = now;
+        DELETED_ITEM_IDS.add(String(it.item_id || it.id));
+      });
+      RAW_ARCHIVED = shipped.concat(RAW_ARCHIVED);
+      RAW_ITEMS = RAW_ITEMS.filter(function (it) { return String(it.status || '').trim() !== '已排发'; });
+      const ok = await saveDataToSupabase();
+      if (ok) {
+        showToast('🗄️ 已归档 ' + shipped.length + ' 条已排发谷子（累计 ' + RAW_ARCHIVED.length + ' 条）');
+        renderTable(); updateBatchDropdownOptions();
+      }
+    }
+    window.archiveShippedItems = archiveShippedItems;
+
+    // 按 id 合并：我这边的优先（含刚做的修改），服务器上多出来的照样保留
+    function mergeById(mine, theirs) {
+      const myIds = {};
+      const out = (mine || []).slice();
+      (mine || []).forEach(function (x) { myIds[String(x && x.id)] = true; });
+      (theirs || []).forEach(function (x) {
+        if (!x) return;
+        const k = String(x.id);
+        if (!myIds[k]) { myIds[k] = true; out.push(x); }
+      });
+      return out;
+    }
+
+    /* 💳 凭证合并（2026-10-29 团长口径：收款审核永远以网站提交为优先）
+
+       mergeById 是「后台内存优先」，会把别人刚写的状态盖回去。对 pay_proofs 会出这种事故：
+       后台页面一直开着不动 → 团员在网站重新提交（同批次那条「来自QQ」的待审记录被自动
+       作废成「已撤回」）→ 团长随后点保存 → 用内存里的旧「待审核」把它覆盖回来 →
+       后台又冒出一条重复待审，还可能被审第二次。
+
+       所以凭证不能按「谁有 id 用谁」，必须先看状态：
+         · 服务器那份已经是终态（已通过 / 已驳回 / 已撤回），本地还停在「待审核」→ 用服务器
+         · 本地已经处理过（本次刚点通过 / 驳回）→ 用本地，避免把团长刚做的操作冲掉
+         · 其余按本地，服务器多出来的 id 追加进来 */
+    function _proofIsFinal(st) {
+      const s = String(st || '待审核');
+      return s === '已通过' || s === '已驳回' || s === '已撤回';
+    }
+    function mergePayProofs(mine, theirs) {
+      const out = [], seen = {}, theirMap = {};
+      (theirs || []).forEach(function (x) { if (x) theirMap[String(x.id)] = x; });
+      (mine || []).forEach(function (x) {
+        if (!x) return;
+        const k = String(x.id);
+        if (seen[k]) return;
+        seen[k] = true;
+        const t = theirMap[k];
+        if (t && _proofIsFinal(t.status) && !_proofIsFinal(x.status)) { out.push(t); return; }
+        out.push(x);
+      });
+      (theirs || []).forEach(function (x) {
+        if (!x) return;
+        const k = String(x.id);
+        if (seen[k]) return;
+        seen[k] = true;
+        out.push(x);
+      });
+      return out;
+    }
+
+    // 🚀 申请记录合并（比 mergeById 严格，专治 applications 的「状态错位」）：
+    //   ① 墓碑优先：本次明确删掉的一律不保留（否则并集会把删掉的复活）
+    //   ② 脏标记优先：本次改过状态的申请，用我这边的
+    //   ③ 其余一律用服务器最新版 —— 避免「另一份旧页面」把刚派发的申请冲回「待处理」
+    //   ④ 终态保护：「已完成」不可逆，任一侧已完成就保持已完成
+    function mergeApplications(mine, theirs, dirtyIds, deletedIds) {
+      const dirty = dirtyIds || new Set();
+      const deleted = deletedIds || new Set();
+      const theirMap = {};
+      (theirs || []).forEach(function (x) { if (x) theirMap[String(x.id)] = x; });
+      const out = [];
+      const seen = {};
+      (mine || []).forEach(function (x) {
+        if (!x) return;
+        const k = String(x.id);
+        if (deleted.has(k) || seen[k]) return;
+        seen[k] = true;
+        const t = theirMap[k];
+        if (!t || dirty.has(k)) { out.push(x); return; }
+        out.push(_mergeAppOne(x, t));
+      });
+      (theirs || []).forEach(function (x) {
+        if (!x) return;
+        const k = String(x.id);
+        if (deleted.has(k) || seen[k]) return;
+        seen[k] = true;
+        out.push(x);
+      });
+      return out;
+    }
+
+    // 单条申请合并：a = 我这边的，b = 服务器最新版
+    function _mergeAppOne(a, b) {
+      const sa = String((a && a.status) || '').trim();
+      const sb = String((b && b.status) || '').trim();
+      if (sa === '已完成' || sb === '已完成') {
+        const base = (sa === '已完成') ? a : b;   // 取已完成那份（字段更全）
+        const o = Object.assign({}, base);
+        o.status = '已完成';
+        return o;
+      }
+      return a;
+    }
+
+    /* 🔻 2026-11-05：一次请求同时取「归档」和「运费」两段（PostgREST 的 jsonb 路径选择）。
+       · archived  → 保存前做并集，防止旧页面覆盖归档区
+       · logistics → 保存前把服务器上的「已交」并进来（mergeLogisticsData：任一侧已交即已交）
+       原来整份读 image_data 是 325KB / 4.87 秒，路径选择只要几十 KB。 */
+    async function _freshSlices() {
+      try {
+        const { data, error } = await supabaseClient
+          .from('leader_data')
+          .select('image_data->archived_items,image_data->logistics_data')
+          .eq('query_key', CURRENT_QUERY_KEY);
+        const row = (data && data[0]) || {};
+        /* ⚠️ 新团这条记录的 image_data 里压根没有 archived_items 字段（返回 null），
+           用 Array.isArray 判断会误走兜底整份读 → 所以要判「字段存在」而不是「是不是数组」。 */
+        if (error || !('archived_items' in row)) return null;
+        return {
+          archived: Array.isArray(row.archived_items) ? row.archived_items : [],
+          logistics: Array.isArray(row.logistics_data) ? row.logistics_data : null
+        };
+      } catch (e) { return null; }
+    }
+
+    // 🗄️ 保存前与数据库归档区做并集合并，防止旧页面保存时覆盖归档数据
+    async function _mergedArchivedItems(slices) {
+      try {
+        const sl = slices || await _freshSlices();
+        let freshArr = null;
+        if (sl) {
+          freshArr = sl.archived;
+        } else {
+          /* 兼容退路：PostgREST 不认路径选择 / 返回结构变了 → 整份读（原来的做法） */
+          const fb = await supabaseClient.from('leader_data').select('image_data').eq('query_key', CURRENT_QUERY_KEY);
+          let fresh = (fb.data && fb.data[0] && fb.data[0].image_data) || {};
+          if (typeof fresh === 'string') { try { fresh = JSON.parse(fresh); } catch (e) { fresh = {}; } }
+          freshArr = Array.isArray(fresh.archived_items) ? fresh.archived_items : [];
+        }
+        const seen = {};
+        RAW_ARCHIVED.forEach(function (it) { seen[String(it.item_id || it.id)] = true; });
+        const out = RAW_ARCHIVED.slice();
+        (freshArr || []).forEach(function (it) {
+          const k = String(it.item_id || it.id);
+          if (!seen[k]) { seen[k] = true; out.push(it); }
+        });
+        return out;
+      } catch (e) { return RAW_ARCHIVED; }
+    }
+
+    /* 🩺 国际运费落库校验：回读数据库，确认这几项真的已经是「已交」。
+       与订单侧的 _verifyPayApplied 对齐 —— 以前运费改完根本没人验，
+       写没写进去全靠运气。校验本身出错只返回 true，不拦团长。 */
+    async function _verifyIntlApplied(intlIds) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('leader_data')
+          .select('image_data->logistics_data')
+          .eq('query_key', CURRENT_QUERY_KEY);
+        if (error || !data || !data.length) return true;
+        const row = data[0] || {};
+        if (!('logistics_data' in row)) return true;
+        const map = {};
+        (Array.isArray(row.logistics_data) ? row.logistics_data : []).forEach(function (b) {
+          (Array.isArray(b && b.fee_members) ? b.fee_members : []).forEach(function (m) {
+            if (m) map['intl:' + String(m.id || '')] = String(m.status || '').trim();
+          });
+        });
+        return intlIds.every(function (id) { return map[id] === '已交'; });
+      } catch (e) { return true; }
+    }
+
+    // 🔒 保存串行化（2026-09-30 修）：同一时刻只允许一次写库。
+    // 为什么必须这么做：并发保存时，后完成的那一次会把前一次「正在合并」用的 DIRTY 标记一并清掉，
+    // 于是冲突合并分支把刚改过的订单回退成服务器旧值；而凭证是按 id 合并（我这边的优先），
+    // 「已通过」照样保住了 → 静默产生「凭证过了、订单没动 → 机器人一直催已交的人」。
+    // 09-30 实证：多利 ￥19、橘子 ￥90，两次点击相隔 2 秒（07:33:31 / 07:33:33），正是整轮审核最密的一刻。
+    let _saveChain = Promise.resolve();
+    /* ==========================================
+       💰 批次定金设置（image_data.batch_plans）
+       键 = _normBatchKey(批次名) —— 与团员端 index.html 的 _normBatch() 逐字一致；
+            对不上就会「后台设了、团员看不到」，改一边必须同改另一边。
+       值 = { ratio: 0.5, enabled: true }（ratio 是小数，0.5 = 五成）
+       ========================================== */
+    function _batchPlanOf(name) {
+      const k = _normBatchKey(name);
+      const p = (RAW_BATCH_PLANS && typeof RAW_BATCH_PLANS === 'object') ? RAW_BATCH_PLANS[k] : null;
+      const r = (p && isFinite(Number(p.ratio))) ? Number(p.ratio) : 0.5;
+      return { key: k, ratio: (r > 0 && r <= 1) ? r : 0.5, enabled: !!(p && p.enabled) };
+    }
+
+    function _bpPreviewText(pct) {
+      if (!isFinite(pct) || pct <= 0) return '比例无效 → 按未启用处理';
+      if (pct > 100) return '比例不能超过 100%';
+      return '定金 = 应付 × ' + pct + '%，余下 ' + (Math.round((100 - pct) * 10) / 10) + '% 记成尾款';
+    }
+    function _bpRefreshPreview(i) {
+      const r = document.getElementById('bpRatio_' + i);
+      const cell = document.getElementById('bpPrev_' + i);
+      if (!r || !cell) return;
+      cell.textContent = _bpPreviewText(Number(r.value));
+    }
+
+    function renderBatchPlans() {
+      const box = document.getElementById('batchPlansList');
+      if (!box) return;
+      const names = [], seen = {};
+      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it) {
+        const bn = String((it && it.batch_name) || '').trim() || '默认批次';
+        const k = _normBatchKey(bn);
+        if (!k || seen[k]) return;
+        seen[k] = 1; names.push(bn);
+      });
+      names.sort(function (a, b) { return a.localeCompare(b, 'zh'); });
+      window.__BP_NAMES = names;
+      if (!names.length) {
+        box.innerHTML = '<div style="padding:10px; color:var(--text-muted); font-size:0.85rem;">排表里还没有批次。</div>';
+        return;
+      }
+      const td = 'padding:7px 8px; border-bottom:1px solid var(--border);';
+      let html = '<div style="overflow-x:auto;"><table class="bp-table" style="width:100%; border-collapse:collapse; font-size:0.85rem;">' +
+        '<thead><tr style="color:var(--text-muted); font-size:0.8rem;">' +
+        '<th style="text-align:left; ' + td + '">批次</th>' +
+        '<th style="text-align:center; ' + td + '">启用</th>' +
+        '<th style="text-align:center; ' + td + '">定金比例</th>' +
+        '<th style="text-align:left; ' + td + '">说明</th>' +
+        '</tr></thead><tbody>';
+      names.forEach(function (bn, i) {
+        const pl = _batchPlanOf(bn);
+        const pct = Math.round(pl.ratio * 1000) / 10;
+        html += '<tr>' +
+          '<td class="bp-name" style="' + td + ' text-align:left;"><strong>' + escapeHtml(bn) + '</strong></td>' +
+          '<td class="bp-on" style="' + td + ' text-align:center;"><input type="checkbox" id="bpOn_' + i + '"' + (pl.enabled ? ' checked' : '') + '></td>' +
+          '<td class="bp-ratio" style="' + td + ' text-align:center;"><input type="number" id="bpRatio_' + i + '" min="1" max="100" step="1" value="' + pct + '" style="width:72px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); text-align:center; font-family:var(--sans);"> %</td>' +
+          '<td class="bp-hint" id="bpPrev_' + i + '" style="' + td + ' text-align:left; color:var(--text-muted);">' + _bpPreviewText(pct) + '</td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div>';
+      box.innerHTML = html;
+      names.forEach(function (_, i) {
+        const r = document.getElementById('bpRatio_' + i);
+        if (r) r.oninput = function () { _bpRefreshPreview(i); };
+      });
+    }
+    window.renderBatchPlans = renderBatchPlans;
+
+    /* 保存定金设置 → RAW_BATCH_PLANS → 走 saveDataToSupabase()（带版本锁）。
+       ⚠️ 列表里没有的批次配置原样带走、不删 —— 后台不做「没显示到就顺手抹掉」这种事。 */
+    async function saveBatchPlans() {
+      if (!CURRENT_RECORD_ID) return showToast('请先加载数据');
+      const names = window.__BP_NAMES || [];
+      const next = {};
+      Object.keys(RAW_BATCH_PLANS || {}).forEach(function (k) { next[k] = RAW_BATCH_PLANS[k]; });
+      let on = 0; const bad = [];
+      names.forEach(function (bn, i) {
+        const k = _normBatchKey(bn);
+        const onEl = document.getElementById('bpOn_' + i);
+        const rEl = document.getElementById('bpRatio_' + i);
+        const pct = Number(rEl ? rEl.value : 0);
+        const okPct = isFinite(pct) && pct > 0 && pct <= 100;
+        if (onEl && onEl.checked) {
+          if (!okPct) { bad.push(bn); delete next[k]; return; }
+          next[k] = { ratio: Math.round(pct * 10) / 1000, enabled: true, updated_at: new Date().toISOString() };
+          on++;
+        } else {
+          delete next[k];
+        }
+      });
+      if (bad.length) showToast('比例不在 1–100 之间，已按未启用处理：' + bad.slice(0, 3).join('、') + (bad.length > 3 ? ' 等' : ''));
+      const prev = RAW_BATCH_PLANS;
+      RAW_BATCH_PLANS = next;
+      const ok = await saveDataToSupabase();
+      if (!ok) { RAW_BATCH_PLANS = prev; renderBatchPlans(); return; }
+      renderBatchPlans();
+      showToast(on ? ('✅ 定金设置已保存：' + on + ' 个批次启用定金') : '✅ 已保存：当前没有批次启用定金');
+    }
+    window.saveBatchPlans = saveBatchPlans;
+
+
+    /* ==========================================
+       🕓 保存遮罩控制器（2026-11-05）
+       计数式：连点两次删除时第二次在队列里等，遮罩不闪、不会提前消失。
+       ========================================== */
+    let _saveJobs = 0;
+    let _saveT0 = 0;
+    let _saveTick = null;
+    let _saveStageText = '正在准备保存…';
+
+    function _saveMaskEl() {
+      let el = document.getElementById('saveMask');
+      if (el) return el;
+      el = document.createElement('div');
+      el.id = 'saveMask';
+      el.innerHTML =
+        '<div class="save-card">' +
+          '<div class="save-spin"></div>' +
+          '<div class="save-txt">' +
+            '<div class="save-title">正在保存…</div>' +
+            '<div class="save-sub" id="saveMaskSub"></div>' +
+            '<div class="save-warn" id="saveMaskWarn"></div>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(el);
+      return el;
+    }
+
+    function _saveMaskPaint() {
+      const sub = document.getElementById('saveMaskSub');
+      const warn = document.getElementById('saveMaskWarn');
+      if (!sub || !warn) return;
+      const sec = Math.max(0, (Date.now() - _saveT0) / 1000);
+      sub.textContent = _saveStageText + ' · 已用 ' + sec.toFixed(1) + ' 秒';
+      if (sec >= 25) {
+        warn.style.display = 'block';
+        warn.textContent = '已经 ' + Math.round(sec) + ' 秒，仍在写入/重试。请不要关闭或刷新页面。';
+      } else if (sec >= 10) {
+        warn.style.display = 'block';
+        warn.textContent = '网络较慢，仍在写入。请不要关闭或刷新页面。';
+      } else {
+        warn.style.display = 'none';
+      }
+    }
+
+    /* 保存分几个阶段（读最新 → 写整份 → 冲突重试），文字要跟着走，
+       否则团长只看到秒数在涨，不知道卡在哪一步。 */
+    function _saveStage(t) {
+      if (typeof t === 'string' && t) _saveStageText = t;
+      _saveMaskPaint();
+    }
+
+    function _saveMaskBegin() {
+      _saveJobs++;
+      if (_saveJobs > 1) { _saveMaskPaint(); return; }
+      _saveT0 = Date.now();
+      _saveStageText = '正在准备保存…';
+      const el = _saveMaskEl();
+      el.style.display = 'flex';
+      void el.offsetWidth;
+      el.classList.add('show');
+      _saveMaskPaint();
+      clearInterval(_saveTick);
+      _saveTick = setInterval(_saveMaskPaint, 100);
+    }
+
+    function _saveMaskEnd(force) {
+      _saveJobs = Math.max(0, _saveJobs - 1);
+      if (_saveJobs > 0) return;
+      clearInterval(_saveTick);
+      _saveTick = null;
+      const el = document.getElementById('saveMask');
+      if (!el) return;
+      const elapsed = Date.now() - _saveT0;
+      /* 极快的保存（<320ms）也让它露一脸，避免"闪一下"；失败时立刻收，
+         否则会挡住失败提示的 toast。 */
+      const wait = force ? 0 : Math.max(0, 320 - elapsed);
+      setTimeout(function () {
+        if (_saveJobs > 0) return;
+        el.classList.remove('show');
+        setTimeout(function () {
+          if (_saveJobs === 0) el.style.display = 'none';
+        }, 200);
+      }, wait);
+    }
+
+    function saveDataToSupabase() {
+      const run = function () { return _saveDataToSupabase(); };
+      /* 遮罩从「进入队列」就开始计时：连点两下时，第二下等的这段时间也是用户在等。 */
+      _saveMaskBegin();
+      const next = _saveChain.then(run, run);
+      _saveChain = next.then(function () {}, function () {});
+      return next.then(
+        function (r) {
+          /* _saveDataToSupabase 失败是 return false（不抛错），也要立刻收遮罩 */
+          _saveMaskEnd(r === false);
+          return r;
+        },
+        function (e) {
+          _saveMaskEnd(true);
+          throw e;
+        }
+      );
+    }
+
+    async function _saveDataToSupabase() {
+      if (!CURRENT_QUERY_KEY) return showToast('未指定 Query Key');
+      try {
+        // 本次保存「自己负责的」标记快照 —— 只按这份合并、也只清这份。
+        // ⚠️ 绝不能再写全局 DIRTY_ITEM_IDS.clear()：那会把并发保存的标记一起清掉（上面那个 bug 的根因）。
+        const MY_DIRTY = new Set(DIRTY_ITEM_IDS);
+        const MY_DELETED = new Set(DELETED_ITEM_IDS);
+        const MY_PROOF_DELETED = new Set(PAY_PROOF_DELETED_IDS);
+        const MY_LOGI_DELETED = new Set(LOGISTICS_DELETED_BATCHES);
+        const MY_APP_DIRTY = new Set(APP_STATUS_DIRTY);
+        const MY_APP_DELETED = new Set(APP_DELETED_IDS);
+        const clearMine = function () {
+          MY_DIRTY.forEach(function (x) { DIRTY_ITEM_IDS.delete(x); });
+          MY_DELETED.forEach(function (x) { DELETED_ITEM_IDS.delete(x); });
+          MY_PROOF_DELETED.forEach(function (x) { PAY_PROOF_DELETED_IDS.delete(x); });
+          MY_LOGI_DELETED.forEach(function (x) { LOGISTICS_DELETED_BATCHES.delete(x); });
+          MY_APP_DIRTY.forEach(function (x) { APP_STATUS_DIRTY.delete(x); });
+          MY_APP_DELETED.forEach(function (x) { APP_DELETED_IDS.delete(x); });
+        };
+        _saveStage('正在读取最新归档…');
+        const slices = await _freshSlices();
+        const mergedArch = await _mergedArchivedItems(slices);
+        RAW_ARCHIVED = mergedArch;
+        /* 🛡 运费以「服务器上已有的已交 + 本地改动」合并后的结果为准：
+           后台是整份回写，旧页面一保存就会把别人刚写的「已交」冲回「未交」
+           （2026-11-04 23:25 仲夏夜之梦就是这么丢的）。任一侧已交即已交。 */
+        const mergedLogi = (slices && Array.isArray(slices.logistics))
+          ? mergeLogisticsData(slices.logistics, RAW_LOGISTICS, LOGISTICS_DELETED_BATCHES)
+          : null;
+        // 写库前清理囤货日期，但只清「本次动过的条目」（MY_DIRTY），
+        // 库里那些历史遗留的错误日期不会被顺手改掉 —— 团长没让我动的数据，一个都不动。
+        if (Array.isArray(RAW_ITEMS)) sanitizeStockDates(RAW_ITEMS, MY_DIRTY);
+        /* 2026-11-07 审查修复：原来这里按「固定字段清单」重抄一份 image_data，
+           清单外的新字段（机器人 / 团员自查页 / 以后新增的业务）会被后台一次保存静默抹掉
+           —— 原注释记着 2026-09-22 pay_proofs 已经这么丢过一次。
+           现在改成「以读到的完整原件垫底 + 只覆盖本次真正改动的切片」，
+           新字段自动保留，以后加字段也不必再手工同步这一行。
+           下方冲突合并分支本来就是基于服务器最新完整对象（freshImg2）合并，保持不变。 */
+        const payload = {
+          group_data: RAW_ITEMS,
+          image_data: Object.assign({},
+            (RAW_IMAGE_DATA_BASE && typeof RAW_IMAGE_DATA_BASE === 'object') ? RAW_IMAGE_DATA_BASE : {},
+            {
+              applications: RAW_APPLICATIONS,
+              transfer_logs: RAW_LOGS,
+              feedback: RAW_FEEDBACK,
+              logistics_data: (mergedLogi || RAW_LOGISTICS),
+              archived_items: mergedArch,
+              pay_proofs: RAW_PAY_PROOFS,
+              batch_plans: RAW_BATCH_PLANS,
+              piggy_bank: RAW_PIGGY,
+              dispatch_marks: RAW_DISPATCH_MARKS
+            })
+        };
+        /* 🛡 删除墓碑（2026-11-09 16:20）：把本次明确删掉的编号写进
+           image_data.deleted_item_ids。服务端代理会把它与库中已有名单合并，
+           之后任何设备（包括没刷新的旧页面）保存时都会自动剔除这些编号 ——
+           以前「删除只记在当前页内存里，别的设备一保存就带回来」就是这么丢的。
+           没有删除时这个字段一个字节都不写，保持原有 image_data 结构不变。 */
+        if (MY_DELETED.size > 0) {
+          const _tombBase = (RAW_IMAGE_DATA_BASE && Array.isArray(RAW_IMAGE_DATA_BASE.deleted_item_ids))
+            ? RAW_IMAGE_DATA_BASE.deleted_item_ids : [];
+          const _tombAll = new Set(_tombBase.map(String));
+          MY_DELETED.forEach(function (x) { _tombAll.add(String(x)); });
+          payload.image_data.deleted_item_ids = Array.from(_tombAll);
+        }
+        /* 🛡 2026-11-09（14:35 改为按 item_id 静默自动对齐）
+           原做法按「批次名」比对，服务器有整批、本地没有就直接中止保存、让人刷新：
+           手机刷新会丢掉刚录入未保存的内容，不刷新又永远存不进去；整批改
+           批次名时 id 还在、只是名字变了，也会被误判成整批删除。
+           现在写库前读一次服务器最新排表 + version，按 item_id 对齐：
+           服务器多出来、且本次没明确删掉的条目补进 RAW_ITEMS；本地刚录入的
+           （服务器没有的 id）原样保留；版本跟上后直接继续保存。
+           全程不弹提示；同 id 以本地编辑为准；不复活明确删掉的条目。 */
+        try {
+          /* 2026-11-10 性能（A2）：先只取 version（18 字节）。
+             版本跟手上一致 ⇒ 服务器就是这份数据，没有别人写进来的条目需要并，
+             没必要每次保存都白拉 1.4MB 下来。版本不一致（别的设备/机器人刚写过）
+             才回退整份读，合并逻辑一字未改。
+             ⚠️ 服务端那道「整批消失」护栏在反代里照跑，不依赖这次读。 */
+          let _skipFullRead = false;
+          try {
+            const _v = await supabaseClient.from('leader_data')
+              .select('version').eq('id', CURRENT_RECORD_ID);
+            if (!_v.error && _v.data && _v.data.length &&
+                CURRENT_VERSION !== null &&
+                _v.data[0].version !== undefined && _v.data[0].version !== null &&
+                Number(_v.data[0].version) === Number(CURRENT_VERSION)) {
+              _skipFullRead = true;
+            }
+          } catch (e) { _skipFullRead = false; }
+          const _g = _skipFullRead
+            ? { error: null, data: [] }
+            : await supabaseClient.from('leader_data')
+                .select('group_data,version').eq('id', CURRENT_RECORD_ID);
+          if (!_g.error && _g.data && _g.data.length) {
+            const _gr = _g.data[0];
+            let _sv = _gr.group_data;
+            if (typeof _sv === 'string') { try { _sv = JSON.parse(_sv); } catch (e) { _sv = []; } }
+            if (Array.isArray(_sv) && Array.isArray(RAW_ITEMS)) {
+              const _myIds = Object.create(null);
+              RAW_ITEMS.forEach(function (it) {
+                if (it && typeof it === 'object') _myIds[String(it.item_id || it.id || '')] = true;
+              });
+              _sv.forEach(function (it) {
+                if (!it || typeof it !== 'object') return;
+                const _id = String(it.item_id || it.id || '');
+                if (!_id || _myIds[_id]) return;
+                if (MY_DELETED.has(_id)) return;
+                RAW_ITEMS.push(it);
+                _myIds[_id] = true;
+              });
+            }
+            if (_gr.version !== undefined && _gr.version !== null) {
+              const _svVer = Number(_gr.version);
+              if (!isNaN(_svVer)) CURRENT_VERSION = _svVer;
+            }
+          }
+        } catch (e) { /* 读不到就照原样保存，服务端护栏兜底 */ }
+        _saveStage('正在保存 ' + (RAW_ITEMS ? RAW_ITEMS.length : 0) + ' 条谷子…');
+        if (CURRENT_VERSION !== null) {
+          const nextVersion = (Number(CURRENT_VERSION) || 0) + 1;
+          payload.version = nextVersion;
+          const { data, error } = await supabaseClient.from('leader_data')
+            .update(payload).eq('id', CURRENT_RECORD_ID).eq('version', CURRENT_VERSION).select('id');
+          if (error) { showToast('保存失败: ' + error.message); return false; }
+          if (!data || data.length === 0) {
+            // 冲突：循环拉取最新数据并合并保存（最多 6 次），避免后台写库频繁导致失败
+            let mergedApplied = false;
+            let mergeResult = null;
+            for (let mi = 0; mi < 6; mi++) {
+              _saveStage('有人同时在改，正在合并重试（第 ' + (mi + 1) + '/6 次）…');
+              const fresh = await supabaseClient.from('leader_data').select('*').eq('query_key', CURRENT_QUERY_KEY);
+              if (fresh.error || !fresh.data || fresh.data.length === 0) break;
+              const freshRec = fresh.data[0];
+              const freshVersion = (freshRec.version !== undefined && freshRec.version !== null) ? Number(freshRec.version) : null;
+              if (freshVersion === null) break;
+              let freshItems = freshRec.group_data;
+              if (typeof freshItems === 'string') { try { freshItems = JSON.parse(freshItems); } catch (e) { freshItems = []; } }
+              if (!Array.isArray(freshItems)) freshItems = [];
+              const freshById = {};
+              freshItems.forEach(function(it){ freshById[String(it.item_id || it.id)] = it; });
+              const mergedArr = [];
+              const seenIds = {};
+              let myNewCount = 0;
+              RAW_ITEMS.forEach(function(it){
+                const id = String(it.item_id || it.id);
+                if (!freshById[id]) { myNewCount++; }
+                if (!freshById[id] || MY_DIRTY.has(id)) { mergedArr.push(it); seenIds[id] = true; }
+              });
+              freshItems.forEach(function(it){
+                const id = String(it.item_id || it.id);
+                if (!seenIds[id]) { mergedArr.push(it); seenIds[id] = true; }
+              });
+              const merged = mergedArr.filter(function(it){ return !MY_DELETED.has(String(it.item_id || it.id)); });
+              let freshImg2 = freshRec.image_data;
+              if (typeof freshImg2 === 'string') { try { freshImg2 = JSON.parse(freshImg2); } catch (e) { freshImg2 = {}; } }
+              if (!freshImg2 || typeof freshImg2 !== 'object') freshImg2 = {};
+              const freshLogistics = Array.isArray(freshImg2.logistics_data) ? freshImg2.logistics_data : [];
+              freshImg2.logistics_data = mergeLogisticsData(freshLogistics, RAW_LOGISTICS, MY_LOGI_DELETED);
+              freshImg2.archived_items = mergedArch;
+              // 💰 批次定金计划：按批次键合并（我这边的覆盖服务器，服务器多出来的批次保留）
+              freshImg2.batch_plans = Object.assign({},
+                (freshImg2.batch_plans && typeof freshImg2.batch_plans === 'object') ? freshImg2.batch_plans : {},
+                RAW_BATCH_PLANS || {});
+              // ⚠️ 下面几类都按 id 合并「我这边的优先 + 服务器多出来的保留」。
+              //    不合并的话，冲突分支会用服务器旧数据把刚做的修改冲掉 ——
+              //    2026-09-24 踩到：派发后申请被冲回「待处理」，谷子却已「已排发」→ 两边状态不一致。
+              // ⚠️ 合并后必须再剔除「本次明确删掉的」—— 否则并集会把删掉的记录复活（2026-09-25 团长要真删）
+              freshImg2.pay_proofs = mergePayProofs(RAW_PAY_PROOFS, freshImg2.pay_proofs).filter(function (p) {
+                return !MY_PROOF_DELETED.has(String(p && p.id));
+              });
+              // 💰 零钱罐：同样按 id 合并（我这边优先 + 服务器多出来的保留）——
+              //    审核/驳回/退回都是「改我自己那几条」，mergeById 以 mine 为准，改动能保住。
+              freshImg2.piggy_bank = mergeById(RAW_PIGGY, freshImg2.piggy_bank);
+              freshImg2.applications = mergeApplications(RAW_APPLICATIONS, freshImg2.applications, MY_APP_DIRTY, MY_APP_DELETED);
+              // ✅ 排发勾选：服务器 ∪ 我这次的增删（不能直接用服务器那份，会丢我刚勾的）
+              freshImg2.dispatch_marks = _mergeDispatchMarks(freshImg2.dispatch_marks);
+              /* 🛡 删除墓碑：冲突分支也要带上本次删除，否则代理无从得知 */
+              if (MY_DELETED.size > 0) {
+                const _t2 = Array.isArray(freshImg2.deleted_item_ids) ? freshImg2.deleted_item_ids : [];
+                const _s2 = new Set(_t2.map(String));
+                MY_DELETED.forEach(function (x) { _s2.add(String(x)); });
+                freshImg2.deleted_item_ids = Array.from(_s2);
+              }
+
+              freshImg2.transfer_logs = mergeById(RAW_LOGS, freshImg2.transfer_logs);
+              freshImg2.feedback = mergeById(RAW_FEEDBACK, freshImg2.feedback);
+              const retry = await supabaseClient.from('leader_data')
+                .update({ group_data: merged, image_data: freshImg2, version: freshVersion + 1 })
+                .eq('id', freshRec.id).eq('version', freshVersion).select('id');
+              if (retry.error || !retry.data || retry.data.length === 0) {
+                await new Promise(r => setTimeout(r, 300));
+                continue;
+              }
+              mergedApplied = true;
+              mergeResult = { freshRec: freshRec, freshVersion: freshVersion, merged: merged, mergedLogistics: freshImg2.logistics_data, mergedProofs: freshImg2.pay_proofs, mergedBatchPlans: freshImg2.batch_plans, mergedPiggy: freshImg2.piggy_bank, fullImageData: freshImg2, myNewCount: myNewCount };
+              break;
+            }
+            if (!mergedApplied || !mergeResult) {
+              alert('⚠️ 数据持续被更新，已自动刷新为最新数据，请重新操作！');
+              await loadDataByQueryKey();
+              return false;
+            }
+            const freshRec = mergeResult.freshRec;
+            const freshVersion = mergeResult.freshVersion;
+            const merged = mergeResult.merged;
+            const myNewCount = mergeResult.myNewCount;
+            const hadDirty = MY_DIRTY.size > 0;
+            const hadDeleted = MY_DELETED.size > 0;
+            let freshImg = freshRec.image_data;
+            if (typeof freshImg === 'string') { try { freshImg = JSON.parse(freshImg); } catch (e) { freshImg = {}; } }
+            if (!freshImg || typeof freshImg !== 'object') freshImg = {};
+            CURRENT_RECORD_ID = freshRec.id;
+            CURRENT_VERSION = freshVersion + 1;
+            RAW_ITEMS = merged;
+            RAW_LOGISTICS = mergeResult.mergedLogistics || RAW_LOGISTICS;
+            if (Array.isArray(mergeResult.mergedProofs)) RAW_PAY_PROOFS = mergeResult.mergedProofs;
+            if (Array.isArray(mergeResult.mergedPiggy)) RAW_PIGGY = mergeResult.mergedPiggy;   // 💰 零钱罐
+            if (mergeResult.mergedBatchPlans && typeof mergeResult.mergedBatchPlans === 'object') RAW_BATCH_PLANS = mergeResult.mergedBatchPlans;
+            clearMine();
+            RAW_APPLICATIONS = Array.isArray(freshImg.applications) ? freshImg.applications : RAW_APPLICATIONS;
+            RAW_LOGS = Array.isArray(freshImg.transfer_logs) ? freshImg.transfer_logs : RAW_LOGS;
+            RAW_FEEDBACK = Array.isArray(freshImg.feedback) ? freshImg.feedback : RAW_FEEDBACK;
+            RAW_FEEDBACK.forEach(function (f) { if (f && !f.code) f.code = fbCodeOf(f); });
+            updateBatchDropdownOptions();
+            renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
+            if (myNewCount > 0) alert('✅ 已保存！检测到数据有更新，已自动合并保留你新录入的 ' + myNewCount + ' 条谷子，其它修改以最新数据为准。');
+            else if (hadDirty || hadDeleted) alert('✅ 已保存！检测到数据有更新，已自动合并保留你的修改/删除操作。');
+            else alert('⚠️ 检测到数据有更新，已刷新为最新数据，请重新操作。');
+            RAW_IMAGE_DATA_BASE = mergeResult.fullImageData || RAW_IMAGE_DATA_BASE;
+            return true;
+          }
+          CURRENT_VERSION = nextVersion;
+          RAW_IMAGE_DATA_BASE = payload.image_data;   // 下一次保存以刚写进去的完整对象垫底
+          clearMine();
+          return true;
+        }
+        // 🛡️ 兜底分支（拿不到版本号时）：**绝不做「无版本整表覆盖」**。
+        //    老写法 update(payload).eq('id', ...) 没有 version 条件 → 会把别人
+        //    （团员刚提交的交款凭证 / 排发申请 / 反馈，机器人刚写的记录）整份抹掉 ——
+        //    这就是「团员交了截图却没记录、图变成孤儿图」的另一条触发路径。
+        //    现在：先直接读一次版本号；拿到就按版本锁写；CAS 失败或拿不到就刷新让团长重做。
+        let fallbackVer = null;
+        try {
+          const { data: vr } = await supabaseClient.from('leader_data').select('version').eq('id', CURRENT_RECORD_ID);
+          if (vr && vr[0] && vr[0].version !== undefined && vr[0].version !== null) fallbackVer = Number(vr[0].version);
+        } catch (e) {}
+        if (fallbackVer === null) {
+          alert('⚠️ 这次拿不到数据版本号，为避免覆盖别人刚提交的数据，已帮你刷新，请重新操作。');
+          await loadDataByQueryKey();
+          return false;
+        }
+        const { data: wres, error } = await supabaseClient.from('leader_data')
+          .update(Object.assign({}, payload, { version: fallbackVer + 1 }))
+          .eq('id', CURRENT_RECORD_ID).eq('version', fallbackVer).select('id');
+        if (error) { showToast('保存失败: ' + error.message); return false; }
+        if (!wres || wres.length === 0) {
+          alert('⚠️ 数据刚被别处更新过，已帮你刷新，请重新操作。');
+          await loadDataByQueryKey();
+          return false;
+        }
+        CURRENT_VERSION = fallbackVer + 1;
+        RAW_IMAGE_DATA_BASE = payload.image_data;
+        clearMine();
+        return true;
+      } catch (err) { showToast('保存异常'); return false; }
+    }
+
+    function updateBatchDropdownOptions() {
+      const removed = getRemovedBatchOptions();
+      const batchSet = new Set(['默认批次']);
+      RAW_ITEMS.forEach(i => {
+        if (i.batch_name && i.batch_name.trim()) {
+          batchSet.add(i.batch_name.trim());
+        }
+      });
+      const includeArchived = document.getElementById('batchIncludeArchived')?.checked || false;
+      const legacyList = Array.from(batchSet).filter(b => b === '默认批次' || (removed.indexOf(b) === -1 && (includeArchived || !isArchivedBatchName(b))));
+      const allBatches = Array.isArray(RAW_BATCHES) ? RAW_BATCHES : [];
+      const visibleBatches = allBatches.filter(b => includeArchived || String(b.status || '活跃').trim() !== '归档');
+
+      const inputBatchSel = document.getElementById('inputBatchId');
+      if (inputBatchSel) {
+        const curBatch = inputBatchSel.value || '';
+        let html = '<option value="">请选择批次</option>';
+        visibleBatches.forEach(b => {
+          const tag = String(b.disk_tag || '').trim();
+          const label = b.batch_id + ' ' + b.disk_name + ' ' + b.goods_title + (tag ? ' ' + tag : '');
+          html += '<option value="' + escapeHtml(b.batch_id) + '">' + escapeHtml(label) + '</option>';
+        });
+        legacyList.forEach(b => {
+          if (b === '默认批次') return;
+          html += '<option value="legacy:' + escapeHtml(b) + '">' + escapeHtml(b) + '</option>';
+        });
+        inputBatchSel.innerHTML = html;
+        if (curBatch) ensureSelectOption('inputBatchId', curBatch);
+      }
+
+      const filterLegacySet = new Set(['默认批次']);
+      RAW_ITEMS.forEach(i => { const bn = String(i.batch_name || '').trim(); if (bn) filterLegacySet.add(bn); });
+      // 与批量改批次弹窗一致：已归档隐藏的批次不显示；默认不显示已收款完结批次，勾选后显示
+      const filterIncludeArchived = document.getElementById('filterIncludeArchived')?.checked || false;
+      const filterLegacyList = Array.from(filterLegacySet).filter(b => b === '默认批次' || (removed.indexOf(b) === -1 && (filterIncludeArchived || !isArchivedBatchName(b))));
+
+      const dl = document.getElementById('batchPresets');
+      if (dl) {
+        dl.innerHTML = filterLegacyList.map(b => '<option value="' + escapeHtml(b) + '">').join('');
+      }
+      // 构建批次级联数据源（B+D 方案）：一级 = 分组，二级 = 组内具体批次
+            buildFilterCascadeData(filterLegacyList);
+          }
+
+          // ===== 批次级联选择器（筛选区：B+D 方案 一级分组 → 二级具体批次） =====
+          let FILTER_CASCADE_GROUPS = [];      // [{ label, members: [批次名...] }] 多批次分组
+          let FILTER_CASCADE_STANDALONE = [];  // 单批次直接展示的独立项
+
+          function buildFilterCascadeData(batchNames) {
+            const ARCHIVED_LABEL = '⚪ 已收款完结';
+            const groups = {};
+            const groupOrder = [];
+            const standalone = [];
+            (batchNames || []).forEach(function(b){
+              if (b === '默认批次') { standalone.push(b); return; }
+              const g = isArchivedBatchName(b) ? ARCHIVED_LABEL : getBatchGroupName(b);
+              if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
+              groups[g].push(b);
+            });
+            // 单批次组直接作为独立项展示；多批次组折叠为分组头
+            FILTER_CASCADE_GROUPS = [];
+            FILTER_CASCADE_STANDALONE = [];
+            groupOrder.forEach(function(g){
+              const members = groups[g];
+              if (members.length <= 1) { standalone.push(members[0]); return; }
+              FILTER_CASCADE_GROUPS.push({ label: g, members: members });
+            });
+            FILTER_CASCADE_STANDALONE = standalone;
+          }
+
+          function toggleFilterBatchCascade() {
+            const panel1 = document.getElementById('filterBatchPanel1');
+            const trig = document.getElementById('filterBatchCascadeTrigger');
+            if (!panel1) return;
+            const opening = !panel1.classList.contains('open');
+            closeFilterBatchCascade();
+            if (opening) {
+              // 渲染一级选项：全部批次 + 分组头 + 独立批次
+              const cur = window.SELECTED_FILTER_BATCH || '';
+              let html = '<div class="cascade-option' + (cur === '' ? ' selected' : '') + '" data-group="" data-batch="" onclick="selectFilterCascadeL1(this)">全部批次</div>';
+              FILTER_CASCADE_GROUPS.forEach(function(grp){
+                const sel = (cur && grp.members.indexOf(cur) !== -1) ? ' selected' : '';
+                html += '<div class="cascade-option' + sel + '" data-group="' + escapeHtml(grp.label) + '" data-batch="" onclick="selectFilterCascadeL1(this)">' + escapeHtml(grp.label) + ' (' + grp.members.length + '批)</div>';
+              });
+              FILTER_CASCADE_STANDALONE.forEach(function(b){
+                const sel = (cur === b) ? ' selected' : '';
+                html += '<div class="cascade-option' + sel + '" data-group="" data-batch="' + escapeHtml(b) + '" onclick="selectFilterCascadeL1(this)">' + escapeHtml(b) + '</div>';
+              });
+              document.getElementById('filterBatchOptions1').innerHTML = html;
+              panel1.classList.add('open');
+              if (trig) trig.classList.add('open');
+            }
+          }
+          window.toggleFilterBatchCascade = toggleFilterBatchCascade;
+
+          function selectFilterCascadeL1(el) {
+            const group = el.getAttribute('data-group') || '';
+            const batch = el.getAttribute('data-batch') || '';
+            // 全部批次：清空筛选
+            if (!group && !batch) {
+              filterByBatch('', '');
+              closeFilterBatchCascade();
+              return;
+            }
+            // 一级高亮
+            el.parentNode.querySelectorAll('.cascade-option').forEach(o => o.classList.remove('selected'));
+            el.classList.add('selected');
+            if (group) {
+              // 分组头 → 展开二级（组内具体批次）
+              const grp = FILTER_CASCADE_GROUPS.find(x => x.label === group);
+              const members = grp ? grp.members : [];
+              const panel2 = document.getElementById('filterBatchPanel2');
+              if (panel2) {
+                let h2 = members.map(function(b){
+                  const sel = (window.SELECTED_FILTER_BATCH === b) ? ' selected' : '';
+                  return '<div class="cascade-option' + sel + '" data-group="' + escapeHtml(group) + '" data-batch="' + escapeHtml(b) + '" onclick="selectFilterCascadeL2(this)">' + escapeHtml(b) + '</div>';
+                }).join('');
+                document.getElementById('filterBatchOptions2').innerHTML = h2;
+                panel2.classList.add('open');
+              }
+            } else {
+              // 独立批次 → 直接应用该批次筛选
+              filterByBatch(batch, '');
+              closeFilterBatchCascade();
+            }
+          }
+          window.selectFilterCascadeL1 = selectFilterCascadeL1;
+
+          function selectFilterCascadeL2(el) {
+            const batch = el.getAttribute('data-batch') || '';
+            // 二级高亮（组内）
+            el.parentNode.querySelectorAll('.cascade-option').forEach(o => o.classList.remove('selected'));
+            el.classList.add('selected');
+            // 同步一级分组高亮
+            const p1 = document.getElementById('filterBatchOptions1');
+            const group = el.getAttribute('data-group') || '';
+            if (p1) {
+              p1.querySelectorAll('.cascade-option').forEach(o => {
+                const hit = o.getAttribute('data-group') === group || o.getAttribute('data-batch') === batch;
+                o.classList.toggle('selected', hit);
+              });
+            }
+            filterByBatch(batch, '');
+            closeFilterBatchCascade();
+          }
+          window.selectFilterCascadeL2 = selectFilterCascadeL2;
+
+    function closeFilterBatchCascade() {
+      const p1 = document.getElementById('filterBatchPanel1');
+      const p2 = document.getElementById('filterBatchPanel2');
+      const trig = document.getElementById('filterBatchCascadeTrigger');
+      if (p1) p1.classList.remove('open');
+      if (p2) p2.classList.remove('open');
+      if (trig) trig.classList.remove('open');
+    }
+    window.closeFilterBatchCascade = closeFilterBatchCascade;
+
+    // 🌟 筛选钩子：批次 + 详细分类 → 刷新下方表格（与原有筛选逻辑对接）
+    function filterByBatch(batch, detail) {
+      window.SELECTED_FILTER_BATCH = String(batch || '');
+      window.SELECTED_BATCH_DETAIL = String(detail || '');
+      const t = document.getElementById('filterBatchCascadeText');
+      if (t) t.innerText = batch ? (detail ? batch + ' - ' + detail : batch) : '全部批次';
+      onFilterChange();
+    }
+    window.filterByBatch = filterByBatch;
+
+    /* 🧭 状态筛选（2026-11-04）：团长要的是「点漏斗 → 选一个状态 → 只显示这些行」，
+       不用再记「可排发」「国际运输中」到底怎么写的。
+       ⚠️ 单选。真实值写回隐藏的 #filterStatus.value，
+          所以 saveFilterState / restoreFilterState / renderTable 三处全都不用动。 */
+    function _statusFilterValues() {
+      /* 只列当前数据里真的出现过的状态（免得点进去一堆空状态），
+         顺序按 STATUS_OPTIONS 走，历史遗留的怪状态排在后面。 */
+      var order = STATUS_OPTIONS.map(function (o) { return o.value; });
+      var seen = {};
+      var extras = [];
+      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it) {
+        var s = String((it && it.status) || '未出荷').trim();
+        if (!s || seen[s]) return;
+        seen[s] = 1;
+        if (order.indexOf(s) < 0) extras.push(s);
+      });
+      var list = order.filter(function (v) { return seen[v]; });
+      extras.sort();
+      var all = list.concat(extras);
+      var cur = String((document.getElementById('filterStatus') || {}).value || '').trim();
+      if (cur && all.indexOf(cur) < 0) all.push(cur);
+      return all;
+    }
+    window._statusFilterValues = _statusFilterValues;
+
+    function _syncFilterStatusUI() {
+      var input = document.getElementById('filterStatus');
+      var text = document.getElementById('filterStatusText');
+      var trig = document.getElementById('filterStatusTrigger');
+      var v = String((input && input.value) || '').trim();
+      if (text) text.textContent = v || '全部状态';
+      if (trig) {
+        trig.classList.toggle('on', !!v);
+        trig.title = v
+          ? ('当前只显示「' + v + '」的行，点开可换或清空')
+          : '按状态筛选：只显示符合条件的行';
+      }
+    }
+    window._syncFilterStatusUI = _syncFilterStatusUI;
+
+    function closeFilterStatusPanel() {
+      var p = document.getElementById('filterStatusPanel');
+      var t = document.getElementById('filterStatusTrigger');
+      if (p) p.classList.remove('open');
+      if (t) t.classList.remove('open');
+    }
+    window.closeFilterStatusPanel = closeFilterStatusPanel;
+
+    function toggleFilterStatusPanel() {
+      var panel = document.getElementById('filterStatusPanel');
+      var trig = document.getElementById('filterStatusTrigger');
+      if (!panel) return;
+      var opening = !panel.classList.contains('open');
+      closeFilterStatusPanel();
+      if (typeof closeFilterBatchCascade === 'function') closeFilterBatchCascade();
+      if (!opening) return;
+      var cur = String((document.getElementById('filterStatus') || {}).value || '').trim();
+      var html = '<div class="cascade-option' + (cur ? '' : ' selected') + '" data-v="" onclick="pickFilterStatus(this)">全部状态</div>';
+      _statusFilterValues().forEach(function (v) {
+        html += '<div class="cascade-option' + (v === cur ? ' selected' : '') + '" data-v="' + escapeHtml(v) + '" onclick="pickFilterStatus(this)">' + escapeHtml(v) + '</div>';
+      });
+      var box = document.getElementById('filterStatusOptions');
+      if (box) box.innerHTML = html;
+      panel.classList.add('open');
+      if (trig) trig.classList.add('open');
+    }
+    window.toggleFilterStatusPanel = toggleFilterStatusPanel;
+
+    function pickFilterStatus(el) {
+      var v = String((el && el.getAttribute('data-v')) || '');
+      var input = document.getElementById('filterStatus');
+      if (input) input.value = v;
+      _syncFilterStatusUI();
+      closeFilterStatusPanel();
+      onFilterChange();   /* 回到第 1 页 + 存本机 + 重画表格 */
+      return false;
+    }
+    window.pickFilterStatus = pickFilterStatus;
+
+    // 点击页面空白处关闭所有级联面板
+    document.addEventListener('click', function(e){
+      const wrap = document.getElementById('filterBatchCascade');
+      if (wrap && !wrap.contains(e.target)) closeFilterBatchCascade();
+      const swrap = document.getElementById('filterStatusWrap');
+      if (swrap && !swrap.contains(e.target)) closeFilterStatusPanel();
+    });
+
+    function _syncSearchClearBtn() {
+      const w = document.getElementById('searchWrap');
+      const f = document.getElementById('filterSearch');
+      if (w && f) w.classList.toggle('has-val', !!String(f.value || '').length);
+    }
+
+    function onSearchInput() {
+      _syncSearchClearBtn();
+      clearTimeout(searchDebounceTimer);
+      /* 500ms → 260ms（2026-10-26）：2645 条过滤 + 渲染实测只要 3~6ms，
+         原来那 500ms 是纯等待，打完字要愣半秒才动。 */
+      searchDebounceTimer = setTimeout(() => { CURRENT_PAGE = 1; renderTable(); }, 260);
+    }
+    window.onSearchInput = onSearchInput;
+
+    function clearSearch() {
+      const f = document.getElementById('filterSearch');
+      if (!f) return;
+      f.value = '';
+      _syncSearchClearBtn();
+      clearTimeout(searchDebounceTimer);
+      CURRENT_PAGE = 1;
+      renderTable();
+      f.focus();
+    }
+    window.clearSearch = clearSearch;
+
+    /* 键盘快捷键（2026-10-26）：/ 聚焦搜索、Esc 清空搜索、← → 翻页。
+       只在不处于输入状态、且当前就在「排表管理」页时生效，避免打断打字。 */
+    document.addEventListener('keydown', function (e) {
+      const el = e.target || {};
+      const tag = String(el.tagName || '').toLowerCase();
+      const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+      if (e.key === 'Escape') {
+        const sp = document.getElementById('filterStatusPanel');
+        if (sp && sp.classList.contains('open')) { closeFilterStatusPanel(); return; }
+        if (el.id === 'filterSearch') { clearSearch(); el.blur(); }
+        return;
+      }
+      if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+      const tabOn = document.getElementById('tabItems');
+      if (!tabOn || !tabOn.classList.contains('active')) return;
+      if (e.key === '/') {
+        e.preventDefault();
+        const f = document.getElementById('filterSearch');
+        if (f) f.focus();
+      } else if (e.key === 'ArrowLeft') {
+        if (CURRENT_PAGE > 1) { e.preventDefault(); changePage(CURRENT_PAGE - 1); }
+      } else if (e.key === 'ArrowRight') {
+        if (CURRENT_PAGE < (window.__LAST_TOTAL_PAGES || 1)) { e.preventDefault(); changePage(CURRENT_PAGE + 1); }
+      }
+    });
+
+    /* ===== 🖱️ 弹窗手感（2026-10-26）=====
+       ① Esc 关掉最上面那个弹窗（原来只能去点 ✕ 或「取消」）
+       ② 点灰色遮罩也能关；但「批量改状态/改批次」里已经敲了字就先问一句，别手一滑白打字
+       ③ 弹窗一打开自动聚焦第一个输入框，少一次手动点
+       ⚠️ 不碰 authOverlay 的登录逻辑，只是共用了同一套显示/隐藏的 class。 */
+    const MODAL_CLOSERS = {
+      logisticsDetailModal: 'closeLogisticsDetail',
+      payDetailModal: 'closePayDetail',
+      batchImportModal: 'closeBatchImportModal',
+      batchStatusModal: 'closeBatchStatusModal',
+      batchSelectModal: 'closeBatchSelectModal',
+      feedbackModal: 'closeFeedbackModal',
+      dispatchConfirmModal: 'closeDispatchConfirm'
+    };
+
+    /* 用户在这一层刚敲进去、关掉就没了的文字 */
+    function _modalDirtyText(modal) {
+      if (!modal || !modal.contains) return '';
+      const ids = ['batchModalCustomInput', 'batchModalSearch', 'batchModalPrefix'];
+      for (let i = 0; i < ids.length; i++) {
+        const el = document.getElementById(ids[i]);
+        if (el && modal.contains(el) && el.offsetParent !== null) {
+          const v = String(el.value || '').trim();
+          if (v) return v;
+        }
+      }
+      return '';
+    }
+
+    function _closeModalById(id) {
+      const fnName = MODAL_CLOSERS[id];
+      if (!fnName || typeof window[fnName] !== 'function') return;
+      const dirty = _modalDirtyText(document.getElementById(id));
+      if (dirty && !confirm('「' + dirty.slice(0, 20) + '」还没确认，关掉就白输了。\n\n确定关闭吗？')) return;
+      window[fnName]();
+    }
+    window._closeModalById = _closeModalById;
+
+    function _topActiveModal() {
+      const list = Array.prototype.filter.call(document.querySelectorAll('.modal-overlay.active'), function (m) {
+        return MODAL_CLOSERS[m.id];
+      });
+      return list.length ? list[list.length - 1] : null;
+    }
+
+    function _focusFirstField(modal) {
+      if (!modal) return;
+      const cand = modal.querySelectorAll('input[type="text"], input[type="number"], input[type="date"], textarea, select');
+      for (let i = 0; i < cand.length; i++) {
+        const el = cand[i];
+        if (el.disabled || el.readOnly || el.offsetParent === null) continue;
+        if (el.type === 'hidden') continue;
+        try {
+          el.focus({ preventScroll: true });
+          if (el.tagName === 'INPUT' && el.type === 'text' && el.select) el.select();
+        } catch (e) {}
+        return;
+      }
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      const m = _topActiveModal();
+      if (!m) return;
+      e.preventDefault();
+      _closeModalById(m.id);
+    });
+
+    (function bindModalOverlays() {
+      const obs = new MutationObserver(function (muts) {
+        muts.forEach(function (mu) {
+          const el = mu.target;
+          if (!el.classList || !el.classList.contains('modal-overlay')) return;
+          if (el.classList.contains('active')) setTimeout(function () { _focusFirstField(el); }, 60);
+        });
+      });
+      document.querySelectorAll('.modal-overlay').forEach(function (m) {
+        if (MODAL_CLOSERS[m.id]) {
+          m.addEventListener('click', function (e) {
+            if (e.target !== m) return;          // 只有点到遮罩本身才算，点弹窗内容不算
+            _closeModalById(m.id);
+          });
+        }
+        obs.observe(m, { attributes: true, attributeFilter: ['class'] });
+      });
+    })();
+
+    function stripBatchCountLabel(val) {
+      // 将 "批次名 (N件)" 还原为 "批次名"；普通输入原样返回
+      return String(val || '').replace(/\s*\(\d+件\)\s*$/, '');
+    }
+
+    function onFilterIncludeArchivedChange() {
+      // 勾选/取消"显示已收款完结批次"：重建批次级联数据源 + 立即重渲染表格（过滤归档批次谷子）
+      updateBatchDropdownOptions();
+      onFilterChange();
+    }
+    window.onFilterIncludeArchivedChange = onFilterIncludeArchivedChange;
+
+    function onFilterChange() { CURRENT_PAGE = 1; saveFilterState(); renderTable(); }
+    window.onFilterChange = onFilterChange;
+
+    /* 💾 筛选条件记忆（2026-10-26）：批次 / 地区 / 状态记在本机，下次进后台不用重新选一遍。
+       ⚠️ 页码刻意不记 —— 回来永远从第 1 页，否则停在第 87 页更找不到北。
+       ⚠️ 记下来的批次如果已经改名/删掉，必须在 restore 时丢掉，否则团长会对着空表发呆。 */
+    const FILTER_LS_KEY = 'gtbot_admin_filters';
+    function saveFilterState() {
+      try {
+        localStorage.setItem(FILTER_LS_KEY, JSON.stringify({
+          batch: window.SELECTED_FILTER_BATCH || '',
+          detail: window.SELECTED_BATCH_DETAIL || '',
+          country: (document.getElementById('filterCountry') || {}).value || '',
+          status: (document.getElementById('filterStatus') || {}).value || ''
+        }));
+      } catch (e) {}
+    }
+    function restoreFilterState() {
+      let s = null;
+      try { s = JSON.parse(localStorage.getItem(FILTER_LS_KEY) || 'null'); } catch (e) {}
+      if (!s || typeof s !== 'object') return false;
+      let batch = String(s.batch || '');
+      let detail = String(s.detail || '');
+      const items = Array.isArray(RAW_ITEMS) ? RAW_ITEMS : [];
+      if (batch && items.length && !items.some(function (i) { return String(i.batch_name || '默认批次') === batch; })) {
+        batch = ''; detail = '';
+      }
+      if (batch && detail && items.length &&
+          !items.some(function (i) { return String(i.name || '').toLowerCase().indexOf(detail.toLowerCase()) >= 0; })) {
+        detail = '';
+      }
+      window.SELECTED_FILTER_BATCH = batch;
+      window.SELECTED_BATCH_DETAIL = detail;
+      const t = document.getElementById('filterBatchCascadeText');
+      if (t) t.innerText = batch ? (detail ? batch + ' - ' + detail : batch) : '全部批次';
+      const c = document.getElementById('filterCountry');
+      if (c && s.country && Array.prototype.some.call(c.options, function (o) { return o.value === s.country; })) c.value = s.country;
+      const st = document.getElementById('filterStatus');
+      if (st && s.status) st.value = s.status;
+      _syncFilterStatusUI();
+      // 真的恢复了「有内容」的筛选才返回 true（全是空的不算，免得每次开都弹一句废话）
+      const _c = (c && c.value) || '';
+      const _s = (st && st.value) || '';
+      return !!(batch || detail || _c || _s);
+    }
+    window.restoreFilterState = restoreFilterState;
+
+    /* 翻页后把视线带回列表顶部（2026-10-26）：
+       以前滚到页底点「下一页」，新内容在最上面、视口还停在页面底部，
+       第一行被导航挡掉 -471px，看着像"点了没反应"。 */
+    function _scrollToItemsTop() {
+      try {
+        const tb = document.getElementById('itemsTableBody');
+        if (!tb) return;
+        const isMobile = window.matchMedia('(max-width: 768px)').matches;
+        /* 桌面端：整张卡片头（标题/批量按钮/筛选栏/列名）都常驻 → 滚到「卡片顶」，
+           滚到「表格顶」会正好把卡片头切在屏幕外面。 */
+        const box = isMobile
+          ? (document.getElementById('mobileSelBar') || document.getElementById('adminMobileCardsView'))
+          : (tb.closest('.items-card') || tb.closest('.table-container') || tb);
+        /* 表格容器的内部滚动也要归零（桌面端表头吸顶后它自己有滚动条） */
+        const container = tb.closest('.table-container');
+        if (container) container.scrollTop = 0;
+        if (!box) return;
+        const navH = isMobile ? 54 : 0;   /* 手机上顶部 tab 条是 sticky，别把列表头挡住 */
+        const y = box.getBoundingClientRect().top + window.scrollY - navH - 8;
+        window.scrollTo(0, Math.max(0, y));
+      } catch (e) {}
+    }
+    window._scrollToItemsTop = _scrollToItemsTop;
+
+    function changePage(page) {
+      CURRENT_PAGE = page;
+      /* ⚠️ 别再手动 mc.checked = false：renderTable 会按 SELECTED_ITEM_KEYS 回填勾选并调
+         _refreshSelectAllState()，这里再清零会把「本页全勾」的表头状态抹成未勾（行还是绿的）。 */
+      renderTable();
+      _scrollToItemsTop();
+    }
+    window.changePage = changePage;
+
+    function jumpToPage(v) {
+      const n = parseInt(v, 10);
+      if (!isFinite(n)) return;
+      const last = Math.max(1, window.__LAST_TOTAL_PAGES || 1);
+      changePage(Math.min(Math.max(1, n), last));
+    }
+    window.jumpToPage = jumpToPage;
+
+    function onPageSizeChange(v) {
+      const n = parseInt(v, 10);
+      if (!n || n < 1) return;
+      const firstIdx = (CURRENT_PAGE - 1) * PAGE_SIZE;   /* 尽量停在原来那批数据附近 */
+      PAGE_SIZE = n;
+      try { localStorage.setItem('gtbot_admin_page_size', String(n)); } catch (e) {}
+      CURRENT_PAGE = Math.max(1, Math.floor(firstIdx / PAGE_SIZE) + 1);
+      renderTable();
+      _scrollToItemsTop();
+    }
+    window.onPageSizeChange = onPageSizeChange;
+
+    function handleImageUrlInput(val) { updateImagePreview(val.trim()); }
+    window.handleImageUrlInput = handleImageUrlInput;
+
+    function updateImagePreview(url) {
+      const img = document.getElementById('imagePreviewImg');
+      const txt = document.getElementById('imagePreviewText');
+      if (url) {
+        img.setAttribute('data-orig', url);
+        img.removeAttribute('data-fb');
+        img.onerror = function(){ imgFallback(img); };   // 直连裂了 → 自动换通道
+        img.src = sbImg(url);
+        img.style.display = 'block'; txt.style.display = 'none';
+      }
+      else { img.src = ''; img.removeAttribute('data-orig'); img.style.display = 'none'; txt.style.display = 'block'; }
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       谷子图片上传（2026-11-04 重写：拖拽 + 点击 / 真实进度条 / 删除）
+       ── 为什么用 XHR 而不是 supabaseClient.storage.upload() ──
+          supabase-js 的 upload() 不返回进度事件，只能做假的定时动画。
+          这里直接 POST 同源反代 /sb 的 Storage 接口，监听 xhr.upload.onprogress，
+          进度是**真实已上传字节数**（大图才看得出差别）。
+       ── 约束（团长定的口径）──
+          只收 jpg / png；单张 ≤ 10MB；超了**直接拒绝并说清原因**，绝不偷偷压缩。
+          这个框只挂 1 张图（数据里就是 image_url 单字段），一次选多张只取第一张。
+       ══════════════════════════════════════════════════════════════════════ */
+    const IMG_MAX_BYTES = 10 * 1024 * 1024;
+    const IMG_MAX_COUNT = 1;
+    let IMG_TASK = null;              /* 正在上传：{ xhr, file, path } */
+
+    /* 点框选择 —— 手机上只有这条路（iOS Safari 不支持 HTML5 拖拽） */
+    function pickImageFile() {
+      if (IMG_TASK) return showToast('上一张还在上传，稍等一下');
+      const el = document.getElementById('inputImageFile');
+      if (el) el.click();
+    }
+    window.pickImageFile = pickImageFile;
+
+    function _imgExtOf(name) {
+      const s = String(name || '');
+      const i = s.lastIndexOf('.');
+      return i >= 0 ? s.slice(i + 1).toLowerCase() : '';
+    }
+    function _imgSizeText(n) {
+      const b = Number(n) || 0;
+      if (b >= 1048576) return (b / 1048576).toFixed(b >= 10485760 ? 0 : 1) + 'MB';
+      if (b >= 1024) return Math.round(b / 1024) + 'KB';
+      return b + 'B';
+    }
+    /* 扩展名 + MIME 双判：Windows 上偶尔 file.type 为空，只看 MIME 会把好图误杀 */
+    function _imgCheck(file) {
+      const ext = _imgExtOf(file.name);
+      const mime = String(file.type || '').toLowerCase();
+      const okExt = ext === 'jpg' || ext === 'jpeg' || ext === 'png';
+      const okMime = mime === '' || mime === 'image/jpeg' || mime === 'image/png';
+      if (!okExt || !okMime) return { ok: false, msg: '只支持 jpg / png，这张是 ' + (ext ? '.' + ext : '未知格式') };
+      if (file.size > IMG_MAX_BYTES) return { ok: false, msg: '单张不能超过 10MB，这张是 ' + _imgSizeText(file.size) };
+      return { ok: true, ext: (ext === 'jpeg' ? 'jpg' : ext) };
+    }
+
+    /* ── 拖拽三件套（dragover 必须 preventDefault，否则浏览器直接打开图片） ── */
+    function imgDragOver(e) {
+      e.preventDefault(); e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      const z = document.getElementById('imgDropZone');
+      if (z) z.classList.add('dz-over');
+    }
+    function imgDragLeave(e) {
+      e.preventDefault(); e.stopPropagation();
+      const z = document.getElementById('imgDropZone');
+      if (z) z.classList.remove('dz-over');
+    }
+    function imgDrop(e) {
+      e.preventDefault(); e.stopPropagation();
+      const z = document.getElementById('imgDropZone');
+      if (z) z.classList.remove('dz-over');
+      const dt = e.dataTransfer;
+      const files = dt && dt.files ? dt.files : null;
+      if (!files || !files.length) return;
+      if (files.length > IMG_MAX_COUNT) showToast('这个框只挂 1 张图，已取第一张「' + files[0].name + '」');
+      startImageUpload(files[0]);
+    }
+    window.imgDragOver = imgDragOver; window.imgDragLeave = imgDragLeave; window.imgDrop = imgDrop;
+
+    function showImgFileRow(file) {
+      const box = document.getElementById('imgFileList');
+      if (!box) return;
+      box.style.display = 'block';
+      box.innerHTML =
+        '<div class="img-file">' +
+          '<div class="img-file-top">' +
+            '<span class="img-file-name" title="' + escapeHtml(file.name) + '">' + escapeHtml(file.name) + '</span>' +
+            '<span class="img-file-meta">' + _imgSizeText(file.size) + '</span>' +
+            '<span class="img-file-meta" data-pct>0%</span>' +
+            '<button type="button" class="img-file-del" onclick="removeImageFile(event)">✕ 删除</button>' +
+          '</div>' +
+          '<div class="img-file-bar"><i style="width:0%"></i></div>' +
+          '<div class="img-file-err" style="display:none;"></div>' +
+        '</div>';
+    }
+    function setImgFileState(pct, state, errMsg) {
+      const el = document.querySelector('#imgFileList .img-file');
+      if (!el) return;
+      const p = Math.max(0, Math.min(100, Math.round(pct || 0)));
+      const bar = el.querySelector('.img-file-bar > i');
+      const lab = el.querySelector('[data-pct]');
+      if (bar) bar.style.width = (state === 'err' ? 100 : p) + '%';
+      if (lab) lab.textContent = (state === 'err' ? '失败' : p + '%');
+      el.classList.toggle('is-ok', state === 'ok');
+      el.classList.toggle('is-err', state === 'err');
+      const er = el.querySelector('.img-file-err');
+      if (er) { er.style.display = errMsg ? 'block' : 'none'; er.textContent = errMsg || ''; }
+    }
+    function imgResetUploader() {
+      const box = document.getElementById('imgFileList');
+      if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+      const z = document.getElementById('imgDropZone');
+      if (z) z.classList.remove('dz-over', 'dz-busy');
+      const st = document.getElementById('uploadStatusText');
+      if (st) st.textContent = '自动上传到 Supabase 图床';
+      const inp = document.getElementById('inputImageFile');
+      if (inp) inp.value = '';
+    }
+    window.imgResetUploader = imgResetUploader;
+
+    /* 删除：自绘两步（第一次变「确认删除？」，4 秒内再点才真删）。
+       ⚠️ 不删云端对象 —— 它可能已被保存的条目引用，删了就是永久裂图。
+       这里只把它从「当前表单」上摘掉，点保存后才真正生效。 */
+    function removeImageFile(e) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      const btn = e && e.currentTarget ? e.currentTarget : null;
+      if (btn && btn.getAttribute('data-arm') !== '1') {
+        btn.setAttribute('data-arm', '1');
+        btn.textContent = '确认删除？';
+        clearTimeout(btn._armT);
+        btn._armT = setTimeout(function () {
+          btn.setAttribute('data-arm', '');
+          btn.textContent = '✕ 删除';
+        }, 4000);
+        return;
+      }
+      if (btn) clearTimeout(btn._armT);
+      if (IMG_TASK && IMG_TASK.xhr) { try { IMG_TASK.xhr.abort(); } catch (_) {} }
+      IMG_TASK = null;
+      IS_IMAGE_UPLOADING = false;
+      imgResetUploader();
+      const u = document.getElementById('inputImageUrl');
+      if (u) u.value = '';
+      updateImagePreview('');
+      showToast('已移除这张图（保存后才生效）');
+    }
+    window.removeImageFile = removeImageFile;
+
+    function _imgUploadErrText(xhr) {
+      let msg = '';
+      try {
+        const j = JSON.parse(xhr.responseText || '{}');
+        msg = j.message || j.error || '';
+      } catch (_) {}
+      if (!msg) msg = 'HTTP ' + xhr.status;
+      if (xhr.status === 413) msg = '文件太大，被服务端拒绝了（' + msg + '）';
+      if (xhr.status === 401 || xhr.status === 403) msg = '没有上传权限，请重新登录后台（' + msg + '）';
+      return msg;
+    }
+
+    async function startImageUpload(file) {
+      if (!file) return;
+      if (IMG_TASK) return showToast('上一张还在上传，稍等一下');
+      const statusEl = document.getElementById('uploadStatusText');
+
+      const chk = _imgCheck(file);
+      if (!chk.ok) {
+        showImgFileRow(file);
+        setImgFileState(0, 'err', chk.msg);
+        if (statusEl) statusEl.textContent = '❌ ' + chk.msg;
+        showToast(chk.msg);
+        return;
+      }
+
+      /* 先挂本地预览：上传失败时也能看清自己选的是哪张 */
+      try {
+        const reader = new FileReader();
+        reader.onload = function (evt) { updateImagePreview(evt.target.result); };
+        reader.readAsDataURL(file);
+      } catch (_) {}
+
+      showImgFileRow(file);
+      if (statusEl) statusEl.textContent = '⏳ 上传中 0%';
+      IS_IMAGE_UPLOADING = true;
+      const zone = document.getElementById('imgDropZone');
+      if (zone) zone.classList.add('dz-busy');
+
+      const ext = chk.ext || 'jpg';
+      const objPath = String(CURRENT_QUERY_KEY || 'public') + '/' + Date.now() + '_' + Math.floor(Math.random() * 100000) + '.' + ext;
+
+      /* 必须用登录态 token：goods-images 桶对匿名是 403，只有登录的管理能写 */
+      let token = SUPABASE_KEY;
+      try {
+        const sess = await supabaseClient.auth.getSession();
+        const at = sess && sess.data && sess.data.session && sess.data.session.access_token;
+        if (at) token = at;
+      } catch (_) {}
+
+      const base = SB_ACTIVE_BASE || sbPageBase();
+      const url = base + '/storage/v1/object/goods-images/' + objPath.split('/').map(encodeURIComponent).join('/');
+
+      const xhr = new XMLHttpRequest();
+      IMG_TASK = { xhr: xhr, file: file, path: objPath };
+
+      const done = function () {
+        IMG_TASK = null;
+        IS_IMAGE_UPLOADING = false;
+        const z = document.getElementById('imgDropZone');
+        if (z) z.classList.remove('dz-busy');
+        const inp = document.getElementById('inputImageFile');
+        if (inp) inp.value = '';
+      };
+
+      xhr.open('POST', url, true);
+      xhr.setRequestHeader('apikey', SUPABASE_KEY);
+      xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+      xhr.setRequestHeader('x-upsert', 'true');
+      xhr.setRequestHeader('Content-Type', file.type || (ext === 'png' ? 'image/png' : 'image/jpeg'));
+
+      xhr.upload.onprogress = function (ev) {
+        if (!ev || !ev.lengthComputable) return;
+        const pct = Math.round(ev.loaded / ev.total * 100);
+        setImgFileState(pct, 'up');
+        if (statusEl) statusEl.textContent = '⏳ 上传中 ' + pct + '%';
+      };
+      xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const pub = supabaseClient.storage.from('goods-images').getPublicUrl(objPath);
+          const publicUrl = pub && pub.data ? pub.data.publicUrl : '';
+          setImgFileState(100, 'ok');
+          if (publicUrl) {
+            document.getElementById('inputImageUrl').value = publicUrl;
+            updateImagePreview(publicUrl);
+            if (statusEl) statusEl.textContent = '✅ 上传成功';
+            showToast('图片上传成功');
+          } else {
+            if (statusEl) statusEl.textContent = '⚠️ 传上去了但没拿到图片地址';
+            showToast('图片传上去了，但没拿到地址，请重试一次');
+          }
+        } else {
+          const msg = _imgUploadErrText(xhr);
+          setImgFileState(100, 'err', msg);
+          if (statusEl) statusEl.textContent = '❌ 上传失败：' + msg;
+          updateImagePreview('');
+          showToast('图片上传失败：' + msg);
+        }
+        done();
+      };
+      xhr.onerror = function () {
+        const msg = '网络中断，传到一半断了';
+        setImgFileState(100, 'err', msg);
+        if (statusEl) statusEl.textContent = '❌ 上传失败：' + msg;
+        updateImagePreview('');
+        showToast('图片上传失败：' + msg);
+        done();
+      };
+      xhr.onabort = function () {
+        if (statusEl) statusEl.textContent = '已取消上传';
+        done();
+      };
+      xhr.send(file);
+    }
+    window.startImageUpload = startImageUpload;
+
+    function handleImageUpload(e) {
+      const files = e && e.target && e.target.files ? e.target.files : null;
+      if (!files || !files.length) return;
+      if (files.length > IMG_MAX_COUNT) showToast('这个框只挂 1 张图，已取第一张「' + files[0].name + '」');
+      startImageUpload(files[0]);
+    }
+    window.handleImageUpload = handleImageUpload;
+
+    // 状态样式映射（含老状态兼容）
+    function getStatusBadgeClass(status) {
+      const s = (status || '').trim();
+      if (STATUS_OPTIONS.some(opt => opt.value === s)) {
+        return `badge-status-${s}`;
+      }
+      const legacyMap = {
+        '已下单未到货': 'badge-status-已下单',
+        '回国中': 'badge-status-国际运输中',
+        '已到货': 'badge-status-可排发',
+        '已申请发货': 'badge-status-待发货',
+        '已交定金': 'badge-status-已交定金'   // 💰 系统状态（只由「确认收款」写，不在手动状态下拉里）
+      };
+      return legacyMap[s] || 'badge-status-custom';
+    }
+
+    /* 支付方式彩色标签：微信绿 / 支付宝蓝 / 零钱罐紫 / 其他灰（普通订单与国际运费共用）
+       🐷 零钱罐（2026-10-14）：这笔钱是从团员零钱罐里抵扣的，没走微信/支付宝平台，
+          单独给一个紫色标签，团长看账时一眼能分清「平台到账」和「罐里划走」。 */
+    function getPayMethodBadge(pm) {
+      const pmRaw = String(pm || '').trim();
+      if (!pmRaw) return '<span style="color:var(--text-muted);font-size:0.8rem;">—</span>';
+      const pmCls = pmRaw.indexOf('零钱罐') >= 0 ? 'badge-pay-零钱罐'
+        : (pmRaw.indexOf('微信') >= 0 ? 'badge-pay-微信'
+          : (pmRaw.indexOf('支付宝') >= 0 ? 'badge-pay-支付宝' : 'badge-pay-其他'));
+      return '<span class="badge ' + pmCls + '">' + escapeHtml(pmRaw) + '</span>';
+    }
+
+    // ==========================================
+    // 💰 收款对账统计（普通订单 group_data）
+    // 应收 = Σ(单价×数量)；实收 = 非「未付款」订单金额；未收 = 应收 - 实收
+    // 「未付款」= 待交谷子费，未付款即视为欠款；付款方式来自团员 /已付 上报。
+    // ==========================================
+    let PAY_STATS_INCLUDE_ARCHIVED = false;
+    let PAY_STATS_CACHE = [];
+    // 🔽 排序口径（2026-09-27 团长要求）：默认「最近录入优先」——
+    //    原先固定按「应收金额」降序，跟录入时间无关，团长要找今天刚录的批次得一行行翻。
+    //    'time' = 每个批次取「最近一次录入时间」(max created_at) 倒序；'due' = 老口径（应收金额降序）。
+    let PAY_STATS_SORT = 'time';
+
+    /* ⚠️ 「已交定金」不算钱已收齐（只收了一半）—— 漏掉它会让收款对账的「实收」虚高。
+       2026-10-10 上定金功能时一并修正（只多排除这一个状态，其余口径一字未动）。 */
+    function isOrderPaid(it) { const st = String((it && it.status) || '').trim(); return st !== '未付款' && st !== '已交定金'; }
+
+    /* 把 created_at（ISO 串，老数据也可能是别的写法）转成毫秒时间戳；解析不了 → 0 */
+    function _payTs(v) {
+      const s = String(v == null ? '' : v).trim();
+      if (!s) return 0;
+      const t = Date.parse(s);
+      return isNaN(t) ? 0 : t;
+    }
+
+    /* 时间戳 → 「MM-DD HH:mm」显示 */
+    function _fmtPayTs(ts) {
+      if (!ts) return '';
+      const d = new Date(ts);
+      const p = function (n) { return (n < 10 ? '0' : '') + n; };
+      return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+    }
+
+    /* 🐷 零钱罐单独成一类：它既不是微信也不是支付宝（钱早就在罐里了），
+       混进「其他」会让团长以为平台上收到了钱。 */
+    function _payMethodKey(pm) {
+      const s = String(pm || '').trim();
+      if (s.indexOf('零钱罐') >= 0) return '零钱罐';
+      if (s.indexOf('微信') >= 0) return '微信';
+      if (s.indexOf('支付宝') >= 0) return '支付宝';
+      return s ? '其他' : '未注明';
+    }
+
+    function computePayStats(includeArchived) {
+      const batches = {};
+      const methods = { '微信': 0, '支付宝': 0, '零钱罐': 0, '其他': 0, '未注明': 0 };   // 🐷 零钱罐单列，别和"其他"混
+      /* 💳 平台分账人数（2026-11-08）：每个平台各自对 CN 去重。
+         同一个人两个平台都付过 → 两边各算 1 人，人数相加可能大于总人数，这是有意的。 */
+      const methodMembers = { '微信': new Set(), '支付宝': new Set(), '零钱罐': new Set(), '其他': new Set(), '未注明': new Set() };
+      const overallMembers = new Set();
+      let due = 0, recv = 0, cnt = 0, unpaidCnt = 0;
+      const r2 = function (n) { return Math.round(n * 100) / 100; };
+      RAW_ITEMS.forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        const bn = (String(it.batch_name || '').trim()) || '默认批次';
+        if (!includeArchived && bn !== '默认批次' && isArchivedBatchName(bn)) return;
+        const amt = (Number(it.price) || 0) * (Number(it.quantity) || 1);
+        let b = batches[bn];
+        if (!b) { b = { name: bn, due: 0, recv: 0, cnt: 0, unpaidCnt: 0, firstTs: 0, lastTs: 0, members: new Set(), methods: { '微信': 0, '支付宝': 0, '零钱罐': 0, '其他': 0, '未注明': 0 } }; batches[bn] = b; }
+        // 📅 录入时间：firstTs = 该批次最早一条的录入时间；lastTs = 最近一条（团长要的排序依据）
+        const _ts = _payTs(it.created_at);
+        if (_ts) {
+          if (!b.firstTs || _ts < b.firstTs) b.firstTs = _ts;
+          if (_ts > b.lastTs) b.lastTs = _ts;
+        }
+        b.due += amt; b.cnt += 1; b.members.add(String(it.cn || ''));
+        due += amt; cnt += 1; overallMembers.add(String(it.cn || ''));
+        if (isOrderPaid(it)) {
+          b.recv += amt; recv += amt;
+          const k = _payMethodKey(it.pay_method);
+          b.methods[k] += amt; methods[k] += amt;
+          methodMembers[k].add(String(it.cn || ''));
+        } else {
+          b.unpaidCnt += 1; unpaidCnt += 1;
+        }
+      });
+      const list = Object.keys(batches).map(function (k) {
+        const b = batches[k];
+        return { name: b.name, cnt: b.cnt, members: b.members.size, due: r2(b.due), recv: r2(b.recv), unpaid: r2(b.due - b.recv), unpaidCnt: b.unpaidCnt, methods: b.methods, archived: isArchivedBatchName(b.name), firstTs: b.firstTs, lastTs: b.lastTs };
+      }).sort(function (a, b) {
+        // 主排序：按团长选的模式；并列时一律用「未收多的靠前」兜底，保证顺序稳定可预期
+        if (PAY_STATS_SORT === 'time') {
+          return (b.lastTs - a.lastTs) || (b.due - a.due) || (b.unpaid - a.unpaid);
+        }
+        return (b.due - a.due) || (b.unpaid - a.unpaid);
+      });
+      Object.keys(methods).forEach(function (k) { methods[k] = r2(methods[k]); });
+      const methodPeople = {};
+      Object.keys(methodMembers).forEach(function (k) { methodPeople[k] = methodMembers[k].size; });
+      return { list: list, overall: { cnt: cnt, members: overallMembers.size, due: r2(due), recv: r2(recv), unpaid: r2(due - recv), unpaidCnt: unpaidCnt, methods: methods, methodPeople: methodPeople } };
+    }
+
+    /* 💳 平台分账小计条（2026-11-08 团长要求）：上下排布，微信 / 支付宝 / 其他各一块。
+       ⚠️ 纯显示：金额直接取 computePayStats 已算好的 methods，一个数没改、没新增算法。 */
+    function _payOtherAmt(m) {
+      return (Number(m && m['零钱罐']) || 0) + (Number(m && m['其他']) || 0) + (Number(m && m['未注明']) || 0);
+    }
+    function _payOtherPeople(p) {
+      return (Number(p && p['零钱罐']) || 0) + (Number(p && p['其他']) || 0) + (Number(p && p['未注明']) || 0);
+    }
+    function _paySplitRow(label, icon, color, bg, amt, people) {
+      return '<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:7px 10px; border-left:4px solid ' + color + '; background:' + bg + '; border-radius:6px; font-size:0.88rem;">' +
+        '<span style="font-weight:700; color:' + color + ';">' + icon + ' ' + label +
+          ' <span style="font-weight:500; color:var(--text-muted);">' + (Number(people) || 0) + ' 人</span></span>' +
+        '<strong style="font-size:1rem; color:' + color + ';">￥' + (Number(amt) || 0).toFixed(2) + '</strong>' +
+      '</div>';
+    }
+
+    function renderPayStats() {
+      const sumEl = document.getElementById('payStatsSummary');
+      const tbody = document.getElementById('payStatsTableBody');
+      const mobileView = document.getElementById('payStatsMobileCardsView');
+      if (!tbody) return;
+      const s = computePayStats(PAY_STATS_INCLUDE_ARCHIVED);
+      const o = s.overall;
+      PAY_STATS_CACHE = s.list;
+      if (sumEl) {
+        sumEl.innerHTML =
+          '<span class="badge badge-country">' + o.members + ' 人</span><br>' +
+          '应收 <strong style="font-size:1.05rem;">￥' + o.due.toFixed(2) + '</strong> ｜ ' +
+          '实收 <strong style="color:#16a34a; font-size:1.05rem;">￥' + o.recv.toFixed(2) + '</strong> ｜ ' +
+          '未收 <strong style="color:' + (o.unpaid > 0.0000001 ? '#dc2626' : '#64748b') + '; font-size:1.05rem;">￥' + o.unpaid.toFixed(2) + '</strong>' +
+          '<div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">' +
+            _paySplitRow('微信', '💚', '#16a34a', '#f0fdf4', o.methods['微信'], (o.methodPeople || {})['微信']) +
+            _paySplitRow('支付宝', '💙', '#1d4ed8', '#eff6ff', o.methods['支付宝'], (o.methodPeople || {})['支付宝']) +
+            (_payOtherAmt(o.methods) > 0.0000001
+              ? _paySplitRow('其他 · 零钱罐 / 未注明 / 其他', '⬜', '#64748b', '#f8fafc', _payOtherAmt(o.methods), _payOtherPeople(o.methodPeople))
+              : '') +
+          '</div>' +
+          (o.methods['未注明'] > 0.0000001 ? '<div style="margin-top:6px; font-size:0.78rem; color:var(--text-muted);">「未注明」= 早期订单或团长手动改的状态，没记支付方式；团员用 /已付 上报后会自动归类到微信/支付宝。</div>' : '') +
+          '<div style="margin-top:4px; font-size:0.76rem; color:var(--text-muted);">金额按每笔订单的支付方式拆；人数按平台各自去重。点「明细」可按人分排看，每排也有小计。</div>';
+      }
+      if (s.list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--text-muted);">暂无订单数据</td></tr>';
+        if (mobileView) mobileView.innerHTML = '';
+        return;
+      }
+      let html = '', cardsHtml = '';
+      s.list.forEach(function (b, i) {
+        const needCls = b.unpaid > 0.0000001 ? 'badge-status-未付款' : 'badge-status-可排发';
+        const lastTxt = b.lastTs ? _fmtPayTs(b.lastTs) : '';
+        const timeLine = lastTxt
+          ? '<div style="font-size:0.72rem; color:var(--text-muted); font-weight:400;">最近录入 ' + lastTxt + '</div>'
+          : '<div style="font-size:0.72rem; color:var(--text-muted); font-weight:400;">无录入时间</div>';
+        html += '<tr>' +
+          '<td style="font-weight:600;">' + escapeHtml(b.name) + (b.archived ? ' <span class="badge badge-status-custom" style="font-size:0.7rem;">已完结</span>' : '') + timeLine + '</td>' +
+          '<td>' + b.members + '</td>' +
+          '<td>￥' + b.due.toFixed(2) + '</td>' +
+          '<td style="color:#16a34a; font-weight:600;">￥' + b.recv.toFixed(2) + '</td>' +
+          '<td style="color:' + (b.unpaid > 0.0000001 ? '#dc2626' : '#64748b') + '; font-weight:600;">￥' + b.unpaid.toFixed(2) + '</td>' +
+          '<td>' + (b.unpaidCnt ? '<span class="badge ' + needCls + '">' + b.unpaidCnt + '</span>' : '<span style="color:var(--text-muted);">—</span>') + '</td>' +
+          '<td><button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem;" onclick="openPayDetail(' + i + ')">明细</button></td>' +
+          '</tr>';
+        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(b.name) + '</span><span class="badge ' + needCls + '">未付款 ' + b.unpaidCnt + '</span></div><div style="font-size:0.9rem; padding:6px 0;">' + b.members + ' 人 | 应收 ￥' + b.due.toFixed(2) + '<br>实收 ￥' + b.recv.toFixed(2) + ' | 未收 ￥' + b.unpaid.toFixed(2) + '<br><span style="font-size:0.78rem; color:var(--text-muted);">最近录入 ' + (lastTxt || '—') + '</span></div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openPayDetail(' + i + ')">📋 明细</button></div></div>';
+      });
+      tbody.innerHTML = html;
+      if (mobileView) mobileView.innerHTML = cardsHtml;
+    }
+    window.renderPayStats = renderPayStats;
+
+    function onPayStatsToggleArchived() {
+      const cb = document.getElementById('payStatsIncludeArchived');
+      PAY_STATS_INCLUDE_ARCHIVED = !!(cb && cb.checked);
+      renderPayStats();
+    }
+    window.onPayStatsToggleArchived = onPayStatsToggleArchived;
+
+    /* 🔽 切换排序口径（纯显示层，不动任何数据） */
+    function onPayStatsSortChange() {
+      const sel = document.getElementById('payStatsSortMode');
+      PAY_STATS_SORT = (sel && sel.value) === 'due' ? 'due' : 'time';
+      renderPayStats();
+    }
+    window.onPayStatsSortChange = onPayStatsSortChange;
+
+    function openPayDetail(idx) {
+      const batch = PAY_STATS_CACHE[idx];
+      if (!batch) return;
+      const batchName = batch.name;
+      const byCn = {};
+      RAW_ITEMS.forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        const bn = (String(it.batch_name || '').trim()) || '默认批次';
+        if (bn !== batchName) return;
+        const cn = String(it.cn || '(未填CN)');
+        const amt = (Number(it.price) || 0) * (Number(it.quantity) || 1);
+        let g = byCn[cn];
+        if (!g) { g = { cn: cn, cnt: 0, due: 0, recv: 0, unpaid: 0, methods: {}, pmAmt: {} }; byCn[cn] = g; }
+        g.cnt += 1; g.due += amt;
+        if (isOrderPaid(it)) {
+          g.recv += amt;
+          const k = _payMethodKey(it.pay_method);
+          g.methods[k] = (g.methods[k] || 0) + 1;
+          g.pmAmt[k] = (g.pmAmt[k] || 0) + amt;   /* 💳 归排依据：哪个平台付的钱最多 */
+        }
+        else { g.unpaid += amt; }
+      });
+      const rows = Object.keys(byCn).map(function (k) { return byCn[k]; })
+        .sort(function (a, b) { return (b.unpaid - a.unpaid) || (b.due - a.due); });
+      const totalDue = rows.reduce(function (a, r) { return a + r.due; }, 0);
+      const totalRecv = rows.reduce(function (a, r) { return a + r.recv; }, 0);
+      const unpaidPeople = rows.filter(function (r) { return r.unpaid > 0.0000001; }).length;
+      /* 🐷 零钱罐（2026-10-14）：把「这批人里谁的罐里还有钱」在明细里直接摊出来 ——
+         团长一句「你罐里还有 ￥X，直接用掉」就能收账，不必再翻算账中心。只读，不动任何数据。 */
+      const _pgOf = function (cn) {
+        try { return (typeof piggyBalanceOf === 'function') ? piggyBalanceOf(cn) : 0; } catch (e) { return 0; }
+      };
+      let pgPeople = 0, pgTotal = 0;
+      rows.forEach(function (r) { const b2 = _pgOf(r.cn); if (b2 > 0.004) { pgPeople++; pgTotal += b2; } });
+      document.getElementById('payDetailTitle').innerText = '💰 收款对账明细 - ' + batchName;
+      document.getElementById('payDetailSummary').innerText =
+        '共 ' + rows.length + ' 人 | 未付款 ' + unpaidPeople + ' 人 | 应收 ￥' + totalDue.toFixed(2) + ' | 实收 ￥' + totalRecv.toFixed(2) + ' | 未收 ￥' + (totalDue - totalRecv).toFixed(2) +
+        (pgPeople ? '　｜　🐷 零钱罐可用：' + pgPeople + ' 人 共 ￥' + pgTotal.toFixed(2) + '（可从罐里直接抵扣）' : '');
+      const tbody = document.getElementById('payDetailBody');
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">该批次暂无订单</td></tr>';
+      } else {
+        /* 💳 按主要支付方式把人分成上下几排（2026-11-08 团长要求）：
+           微信 / 支付宝 / 其他各一块，每块顶部一条「N 人 ｜ 应收 / 已付 / 未付」小计条。
+           ⚠️ 只改显示分组，不改任何金额算法：
+              · 一个人用过多种方式 → 按「已付金额最多的平台」归排，行内仍把用过的方式全列出来
+              · 完全没付款 / 没记方式 → 归「其他」，不会从页面上消失
+              · 每排小计＝该排各行的数值相加，三排相加＝上方总计 */
+        const _grpOf = function (r) {
+          const a = r.pmAmt || {};
+          let best = '', bestV = 0;
+          ['微信', '支付宝', '零钱罐', '其他', '未注明'].forEach(function (k) {
+            const v = Number(a[k]) || 0;
+            if (v > bestV + 0.0000001) { bestV = v; best = k; }
+          });
+          return (best === '微信' || best === '支付宝') ? best : '其他';
+        };
+        const _grpMeta = {
+          '微信':   { label: '微信',   icon: '💚', color: '#16a34a', bg: '#f0fdf4' },
+          '支付宝': { label: '支付宝', icon: '💙', color: '#1d4ed8', bg: '#eff6ff' },
+          '其他':   { label: '其他（零钱罐 / 未注明 / 未付款）', icon: '⬜', color: '#64748b', bg: '#f8fafc' }
+        };
+        const _buckets = { '微信': [], '支付宝': [], '其他': [] };
+        rows.forEach(function (r) { _buckets[_grpOf(r)].push(r); });
+
+        /* 一行 = 一个人，HTML 与改前完全一样（零钱罐余额、支付方式标签都在），只是搬成可复用函数 */
+        const _payDetailRowHtml = function (r) {
+          const pmKeys = Object.keys(r.methods).sort(function (a, b) { return r.methods[b] - r.methods[a]; });
+          const pmHtml = pmKeys.length ? pmKeys.map(function (k) { return getPayMethodBadge(k) + (r.methods[k] > 1 ? '<span style="font-size:0.72rem;color:var(--text-muted);">×' + r.methods[k] + '</span>' : ''); }).join(' ') : '<span style="color:var(--text-muted);font-size:0.8rem;">—</span>';
+          /* 🐷 零钱罐挂在「支付方式」下面一行：有余额才显示，余额为 0 什么都不加（老账目一字不变） */
+          const _pgb = _pgOf(r.cn);
+          const pgHtml = _pgb > 0.004
+            ? '<div style="margin-top:4px; font-size:0.76rem; line-height:1.5;">🐷 零钱罐 <span class="badge badge-pay-零钱罐" style="font-size:0.72rem;">可用 ￥' + _pgb.toFixed(2) + '</span></div>'
+            : '';
+          const un = r.unpaid > 0.0000001;
+          return '<tr><td><strong>' + escapeHtml(r.cn) + '</strong></td><td>' + pmHtml + pgHtml + '</td><td>￥' + r.due.toFixed(2) + '</td><td style="color:#16a34a;">￥' + r.recv.toFixed(2) + '</td><td style="color:' + (un ? '#dc2626' : '#64748b') + '; font-weight:' + (un ? '700' : '400') + ';">￥' + r.unpaid.toFixed(2) + '</td></tr>';
+        };
+
+        let out = '';
+        ['微信', '支付宝', '其他'].forEach(function (key) {
+          const arr = _buckets[key];
+          if (!arr.length && key === '其他') return;   /* 微信/支付宝没人也照样显示一排，省得以为漏了 */
+          const m = _grpMeta[key];
+          const sDue = arr.reduce(function (a, r) { return a + r.due; }, 0);
+          const sRecv = arr.reduce(function (a, r) { return a + r.recv; }, 0);
+          const sUnpaid = arr.reduce(function (a, r) { return a + r.unpaid; }, 0);
+          out += '<tr><td colspan="5" style="padding:8px 10px; background:' + m.bg + '; border-left:4px solid ' + m.color + '; font-weight:700; font-size:0.88rem; color:' + m.color + ';">' +
+            m.icon + ' ' + m.label + ' · ' + arr.length + ' 人' +
+            ' <span style="font-weight:500; color:var(--text-muted);">｜ 应收 ￥' + sDue.toFixed(2) +
+            ' ｜ 已付 ￥' + sRecv.toFixed(2) + ' ｜ 未付 ￥' + sUnpaid.toFixed(2) + '</span></td></tr>';
+          out += arr.length
+            ? arr.map(_payDetailRowHtml).join('')
+            : '<tr><td colspan="5" style="text-align:center; padding:10px; color:var(--text-muted); font-size:0.82rem;">这一排暂时没有人</td></tr>';
+        });
+        tbody.innerHTML = out;
+      }
+      document.getElementById('payDetailModal').classList.add('active');
+    }
+    window.openPayDetail = openPayDetail;
+
+    function closePayDetail() { document.getElementById('payDetailModal').classList.remove('active'); }
+
+    // ==========================================
+    // 💳 交款审核（2026-09-22 新增）
+    //    团员在自查页「交肾核算」上传付款截图 → 这里审核。
+    //    点「确认收款」会把这些订单从「未付款」改成「已下单」并记下支付方式。
+    //    ⚠️ 图片存在 pay-proofs 桶。2026-09-24 修：该桶原先没给网页「读」的权限，
+    //       签名接口一律回 Object not found → 后台从上线起就看不到任何凭证图（只显示
+    //       「图片读不到 检查 pay-proofs 桶」）。现改为「知道确切链接才能取」：
+    //       直接拼公开下载地址即可显示，而桶内容仍**列不出来**（匿名密钥 list 返回空），
+    //       外人拿不到文件清单、也无从猜路径。
+    /* 批次名归一化：必须与机器人 batch_payment._batch_key() 完全一致 */
+    function _normBatchKey(s) {
+      return String(s == null ? '' : s).trim()
+        .replace(/\u3000/g, '')
+        .replace(/[\u00b7\u30fb\u2022\u3002\uff0e]/g, '.')
+        .toLowerCase()
+        .replace(/\s+/g, '');
+    }
+
+    /* 系统算出的「本批次应付金额」——用来和团员自填金额比对。
+       ① 国际运费凭证：按 item_ids（intl:<fee_members.id>）精确匹配求和 ——
+          一个 CN 在同一批次可能有多条，**不能只取最后一条**；
+       ② 普通订单：把凭证覆盖到的订单价格加起来；
+       都算不出来时 source='none'，审核页会明确标「未能核对」而不是假装通过。 */
+    /* 🏝️ 这张凭证对应的是不是「岛内运费」（fee_type='island'，日本国内那一段）？
+       凭证本身只记了 order_type='国际'（岛内走同一套金额口径，见 _payProofDueAmount），
+       所以拿 item_ids 里的 `intl:<id>` 回 logistics_data 查那条记录的 fee_type。
+       ⚠️ 纯显示用（决定徽章文字）；金额与状态判定一律走 order_type，绝不拿它改数据。 */
+    function _proofFeeIsIsland(p) {
+      const ids = (Array.isArray(p && p.item_ids) ? p.item_ids : []).map(String);
+      if (!ids.length) return false;
+      let hit = false;
+      (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+        if (!b || typeof b !== 'object') return;
+        (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
+          if (!m || typeof m !== 'object') return;
+          if (ids.indexOf('intl:' + String(m.id || '')) < 0) return;
+          if (String(m.fee_type || '').trim() === 'island') hit = true;
+        });
+      });
+      return hit;
+    }
+
+    function _payProofDueAmount(p) {
+      const ids = (Array.isArray(p.item_ids) ? p.item_ids : []).map(String);
+
+      // ① 国际运费：order_type='国际'，或 item_ids 带 intl: 前缀
+      if (String(p.order_type || '') === '国际' || ids.some(function (x) { return x.indexOf('intl:') === 0; })) {
+        let isum = 0, ifound = 0;
+        (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+          if (!b || typeof b !== 'object') return;
+          (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
+            if (!m || typeof m !== 'object') return;
+            if (ids.indexOf('intl:' + String(m.id || '')) < 0) return;
+            ifound++;
+            isum += Number(m.amount_due) || 0;
+          });
+        });
+        if (ifound) return { amount: Math.round(isum * 100) / 100, source: 'logistics', matched: ifound };
+        return { amount: null, source: 'none', matched: 0 };
+      }
+
+      // ② 普通订单
+      let sum = 0, found = 0;
+      RAW_ITEMS.concat(RAW_ARCHIVED || []).forEach(function (it) {
+        if (!it) return;
+        const iid = String(it.item_id || it.id || '');
+        if (!iid || ids.indexOf(iid) < 0) return;
+        found++;
+        sum += (Number(it.quantity) || 1) * (Number(it.price) || 0);
+      });
+      if (found) return { amount: Math.round(sum * 100) / 100, source: 'orders', matched: found };
+      return { amount: null, source: 'none', matched: 0 };
+    }
+
+    /* 💰 定金 / 尾款凭证的「应付」≠ 整批全款，必须单独判定 ——
+       不扩这一条，团长永远点不了「确认收款」（定金金额天生跟全款对不上）。
+         · deposit：应付 = 该批全款 × 该批定金比例（比例从「💰 定金设置」实时取）
+         · balance：应付 = 同一批次、同一人**已通过**的定金凭证上固化的 balance_due
+       ⚠️ 只认 plan 字段；老凭证没有 plan → 返回 null，走原来的全款口径（一个字不变）。 */
+    function _payProofPlanDue(p, fullDue) {
+      const plan = String((p && p.plan) || '').trim();
+      if (plan !== 'deposit' && plan !== 'balance') return null;
+      const k = _normBatchKey(p.batch_key || (Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names));
+      if (plan === 'deposit') {
+        const cfg = (RAW_BATCH_PLANS && RAW_BATCH_PLANS[k]) || null;
+        const r = (cfg && cfg.enabled) ? Number(cfg.ratio) : NaN;
+        if (!isFinite(r) || r <= 0 || r >= 1) return { amount: null, source: 'plan', note: '该批次没开定金，或比例不在 1–100 之间' };
+        if (fullDue.amount === null) return { amount: null, source: 'plan', note: '算不出整批应付' };
+        return { amount: Math.round(fullDue.amount * r * 100) / 100, source: 'plan', ratio: r };
+      }
+      const cn = String(p.cn || '').trim().toLowerCase();
+      let b = 0, paid = 0, hit = 0;
+      (Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : []).forEach(function (x) {
+        if (!x) return;
+        const xp = String(x.plan || '');
+        if (xp !== 'deposit' && xp !== 'balance') return;
+        if (String(x.status || '') !== '已通过') return;
+        if (String(x.cn || '').trim().toLowerCase() !== cn) return;
+        const xk = _normBatchKey(x.batch_key || (Array.isArray(x.batch_names) ? x.batch_names[0] : x.batch_names));
+        if (xk !== k) return;
+        if (xp === 'deposit') { b += Number(x.balance_due || 0); hit++; }
+        else { paid += Number(x.amount || 0); }   // ⚠️ 已补过的尾款要扣掉，判的是「还差多少」
+      });
+      if (!hit) return { amount: null, source: 'plan', note: '找不到这个人这一批的定金记录' };
+      return { amount: Math.max(0, Math.round((b - paid) * 100) / 100), source: 'plan' };
+    }
+
+    /* 🧮 分批补交（2026-10-11 团长要求）：
+       「如果有人少交了几块，后面补交，他提交的两张截图**加起来**必须和总金额一致，
+         不一致依旧只能驳回。」
+       → 对**还挂着（待审核）的全款凭证**，判定不能只看单张，要看**这一组的合计**。
+
+       一组 = 同一「人（CN） + 批次 + 类型（普通订单 / 国际·岛内运费）」，且都是全款口径（plan=full）。
+       ⚠️ 定金 / 尾款（plan != full）**不参与**累计 —— 它们各自有比例 / balance_due 那套口径。 */
+    function _payProofCluster(p) {
+      const out = { list: [], ids: [], key: '', intl: false };
+      if (!p || typeof p !== 'object') return out;
+      const cn = String(p.cn || '').trim().toLowerCase();
+      const k = _normBatchKey(p.batch_key || (Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names));
+      function _isIntl(x) {
+        if (String((x && x.order_type) || '') === '国际') return true;
+        return Array.isArray(x && x.item_ids) &&
+               x.item_ids.some(function (y) { return String(y).indexOf('intl:') === 0; });
+      }
+      const isIntl = _isIntl(p);
+      out.key = k; out.intl = isIntl;
+      const seen = {};
+      (Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : []).forEach(function (x) {
+        if (!x || typeof x !== 'object') return;
+        if (String(x.cn || '').trim().toLowerCase() !== cn) return;   // CN 为空的老凭证 → 只会组到自己
+        if (_normBatchKey(x.batch_key || (Array.isArray(x.batch_names) ? x.batch_names[0] : x.batch_names)) !== k) return;
+        if (_isIntl(x) !== isIntl) return;
+        if ((String(x.plan || '') || 'full') !== 'full') return;
+        const st = String(x.status || '');
+        if (st === '已驳回' || st === '已撤回') return;               // 作废的不计入
+        out.list.push(x);
+        (Array.isArray(x.item_ids) ? x.item_ids : []).forEach(function (y) {
+          const s = String(y);
+          if (s && !seen[s]) { seen[s] = true; out.ids.push(s); }
+        });
+      });
+      if (out.list.indexOf(p) < 0) out.list.push(p);
+      return out;
+    }
+
+    /* 这一组**总共该交多少** = 这个人这个批次里**还没交的条目** + 这组凭证里**已经通过**收过的钱。
+       为什么要加后半截：凭证一通过，对应条目的状态就变成「已下单 / 已交」，
+       不再出现在"未交条目"里 —— 不加回来，等于把自己刚收过的钱当成没交，金额永远对不上。
+       ⚠️ 一条都对不上（批次名取不到 / 数据对不上）→ 返回 null，上层按 unknown 处理，绝不瞎猜。 */
+    function _payProofScopeDue(p, cl) {
+      const k = cl.key;
+      const cn = String(p.cn || '').trim().toLowerCase();
+      if (!k || !cn) return null;
+      let sum = 0, found = 0;
+      if (cl.intl) {
+        (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+          if (!b || typeof b !== 'object') return;
+          if (_normBatchKey(b.batch_name) !== k) return;
+          (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
+            if (!m || typeof m !== 'object') return;
+            if (String(m.cn || '').trim().toLowerCase() !== cn) return;
+            if (String(m.status || '').trim() !== '未交') return;
+            sum += Number(m.amount_due) || 0; found++;
+          });
+        });
+      } else {
+        RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []).forEach(function (it) {
+          if (!it || typeof it !== 'object') return;
+          if (String(it.cn || '').trim().toLowerCase() !== cn) return;
+          if (_normBatchKey(it.batch_name || '默认批次') !== k) return;
+          const st = String(it.status || '').trim();
+          if (st !== '未付款' && st !== '未交') return;   // 「已交定金」不算：定金另有一套账
+          sum += (Number(it.quantity) || 1) * (Number(it.price) || 0); found++;
+        });
+      }
+      const passed = (cl.list || []).filter(function (x) { return String(x.status || '') === '已通过'; });
+      passed.forEach(function (x) { sum += Number(x.amount) || 0; });
+      if (!found && !passed.length) return null;
+      return Math.round(sum * 100) / 100;
+    }
+
+    /* 🩺 这张凭证据以定位订单的 item_id，现在在库里还找得到吗？
+       → 返回「失效的条数」（运费 id 走 logistics 单独判）。
+       为什么需要：**这批排表被重新导入过**，整批订单换了新的 item_id，
+       而团员是在换 id 之前交的钱 → 凭证上记的还是旧 id。
+       （2026-10-11 实测：「10.10 一番赏第一期」8 笔凭证全军覆没，
+         团长看到的「算不出这一笔的应付金额（订单可能已归档或找不到）」就是它。）*/
+    function _staleIdCount(p) {
+      const ids = (Array.isArray(p && p.item_ids) ? p.item_ids : []).map(String);
+      if (!ids.length) return 0;
+      const found = {};
+      const pool = RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []);
+      pool.forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        const iid = String(it.item_id || it.id || '');
+        if (iid) found[iid] = true;
+      });
+      const logi = Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : [];
+      let n = 0;
+      ids.forEach(function (x) {
+        if (x.indexOf('intl:') === 0) {
+          const hit = logi.some(function (b) {
+            return b && Array.isArray(b.fee_members) &&
+                   b.fee_members.some(function (m) { return m && ('intl:' + String(m.id || '')) === x; });
+          });
+          if (!hit) n++;
+          return;
+        }
+        if (!found[x]) n++;
+      });
+      return n;
+    }
+
+    /* 🩺 凭证里的 item_id 全失效时，按「同一个人 + 同一个批次 + 该计划该有的状态」
+       重新定位要改的订单。**只在金额校验已经通过（chk.state==='ok'）时才允许调用** ——
+       也就是「这一组收到的钱 == 该人该批该交的总额」已经核对无误，
+       兜底只是把「改哪几条」从失效的旧编号换成现在库里的真实条目，
+       口径与 _payProofScopeDue 完全一致（同 cn + 同批次 + 未交），不会多改也不会少改。
+       ⚠️ full/deposit 认「未付款·未交」；balance（补尾款）认「已交定金」。 */
+    function _payProofRecoverIds(p, plan) {
+      const k = _normBatchKey(p && (p.batch_key || (Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names)));
+      const cn = String((p && p.cn) || '').trim().toLowerCase();
+      if (!k || !cn) return [];
+      const want = (plan === 'balance') ? ['已交定金'] : ['未付款', '未交'];
+      const out = [];
+      RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []).forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        if (String(it.cn || '').trim().toLowerCase() !== cn) return;
+        if (_normBatchKey(it.batch_name || '默认批次') !== k) return;
+        if (want.indexOf(String(it.status || '').trim()) < 0) return;
+        const iid = String(it.item_id || it.id || '');
+        if (iid) out.push(iid);
+      });
+      return out;
+    }
+
+    /* 🩺 整批应付（金额口径的统一入口）：
+       先按凭证上记的订单编号算（_payProofDueAmount）；**一个编号都对不上**时
+       （这批排表被重新导入过 → 整批换了新编号），退回到
+       「同一个人 + 同一个批次 + 还没交的条目」——与 _payProofScopeDue / _payProofRecoverIds 完全同口径。
+       ⚠️ 只要有一个编号还对得上，就仍以编号为准（老口径一字不改）。 */
+    function _payProofFullDue(p) {
+      const d = _payProofDueAmount(p);
+      if (d.amount !== null) return d;
+      const k = _normBatchKey(p && (p.batch_key || (Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names)));
+      const cn = String((p && p.cn) || '').trim().toLowerCase();
+      if (!k || !cn) return d;
+      /* ⚠️ 这里算的是「这个人这一批一共该交多少钱」，所以**必须把「已交定金」也算进来** ——
+         定金只是先交了一部分，整批应付并不因此变小。
+         （反过来，_payProofRecoverIds 是「要改哪几条订单」，那条路绝不能碰已交定金，
+           否则补交时会把"还欠尾款"的单直接改成「已下单」= 少收钱。） */
+      const WANT = ['未付款', '未交', '已交定金'];
+      let sum = 0, n = 0;
+      RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []).forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        if (String(it.cn || '').trim().toLowerCase() !== cn) return;
+        if (_normBatchKey(it.batch_name || '默认批次') !== k) return;
+        if (WANT.indexOf(String(it.status || '').trim()) < 0) return;
+        n++;
+        sum += (Number(it.quantity) || 1) * (Number(it.price) || 0);
+      });
+      if (!n) return d;
+      return { amount: Math.round(sum * 100) / 100, source: 'recovered', matched: n };
+    }
+
+    /* 🔁 疑似重复提交（2026-10-11 团长要求）：
+       同一组（同人/同批/同类型/full）里若还有别的**待审核**凭证，且
+       **金额一模一样、覆盖的订单编号也完全相同** → 多半是同一笔钱被交了两遍。
+       真实案例：初次见面 17:40:53 与 17:41:05 隔 12 秒交了两笔一模一样的 ￥294，两笔都被放行 → 多收一笔。
+       ⚠️ 只用来**红字提醒团长核实**，绝不参与金额判定、也不自动拦
+         （人家真买了两份时金额本来就该翻倍，拦了反而是错的）。 */
+    function _payProofDupSig(x) {
+      const amt = (Math.round((Number(x && x.amount) || 0) * 100) / 100).toFixed(2);
+      const ids = (Array.isArray(x && x.item_ids) ? x.item_ids.map(String).slice().sort() : []).join(',');
+      return amt + '|' + ids;
+    }
+    function _payProofDupCount(p, cl) {
+      const list = (cl && cl.list) || [];
+      if (list.length < 2 || !p) return 0;
+      const sig = _payProofDupSig(p);
+      if (!sig.slice(sig.indexOf('|') + 1)) return 0;   // 没有订单编号的老凭证不判重（免得误报）
+      return list.filter(function (x) {
+        return x !== p && String((x && x.status) || '') === '待审核' && _payProofDupSig(x) === sig;
+      }).length;
+    }
+
+    /* 金额比对结果：ok（一致）/ mismatch（不一致，禁止通过）/ unknown（算不出应付）
+       🧮 2026-10-11：**待审核的全款凭证**按「同一人同一批的合计」判定（见上面 _payProofCluster）。
+         其余（已通过/已驳回的历史记录、定金、尾款）照旧按单张判定 ——
+         免得历史凭证满屏红字，也免得动到已经跑通的定金/尾款链路。 */
+    function _payProofCheck(p) {
+      const plan = String((p && p.plan) || '') || 'full';
+      if (plan === 'full' && String((p && p.status) || '待审核') === '待审核') {
+        const cl = _payProofCluster(p);
+        const got = Math.round((cl.list || []).reduce(function (a, x) { return a + (Number(x.amount) || 0); }, 0) * 100) / 100;
+        const dueAmt = _payProofScopeDue(p, cl);
+        const base = { got: got, source: 'cluster', plan: 'full', cluster: cl, n: (cl.list || []).length,
+                       staleN: _staleIdCount(p), dupN: _payProofDupCount(p, cl) };
+        if (dueAmt === null) return Object.assign({ state: 'unknown', due: null, planNote: '' }, base);
+        if (Math.abs(dueAmt - got) < 0.005) return Object.assign({ state: 'ok', due: dueAmt, fullDue: dueAmt }, base);
+        return Object.assign({ state: 'mismatch', due: dueAmt, fullDue: dueAmt }, base);
+      }
+      const due = _payProofFullDue(p);
+      const planDue = _payProofPlanDue(p, due);
+      const target = planDue || due;
+      const got = Math.round((Number(p.amount) || 0) * 100) / 100;
+      const _stale = _staleIdCount(p);
+      if (target.amount === null) return { state: 'unknown', due: null, got: got, source: target.source, plan: plan, planNote: target.note || '', staleN: _stale };
+      if (Math.abs(target.amount - got) < 0.005) return { state: 'ok', due: target.amount, got: got, source: target.source, plan: plan, fullDue: due.amount, staleN: _stale };
+      return { state: 'mismatch', due: target.amount, got: got, source: target.source, plan: plan, fullDue: due.amount, staleN: _stale };
+    }
+
+    /* 🔁 落库校验（2026-09-30 新增）：回读数据库，确认这几条订单真的已经是「已下单 + 有付款方式」。
+       为什么需要：保存"成功"不等于改动进了库 —— 冲突合并分支一旦回退成服务器旧值，
+       订单会静默变回未付款，而凭证已按 id 合并保住了「已通过」，两边就错位了。
+       校验本身出错（网络抖动/读失败）返回 true，不拦团长 —— 宁可放过，也不让审核卡死。 */
+    async function _verifyPayApplied(vIds) {
+      try {
+        const { data, error } = await supabaseClient.from('leader_data')
+          .select('group_data').eq('query_key', CURRENT_QUERY_KEY);
+        if (error || !data || !data.length) return true;
+        let arr = data[0].group_data;
+        if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (e) { return true; } }
+        if (!Array.isArray(arr)) return true;
+        const byId = {};
+        arr.forEach(function (it) { if (it && typeof it === 'object') byId[String(it.item_id || it.id || '')] = it; });
+        return vIds.every(function (iid) {
+          const it = byId[iid];
+          if (!it) return false;
+          const st = String(it.status || '').trim();
+          if (st === '未付款' || st === '未交') return false;
+          return !!String(it.pay_method || '').trim();
+        });
+      } catch (e) { return true; }
+    }
+
+    /* 删除存储里的凭证原图。失败只记录、不抛错 —— 记录侧已经标记为不再引用，
+       漏删掉的文件由「清理无引用旧图」兜底。 */
+    async function _purgeProofObjects(paths) {
+      const list = (paths || []).filter(Boolean).map(String);
+      if (!list.length) return 0;
+      try {
+        const { error } = await supabaseClient.storage.from('pay-proofs').remove(list);
+        if (error) { console.warn('清理凭证原图失败:', error); return 0; }
+        return list.length;
+      } catch (e) { console.warn('清理凭证原图异常:', e); return 0; }
+    }
+
+    // ==========================================
+    /* 凭证图的公开下载地址。不再走签名（签名需要先读到对象行，匿名密钥读不到）。
+       路径本身是上传时随机生成的长串，猜不到；桶内容也列不出来。 */
+    function _payProofPublicUrl(path) {
+      if (!path) return '';
+      try {
+        const safe = String(path).split('/').filter(Boolean).map(encodeURIComponent).join('/');
+        return SB_IMG_BASE + '/storage/v1/object/public/pay-proofs/' + safe;
+      } catch (e) { return ''; }
+    }
+
+    function _payReviewMethodBadge(pm) {
+      const s = String(pm || '').trim();
+      if (!s) return '<span class="badge" style="color:var(--text-muted);">未注明</span>';
+      const cls = s.indexOf('零钱罐') >= 0 ? 'badge-pay-零钱罐'
+        : (s.indexOf('微信') >= 0 ? 'badge-pay-微信'
+          : (s.indexOf('支付宝') >= 0 ? 'badge-pay-支付宝' : 'badge-pay-其他'));
+      return '<span class="badge ' + cls + '">' + escapeHtml(s) + '</span>';
+    }
+
+    function _payProofStatusBadge(st) {
+      const s = String(st || '待审核');
+      const color = s === '已通过' ? '#16a34a' : (s === '已驳回' ? '#dc2626' : (s === '已撤回' ? '#64748b' : '#a16207'));
+      const bg = s === '已通过' ? '#dcfce7' : (s === '已驳回' ? '#fee2e2' : (s === '已撤回' ? '#e2e8f0' : '#fef3c7'));
+      return '<span class="badge" style="background:' + bg + '; color:' + color + '; border:1px solid ' + color + '44;">' + escapeHtml(s) + '</span>';
+    }
+
+    /* 🔴 强制删除按钮（统一样式，2026-10-29）
+       待审核用大号（推到行尾），已驳回/已撤回用小号（跟在文字后面）。
+       ⚠️ 颜色/描边/阴影是团长明确要求的「必须标红、必须醒目」，别调淡。 */
+    function _forceDelBtnHtml(id, small) {
+      const pad = small ? '4px 11px' : '7px 16px';
+      const fs = small ? '0.78rem' : '0.9rem';
+      const ml = small ? 'margin-left:10px;' : 'margin-left:auto;';
+      const label = small ? '删除记录' : '强制删除';
+      return '<button class="btn btn-danger" title="钱交对了但系统审核不上时，直接抹掉这条记录（不可恢复）" ' +
+        'style="' + ml + 'padding:' + pad + '; font-size:' + fs + '; font-weight:800; letter-spacing:0.5px; ' +
+        'background:#b91c1c !important; color:#fff !important; border:2px solid #7f1d1d !important; ' +
+        'box-shadow:0 2px 12px rgba(153,27,27,.5);" ' +
+        'onclick="forceDeletePayProof(\'' + id + '\')">🗑 ' + label + '</button>';
+    }
+
+    function _payProofCardHtml(p) {
+      const id = String(p.id || '');
+      const names = Array.isArray(p.batch_names) ? p.batch_names.join('、') : String(p.batch_names || '');
+      const st = String(p.status || '待审核');
+      const canAct = (st === '待审核');
+      const ids = Array.isArray(p.item_ids) ? p.item_ids : [];
+      const chk = _payProofCheck(p);
+      // 💰 定金凭证若算不出整批应付 → 尾款无从算起，一律不给过（宁可驳回，也不凭猜收钱）
+      const blocked = (chk.state === 'mismatch') || (chk.plan === 'deposit' && chk.state === 'unknown');
+      const planBadge = chk.plan === 'deposit'
+        ? '<span class="badge" style="background:#faeeda; color:#854f0b; border:1px solid #854f0b44;">💰 定金</span>'
+        : (chk.plan === 'balance'
+            ? '<span class="badge" style="background:#faeeda; color:#854f0b; border:1px solid #854f0b44;">💰 尾款</span>'
+            : '');
+      const isIntl = String(p.order_type || '') === '国际' ||
+                     ids.some(function (x) { return String(x).indexOf('intl:') === 0; });
+      // 🏝️ 岛内那笔（日本国内段）单独标出来，别让团长也看成「国际运费」
+      const isIsland = isIntl && _proofFeeIsIsland(p);
+
+      let amtHtml = '';
+      const _dueLabel = chk.plan === 'deposit' ? '该交定金' : (chk.plan === 'balance' ? '该补尾款' : '应付');
+      const _hasFull = (chk.fullDue !== null && chk.fullDue !== undefined);
+      // 🧮 这一组（同一人同一批）一共几笔 —— 分批补交时团长要一眼看出「两张加起来够没够」
+      const _cnN = (chk.n && chk.n > 1) ? chk.n : 0;
+      const _nTip = _cnN ? ('<span style="color:var(--text-muted); font-size:0.78rem;">（' + _cnN + ' 笔加起来）</span>') : '';
+      if (chk.state === 'ok') {
+        amtHtml = '金额：<strong style="color:#16a34a; font-size:0.95rem;">￥' + chk.got.toFixed(2) + '</strong>' + _nTip +
+                  '<span style="color:#16a34a; font-size:0.82rem;"> ✓ ' +
+                  (chk.plan === 'deposit'
+                    ? ('与「整批应付 ￥' + Number(chk.fullDue || 0).toFixed(2) + ' × 定金比例」一致')
+                    : (chk.plan === 'balance' ? '与该批尚欠尾款一致' : '与这一批总共该交的金额一致')) + '</span>' +
+                  (chk.plan === 'deposit' && _hasFull
+                    ? ('<br><span style="color:#854f0b; font-size:0.82rem;">💰 确认后这批变「已交定金」，还欠尾款 <strong>￥' +
+                        Math.max(0, Math.round((Number(chk.fullDue) - chk.got) * 100) / 100).toFixed(2) + '</strong>（会写进凭证，以后改比例也不受影响）</span>')
+                    : '') +
+                  (_cnN ? ('<br><span style="color:#16a34a; font-size:0.8rem;">这 ' + _cnN + ' 笔会一起确认收款。</span>') : '') +
+                  /* 🩺 凭证编号失效（这批排表被重新导入过）→ 提前说明会怎么处理，免得团长以为改错单 */
+                  (chk.staleN
+                    ? ('<br><span style="color:#a16207; font-size:0.8rem;">⚠️ 这张截图上的订单编号已失效（这批排表被重新导入过）：确认收款时会按「同一个人 + 同一个批次」自动对上订单，金额已核对过，不会多收也不会少收。</span>')
+                    : '');
+      } else if (chk.state === 'mismatch') {
+        const diff = Math.round((chk.due - chk.got) * 100) / 100;
+        amtHtml = '金额：<strong style="color:#dc2626; font-size:0.95rem;">' + (_cnN ? '合计 ￥' : '他填 ￥') + chk.got.toFixed(2) + '</strong>' + _nTip +
+                  ' ｜ ' + _dueLabel + ' <strong style="color:#dc2626;">￥' + chk.due.toFixed(2) + '</strong>' +
+                  (chk.plan === 'deposit' && _hasFull
+                    ? ('<span style="color:var(--text-muted); font-size:0.8rem;">（整批应付 ￥' + Number(chk.fullDue).toFixed(2) + '）</span>') : '') +
+                  '<br><span style="color:#dc2626; font-weight:700; font-size:0.85rem;">✗ 金额不符' +
+                  (diff > 0 ? ('：还差 ￥' + diff.toFixed(2)) : ('：多付 ￥' + Math.abs(diff).toFixed(2))) +
+                  (_cnN ? ' —— 补交的截图要加起来对得上；差着就先驳回，让他补上再来'
+                        : ' —— 不能通过，只能驳回') + '</span>';
+      } else {
+        amtHtml = '金额：<strong style="color:#dc2626; font-size:0.95rem;">￥' + chk.got.toFixed(2) + '</strong>' +
+                  (chk.plan === 'deposit'
+                    ? '<br><span style="color:#dc2626; font-size:0.82rem;">⚠️ 算不出这一批的整批应付' + (chk.planNote ? ('（' + escapeHtml(chk.planNote) + '）') : '') + '，没法自动算尾款 —— <strong>这项不能通过</strong>。请先补全订单/运费数据，或让团员改交全款。</span>'
+                    : (chk.staleN
+                        ? '<br><span style="color:#a16207; font-size:0.82rem;">⚠️ 这张截图上的订单编号已失效 —— <strong>这批排表被重新导入过</strong>（整批订单换了新编号），所以按编号对不上账。请自行确认金额后再通过。</span>'
+                        : '<br><span style="color:#a16207; font-size:0.82rem;">⚠️ 算不出这一笔的应付金额（订单可能已归档或找不到），无法自动核对，请自行确认后再通过。</span>'));
+      }
+
+      /* 🔁 疑似重复提交：三种状态都提示 —— 只提醒核实，不改变能不能通过 */
+      if (chk.dupN && chk.dupN > 0) {
+        amtHtml += '<br><span style="color:#dc2626; font-weight:700; font-size:0.82rem;">🔁 疑似重复提交：这一组还有 ' +
+                   chk.dupN + ' 笔<b>金额和订单编号完全一样</b>的凭证也在待审核。请先核实对方是不是只付了一次 —— ' +
+                   '多交的那笔别确认，点「驳回」退回去。</span>';
+      }
+
+      /* 💰 零钱罐（2026-10-14）：这张凭证要么已经勾了「用零钱罐抵扣」，要么这个团员罐里还有余额。
+         团长收钱时一眼能看到「这人手里还有钱」，不用去别处翻。 */
+      const _pgUsed = Math.round(Number(p.piggy_used || 0) * 100) / 100;
+      const _pgBal = (typeof piggyBalanceOf === 'function') ? piggyBalanceOf(p.cn) : 0;
+      let piggyHtml = '';
+      if (_pgUsed > 0) {
+        const _gotN = Number(chk.got || 0);
+        const _need = Math.max(0, Math.round((_gotN - _pgUsed) * 100) / 100);
+        piggyHtml = '<div style="margin-top:8px; padding:8px 10px; border-radius:8px; border:1px solid rgba(217,75,75,0.35); background:#fffbe6; font-size:0.84rem; line-height:1.7;">' +
+          '💰 <b>零钱罐抵扣 ￥' + _pgUsed.toFixed(2) + '</b>' +
+          (_need > 0.004 ? (' ｜ 团员另需转账 <b>￥' + _need.toFixed(2) + '</b>（截图应体现这一笔）') : ' ｜ <b>全额抵扣，无需转账</b>') +
+          '<br><span style="color:var(--text-muted); font-size:0.78rem;">确认收款时会自动从他罐里扣掉这 ￥' + _pgUsed.toFixed(2) + '。</span>' +
+        '</div>';
+      } else if (_pgBal > 0.004 && canAct) {
+        piggyHtml = '<div style="margin-top:8px; padding:8px 10px; border-radius:8px; border:1px solid #f0d9a0; background:#fffdf5; font-size:0.84rem; line-height:1.7;">' +
+          '🐷 该团员零钱罐还有 <b style="color:#15803d;">￥' + _pgBal.toFixed(2) + '</b>' +
+          '<br><span style="color:var(--text-muted); font-size:0.78rem;">他提交时若勾了「用零钱罐抵扣」，这里会显示抵扣多少；没勾就是正常转账。</span>' +
+        '</div>';
+      }
+
+      let actions = '';
+      if (canAct) {
+        const approveBtn = blocked
+          ? '<button class="btn btn-primary" id="approveBtn_' + id + '" style="padding:6px 14px; font-size:0.85rem; opacity:0.45; cursor:not-allowed;" disabled title="金额与应付不符，请驳回让团员重新提交">🚫 金额不符·不能通过</button>'
+          : '<button class="btn btn-primary" id="approveBtn_' + id + '" style="padding:6px 14px; font-size:0.85rem;" onclick="approvePayProof(\'' + id + '\')">✅ 确认收款</button>';
+        actions =
+          '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">' +
+            approveBtn +
+            '<button class="btn btn-danger" style="padding:6px 14px; font-size:0.85rem;" onclick="showRejectBox(\'' + id + '\')">❌ 驳回</button>' +
+            '<span style="font-size:0.78rem; color:var(--text-muted);">确认后 ' + ids.length +
+              (isIntl ? ' 项国际运费标为「已交」'
+                      : (chk.plan === 'deposit' ? ' 条订单变为「已交定金」（尾款以后再补）'
+                                                : (chk.plan === 'balance' ? ' 条订单补清，变为「已下单」' : ' 条订单变为「已下单」'))) + '</span>' +
+            /* 🔴 强制删除：钱交对了但系统不给过时的唯一出口（样式统一在 _forceDelBtnHtml） */
+            _forceDelBtnHtml(id) +
+          '</div>' +
+          '<div id="rejectBox_' + id + '" style="display:none; margin-top:10px;">' +
+            '<input id="rejectReason_' + id + '" placeholder="驳回原因（必填，团员能看到。例如：金额不符，截图只付了 20，还差 10 元）" oninput="this.style.borderColor=\'\'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();rejectPayProof(\'' + id + '\');}" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; box-sizing:border-box;">' +
+            '<div style="margin-top:6px; font-size:0.76rem; color:var(--text-muted); line-height:1.6;">⚠️ 必填 —— 这段话会<strong>原样</strong>显示给团员，系统不会替你编任何理由（只在末尾补一句「请重新上传」）。直接回车 = 确认驳回。</div>' +
+            '<div style="margin-top:8px; display:flex; gap:8px;">' +
+              '<button class="btn btn-danger" style="padding:5px 12px; font-size:0.82rem;" onclick="rejectPayProof(\'' + id + '\')">确认驳回</button>' +
+              '<button class="btn btn-secondary" style="padding:5px 12px; font-size:0.82rem;" onclick="hideRejectBox(\'' + id + '\')">取消</button>' +
+            '</div>' +
+          '</div>';
+      } else if (st === '已撤回') {
+        actions = '<div style="margin-top:8px; font-size:0.85rem; color:#64748b;">团员已自行撤销这次提交' +
+                  (p.withdrawn_at ? ('（' + escapeHtml(p.withdrawn_at) + '）') : '') + '。' +
+                  /* 已撤回的记录也要能清掉（2026-10-29：团长抱怨「删不掉」） */
+                  _forceDelBtnHtml(id, true) + '</div>';
+      } else if (st === '已驳回' || p.reject_reason) {
+        actions = '<div style="margin-top:8px; font-size:0.85rem; color:#dc2626;">驳回原因：' + escapeHtml(p.reject_reason || '(未填)') +
+                  _forceDelBtnHtml(id, true) + '</div>';
+      }
+
+      const thumbInner = p.img_path ? '加载中…'
+        : '<span style="padding:6px;">原图已清理<br><span style="font-size:0.68rem;">只保留款项记录</span></span>';
+
+      return '' +
+      '<div style="display:flex; gap:14px; align-items:flex-start; padding:12px; border:1px solid var(--border); border-radius:10px; background:#fff; flex-wrap:wrap;">' +
+        '<div id="proofThumb_' + id + '" style="width:112px; height:112px; flex:0 0 112px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9; display:flex; align-items:center; justify-content:center; overflow:hidden; font-size:0.72rem; color:var(--text-muted); text-align:center;">' + thumbInner + '</div>' +
+        '<div style="flex:1 1 260px; min-width:220px;">' +
+          '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+            '<strong style="font-size:0.95rem;">' + escapeHtml(p.cn || '(未填CN)') + '</strong>' +
+            (isIsland
+              ? '<span class="badge" style="background:#ccfbf1; color:#0f766e; border:1px solid #0f766e44;">🏝️ 岛内运费</span>'
+              : (isIntl ? '<span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #0369a144;">🌍 国际运费</span>' : '')) +
+            planBadge + _payProofStatusBadge(st) + _payReviewMethodBadge(p.pay_method) +
+          '</div>' +
+          '<div style="margin-top:6px; font-size:0.85rem; line-height:1.9; color:var(--text-muted);">' +
+            '批次：' + escapeHtml(names || '—') + '<br>' +
+            amtHtml + '<br>' +
+            '覆盖 ' + ids.length + (isIsland ? ' 项岛内运费' : (isIntl ? ' 项国际运费' : ' 条订单')) +
+            (p.purged_at ? (' ｜ <span style="color:#64748b;">原图已于 ' + escapeHtml(p.purged_at) + ' 清理</span>') : '') + '<br>' +
+            (p.note ? ('备注：' + escapeHtml(p.note) + '<br>') : '') +
+            '提交：' + escapeHtml(p.created_at || '') +
+            (p.reviewed_at ? (' ｜ 处理：' + escapeHtml(p.reviewed_at)) : '') +
+          '</div>' +
+          piggyHtml +
+          actions +
+        '</div>' +
+      '</div>';
+    }
+
+    async function _loadProofThumb(p) {
+      if (!p || !p.img_path) return;   // 已通过/已撤回的凭证原图已被清理，不留碎图
+      const el = document.getElementById('proofThumb_' + String(p.id || ''));
+      if (!el) return;
+      const url = _payProofPublicUrl(p.img_path);
+      if (!url) {
+        el.innerHTML = '<span style="padding:6px;">图片读不到<br>检查 pay-proofs 桶</span>';
+        return;
+      }
+      el.innerHTML = '<img src="' + url + '" onerror="imgFallback(this)" style="width:100%; height:100%; object-fit:cover; cursor:zoom-in;" onclick="window.open(this.src,\'_blank\')">';
+    }
+
+    // ==========================================
+    // 📦 交款审核：按批次分组（2026-09-25 新增）
+    //    团长诉求：「团里收钱是不同的人在收，方便各自核对」
+    //    —— 一个批次通常由一位负责人收款，所以按批次拆开、各自小计，
+    //       并可一键复制该批次清单，直接发给那位收款人对账。
+    //    ⚠️ 分组只是"显示层"，底层数据仍是同一个 pay_proofs 数组（不新增字段、不改团员端）。
+    // ==========================================
+    let PAY_REVIEW_GROUP_FILTER = '';   // '' = 显示全部批次；否则只显示该批次
+    let PAY_REVIEW_EXPANDED = {};       // 批次名 -> true（该组"已处理"记录全展开）
+
+    /* 一条凭证属于哪个批次（分组键）。空批次名归入「未注明批次」，避免整组消失。 */
+    function _proofGroupName(p) {
+      const n = Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names;
+      const s = String(n == null ? '' : n).trim();
+      return s || '未注明批次';
+    }
+    function _proofIsPending(p) { return String(p.status || '待审核') === '待审核'; }
+    function _proofSum(arr) { return arr.reduce(function (a, p) { return a + (Number(p.amount) || 0); }, 0); }
+
+    /* 该组当前要显示的卡片：待审核全显示 + 已处理的前 3 条（可手动展开全部） */
+    function _payReviewCardsOf(g) {
+      const pending = g.items.filter(_proofIsPending);
+      const done = g.items.filter(function (p) { return !_proofIsPending(p); });
+      const showDone = PAY_REVIEW_EXPANDED[g.name] ? done : done.slice(0, 3);
+      return pending.concat(showDone);
+    }
+
+    /* 该批次的核对清单文案（发给对应收款人用；只含姓名/金额/方式/时间，不含截图链接） */
+    function buildBatchProofList(batchName) {
+      const all = (Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : [])
+        .filter(function (p) { return _proofGroupName(p) === batchName; });
+      const pending = all.filter(_proofIsPending);
+      const passed = all.filter(function (p) { return String(p.status || '') === '已通过'; });
+      const other = all.filter(function (p) {
+        const s = String(p.status || '待审核');
+        return !_proofIsPending(p) && s !== '已通过';
+      });
+      const one = function (p) {
+        const m = String(p.pay_method || '').trim();
+        return '· ' + String(p.cn || '（未填CN）') + ' ￥' + (Number(p.amount) || 0).toFixed(2) +
+               (m ? '（' + m + '）' : '') + (p.created_at ? ' ' + String(p.created_at) : '');
+      };
+      const out = ['📋 ' + batchName + ' · 交款核对清单'];
+      out.push('待审核 ' + pending.length + ' 笔 ￥' + _proofSum(pending).toFixed(2) +
+               ' ｜ 已通过 ' + passed.length + ' 笔 ￥' + _proofSum(passed).toFixed(2));
+      if (pending.length) { out.push(''); out.push('【待审核 ' + pending.length + ' 笔】'); pending.forEach(function (p) { out.push(one(p)); }); }
+      if (passed.length) { out.push(''); out.push('【已通过 ' + passed.length + ' 笔】'); passed.forEach(function (p) { out.push(one(p)); }); }
+      if (other.length) { out.push(''); out.push('【已驳回 / 已撤回 ' + other.length + ' 笔】'); other.forEach(function (p) { out.push(one(p)); }); }
+      return out.join('\n');
+    }
+
+    /* 复制文本（后台在电脑上打开，但沿用项目里那套 textarea + execCommand，兼容性最稳） */
+    function _copyTextToClipboard(text, okMsg) {
+      const ta = document.createElement('textarea');
+      ta.value = String(text || '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      try {
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, 99999);
+        const ok = document.execCommand('copy');
+        showToast(ok ? (okMsg || '✅ 已复制') : '请手动复制');
+        return ok;
+      } catch (e) {
+        showToast('复制失败，请手动复制');
+        return false;
+      } finally {
+        if (ta.parentNode) ta.parentNode.removeChild(ta);
+      }
+    }
+
+    function copyBatchProofList(batchName) {
+      _copyTextToClipboard(buildBatchProofList(batchName),
+        '✅ 「' + batchName + '」清单已复制，发给这位收款人核对就行');
+    }
+    window.copyBatchProofList = copyBatchProofList;
+
+    /* 只看某一组（再点一次 = 恢复全部） */
+    function setPayReviewGroup(name) {
+      PAY_REVIEW_GROUP_FILTER = (PAY_REVIEW_GROUP_FILTER === name) ? '' : name;
+      renderPayReview();
+    }
+    window.setPayReviewGroup = setPayReviewGroup;
+
+    function togglePayReviewExpand(name) {
+      PAY_REVIEW_EXPANDED[name] = !PAY_REVIEW_EXPANDED[name];
+      renderPayReview();
+    }
+    window.togglePayReviewExpand = togglePayReviewExpand;
+
+    // ── 🗑「删除这组」：核完了的批次，连同记录一起从库里删掉（2026-09-25 团长定：不留、不备份） ──
+    //    ⚠️ 有待审核的组不给删（先把这摊活干完）。
+    //    ⚠️ 删完不可恢复 —— 所以按钮上直接写明要删几条 + 两段式确认。
+    //    实现：从 RAW_PAY_PROOFS 摘掉该组全部记录 → saveDataToSupabase() 落库；
+    //    同时把 id 记进 PAY_PROOF_DELETED_IDS，防止保存冲突时被 mergeById 合并回来。
+    let _payGroupDelArmed = {};
+    async function deletePayReviewGroup(idx) {
+      const name = (window.__PR_GROUPS || [])[idx];
+      if (!name) return;
+      const all = Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : [];
+      const group = all.filter(function (p) { return _proofGroupName(p) === name; });
+      if (!group.length) return;
+      const pend = group.filter(_proofIsPending).length;
+      if (pend) return showToast('这组还有 ' + pend + ' 笔待审核 —— 先确认收款或驳回，再删除');
+      const btn = document.querySelector('[data-delgrp="' + idx + '"]');
+      if (!_payGroupDelArmed[name]) {   // 两段式，防误触（同「确认收款」的规矩）
+        _payGroupDelArmed[name] = true;
+        if (btn) { btn.innerText = '⚠️ 确认删除 ' + group.length + ' 条？'; btn.style.background = '#dc2626'; btn.style.color = '#fff'; btn.style.borderColor = '#dc2626'; }
+        setTimeout(function () {
+          _payGroupDelArmed[name] = false;
+          const b2 = document.querySelector('[data-delgrp="' + idx + '"]');
+          if (b2) { b2.innerText = '🗑 删除这组'; b2.style.background = ''; b2.style.color = ''; b2.style.borderColor = ''; }
+        }, 5000);
+        return;
+      }
+      _payGroupDelArmed[name] = false;
+      if (btn) { btn.disabled = true; btn.innerText = '⏳ 正在删除…'; }
+
+      // 按「对象引用」摘除（老数据可能没 id，用引用才不会漏删）
+      const removed = group.slice();
+      const removedSet = new Set(removed);
+      removed.forEach(function (p) {
+        const k = String(p && p.id);
+        if (k && k !== 'undefined' && k !== 'null') PAY_PROOF_DELETED_IDS.add(k);
+      });
+      RAW_PAY_PROOFS = all.filter(function (p) { return !removedSet.has(p); });
+      if (PAY_REVIEW_GROUP_FILTER === name) PAY_REVIEW_GROUP_FILTER = '';
+      if (PAY_REVIEW_EXPANDED[name]) delete PAY_REVIEW_EXPANDED[name];
+      renderPayReview();
+
+      const ok = await saveDataToSupabase();
+      if (!ok) {   // 没落库就把内存恢复原样，免得「看着删了、其实没删」
+        removed.forEach(function (p) {
+          const k = String(p && p.id);
+          if (k && k !== 'undefined' && k !== 'null') PAY_PROOF_DELETED_IDS.delete(k);
+        });
+        RAW_PAY_PROOFS = all;
+        renderPayReview(); renderPayStats();
+        return showToast('删除失败，已恢复原样 —— 请检查网络后重试');
+      }
+      renderPayReview(); renderPayStats();
+      showToast('已删除「' + name + '」的 ' + removed.length + ' 条记录（不可恢复）');
+    }
+    window.deletePayReviewGroup = deletePayReviewGroup;
+
+    /* 🗑 强制删除单条交款记录（2026-10-29 团长需求）
+       场景：钱其实交对了，但截图上的订单编号失效 / 数据对不上，系统不给过，
+             驳回也解决不了问题 —— 需要一个能把这条待审核记录直接抹掉的出口。
+       与「驳回」的区别：驳回会留一条记录并显示原因给团员；强制删除是彻底消失。
+       落库机制与 deletePayReviewGroup 完全同源：墓碑集合 + 按引用摘除 + 失败回滚
+       （不回滚墓碑，下次保存会被 mergeProofs 合并回来）。 */
+    async function forceDeletePayProof(id) {
+      const all = Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : [];
+      const p = all.filter(function (x) { return String(x.id) === String(id); })[0];
+      if (!p) return showToast('这条记录已不存在，请点刷新');
+      const amt = Number(p.amount || 0).toFixed(2);
+      const names = Array.isArray(p.batch_names) ? p.batch_names.join('、') : String(p.batch_names || '');
+      const ok = await adminConfirm({
+        title: '强制删除这条交款记录？',
+        body: '团员：' + (p.cn || '(未填CN)') +
+              '\n金额：￥' + amt +
+              (names ? ('\n批次：' + names) : '') +
+              (p.note ? ('\n备注：' + p.note) : '') +
+              '\n\n⚠️ 删掉之后：\n' +
+              '· 记录彻底消失，团员那边也看不到\n' +
+              '· 不会改任何订单状态，也不会退钱\n' +
+              '· 删了不能恢复\n\n' +
+              '如果只是想退回去让他重交，用「驳回」更好 —— 他能看到原因。',
+        okText: '强制删除'
+      });
+      if (!ok) return;
+
+      const k = String(p.id || '');
+      const hasId = !!(k && k !== 'undefined' && k !== 'null');
+      if (hasId) PAY_PROOF_DELETED_IDS.add(k);
+      RAW_PAY_PROOFS = all.filter(function (x) { return x !== p; });   /* 按引用摘，老数据没 id 也能删 */
+      renderPayReview(); renderPayStats();
+
+      const saved = await saveDataToSupabase();
+      if (!saved) {                       /* 没落库就恢复原样，别让团长以为删了 */
+        if (hasId) PAY_PROOF_DELETED_IDS.delete(k);
+        RAW_PAY_PROOFS = all;
+        renderPayReview(); renderPayStats();
+        return showToast('删除失败，已恢复原样 —— 请检查网络后重试');
+      }
+      renderPayReview(); renderPayStats();
+      showToast('已强制删除 ' + (p.cn || '') + ' ￥' + amt + '（不可恢复）');
+    }
+    window.forceDeletePayProof = forceDeletePayProof;
+
+    /* 一个批次 = 一张折叠卡（头部分组小计 + 操作，下面挂凭证卡） */
+    function _payReviewGroupHtml(g, idx) {
+      const pending = g.items.filter(_proofIsPending);
+      const done = g.items.filter(function (p) { return !_proofIsPending(p); });
+      const passed = done.filter(function (p) { return String(p.status || '') === '已通过'; });
+      const expanded = !!PAY_REVIEW_EXPANDED[g.name];
+      const showDone = expanded ? done : done.slice(0, 3);
+      const cards = pending.concat(showDone);
+      const who = {};
+      g.items.forEach(function (p) { who[String(p.cn || '?')] = 1; });
+      const active = (PAY_REVIEW_GROUP_FILTER === g.name);
+      const moreBtn = (done.length > showDone.length)
+        ? '<div style="text-align:center;"><button class="btn btn-secondary" style="padding:5px 12px; font-size:0.8rem;" onclick="togglePayReviewExpand(window.__PR_GROUPS[' + idx + '])">▾ 展开其余 ' + (done.length - showDone.length) + ' 条已处理记录</button></div>'
+        : ((expanded && done.length > 3)
+          ? '<div style="text-align:center;"><button class="btn btn-secondary" style="padding:5px 12px; font-size:0.8rem;" onclick="togglePayReviewExpand(window.__PR_GROUPS[' + idx + '])">▴ 收起已处理记录</button></div>'
+          : '');
+
+      return '<div style="border:1px solid ' + (pending.length ? '#fcd34d' : 'var(--border)') + '; border-radius:12px; background:#fbfdff; overflow:hidden;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 12px; background:' + (pending.length ? '#fffbeb' : '#f8fafc') + '; border-bottom:1px solid var(--border);">' +
+          '<div style="font-weight:800; font-size:0.95rem;">📦 ' + escapeHtml(g.name) +
+            (active ? ' <span style="font-size:0.72rem; font-weight:600; color:#0369a1;">（正在只看这一组）</span>' : '') +
+          '</div>' +
+          '<div style="font-size:0.82rem; color:var(--text-muted); line-height:1.7;">' +
+            '待审核 <strong style="color:' + (pending.length ? '#dc2626' : '#16a34a') + ';">' + pending.length + '</strong> 笔 ￥' + _proofSum(pending).toFixed(2) +
+            ' ｜ 已通过 ' + passed.length + ' 笔 ￥' + _proofSum(passed).toFixed(2) +
+            ' ｜ 共 ' + Object.keys(who).length + ' 人' +
+          '</div>' +
+          '<div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">' +
+            '<button class="btn btn-secondary" style="padding:5px 11px; font-size:0.8rem;" onclick="copyBatchProofList(window.__PR_GROUPS[' + idx + '])">📋 复制本批次清单</button>' +
+            '<button class="btn btn-secondary" style="padding:5px 11px; font-size:0.8rem;" onclick="setPayReviewGroup(window.__PR_GROUPS[' + idx + '])">' + (active ? '👁 恢复显示全部' : '👁 只看这组') + '</button>' +
+            (pending.length ? '' :
+              '<button class="btn btn-secondary" data-delgrp="' + idx + '" style="padding:5px 11px; font-size:0.8rem;" title="这组已经核完了 —— 把这 ' + g.items.length + ' 条记录从数据库删掉（不可恢复）" onclick="deletePayReviewGroup(' + idx + ')">🗑 删除这组</button>') +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex; flex-direction:column; gap:10px; padding:12px;">' +
+          (cards.length ? cards.map(_payProofCardHtml).join('')
+                        : '<div style="padding:10px; text-align:center; color:var(--text-muted); font-size:0.85rem;">这一批暂无凭证。</div>') +
+          moreBtn +
+        '</div>' +
+      '</div>';
+    }
+
+    /* ==========================================================
+       🔄 静默自动刷新交款凭证（2026-11-06）
+       团长反复反馈的老问题：「人家明明交了，后台里却没有」「她那边截图也消失了」。
+       查库证明凭证一直在 —— 根因是**后台页面从不刷新**：团长开着页面收一晚上钱，
+       之后谁再提交，只有 Ctrl+F5 才看得见，于是被当成「没交 / 没传成功」。
+       这里每 45 秒（以及切回标签页、窗口获得焦点时）静默查一次版本号：
+         · 版本没变 → 一个字节都不动（不重画、不打扰）
+         · 有变化   → 只把 image_data.pay_proofs 并回来、重画审核区、弹一句提示
+         · 有弹窗（团长正在审核/填驳回理由）→ 只更新角标，不重画，绝不清掉他正在写的东西
+       ⚠️ 只碰凭证数组，不碰订单/物流/勾选；保存仍按版本锁重读，所以不会反向覆盖别人。
+       ========================================================== */
+    let _proofPollBusy = false, _proofPollStarted = false, _proofPollTimer = null;
+
+    function _parseImgOf(o) {
+      let v = o && o.image_data;
+      if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { v = {}; } }
+      return (v && typeof v === 'object') ? v : {};
+    }
+
+    /* 待审核角标：挂在侧边栏「交款审核」上，不用点进去也知道有几笔没核 */
+    function _paintPayReviewBadge(list) {
+      const el = document.getElementById('payReviewBadge');
+      if (!el) return;
+      const n = (Array.isArray(list) ? list : []).filter(function (p) {
+        return String((p && p.status) || '待审核') === '待审核';
+      }).length;
+      el.textContent = n ? String(n) : '';
+      el.style.display = n ? 'inline-block' : 'none';
+    }
+
+    async function refreshPayProofsSilently(force) {
+      if (_proofPollBusy) return;
+      if (!CURRENT_QUERY_KEY || !CURRENT_RECORD_ID) return;
+      const busyModal = !!document.querySelector('.modal-overlay.active');
+      if (busyModal && !force) return;              // 团长正在操作：等下个周期再说
+      _proofPollBusy = true;
+      try {
+        // ① 先只取版本号（几百字节）；没变就立刻结束，不白拉 300KB 的 image_data
+        const vs = await supabaseClient.from('leader_data').select('version').eq('query_key', CURRENT_QUERY_KEY);
+        if (vs.error || !vs.data || !vs.data.length) return;
+        const v = vs.data[0].version;
+        if (v !== undefined && v !== null && CURRENT_VERSION !== null && Number(v) === Number(CURRENT_VERSION)) return;
+
+        // ② 版本变了才拉整份 image_data，按 id 合并（服务器新的、我本地的，都保留）
+        const { data, error } = await supabaseClient.from('leader_data')
+          .select('version,image_data').eq('query_key', CURRENT_QUERY_KEY);
+        if (error || !data || !data.length) return;
+        const rec = data[0];
+        const img = _parseImgOf(rec);
+        const fresh = Array.isArray(img.pay_proofs) ? img.pay_proofs : [];
+        const known = {};
+        (RAW_PAY_PROOFS || []).forEach(function (p) { if (p && p.id) known[String(p.id)] = 1; });
+        const freshNew = fresh.filter(function (p) { return p && (!p.id || !known[String(p.id)]); });
+
+        RAW_PAY_PROOFS = mergePayProofs(RAW_PAY_PROOFS, fresh);
+        if (rec.version !== undefined && rec.version !== null) CURRENT_VERSION = Number(rec.version);
+
+        const pendNew = freshNew.filter(function (p) { return String(p.status || '待审核') === '待审核'; });
+        if (busyModal) { _paintPayReviewBadge(RAW_PAY_PROOFS); return; }
+        renderPayReview();
+        if (pendNew.length) showToast('🔔 有 ' + pendNew.length + ' 笔新的交款凭证 —— 已自动刷新');
+      } catch (e) {
+        /* 静默失败：网络抖动不该弹窗打扰；下个周期会再试 */
+      } finally {
+        _proofPollBusy = false;
+      }
+    }
+
+    function _startProofPoll() {
+      _paintPayReviewBadge(RAW_PAY_PROOFS);
+      if (_proofPollStarted) return;
+      _proofPollStarted = true;
+      _proofPollTimer = setInterval(function () { refreshPayProofsSilently(false); }, 45000);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') refreshPayProofsSilently(false);
+      });
+      window.addEventListener('focus', function () { refreshPayProofsSilently(false); });
+    }
+
+    function renderPayReview() {
+      const listEl = document.getElementById('payReviewList');
+      const sumEl = document.getElementById('payReviewSummary');
+      const filterEl = document.getElementById('payReviewFilters');
+      if (!listEl) return;
+      const all = Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : [];
+      const pending = all.filter(_proofIsPending);
+      const passed = all.filter(function (p) { return String(p.status || '') === '已通过'; });
+      const withdrawn = all.filter(function (p) { return String(p.status || '') === '已撤回'; });
+      const pendAmt = _proofSum(pending);
+      const passAmt = _proofSum(passed);
+      const mismatch = pending.filter(function (p) { return _payProofCheck(p).state === 'mismatch'; });
+      _startProofPoll();
+
+      if (sumEl) {
+        sumEl.innerHTML =
+          '待审核 <strong style="color:' + (pending.length ? '#dc2626' : '#16a34a') + '; font-size:1.05rem;">' + pending.length + '</strong> 笔 · ￥' + pendAmt.toFixed(2) +
+          ' ｜ 已通过 <strong style="color:#16a34a;">' + passed.length + '</strong> 笔 · ￥' + passAmt.toFixed(2) +
+          ' ｜ 已撤回 ' + withdrawn.length + ' 笔' +
+          (mismatch.length ? '<br><strong style="color:#dc2626;">⚠️ 有 ' + mismatch.length + ' 笔金额与应付不符，已锁住「确认收款」，只能驳回。</strong>' : '') +
+          '<br><span style="font-size:0.82rem; color:var(--text-muted);">「确认收款」= 该批次订单改为「已下单」（国际运费则把该项标为「已交」）并记下支付方式，同时按规则<b>清掉截图原图</b>（只留款项记录）；点两次才生效（防误触）。</span>' +
+          '<br><span style="font-size:0.82rem; color:var(--text-muted);">收完钱核对完的批次，可点右上角<b>「🗑 删除这组」</b>把这组凭证从数据库删掉（<b>不可恢复</b>；只删凭证记录，订单的「已下单 / 已交」状态不受影响）。</span>';
+      }
+
+      if (!all.length) {
+        if (filterEl) filterEl.innerHTML = '';
+        listEl.innerHTML = '<div style="padding:24px; text-align:center; color:var(--text-muted);">还没有团员提交付款凭证。<br><span style="font-size:0.85rem;">团员在自查页「交肾核算」里上传后会出现在这里。</span></div>';
+        return;
+      }
+
+      // 按批次归组；有「待审核」的组排前面（收钱的人先看到自己那摊没核完的）
+      const gmap = {};
+      all.forEach(function (p) {
+        const k = _proofGroupName(p);
+        if (!gmap[k]) gmap[k] = { name: k, items: [] };
+        gmap[k].items.push(p);
+      });
+      const keys = Object.keys(gmap).sort(function (a, b) {
+        const pa = gmap[a].items.filter(_proofIsPending).length;
+        const pb = gmap[b].items.filter(_proofIsPending).length;
+        if (pa !== pb) return pb - pa;
+        return a.localeCompare(b, 'zh');
+      });
+      window.__PR_GROUPS = keys;   // onclick 里按索引取名字（避免批次名带引号时拼坏 HTML）
+      const visibleKeys = keys;   // 删除是真删（从 RAW_PAY_PROOFS 摘掉），这里不再有「收起」这回事
+
+      if (filterEl) {
+        const chip = function (labelHtml, active, onclickJs, tail) {
+          return '<button class="btn ' + (active ? 'btn-primary' : 'btn-secondary') + '" style="padding:5px 11px; font-size:0.8rem;" onclick="' + onclickJs + '">' +
+                 labelHtml + (tail ? ' ' + tail : '') + '</button>';
+        };
+        filterEl.innerHTML =
+          chip('全部批次', !PAY_REVIEW_GROUP_FILTER, "setPayReviewGroup('')", '（' + all.length + ' 笔）') +
+          visibleKeys.map(function (k) {
+            const pd = gmap[k].items.filter(_proofIsPending).length;
+            return chip(escapeHtml(k), PAY_REVIEW_GROUP_FILTER === k,
+                        'setPayReviewGroup(window.__PR_GROUPS[' + keys.indexOf(k) + '])',
+                        '（' + (pd ? ('待审 ' + pd) : (gmap[k].items.length + ' 笔')) + '）');
+          }).join('');
+      }
+
+      const shown = PAY_REVIEW_GROUP_FILTER
+        ? visibleKeys.filter(function (k) { return k === PAY_REVIEW_GROUP_FILTER; })
+        : visibleKeys;
+      if (!shown.length) {
+        listEl.innerHTML = '<div style="padding:24px; text-align:center; color:var(--text-muted);">这个批次已经不在列表里了 —— 点「全部批次」看完整的。</div>';
+        return;
+      }
+      listEl.innerHTML = shown.map(function (k) { return _payReviewGroupHtml(gmap[k], keys.indexOf(k)); }).join('');
+      shown.forEach(function (k) {
+        _payReviewCardsOf(gmap[k]).forEach(function (p) { _loadProofThumb(p); });
+      });
+    }
+    window.renderPayReview = renderPayReview;
+
+    let _payApproveArmed = {};
+    async function approvePayProof(proofId) {
+      const id = String(proofId);
+      const btn = document.getElementById('approveBtn_' + id);
+      if (!_payApproveArmed[id]) {
+        _payApproveArmed[id] = true;
+        if (btn) btn.innerText = '⚠️ 再点一次确认';
+        setTimeout(function () {
+          _payApproveArmed[id] = false;
+          const b = document.getElementById('approveBtn_' + id);
+          if (b) b.innerText = '✅ 确认收款';
+        }, 4000);
+        return;
+      }
+      _payApproveArmed[id] = false;
+
+      const proof = RAW_PAY_PROOFS.filter(function (p) { return String(p.id) === id; })[0];
+      if (!proof) return showToast('找不到这条凭证，请刷新');
+      if (String(proof.status || '') === '已通过') return showToast('这条已经确认过了');
+
+      // ① 金额必须与系统算出的应付一致 —— 不一致直接不给过（团长定的规矩：没有逃生门）
+      const chk = _payProofCheck(proof);
+      if (chk.state === 'mismatch') {
+        const diff = Math.round((chk.due - chk.got) * 100) / 100;
+        const _lb = chk.plan === 'deposit' ? '该交定金' : (chk.plan === 'balance' ? '该补尾款' : '这一批总共该交');
+        const _cnN = (chk.n && chk.n > 1) ? ('（' + chk.n + ' 笔加起来）') : '';
+        return showToast('❌ 金额不符：' + _lb + ' ￥' + chk.due.toFixed(2) + '，他这组' + _cnN + '合计 ￥' + chk.got.toFixed(2) +
+          (diff > 0 ? ('，还差 ￥' + diff.toFixed(2)) : ('，多付 ￥' + Math.abs(diff).toFixed(2))) +
+          '。请驳回让他补齐后再来。');
+      }
+      // 💰 定金凭证算不出整批应付 → 尾款无从算起，绝不能通过（否则尾款静默变成 0 = 少收钱）
+      if (chk.plan === 'deposit' && chk.state === 'unknown') {
+        return showToast('❌ 这一批的整批应付算不出来' + (chk.planNote ? ('（' + chk.planNote + '）') : '') +
+          '，没法自动算尾款，这次不能通过。请先补全订单/运费数据，或让团员改交全款。');
+      }
+
+      /* 💰 这笔凭证走哪条路：full=整批全款 / deposit=只交定金 / balance=补尾款。
+         状态迁移：未付款·未交 --full--> 已下单
+                   未付款·未交 --deposit--> 已交定金（同时记下欠多少尾款）
+                   已交定金    --balance--> 已下单（款清） */
+      const proofPlan = (chk.plan === 'deposit' || chk.plan === 'balance') ? chk.plan : 'full';
+      function _acceptStatus(st) {
+        return proofPlan === 'balance' ? (st === '已交定金') : (st === '未付款' || st === '未交');
+      }
+      const _targetStatus = proofPlan === 'deposit' ? '已交定金' : '已下单';
+
+      /* 🧮 分批补交：这一组是**一起通过**的（见上面 _cnPending），所以订单改动必须覆盖
+         **这一组所有凭证的条目并集** —— 只改当前点的那一张，另一张覆盖的订单会一直
+         挂在「未付款」被重复催（2026-10-11 实测 S4 抓到的）。 */
+      let ids = (proof.item_ids || []).map(String);
+      if (proofPlan === 'full' && chk.cluster && Array.isArray(chk.cluster.list)) {
+        const _seen = {}, _u = [];
+        chk.cluster.list.forEach(function (x) {
+          (Array.isArray(x.item_ids) ? x.item_ids : []).forEach(function (y) {
+            const s = String(y);
+            if (s && !_seen[s]) { _seen[s] = true; _u.push(s); }
+          });
+        });
+        if (_u.length) ids = _u;
+      }
+      const isIntl = String(proof.order_type || '') === '国际' ||
+                     ids.some(function (x) { return x.indexOf('intl:') === 0; });
+      let changed = 0, alreadyPaid = 0, notFound = 0, filled = 0, recoveredN = 0;
+      const nowStr = new Date().toLocaleString('zh-CN');
+      let intlPrev = [];   // 国际条目改动前的值：保存失败必须回滚，否则重试会被误判成「已经改过」
+      let intlGoodsPrev = [];   // 🔧 国际审核通过→自动改「可排发」的谷子旧状态（保存失败一起回滚）
+      let intlGoodsTouched = 0; // 本次联动改了几件谷子状态
+
+      /* 🐷 用零钱罐抵扣的订单，支付方式该怎么记（2026-10-15 团长口径）：
+           · 全额罐抵（没另外转账）→ 「零钱罐」
+           · 罐抵一部分 + 另转一部分 → 「零钱罐 + 微信」（保留团员选的那个方式）
+         凭证上的 amount 是**整笔应付**、piggy_used 是其中罐抵的部分
+         （见团员端 index.html 2342-2344 注释）。piggy_used=0 时行为与以前完全一致。 */
+      function _payMethodWithPiggy(pf) {
+        const base = String((pf && pf.pay_method) || '').trim();
+        const use = Math.round(Number((pf && pf.piggy_used) || 0) * 100) / 100;
+        if (!(use > 0)) return base;
+        const gross = Math.round(Number((pf && pf.amount) || 0) * 100) / 100;
+        if (gross > 0 && use >= gross - 0.005) return '零钱罐';
+        return base ? ('零钱罐 + ' + base) : '零钱罐';
+      }
+
+      // —— 普通订单：改动 / 回滚（保存失败、落库校验不过时用得上）——
+      const ordPrev = [];      // 改动前的值（按 id 去重）
+      const ordPrevSeen = {};
+      function patchOneOrder(it, iid) {
+        const st = String(it.status || '').trim();
+        if (!_acceptStatus(st)) {
+          /* 🩺 2026-10-11 修「审核死结」（团长：守月 9.1中午科隆物料 点确认收款必弹
+             「订单状态没能写进数据库」）：
+             这条订单**已经是**这次审核要写成的状态（十有八九是被后台「批量改状态」
+             手动改成了「已下单」），但**没记支付方式**。以前这里直接 return false，
+             订单侧一个字没写 → 落库校验 _verifyPayApplied（要求 pay_method 非空）
+             永远不过 → 点多少次都过不去，成了死结。
+             现在把缺的支付方式/时间补上（状态不动），既解开死结，又让对账有据可查。
+             ⚠️ 只补「状态已经对了、唯独缺支付信息」这一种；状态对不上的照旧跳过。 */
+          if (st === _targetStatus && !String(it.pay_method || '').trim()) {
+            if (!ordPrevSeen[iid]) {
+              ordPrevSeen[iid] = true;
+              ordPrev.push({ iid: iid, it: it, status: it.status,
+                             pay_method: it.pay_method, paid_at: it.paid_at });
+            }
+            it.pay_method = _payMethodWithPiggy(proof);
+            it.paid_at = it.paid_at || nowStr;
+            DIRTY_ITEM_IDS.add(iid);
+            return 'filled';
+          }
+          return false;
+        }
+        if (!ordPrevSeen[iid]) {
+          ordPrevSeen[iid] = true;
+          ordPrev.push({ iid: iid, it: it, status: it.status,
+                         pay_method: it.pay_method, paid_at: it.paid_at });
+        }
+        it.status = _targetStatus;
+        it.pay_method = _payMethodWithPiggy(proof);
+        it.paid_at = nowStr;
+        DIRTY_ITEM_IDS.add(iid);
+        return true;
+      }
+      function applyOrderPatch() {
+        let c = 0, p = 0, nf = 0, f = 0;
+        const pool = RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []);
+        const hitIds = {};
+        pool.forEach(function (it) {
+          if (!it || typeof it !== 'object') return;
+          const iid = String(it.item_id || it.id || '');
+          if (!iid || ids.indexOf(iid) < 0) return;
+          hitIds[iid] = true;
+          const r = patchOneOrder(it, iid);
+          if (r === true) c++; else if (r === 'filled') f++; else p++;
+        });
+        ids.forEach(function (iid) { if (!hitIds[iid]) nf++; });
+        return { changed: c, alreadyPaid: p, notFound: nf, filled: f };
+      }
+      function rollbackOrderPatch() {
+        ordPrev.forEach(function (r) {
+          r.it.status = r.status; r.it.pay_method = r.pay_method; r.it.paid_at = r.paid_at;
+        });
+      }
+
+      /* 🔧 国际审核通过 → 自动把「该批次 + 该圈名」的谷子改成「可排发」（团长 2026-11-04 定的口径：
+         交一笔国际运费，就把这笔对应的那一批谷子自动变成可排发；只改对应批次，闸门照旧保留）。
+         规则：
+           · 只动「这个 fee_members 所在的 logistics 批次」+「这条 fee_members 的 cn」的谷子；
+           · 只把状态改成「可排发」；已经到终态（待发货/已排发/已到货/到货）的绝不回退去改；
+           · 未付款的谷子（还没采购）不碰 —— 还没买的东西谈不上排发。 */
+      function _intlAutoDispatch(batchName, cn) {
+        if (!batchName || !cn) return 0;
+        const bk = _normBatchKey(batchName);
+        const pool = RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []);
+        let n = 0;
+        pool.forEach(function (it) {
+          if (!it || typeof it !== 'object') return;
+          if (_normBatchKey(it.batch_name || '') !== bk) return;
+          if (String(it.cn || '').trim() !== String(cn).trim()) return;
+          const st = String(it.status || '').trim();
+          // 已经是终态/可排发/未付款的跳过：只把「采购完成、正在收国际/运输中」这批往前推
+          if (st === '可排发' || st === '待发货' || st === '已排发' || st === '已到货' || st === '到货') return;
+          if (st === '未付款') return;
+          intlGoodsPrev.push({ it: it, status: it.status, stock_date: it.stock_date, stock_expiry: it.stock_expiry });
+          it.status = '可排发';
+          ensureStockDate(it, st);
+          DIRTY_ITEM_IDS.add(String(it.item_id || it.id || ''));
+          n++;
+        });
+        return n;
+      }
+      if (isIntl) {
+        // 国际运费：改 image_data.logistics_data 里对应条目的状态 → 已交
+        // （改的是机器人 /已付国际 同一份数据，两边不会打架）
+        (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+          if (!b || typeof b !== 'object') return;
+          (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
+            if (!m || typeof m !== 'object') return;
+            if (ids.indexOf('intl:' + String(m.id || '')) < 0) return;
+            const st = String(m.status || '').trim();
+            if (st === '未交') {
+              intlPrev.push({ m: m, status: m.status, pay_method: m.pay_method,
+                              paid_at: m.paid_at, amount_paid: m.amount_paid });
+              m.status = '已交';
+              m.pay_method = _payMethodWithPiggy(proof);
+              m.paid_at = nowStr;
+              m.amount_paid = Number(m.amount_due) || 0;
+              changed++;
+              // 🔧 联动：这一笔国际运费交清了 → 这批这个人的谷子自动可排发
+              intlGoodsTouched += _intlAutoDispatch(b.batch_name, m.cn);
+            } else {
+              alreadyPaid++;
+            }
+          });
+        });
+        ids.forEach(function (iid) {
+          const hit = (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).some(function (b) {
+            return b && Array.isArray(b.fee_members) &&
+                   b.fee_members.some(function (m) { return m && ('intl:' + String(m.id || '')) === iid; });
+          });
+          if (!hit) notFound++;
+        });
+      } else {
+        // 🩺 普通订单改动（2026-09-30 重写）：
+        //   · 查条目口径与金额校验 _payProofDueAmount 完全一致（含归档区）—— 避免「算得出应付、却改不到条目」
+        //   · 记下旧值，保存失败 / 落库校验不过时要能整体回滚
+        //   · 抽成函数：落库校验不过时按 id 重新定位（合并分支会把 RAW_ITEMS 整个换成新数组）再打一次
+        /* 🩺 2026-10-11 兜底：动手之前先探一下「凭证上记的订单编号，现在还剩几个」——
+           这批排表被**重新导入**过 → 整批订单换了新的 item_id，
+           而团员是在换 id 之前交的钱（凭证里记的还是旧编号，一个都对不上）。
+           以前遇到这种情况，等改完才发现"一条都没改到"，只能报
+           「这 N 条订单在系统里找不到，请先点刷新」——可刷新也没用，旧编号是真没了 → 审核永远过不去。
+           现在：**只有在金额已经核对无误（chk.state==='ok'）时**，才把要改的订单按
+                 「同一个人 + 同一个批次 + 该计划该有的状态」换成库里真实存在的条目。
+           金额口径一个字没改（钱还是那一笔，审核前已核对），换的只是"改哪几条"。 */
+        if (chk.state === 'ok') {
+          const _pool = RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []);
+          const _set = {};
+          _pool.forEach(function (it) {
+            if (!it || typeof it !== 'object') return;
+            const iid = String(it.item_id || it.id || '');
+            if (iid) _set[iid] = true;
+          });
+          let _miss = 0;
+          ids.forEach(function (x) { if (x.indexOf('intl:') < 0 && !_set[x]) _miss++; });
+          if (_miss > 0) {
+            const _recov = _payProofRecoverIds(proof, proofPlan);
+            if (_recov.length) { ids = _recov; recoveredN = _recov.length; }
+          }
+        }
+        const r0 = applyOrderPatch();
+        changed = r0.changed; alreadyPaid = r0.alreadyPaid; notFound = r0.notFound; filled = r0.filled;
+      }
+
+      // 🚫 一条都没改到、而且还有条目在表里找不到 → 绝不把凭证标成「已通过」。
+      //    09-30 踩的就是这个坑：页面内存里的订单旧了（或根本没加载到），条目找不到，
+      //    凭证照样被标「已通过」+ 原图被清（不可逆），订单却没动 → 机器人一直催已交的人。
+      if (changed === 0 && notFound > 0) {
+        rollbackOrderPatch();
+        return showToast('❌ 这 ' + notFound + (isIntl ? ' 项运费' : ' 条订单') +
+          '在系统里找不到' + (recoveredN ? '（这张截图上的编号已失效，按「同一个人 + 同一个批次」也没能找到对应的待交订单）'
+                                          : '（页面数据可能旧了）') +
+          '，没有确认收款。请先点「🔄 刷新」再重试；若刷新后依旧，把这条凭证的编号发给开发。');
+      }
+      // 💰 定金/尾款这两条路**必须真的改到订单**才允许通过：
+      //    一条都没改到，说明这些单的状态跟「这条路」对不上（他其实已经交过全款、或定金还没审核）。
+      //    这时候标「已通过」会凭空造出一笔欠款、或记成一笔重复收款 → 直接拦下，让他先刷新看清。
+      if (changed === 0 && (proofPlan === 'deposit' || proofPlan === 'balance')) {
+        rollbackOrderPatch();
+        return showToast('❌ 这些订单现在不是「' + (proofPlan === 'deposit' ? '未付款 / 未交' : '已交定金') +
+          '」状态（共 ' + (alreadyPaid + filled) + ' 条对不上），没有确认收款。请先点「🔄 刷新」看清这批的实际情况，再决定通过还是驳回。');
+      }
+
+      // ② 记录侧：本条置为已通过；同批次的其他「非通过」凭证也一并停止引用原图
+      //    （团长定的规则：被驳回/被撤回的旧图，等该批次最终通过时一起清）
+      const prevRefs = [];
+      const toPurge = [];
+      function stopRef(x) {
+        if (!x || !x.img_path) return;
+        prevRefs.push({ obj: x, img_path: x.img_path, purged_path: x.purged_path, purged_at: x.purged_at });
+        toPurge.push(x.img_path);
+        x.purged_path = x.img_path;
+        x.img_path = '';
+        x.purged_at = new Date().toLocaleString('zh-CN');
+      }
+      /* 🧮 分批补交（2026-10-11 团长要求）：同一组（同人 + 同批 + 同类型）里**待审核的凭证一起通过**。
+         团长规矩是「加起来对得上才算收齐」→ 不能只放行其中一张：
+         只放一张会让订单先变成「已下单」，另一半钱就再也没人催了。
+         （定金 / 尾款不分批，_cnPending 只会组到它自己。） */
+      const _nowCN = new Date().toLocaleString('zh-CN');
+      let _cnPending = [];
+      if (proofPlan === 'full' && chk.cluster && Array.isArray(chk.cluster.list)) {
+        _cnPending = chk.cluster.list.filter(function (x) { return String(x.status || '待审核') === '待审核'; });
+      }
+      if (_cnPending.indexOf(proof) < 0) _cnPending.push(proof);
+      const _pPrev = _cnPending.map(function (x) {
+        return { p: x, status: x.status, reviewed_at: x.reviewed_at,
+                 balance_due: x.balance_due, balance_paid_at: x.balance_paid_at };
+      });
+      _cnPending.forEach(function (x) {
+        x.status = '已通过';
+        x.reviewed_at = _nowCN;
+        // 💰 定金：把「尾款」在**审核这一刻**算好、写死在凭证上 ——
+        //    团长以后改定金比例，已经收过定金的这笔欠款不受影响。
+        if (proofPlan === 'deposit') {
+          const _full = _payProofFullDue(x);
+          x.plan = 'deposit';
+          x.balance_due = (_full.amount === null)
+            ? 0
+            : Math.max(0, Math.round((_full.amount - (Number(x.amount) || 0)) * 100) / 100);
+          x.balance_paid_at = '';
+        } else if (proofPlan === 'balance') {
+          x.plan = 'balance';
+          x.balance_paid_at = _nowCN;
+        }
+      });
+
+      /* 💰 零钱罐抵扣（2026-10-14 团长需求）：团员交这笔钱时如果勾了「用零钱罐抵扣」，
+         就在**这一刻**从他罐里扣掉。规则：
+           · 先存的先用（按 created_at 从早到晚吃）；
+           · 余额不够 → 整单不通过（绝不出现「订单收齐了、罐里却没扣」的账目黑洞）；
+           · 余额够 → 扣减写进内存，跟凭证状态一起 saveDataToSupabase()（同一把版本锁）。
+         幂等：凭证上打 _piggyDeducted 标记，重复点不会扣两次。 */
+      const _piggyPrev = [];
+      let _piggyShort = 0;
+      _cnPending.forEach(function (x) {
+        const use = Math.round(Number(x.piggy_used || 0) * 100) / 100;
+        if (!(use > 0)) return;
+        if (String(x._piggyDeducted || '') === 'yes') return;
+        const list = (Array.isArray(RAW_PIGGY) ? RAW_PIGGY : []).filter(function (r) {
+          return r && _piggySameCn(r.cn, x.cn) && piggyRemain(r) > 0.004;
+        }).sort(function (a, b) { return String(a.created_at || '').localeCompare(String(b.created_at || '')); });
+        let left = use;
+        const touched = [];
+        for (let i = 0; i < list.length && left > 0.004; i++) {
+          const r = list[i];
+          const can = Math.min(piggyRemain(r), left);
+          touched.push({ r: r, used: Number(r.used || 0), log: Array.isArray(r.used_log) ? r.used_log.slice() : [] });
+          r.used = Math.round((Number(r.used || 0) + can) * 100) / 100;
+          if (!Array.isArray(r.used_log)) r.used_log = [];
+          /* 🧾 2026-11-06：使用记录要能一眼看出「抵的是哪一批」→ 除原来的 at/note，
+             再显式写 reason（批次名）+ time（扣除时间）。老流水没这两个字段，渲染时从 note 读。 */
+          const _pbReason = String(Array.isArray(x.batch_names) ? x.batch_names.join('/') : (x.batch_names || '')).trim();
+          r.used_log.push({ at: _nowCN, amount: Math.round(can * 100) / 100,
+                            note: '交款抵扣 ' + _pbReason,
+                            reason: _pbReason || '（没写批次名）', time: _nowCN });
+          left = Math.round((left - can) * 100) / 100;
+        }
+        if (left > 0.004) {
+          touched.forEach(function (t) { t.r.used = t.used; t.r.used_log = t.log; });   // 回滚这一笔已扣的
+          _piggyShort++;
+          return;
+        }
+        touched.forEach(function (t) { _piggyPrev.push(t); });
+        x._piggyDeducted = 'yes';
+      });
+      if (_piggyShort > 0) {
+        _pPrev.forEach(function (r) {
+          r.p.status = r.status; r.p.reviewed_at = r.reviewed_at;
+          r.p.balance_due = r.balance_due; r.p.balance_paid_at = r.balance_paid_at;
+          r.p._piggyDeducted = '';
+        });
+        return showToast('❌ 有 ' + _piggyShort + ' 笔勾了「零钱罐抵扣」，但罐里余额不够了（可能刚被别处用掉）。请驳回让他重新提交，或到「算账中心 → 零钱罐」核对余额。');
+      }
+
+      const bkey = _normBatchKey(proof.batch_key || (Array.isArray(proof.batch_names) ? proof.batch_names[0] : proof.batch_names));
+      _cnPending.forEach(stopRef);
+      RAW_PAY_PROOFS.forEach(function (p) {
+        if (_cnPending.indexOf(p) >= 0) return;
+        const st2 = String(p.status || '');
+        if (st2 === '待审核' || st2 === '已通过') return;
+        const k = _normBatchKey(p.batch_key || (Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names));
+        if (k !== bkey) return;
+        stopRef(p);
+      });
+
+      let ok = await saveDataToSupabase();
+      if (!ok) {
+        _piggyPrev.forEach(function (t) { t.r.used = t.used; t.r.used_log = t.log; });   // 💰 零钱罐扣减一起回滚
+        _pPrev.forEach(function (r) {
+          r.p.status = r.status; r.p.reviewed_at = r.reviewed_at;
+          r.p.balance_due = r.balance_due; r.p.balance_paid_at = r.balance_paid_at;
+          r.p._piggyDeducted = '';
+        });
+        prevRefs.forEach(function (r) {
+          r.obj.img_path = r.img_path; r.obj.purged_path = r.purged_path; r.obj.purged_at = r.purged_at;
+        });
+        intlPrev.forEach(function (r) {
+          r.m.status = r.status; r.m.pay_method = r.pay_method;
+          r.m.paid_at = r.paid_at; r.m.amount_paid = r.amount_paid;
+        });
+        intlGoodsPrev.forEach(function (r) {
+          r.it.status = r.status; r.it.stock_date = r.stock_date; r.it.stock_expiry = r.stock_expiry;
+        });
+        rollbackOrderPatch();
+        return;
+      }
+
+      // ②-b 🔁 落库校验（2026-09-30 新增，长久防错）：
+      //    「保存没报错」≠「改动真的进了库」。回读一次数据库，逐条确认这几单已经是
+      //    「已下单 + 有付款方式」。没确认到 → 按 id 重新定位再打一次、再存一次
+      //    （冲突合并分支会把 RAW_ITEMS 整个换成新数组，旧的循环变量已失效，必须重新查）。
+      //    两次都不行 → 撤销这次审核并把凭证退回「待审核」，明确报错 ——
+      //    宁可不通过，也绝不留「凭证已通过 + 原图已清 + 订单没动」这个真空。
+      let vIds = [];
+      if (!isIntl) {
+        vIds = ids.filter(function (x) { return x.indexOf('intl:') < 0; });
+      }
+      if (vIds.length) {
+        let vok = await _verifyPayApplied(vIds);
+        if (!vok) {
+          const r1 = applyOrderPatch();
+          changed = changed + r1.changed;
+          filled = filled + r1.filled;
+          const ok2 = await saveDataToSupabase();
+          vok = ok2 && await _verifyPayApplied(vIds);
+        }
+        if (!vok) {
+          _piggyPrev.forEach(function (t) { t.r.used = t.used; t.r.used_log = t.log; });   // 💰 零钱罐扣减一起撤销
+          _pPrev.forEach(function (r) {
+            r.p.status = r.status; r.p.reviewed_at = r.reviewed_at;
+            r.p.balance_due = r.balance_due; r.p.balance_paid_at = r.balance_paid_at;
+            r.p._piggyDeducted = '';
+          });
+          prevRefs.forEach(function (r) {
+            r.obj.img_path = r.img_path; r.obj.purged_path = r.purged_path; r.obj.purged_at = r.purged_at;
+          });
+          rollbackOrderPatch();
+          await saveDataToSupabase();   // 把「撤销」也落库
+          renderPayReview();
+          return showToast('❌ 订单状态没能写进数据库，这次审核已撤销（凭证退回「待审核」，截图没删）。请重试；若反复出现请找开发。');
+        }
+      }
+
+      /* ②-c 🛡 国际运费落库校验（2026-11-05 新增）：
+         「保存没报错」≠「运费真的标成已交了」。以前这里没有任何校验，被别的页面
+         整份回写冲掉也毫无提示 —— 团长只能过几天发现「她明明交了还显示未交」。
+         现在：回读确认 → 不对就按 id 重新定位再打一次 → 还不对就跟订单一样撤销审核。 */
+      if (isIntl) {
+        const iIds = ids.filter(function (x) { return x.indexOf('intl:') === 0; });
+        if (iIds.length) {
+          let iok = await _verifyIntlApplied(iIds);
+          if (!iok) {
+            let re = 0;
+            (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+              (Array.isArray(b && b.fee_members) ? b.fee_members : []).forEach(function (m) {
+                if (!m || iIds.indexOf('intl:' + String(m.id || '')) < 0) return;
+                if (String(m.status || '').trim() === '已交') return;
+                m.status = '已交';
+                m.pay_method = _payMethodWithPiggy(proof);
+                m.paid_at = nowStr;
+                m.amount_paid = Number(m.amount_due) || 0;
+                re++;
+              });
+            });
+            const ok3 = re > 0 && await saveDataToSupabase();
+            iok = ok3 && await _verifyIntlApplied(iIds);
+          }
+          if (!iok) {
+            _piggyPrev.forEach(function (t) { t.r.used = t.used; t.r.used_log = t.log; });
+            _pPrev.forEach(function (r) {
+              r.p.status = r.status; r.p.reviewed_at = r.reviewed_at;
+              r.p.balance_due = r.balance_due; r.p.balance_paid_at = r.balance_paid_at;
+              r.p._piggyDeducted = '';
+            });
+            prevRefs.forEach(function (r) {
+              r.obj.img_path = r.img_path; r.obj.purged_path = r.purged_path; r.obj.purged_at = r.purged_at;
+            });
+            intlPrev.forEach(function (r) {
+              r.m.status = r.status; r.m.pay_method = r.pay_method;
+              r.m.paid_at = r.paid_at; r.m.amount_paid = r.amount_paid;
+            });
+            intlGoodsPrev.forEach(function (r) {
+              r.it.status = r.status; r.it.stock_date = r.stock_date; r.it.stock_expiry = r.stock_expiry;
+            });
+            await saveDataToSupabase();   // 把「撤销」也落库
+            renderPayReview();
+            return showToast('❌ 国际运费没能在数据库里标成「已交」，这次审核已撤销（凭证退回「待审核」，截图没删）。请重试；若反复出现把这条凭证编号发给开发。');
+          }
+        }
+      }
+
+      // ③ 记录已经落库，再删对象。删失败不回滚状态（记录侧已声明不再引用），
+      //    漏掉的孤儿文件由「🧹 清理无引用旧图」兜底。
+      const removed = await _purgeProofObjects(toPurge);
+
+      let msg = changed
+        ? ('✅ 已确认收款，' + changed +
+           (isIntl ? ' 项国际运费标为「已交」'
+                   : (proofPlan === 'deposit' ? (' 条订单改为「已交定金」，还欠尾款 ￥' + Number(proof.balance_due || 0).toFixed(2))
+                                              : (proofPlan === 'balance' ? ' 条订单补清，改为「已下单」' : ' 条订单改为「已下单」'))))
+        : (filled ? '✅ 已确认收款（订单本来就已经是「已下单」，这次补记了支付方式）' : '✅ 已标记通过');
+      if (_cnPending.length > 1) {
+        const _sumOK = _cnPending.reduce(function (a, x) { return a + (Number(x.amount) || 0); }, 0);
+        msg += '（这一组共 ' + _cnPending.length + ' 笔一起确认，合计 ￥' + _sumOK.toFixed(2) + '）';
+      }
+      if (recoveredN) msg += '（这张截图上的订单编号已失效，已按「同一个人 + 同一个批次」重新对上 ' + recoveredN + ' 条订单）';
+      if (alreadyPaid) msg += '（' + alreadyPaid + (isIntl ? ' 项原本就不是未交' : ' 条原本就不是未付款') + '，跳过）';
+      if (filled && changed) msg += '（另有 ' + filled + ' 条原本就是「已下单」，已补记支付方式）';
+      if (notFound) msg += '（' + notFound + (isIntl ? ' 项在表里找不到' : ' 条订单在表里找不到') + '）';
+      if (removed) msg += '（已清理 ' + removed + ' 张截图原图）';
+      showToast(msg);
+      renderPayReview();
+      renderPayStats();
+      renderTable();   // 订单状态变了，排表那边同步重画（合并分支会把 RAW_ITEMS 整份换新）
+    }
+    window.approvePayProof = approvePayProof;
+
+    function showRejectBox(id) {
+      const b = document.getElementById('rejectBox_' + id);
+      if (b) b.style.display = 'block';
+      const inp = document.getElementById('rejectReason_' + id);
+      if (inp) {
+        inp.style.borderColor = '';
+        setTimeout(function () { try { inp.focus(); } catch (e) {} }, 30);
+      }
+    }
+    function hideRejectBox(id) {
+      const b = document.getElementById('rejectBox_' + id);
+      if (b) b.style.display = 'none';
+    }
+    window.showRejectBox = showRejectBox;
+    window.hideRejectBox = hideRejectBox;
+
+    async function rejectPayProof(proofId) {
+      const id = String(proofId);
+      const inp = document.getElementById('rejectReason_' + id);
+      const reason = inp ? String(inp.value || '').trim() : '';
+      // 团长定的规矩：驳回原因必须由团长自己写，系统不替他编。
+      if (!reason) {
+        showToast('请先填写驳回原因 —— 这段话团员会看到');
+        if (inp) { try { inp.focus(); inp.style.borderColor = '#dc2626'; } catch (e) {} }
+        return;
+      }
+      const proof = RAW_PAY_PROOFS.filter(function (p) { return String(p.id) === id; })[0];
+      if (!proof) return showToast('找不到这条凭证，请刷新');
+      const prevStatus = proof.status, prevReason = proof.reject_reason, prevReviewed = proof.reviewed_at;
+      proof.status = '已驳回';
+      proof.reject_reason = reason;
+      proof.reviewed_at = new Date().toLocaleString('zh-CN');
+      const ok = await saveDataToSupabase();
+      if (!ok) {
+        proof.status = prevStatus;
+        proof.reject_reason = prevReason;
+        proof.reviewed_at = prevReviewed;
+        return;
+      }
+      hideRejectBox(id);
+      showToast('已驳回，团员重新查询时会看到原因');
+      renderPayReview();
+    }
+    window.rejectPayProof = rejectPayProof;
+
+    // ==========================================
+    // 📢 生成群通知文案（团长自己决定发不发；绝不自动群发、绝不私聊 —— 私聊会被风控）
+    // ==========================================
+    let _payNoticeDone = {};   // 本次会话内已生成过的凭证 id，避免重复通知同一批人
+    function _payProofBatchLabel(p) {
+      const n = Array.isArray(p.batch_names) ? p.batch_names[0] : p.batch_names;
+      return String(n || '');
+    }
+    function _payNoticeSay(html) {
+      const box = document.getElementById('payNoticeBox');
+      if (!box) return;
+      box.style.display = 'block';
+      box.innerHTML = html;
+    }
+    function generateGroupNotice() {
+      const all = Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : [];
+      const fresh = all.filter(function (p) {
+        return String(p.status || '') === '已通过' && !_payNoticeDone[String(p.id || '')];
+      });
+      if (!fresh.length) {
+        _payNoticeSay('<div style="font-size:0.88rem; color:#64748b;">目前没有新的「已通过」记录需要通知。<br>' +
+          '<span style="font-size:0.8rem;">（本次会话里已经生成过的不会重复出现；刷新页面后可重新生成。）</span></div>');
+        return;
+      }
+      const byBatch = {};
+      fresh.forEach(function (p) {
+        const b = _payProofBatchLabel(p) || '未注明批次';
+        if (!byBatch[b]) byBatch[b] = [];
+        byBatch[b].push(p);
+      });
+      const lines = ['✅ 已确认收款（团长核对完毕）'];
+      Object.keys(byBatch).forEach(function (b) {
+        const names = byBatch[b].map(function (p) { return String(p.cn || '（未填CN）'); });
+        const amt = byBatch[b].reduce(function (a, p) { return a + (Number(p.amount) || 0); }, 0);
+        lines.push('· ' + b + '：' + names.join('、') + '（￥' + amt.toFixed(2) + '）');
+      });
+      lines.push('');
+      lines.push('上面这些款项已确认到账，可以到自查终端核对：' + location.origin + '/');
+      const text = lines.join('\n');
+      fresh.forEach(function (p) { _payNoticeDone[String(p.id || '')] = true; });
+
+      _payNoticeSay(
+        '<div style="font-size:0.88rem; font-weight:600; color:#15803d; margin-bottom:6px;">📢 群通知文案（复制到群里发就行，系统不会自动发）</div>' +
+        '<textarea id="payNoticeText" readonly style="width:100%; height:140px; padding:9px; border:1px solid var(--border); border-radius:7px; font-size:0.85rem; line-height:1.7; box-sizing:border-box; background:#fff; color:var(--text);">' + escapeHtml(text) + '</textarea>' +
+        '<div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">' +
+          '<button class="btn btn-primary" style="padding:5px 14px; font-size:0.83rem;" onclick="copyPayNotice()">📋 复制文案</button>' +
+          '<button class="btn btn-secondary" style="padding:5px 14px; font-size:0.83rem;" onclick="document.getElementById(\'payNoticeBox\').style.display=\'none\'">关闭</button>' +
+        '</div>');
+    }
+    window.generateGroupNotice = generateGroupNotice;
+
+    function copyPayNotice() {
+      const ta = document.getElementById('payNoticeText');
+      if (!ta) return;
+      try {
+        ta.removeAttribute('readonly');
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, 99999);
+        const ok = document.execCommand('copy');
+        ta.setAttribute('readonly', 'readonly');
+        if (ok) { showToast('✅ 文案已复制，去群里粘贴吧'); return; }
+      } catch (e) {}
+      showToast('请手动框选上面的文字复制');
+    }
+    window.copyPayNotice = copyPayNotice;
+
+    // ==========================================
+    // 🧹 清理旧原图：把「已标记为可删、但当时没删成功」的凭证原图再删一遍。
+    //    2026-09-24 改：原先靠「列桶里所有文件 → 与记录比对」找孤儿，但匿名密钥
+    //    根本没有列出桶内容的权限（list 恒为空），所以它永远报「没有多余旧图」，等于空转。
+    //    现改为按记录里留下的 purged_path 重试 —— 那才是漏删的真实来源。
+    //    两段式：第一次点只报数量，再点一次才真删（删除必须团长亲自确认）。
+    // ==========================================
+    let _orphanArmed = false;
+    let _orphanSig = '';
+    async function cleanupOrphanProofImages() {
+      const cand = [], seen = {};
+      (Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : []).forEach(function (p) {
+        const pp = (p && p.purged_path) ? String(p.purged_path) : '';
+        if (pp && !seen[pp]) { seen[pp] = true; cand.push(pp); }
+      });
+
+      if (!cand.length) {
+        _orphanArmed = false; _orphanSig = '';
+        return _payNoticeSay('<div style="font-size:0.88rem; color:#15803d;">🧹 没有待清理的旧原图（标记过要删的都已经删干净了）。</div>');
+      }
+      const sig = cand.join('|');
+      if (!_orphanArmed || _orphanSig !== sig) {
+        _orphanArmed = true; _orphanSig = sig;
+        return _payNoticeSay('<div style="font-size:0.88rem; color:#b45309;">🧹 有 <b>' + cand.length +
+          '</b> 张旧原图是「通过 / 驳回 / 撤回」后应该删掉的。<br>' +
+          '<span style="font-size:0.8rem; color:var(--text-muted);">确认要再删一次的话，再点一次「🧹 清理无引用旧图」才会真的删（已经不存在的会自动跳过）。</span></div>');
+      }
+      _orphanArmed = false; _orphanSig = '';
+      const n = await _purgeProofObjects(cand);
+      _payNoticeSay('<div style="font-size:0.88rem; color:#15803d;">🧹 已对 ' + n +
+        ' 张旧原图发起删除（本来就不存在的会被直接跳过）。桶里只会留下还有记录引用的图。</div>');
+      showToast('已重试清理旧原图');
+    }
+    window.cleanupOrphanProofImages = cleanupOrphanProofImages;
+
+    window.closePayDetail = closePayDetail;
+
+    /* ===== ↕️ 表头排序（2026-10-26）=====
+       规则：数字列第一下从大到小（找最贵的一单是最常见的用法），文字列第一下 A→Z；
+       同一列再点反转；第三下回到原始顺序（给团长一个"我什么都不排了"的出口）。
+       ⚠️ 排序只影响「画出来的顺序」，不动 RAW_ITEMS；勾选按 item_id 记，排完还是勾着的。 */
+    function _sortValue(item, key) {
+      if (key === 'price') return Number(item.price) || 0;
+      if (key === 'quantity') return Number(item.quantity) || 0;
+      if (key === 'order_date') return String(item.order_date || '').trim();      // ISO 串按字典序就是时间序
+      if (key === 'status') return String(item.status || '未出荷').trim();
+      if (key === 'country') return String(item.country || '日本').trim();
+      return String(item[key] || '').trim();
+    }
+
+    function applySort(list) {
+      if (!SORT_KEY || !SORT_DIR) return list;
+      const key = SORT_KEY, dir = SORT_DIR;
+      const arr = list.slice();
+      arr.sort(function (a, b) {
+        const va = _sortValue(a, key), vb = _sortValue(b, key);
+        let r;
+        if (typeof va === 'number' && typeof vb === 'number') {
+          r = va - vb;
+        } else {
+          /* 空的永远排最后（不管升还是降），否则「下单日期」一升序满屏都是空行 */
+          const ea = (va === '' || va === null || va === undefined), eb = (vb === '' || vb === null || vb === undefined);
+          if (ea && eb) r = 0; else if (ea) return 1; else if (eb) return -1;
+          else r = String(va).localeCompare(String(vb), 'zh');
+        }
+        if (r === 0) r = String(a.item_id || a.id || '').localeCompare(String(b.item_id || b.id || ''));  // 同值稳定，重画不乱跳
+        return r * dir;
+      });
+      return arr;
+    }
+
+    function toggleSort(key) {
+      if (!SORT_COL_LABEL[key]) return;
+      const firstDir = SORT_NUM_COLS[key] ? -1 : 1;
+      if (SORT_KEY !== key) { SORT_KEY = key; SORT_DIR = firstDir; }
+      else if (SORT_DIR === firstDir) { SORT_DIR = -firstDir; }
+      else { SORT_KEY = ''; SORT_DIR = 0; }
+      CURRENT_PAGE = 1;          // 换排序就回第一页，不然停在 133 页看着像没反应
+      renderTable();
+    }
+    window.toggleSort = toggleSort;
+
+    function _paintSortHeads() {
+      document.querySelectorAll('th.th-sort').forEach(function (th) {
+        const on = SORT_KEY && th.getAttribute('data-sort') === SORT_KEY;
+        th.classList.toggle('on', !!on);
+        const ind = th.querySelector('.sort-ind');
+        if (ind) ind.textContent = on ? (SORT_DIR === -1 ? '▼' : '▲') : '⇅';
+      });
+    }
+    window._paintSortHeads = _paintSortHeads;
+
+    function renderTable() {
+      const tbody = document.getElementById('itemsTableBody');
+      const mobileView = document.getElementById('adminMobileCardsView');
+      const searchVal = (document.getElementById('filterSearch')?.value || '').trim().toLowerCase();
+      const batchValRaw = stripBatchCountLabel(window.SELECTED_FILTER_BATCH || '').trim();
+      const detailVal = String(window.SELECTED_BATCH_DETAIL || '').trim();
+      syncCountryFilterExtras();
+      const countryVal = (document.getElementById('filterCountry')?.value || '').trim();
+      const statusVal = (document.getElementById('filterStatus')?.value || '').trim().toLowerCase();
+
+      // 精确命中某个批次 → 精确筛选；否则按关键词模糊匹配（可搜索下拉体验）
+            const exactBatchHit = batchValRaw && RAW_ITEMS.some(i => String(i.batch_name || '默认批次') === batchValRaw);
+            // "显示已收款完结批次"未勾选时，归档批次的谷子一律隐藏（不看搜索/筛选条件）
+            const filterArchivedOn = document.getElementById('filterIncludeArchived')?.checked || false;
+
+            const filtered = RAW_ITEMS.filter(item => {
+              const itemBatch = String(item.batch_name || '默认批次');
+              if (!filterArchivedOn && isArchivedBatchName(itemBatch)) return false;
+              const nameMatch = (item.name || '').toLowerCase().includes(searchVal);
+              const cnMatch = (item.cn || '').toLowerCase().includes(searchVal);
+              const batchMatchText = itemBatch.toLowerCase().includes(searchVal);
+              const matchSearch = nameMatch || cnMatch || batchMatchText;
+              // 级联选择器选定的详细分类：按谷子名称/批次名模糊匹配
+              const matchDetail = !detailVal || (item.name || '').toLowerCase().includes(detailVal.toLowerCase()) || itemBatch.toLowerCase().includes(detailVal.toLowerCase());
+
+              let matchBatch;
+              if (!batchValRaw) matchBatch = true;
+              else if (exactBatchHit) matchBatch = itemBatch === batchValRaw;
+              else matchBatch = itemBatch.includes(batchValRaw);
+              const matchCountry = !countryVal || (item.country || '日本') === countryVal;
+              const itemStatus = (item.status || '未出荷').toLowerCase();
+              const matchStatus = !statusVal || itemStatus.includes(statusVal);
+
+              return matchSearch && matchBatch && matchDetail && matchCountry && matchStatus;
+            });
+
+      // ↕️ 排序只影响展示顺序（不动 RAW_ITEMS），勾选按 item_id 记所以排完还在
+      const filteredSorted = applySort(filtered);
+
+      const totalItems = filteredSorted.length;
+      const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
+      window.__LAST_TOTAL_ITEMS = totalItems;
+      window.__LAST_TOTAL_PAGES = totalPages;
+      if (CURRENT_PAGE > totalPages) CURRENT_PAGE = totalPages;
+      if (CURRENT_PAGE < 1) CURRENT_PAGE = 1;
+
+      const pageItems = filteredSorted.slice((CURRENT_PAGE - 1) * PAGE_SIZE, CURRENT_PAGE * PAGE_SIZE);
+      window.ITEM_CACHE = pageItems;
+
+      if (totalItems === 0) {
+        tbody.innerHTML = `<tr><td colspan="14" style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配的谷子数据</td></tr>`;
+        if (mobileView) mobileView.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">未搜索到匹配数据</div>`;
+        /* 以前这里直接清空分页区 → 页面底部什么都不显示，看不出是"筛掉了"还是"没加载"。
+           现在照样渲染「共 0 条」+ 每页条数选择。 */
+        renderPaginationBar(0, 1);
+        renderPayStats();
+        /* ⚠️ 这条 early-return 分支也必须重置表头全选框：
+           否则「全选 → 搜一个搜不到的词」时表格是空的，表头那个勾还亮着。 */
+        try { _refreshSelectAllState(); } catch (e) {}
+        try { _paintSortHeads(); } catch (e) {}
+        return;
+      }
+
+      let html = '', cardsHtml = '';
+      pageItems.forEach((item, index) => {
+        const imgTag = item.image_url ? `<img src="${escapeHtml(sbImg(item.image_url))}" data-orig="${escapeHtml(item.image_url)}" onerror="imgFallback(this)" class="img-preview" alt="谷子" loading="lazy">` : `<span style="color:#cbd5e1;font-size:0.75rem;">无图</span>`;
+        const mobileImgTag = item.image_url ? `<img src="${escapeHtml(sbImg(item.image_url))}" data-orig="${escapeHtml(item.image_url)}" onerror="imgFallback(this)" class="admin-card-mobile-img" alt="谷子" loading="lazy">` : `<div class="admin-card-mobile-noimg">无图</div>`;
+        const batchStr = item.batch_name || '默认批次';
+        const countryStr = item.country || '日本';
+        const statusStr = item.status || '未出荷';
+        const statusBadgeClass = getStatusBadgeClass(statusStr);
+        // 📅 下单日期 / 下单平台（老数据没有 → 显示破折号）
+        const orderDateStr = String(item.order_date || '').trim();
+        const orderPlatformStr = String(item.order_platform || '').trim();
+        const orderDateTd = orderDateStr ? escapeHtml(orderDateStr) : '<span style="color:#cbd5e1;">—</span>';
+        const orderPlatformTd = orderPlatformStr ? escapeHtml(orderPlatformStr) : '<span style="color:#cbd5e1;">—</span>';
+
+        /* 🔴 跨页勾选：key 用 item_id（全库 2645 条都有且不重复），不用页内 index。
+           重画时按 SELECTED_ITEM_KEYS 回填，翻页/换搜索词都不会丢。 */
+        const _k = _itemKeyOf(item, index);
+        const _kAttr = escapeHtml(_k);
+        const _on = SELECTED_ITEM_KEYS.has(_k);
+        const _rowBg = _on ? 'background:rgba(21,128,61,0.09);' : '';
+
+        html += `
+          <tr class="itemRow" style="cursor:pointer;${_rowBg}" onclick="itemRowClick(event, ${index})" ondblclick="itemRowDblClick(event, ${index})">
+            <td><input type="checkbox" class="item-checkbox" value="${index}" data-k="${_kAttr}"${_on ? ' checked' : ''} onclick="itemPaintFromCb(this)"></td>
+            <td>${imgTag}</td>
+            <td style="font-weight:600;">${escapeHtml(item.name)}</td>
+            <td><strong>${escapeHtml(item.cn)}</strong></td>
+            <td><span class="badge badge-batch">${escapeHtml(batchStr)}</span></td>
+            <td>￥${Number(item.price || 0).toFixed(2)}</td>
+            <td>${item.quantity || 1}</td>
+            <td><span class="badge badge-country">${escapeHtml(countryStr)}</span></td>
+            <td><span class="badge ${statusBadgeClass}">${escapeHtml(statusStr)}</span></td>
+            <td>${orderDateTd}</td>
+            <td>${orderPlatformTd}</td>
+            <td>${getPayMethodBadge(item.pay_method)}</td>
+            <td>${stockCellHtml(item)}</td>
+            <td>
+              <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="editItemByIndex(${index})">编辑</button>
+              <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="transferSingleByIndex(${index})">转单</button>
+            </td>
+          </tr>
+        `;
+
+        cardsHtml += `
+          <div class="admin-card-mobile itemRow" style="cursor:pointer;${_rowBg}" onclick="itemRowClick(event, ${index})">
+            <div class="admin-card-mobile-header">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <input type="checkbox" class="item-checkbox" value="${index}" data-k="${_kAttr}"${_on ? ' checked' : ''} onclick="itemPaintFromCb(this)">
+                <span class="badge badge-batch">${escapeHtml(batchStr)}</span>
+                <span class="badge badge-country">${escapeHtml(countryStr)}</span>
+              </div>
+              <span class="badge ${statusBadgeClass}">${escapeHtml(statusStr)}</span>
+            </div>
+            <div class="admin-card-mobile-body">
+              ${mobileImgTag}
+              <div class="admin-card-mobile-info">
+                <div style="font-weight:700;">${escapeHtml(item.name)}</div>
+                <div style="margin-top:4px;">${stockCellHtml(item)}</div>
+                <div style="font-size:0.85rem; color:var(--text-muted);">
+                  <span>CN: <strong>${escapeHtml(item.cn)}</strong></span> |
+                  <span>￥${Number(item.price || 0).toFixed(2)}</span> |
+                  <span>x${item.quantity || 1}</span>
+                </div>
+                <div style="margin-top:4px; font-size:0.8rem;">支付方式: ${getPayMethodBadge(item.pay_method)}</div>
+                <div style="margin-top:4px; font-size:0.8rem; color:var(--text-muted);">📅 下单: ${orderDateTd}${orderPlatformStr ? ' · ' + escapeHtml(orderPlatformStr) : ''}</div>
+              </div>
+            </div>
+            <div class="admin-card-mobile-actions">
+              <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="editItemByIndex(${index})">✏️ 编辑</button>
+              <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="transferSingleByIndex(${index})">🔄 转单</button>
+            </div>
+          </div>
+        `;
+      });
+
+      tbody.innerHTML = html;
+      if (mobileView) mobileView.innerHTML = cardsHtml;
+      renderPaginationBar(totalItems, totalPages);
+      renderPayStats();
+      /* 重画时已按 SELECTED_ITEM_KEYS 回填勾选；这里清掉已不存在的 key，再刷表头三态 + 已选计数 */
+      try { _pruneItemSelection(); _refreshSelectAllState(); } catch (e) {}
+      try { _paintSortHeads(); } catch (e) {}
+    }
+
+    function renderPaginationBar(totalItems, totalPages) {
+      const container = document.getElementById('tablePagination');
+      if (!container) return;
+      const sizeSel = `<label style="display:inline-flex; align-items:center; gap:4px; font-size:0.82rem; color:var(--text-muted); white-space:nowrap;">每页
+        <select id="pageSizeSelect" onchange="onPageSizeChange(this.value)" style="font-size:0.82rem; padding:3px 6px; border-radius:6px;">
+          ${[20, 50, 100, 200].map(n => `<option value="${n}"${n === PAGE_SIZE ? ' selected' : ''}>${n}</option>`).join('')}
+        </select> 条</label>`;
+
+      if (!totalItems) {
+        container.innerHTML = `<div class="pagination-info">共 <strong>0</strong> 条（没有符合筛选条件的谷子）</div><div class="pagination-buttons">${sizeSel}</div>`;
+        return;
+      }
+      if (totalPages <= 1) {
+        container.innerHTML = `<div class="pagination-info">共 ${totalItems} 条数据</div><div class="pagination-buttons">${sizeSel}</div>`;
+        return;
+      }
+
+      let btnHtml = `<button class="page-btn page-btn-ends" onclick="changePage(1)" ${CURRENT_PAGE === 1 ? 'disabled' : ''} title="第一页">首页</button>`;
+      btnHtml += `<button class="page-btn" onclick="changePage(${CURRENT_PAGE - 1})" ${CURRENT_PAGE === 1 ? 'disabled' : ''}>&lt; 上一页</button>`;
+      for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= CURRENT_PAGE - 2 && i <= CURRENT_PAGE + 2)) {
+          btnHtml += `<button class="page-btn ${i === CURRENT_PAGE ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
+        } else if (i === CURRENT_PAGE - 3 || i === CURRENT_PAGE + 3) {
+          btnHtml += `<span style="padding:0 4px; color:var(--text-muted);">...</span>`;
+        }
+      }
+      btnHtml += `<button class="page-btn" onclick="changePage(${CURRENT_PAGE + 1})" ${CURRENT_PAGE === totalPages ? 'disabled' : ''}>下一页 &gt;</button>`;
+      btnHtml += `<button class="page-btn page-btn-ends" onclick="changePage(${totalPages})" ${CURRENT_PAGE === totalPages ? 'disabled' : ''} title="最后一页">末页</button>`;
+      btnHtml += `<span style="display:inline-flex; align-items:center; gap:3px; font-size:0.82rem; color:var(--text-muted); white-space:nowrap; margin-left:4px;">跳到
+        <input id="pageJumpInput" type="number" min="1" max="${totalPages}" value="${CURRENT_PAGE}"
+               onkeydown="if(event.key==='Enter'){event.preventDefault(); jumpToPage(this.value); this.blur();}"
+               style="width:58px; padding:3px 6px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem;" title="输入页码后按回车">页</span>`;
+      container.innerHTML = `<div class="pagination-info">共 <strong>${totalItems}</strong> 条，第 <strong>${CURRENT_PAGE}</strong> / <strong>${totalPages}</strong> 页</div>`
+        + `<div class="pagination-buttons">${btnHtml}${sizeSel}</div>`;
+    }
+
+    async function saveItemForm() {
+      if (IS_IMAGE_UPLOADING) return showToast('图片正在上传中，请稍候保存！');
+      const editId = document.getElementById('editItemId').value;
+      const name = document.getElementById('inputName').value.trim();
+      const cn = document.getElementById('inputCn').value.trim();
+      const batchSelVal = document.getElementById('inputBatchId').value || '';
+      let batch_name = '默认批次';
+      let batch_id = '';
+      let open_date = '';
+      if (batchSelVal.indexOf('legacy:') === 0) {
+        batch_name = batchSelVal.slice(7).trim() || '默认批次';
+      } else if (batchSelVal) {
+        const selBatch = RAW_BATCHES.find(x => String(x.batch_id) === String(batchSelVal));
+        if (selBatch) {
+          batch_id = selBatch.batch_id;
+          batch_name = (selBatch.disk_name || '').trim() || '默认批次';
+          open_date = selBatch.open_date || '';
+        }
+      }
+      const price = parseFloat(document.getElementById('inputPrice').value) || 0;
+      const quantity = parseInt(document.getElementById('inputQuantity').value) || 1;
+      const country = (document.getElementById('inputCountry').value || '').trim() || '日本';
+      // 💰 费用类条目守卫：团员端「交肾核算」只认 未付款 / 未交 / 已交定金 三种状态，
+      //    其它状态（未出荷/已下单…）一律不显示。代购费补差、掉落补款、运费差价这类
+      //    条目若停在默认「未出荷」，团员永远看不到待付记录 → 这里强制落成未付款。
+      const _statusInput = document.getElementById('inputStatus').value.trim() || '未出荷';
+      const _FEE_RE = /补差|补款|补收|补交|代购费|差价|掉落|追加费用/;
+      const _FEE_OK = ['未付款', '未交', '已交定金'];
+      const _feeFixed = _FEE_RE.test(name) && !_FEE_OK.includes(_statusInput);
+      const status = _feeFixed ? '未付款' : _statusInput;
+      const imageUrl = (document.getElementById('inputImageUrl')?.value || '').trim();
+      // 📅 下单日期 / 下单平台（散货批次用，允许留空）
+      const orderDate = (document.getElementById('inputOrderDate')?.value || '').trim();
+      const orderPlatform = (document.getElementById('inputOrderPlatform')?.value || '').trim();
+
+      if (!name || !cn) return showToast('请填写谷子名称和 CN！');
+
+      if (editId) {
+        const idx = RAW_ITEMS.findIndex(i => String(i.item_id || i.id) === String(editId));
+        if (idx !== -1) {
+          const prevStatus = RAW_ITEMS[idx].status;
+          const patch = { name, cn, batch_name, price, quantity, country, status, image_url: imageUrl, order_date: orderDate, order_platform: orderPlatform };
+          if (batch_id) { patch.batch_id = batch_id; patch.open_date = open_date; }
+          RAW_ITEMS[idx] = { ...RAW_ITEMS[idx], ...patch };
+          ensureStockDate(RAW_ITEMS[idx], prevStatus);
+          DIRTY_ITEM_IDS.add(String(RAW_ITEMS[idx].item_id || RAW_ITEMS[idx].id));
+        }
+      } else {
+        const newItem = {
+          item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random()*1000),
+          name, cn, batch_name, price, quantity, country, status, image_url: imageUrl,
+          order_date: orderDate, order_platform: orderPlatform,
+          created_at: new Date().toISOString()
+        };
+        if (batch_id) { newItem.batch_id = batch_id; newItem.open_date = open_date; }
+        ensureStockDate(newItem, null);
+        RAW_ITEMS.unshift(newItem);
+      }
+
+      await saveDataToSupabase();
+      clearForm();
+      updateBatchDropdownOptions();
+      renderTable();
+      showToast(_feeFixed ? '已保存 · 费用条目已自动设为「未付款」，团员在交肾核算能看到待付' : '已保存至 group_data！');
+    }
+    window.saveItemForm = saveItemForm;
+
+    function editItemByIndex(index) {
+      const item = window.ITEM_CACHE[index];
+      if (!item) return;
+      document.getElementById('editItemId').value = item.item_id || item.id;
+      document.getElementById('inputName').value = item.name || '';
+      document.getElementById('inputCn').value = item.cn || '';
+      const bSel = document.getElementById('inputBatchId');
+      if (item.batch_id && RAW_BATCHES.some(x => String(x.batch_id) === String(item.batch_id))) {
+        ensureSelectOption('inputBatchId', item.batch_id);
+      } else if (item.batch_name) {
+        ensureSelectOption('inputBatchId', 'legacy:' + item.batch_name);
+      } else {
+        if (bSel) bSel.value = '';
+      }
+      document.getElementById('inputPrice').value = item.price || 0;
+      document.getElementById('inputQuantity').value = item.quantity || 1;
+      ensureSelectOption('inputCountry', item.country || '日本');
+      ensureSelectOption('inputStatus', item.status || '未出荷');
+      document.getElementById('inputImageUrl').value = item.image_url || '';
+      document.getElementById('inputOrderDate').value = item.order_date || '';
+      document.getElementById('inputOrderPlatform').value = item.order_platform || '';
+      updateImagePreview(item.image_url || '');
+      imgResetUploader();
+      document.getElementById('formTitle').innerText = '✏️ 修改谷子信息';
+      document.getElementById('btnClearForm').style.display = 'inline-block';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    window.editItemByIndex = editItemByIndex;
+
+    function clearForm() {
+      document.getElementById('editItemId').value = '';
+      document.getElementById('itemForm').reset();
+      const inputBatchSel = document.getElementById('inputBatchId');
+      if (inputBatchSel) inputBatchSel.value = '';
+      document.getElementById('inputCountry').value = '日本';
+      document.getElementById('inputStatus').value = '未出荷';
+      document.getElementById('inputImageUrl').value = '';
+      setDefaultOrderDate();
+      document.getElementById('inputOrderPlatform').value = '';
+      updateImagePreview('');
+      imgResetUploader();
+      IS_IMAGE_UPLOADING = false;
+      document.getElementById('formTitle').innerText = '📝 录入/编辑谷子';
+      document.getElementById('btnClearForm').style.display = 'none';
+    }
+    window.clearForm = clearForm;
+
+    // 📅 把「下单日期」默认填成今天。
+    // ⚠️ 必须用本地时区手拼 YYYY-MM-DD，不能 toISOString().slice(0,10)
+    //    —— 那个是 UTC，北京时间晚上 8 点后会算成"明天"，日期直接错一天。
+    function setDefaultOrderDate() {
+      const el = document.getElementById('inputOrderDate');
+      if (!el || el.value) return;
+      const d = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      el.value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    }
+    window.setDefaultOrderDate = setDefaultOrderDate;
+
+    // 单条转单（支持部分数量转单）
+    async function transferSingleByIndex(index) {
+      const item = window.ITEM_CACHE[index];
+      if (!item) return;
+      const currentQty = parseInt(item.quantity) || 1;
+      const oldCn = item.cn || '未命名';
+      const newCn = prompt(`将谷子「${item.name}」从原 CN [${oldCn}] 转单给哪位新 CN？`);
+      if (!newCn || !newCn.trim()) return;
+      const qtyInput = prompt(`请输入转单数量：（当前持有 ${currentQty} 个）`, currentQty);
+      if (!qtyInput) return;
+      const transferQty = parseInt(qtyInput.trim());
+      if (isNaN(transferQty) || transferQty <= 0 || transferQty > currentQty) return alert('转单数量不合法！');
+
+      if (transferQty === currentQty) {
+        item.cn = newCn.trim();
+        DIRTY_ITEM_IDS.add(String(item.item_id || item.id));
+      } else {
+        item.quantity = currentQty - transferQty;
+        DIRTY_ITEM_IDS.add(String(item.item_id || item.id));
+        RAW_ITEMS.unshift({
+          ...item,
+          item_id: 'item_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+          cn: newCn.trim(),
+          quantity: transferQty,
+          created_at: new Date().toISOString()
+        });
+      }
+
+      RAW_LOGS.unshift({
+        id: 'log_' + Date.now(),
+        time: new Date().toLocaleString('zh-CN'),
+        from_cn: oldCn,
+        to_cn: newCn.trim(),
+        item_name: item.name,
+        quantity: transferQty
+      });
+
+      await saveDataToSupabase();
+      renderTable(); renderTransferLogs();
+      showToast('转单成功！');
+    }
+    window.transferSingleByIndex = transferSingleByIndex;
+
+    /* ═══════════════════════════════════════════════════════════════════
+       🗂 排表管理 · 谷子明细：单击选中 / 双击编辑（2026-10-16 团长要求）
+       「不用只能戳那个小方框」。桌面端整行、手机端整张卡片都能点。
+       ⚠️ 双击＝两次单击＝勾选被翻两次＝**回到原样**，所以双击进编辑时不会顺手把
+          这一行选上（这正是我们要的：双击是"编辑"，不是"选中"）。
+       ⚠️ 必须让开三类控件的点击：勾选框自己（浏览器已切过一次，再切就白切）、
+          「编辑 / 转单」按钮、卡片上的链接。
+       ═══════════════════════════════════════════════════════════════════ */
+    function _itemHitControl(t, box) {
+      /* 从点击目标往上找，碰到按钮/链接/勾选框就算"点在控件上"（用循环不用 closest，兼容性稳） */
+      let n = t;
+      while (n && n !== box) {
+        const tag = String(n.tagName || '').toLowerCase();
+        if (tag === 'button' || tag === 'a' || tag === 'input') return true;
+        n = n.parentNode;
+      }
+      return false;
+    }
+
+    function _itemBoxOf(cb) {
+      /* 勾选框所在的那"一条"：桌面端是 <tr>，手机端是 .admin-card-mobile */
+      let n = cb;
+      while (n && n.tagName) {
+        if (n.tagName === 'TR') return n;
+        if (n.classList && n.classList.contains('admin-card-mobile')) return n;
+        n = n.parentNode;
+      }
+      return cb ? cb.parentNode : null;
+    }
+
+    function itemPaintBox(box) {
+      if (!box || !box.querySelector) return;
+      const cb = box.querySelector('.item-checkbox');
+      if (!cb) return;
+      box.style.background = cb.checked ? 'rgba(21,128,61,0.09)' : '';
+    }
+
+    /* 一件谷子的稳定 key（跨页、跨筛选都不变）。
+       ⚠️ 绝不能用页内 index：翻到第 2 页后 index=0 是另一件谷子，会把选中错位。 */
+    function _itemKeyOf(it, idx) {
+      if (!it) return '';
+      const id = String(it.item_id || it.id || '').trim();
+      if (id) return id;
+      return '__k#' + (idx == null ? '' : idx);   /* 兜底：老数据缺 item_id（当前库 0 条） */
+    }
+
+    /* Set 里可能残留「已被删掉/已转单」的 key → 计数前先清一遍，避免显示 12 件实际只找到 10 件 */
+    function _pruneItemSelection() {
+      if (!SELECTED_ITEM_KEYS.size) return;
+      const alive = new Set();
+      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it, i) { alive.add(_itemKeyOf(it, i)); });
+      Array.from(SELECTED_ITEM_KEYS).forEach(function (k) { if (!alive.has(k)) SELECTED_ITEM_KEYS.delete(k); });
+    }
+
+    /* 「已选 N 件」：桌面标题旁 + 手机选择条，两个都更新 */
+    function _updateSelCountUI() {
+      const n = getSelectedCacheItems().length;
+      const txt = n ? ('已选 ' + n + ' 件') : '未选';
+      const badge = document.getElementById('selCountBadge');
+      if (badge) {
+        badge.textContent = txt;
+        if (n > 0) badge.classList.add('on'); else badge.classList.remove('on');
+      }
+      const mob = document.getElementById('mobileSelCount');
+      if (mob) {
+        mob.textContent = txt;
+        mob.style.color = n > 0 ? '#15803d' : '#64748b';
+      }
+    }
+
+    /* 🔴 2026-10-25 团长报的 bug：排表管理里「取消勾选两条，批量补图还是把它们加上了」。
+       根因：桌面 <tr> 和手机卡片各有一个 .item-checkbox（同一个 key），
+       而且两个都在 DOM 里（另一端只是 display:none）。勾/取消只改看得见的那个，
+       另一个（隐藏的）还保持着勾选 → 取值时照样把它算进"已选"。
+       修法：任何一次勾/取消都同步同 key 的孪生框，并写进 SELECTED_ITEM_KEYS。 */
+    function _syncItemCheckbox(cb) {
+      if (!cb) return;
+      const k = cb.getAttribute('data-k') || '';
+      if (k) {
+        if (cb.checked) SELECTED_ITEM_KEYS.add(k); else SELECTED_ITEM_KEYS.delete(k);
+      }
+      document.querySelectorAll('.item-checkbox').forEach(function (x) {
+        if (x === cb || !k) return;
+        if ((x.getAttribute('data-k') || '') !== k) return;
+        x.checked = cb.checked;
+        itemPaintBox(_itemBoxOf(x));
+      });
+      itemPaintBox(_itemBoxOf(cb));
+      _refreshSelectAllState();
+    }
+    window._syncItemCheckbox = _syncItemCheckbox;
+
+    /* 表头全选框跟随「本页」实际选中数：全中=勾、部分=半勾、零=空。
+       （跨页选中的其他行不计入这个三态判断，但会计入「已选 N 件」） */
+    function _refreshSelectAllState() {
+      const master = document.getElementById('selectAllCheckbox');
+      const boxes = document.querySelectorAll('tr.itemRow .item-checkbox');
+      const on = Array.prototype.filter.call(boxes, function (x) { return x.checked; }).length;
+      if (master) {
+        master.checked = boxes.length > 0 && on === boxes.length;
+        master.indeterminate = on > 0 && on < boxes.length;
+      }
+      _updateSelCountUI();
+    }
+    window._refreshSelectAllState = _refreshSelectAllState;
+
+    function itemPaintFromCb(cb) { _syncItemCheckbox(cb); }
+
+    function itemRowClick(ev, idx) {
+      const box = ev && ev.currentTarget;
+      if (!box) return;
+      if (_itemHitControl(ev.target, box)) return;   /* 控件自己的点击不抢 */
+      const cb = box.querySelector('.item-checkbox');
+      if (!cb) return;
+      cb.checked = !cb.checked;
+      _syncItemCheckbox(cb);
+    }
+
+    function itemRowDblClick(ev, idx) {
+      const box = ev && ev.currentTarget;
+      if (_itemHitControl(ev.target, box)) return;
+      editItemByIndex(idx);
+    }
+
+    window.itemRowClick = itemRowClick;
+    window.itemRowDblClick = itemRowDblClick;
+    window.itemPaintFromCb = itemPaintFromCb;
+
+    /* 全选 / 取消全选：只作用于「本页」（和表头 title 写的一致）。
+       取消时只把本页的 key 从集合里拿掉，别的页勾着的不会被连坐。 */
+    function toggleSelectAll(master) {
+      const want = !!master.checked;   /* ⚠️ 先记住目标状态：循环里 _refreshSelectAllState 会回头写 master.checked */
+      document.querySelectorAll('.item-checkbox').forEach(cb => {
+        const k = cb.getAttribute('data-k') || '';
+        cb.checked = want;
+        if (k) { if (want) SELECTED_ITEM_KEYS.add(k); else SELECTED_ITEM_KEYS.delete(k); }
+        itemPaintBox(_itemBoxOf(cb));   /* 全选也要整行变绿，否则只有勾、没有底色 */
+      });
+      _refreshSelectAllState();
+    }
+    window.toggleSelectAll = toggleSelectAll;
+
+    /* 手机端「全选本页」：桌面表格在手机上 display:none，表头那个勾根本点不到 */
+    function toggleSelectAllMobile() {
+      const boxes = document.querySelectorAll('tr.itemRow .item-checkbox');
+      const allOn = boxes.length > 0 && Array.prototype.every.call(boxes, function (x) { return x.checked; });
+      const want = !allOn;
+      document.querySelectorAll('.item-checkbox').forEach(cb => {
+        const k = cb.getAttribute('data-k') || '';
+        cb.checked = want;
+        if (k) { if (want) SELECTED_ITEM_KEYS.add(k); else SELECTED_ITEM_KEYS.delete(k); }
+        itemPaintBox(_itemBoxOf(cb));
+      });
+      _refreshSelectAllState();
+    }
+    window.toggleSelectAllMobile = toggleSelectAllMobile;
+
+    function clearItemSelection(silent) {
+      SELECTED_ITEM_KEYS.clear();
+      document.querySelectorAll('.item-checkbox').forEach(cb => {
+        cb.checked = false;
+        itemPaintBox(_itemBoxOf(cb));
+      });
+      _refreshSelectAllState();
+      if (!silent) showToast('已清空选择');
+    }
+    window.clearItemSelection = clearItemSelection;
+
+    /* 取「已选」的谷子对象：从 RAW_ITEMS 按 key 反查，所以跨页/跨筛选都拿得到。
+       （以前只读当前页 DOM + ITEM_CACHE，翻一页就只剩当页的了） */
+    function getSelectedCacheItems() {
+      if (!SELECTED_ITEM_KEYS.size) return [];
+      const selected = [];
+      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it, i) {
+        if (SELECTED_ITEM_KEYS.has(_itemKeyOf(it, i))) selected.push(it);
+      });
+      return selected;
+    }
+
+    async function batchTransferModal() {
+      const selected = getSelectedCacheItems();
+      if (selected.length === 0) return showToast('请先勾选谷子！');
+      const newCn = prompt(`共选中 ${selected.length} 件谷子，请输入转入的新 CN：`);
+      if (!newCn || !newCn.trim()) return;
+      const _who = selected.slice(0, 6).map(i => i.cn).filter(Boolean).join('、');
+      if (!confirm(`确定把这 ${selected.length} 件谷子整体转给「${newCn.trim()}」吗？\n\n${_who}${selected.length > 6 ? ' 等' : ''}\n\n（转单只改认领人，已收款金额不变）`)) return;
+      selected.forEach(item => {
+        const oldCn = item.cn; item.cn = newCn.trim(); DIRTY_ITEM_IDS.add(String(item.item_id || item.id));
+        RAW_LOGS.unshift({ id: 'log_' + Date.now() + '_' + Math.floor(Math.random()*100), time: new Date().toLocaleString('zh-CN'), from_cn: oldCn, to_cn: item.cn, item_name: item.name, quantity: item.quantity || 1 });
+      });
+      await saveDataToSupabase();
+      clearItemSelection(true);
+      renderTable(); renderTransferLogs(); showToast('批量转单成功！');
+    }
+    window.batchTransferModal = batchTransferModal;
+
+    // ==========================================
+
+    let BATCH_DELETE_CANDIDATES = [];
+    let BATCH_DELETE_MODE = false;
+    let BATCH_MODAL_DELETE_MODE = false;    // 弹窗当前是否处于"归档批次"子模式
+    let BATCH_MODAL_DELETE_OPTIONS = [];    // 归档子模式下的候选批次选项
+    let BATCH_MODAL_FULL_OPTIONS = [];      // 弹窗批次下拉的完整选项（用于搜索过滤）
+    let BATCH_MODAL_GROUP_MODE = false;     // 弹窗当前是否处于"分组展开"子模式（选择了分组后展开具体批次）
+    let BATCH_MODAL_GROUP_OPTIONS = [];     // 分组展开子模式下的具体批次选项
+
+    // 🌟 批次分组规则（方案 B+D：状态优先，其次按开团月份，无日期归常驻/活动）
+        // 按月分组：批次名中含 "M.D" 形式的日期 → 归入对应 "📅 M月" 组
+        const BATCH_RESIDENT_GROUP_LABEL = '🏠 常驻/活动';
+
+        function getBatchGroupName(batchName) {
+              // 返回批次所属分组标签；未匹配到月份日期 → 常驻/活动
+              const n = String(batchName || '').trim();
+              if (!n) return BATCH_RESIDENT_GROUP_LABEL;
+              // 匹配 "8.24" / "9.1" / "台湾8.23" 等任意位置 月份.日期 形式
+              const m = n.match(/(\d{1,2})\.(\d{1,2})/);
+              if (m) {
+                const month = parseInt(m[1], 10);
+                if (month >= 1 && month <= 12) return '📅 ' + month + '月';
+              }
+              return BATCH_RESIDENT_GROUP_LABEL;
+            }
+
+    function groupBatches(batchNames) {
+      // batchNames: 批次名数组 → { groupLabel: [批次名...] }，保持传入顺序
+      const map = {};
+      const order = [];
+      batchNames.forEach(function(b){
+        const g = getBatchGroupName(b);
+        if (!map[g]) { map[g] = []; order.push(g); }
+        map[g].push(b);
+      });
+      return { map, order };
+    }
+
+    function batchIsArchivedByName(batchName) {
+      const n = String(batchName || '').trim();
+      if (!n) return false;
+      const matches = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(function(b){ return String(b.disk_name || '').trim() === n; });
+      if (matches.length === 0) return false;
+      return matches.every(function(b){ return String(b.status || '活跃').trim() === '归档'; });
+    }
+
+    function getRemovedBatchOptions() {
+      try { return JSON.parse(localStorage.getItem('ADMIN_REMOVED_BATCH_OPTIONS') || '[]') || []; } catch(e){ return []; }
+    }
+    function setRemovedBatchOptions(list) {
+      localStorage.setItem('ADMIN_REMOVED_BATCH_OPTIONS', JSON.stringify(list));
+    }
+    function addRemovedBatchOption(name) {
+      const list = getRemovedBatchOptions();
+      if (name && list.indexOf(name) === -1) list.push(name);
+      setRemovedBatchOptions(list);
+    }
+
+    function isArchivedBatchName(name) {
+      const n = String(name || '').trim();
+      if (!n) return false;
+      const matches = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(function(b){ return String(b.disk_name || '').trim() === n; });
+      if (matches.length === 0) return false;
+      return matches.every(function(b){ return String(b.status || '活跃').trim() === '归档'; });
+    }
+
+    function buildBatchList(includeArchived) {
+      const removed = getRemovedBatchOptions();
+      const set = new Set(['默认批次']);
+      RAW_ITEMS.forEach(function(i){ if (i.batch_name && i.batch_name.trim()) set.add(i.batch_name.trim()); });
+      return Array.from(set).filter(function(b){
+        if (b === '默认批次') return true;
+        if (removed.indexOf(b) !== -1) return false;
+        if (includeArchived || !isArchivedBatchName(b)) return true;
+        return false;
+      });
+    }
+
+    function populateBatchModalSelect() {
+      const selectEl = document.getElementById('batchModalSelect');
+      const labelEl = document.getElementById('batchModalSelectLabel');
+      labelEl.innerText = '请选择或新建批次：';
+      const includeArchived = document.getElementById('batchModalIncludeArchived')?.checked || false;
+      const batchSet = buildBatchList(includeArchived);
+      const batchList = Array.from(batchSet);
+
+      // 构建分组：状态优先（归档归"已收款完结"），否则按日期/常驻分组；单批次组直接展开为独立选项
+      const ARCHIVED_LABEL = '⚪ 已收款完结';
+      const groups = {};
+      const groupOrder = [];
+      const standalone = [];
+      batchList.forEach(function(b){
+        let g;
+        if (b === '默认批次') { standalone.push(b); return; }
+        if (isArchivedBatchName(b)) g = ARCHIVED_LABEL;
+        else g = getBatchGroupName(b);
+        if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
+        groups[g].push(b);
+      });
+      const groupOpts = [];
+      groupOrder.forEach(function(g){
+        const members = groups[g];
+        if (members.length <= 1) { standalone.push(members[0]); return; }
+        groupOpts.push({ value: '__GROUP__:' + g, label: g + ' (' + members.length + '批)' });
+      });
+      // 保存分组映射，供展开模式使用
+      window.BATCH_MODAL_GROUPS = groups;
+
+      const standaloneOpts = standalone.map(function(b){ return { value: b, label: b }; });
+      BATCH_MODAL_FULL_OPTIONS = [
+        ...groupOpts,
+        ...standaloneOpts,
+        { value: '__NEW__', label: '➕ 新建批次...' },
+        { value: '__DELETE_BATCH__', label: '🗂 归档某个批次选项（仅隐藏选项，不改谷子）' },
+        { value: '__RESTORE_OPTIONS__', label: '🔄 恢复已归档批次选项' },
+        { value: '__PRUNE_EMPTY__', label: '🧹 清理空批次（仅隐藏没有谷子的批次）' }
+      ];
+      filterBatchModalOptions();
+    }
+
+    function filterBatchModalOptions() {
+      const selectEl = document.getElementById('batchModalSelect');
+      if (!selectEl) return;
+      const kw = (document.getElementById('batchModalSearch')?.value || '').trim().toLowerCase();
+      let list;
+      if (BATCH_MODAL_GROUP_MODE) list = BATCH_MODAL_GROUP_OPTIONS;
+      else if (BATCH_MODAL_DELETE_MODE) list = BATCH_MODAL_DELETE_OPTIONS;
+      else list = BATCH_MODAL_FULL_OPTIONS;
+      const filtered = list.filter(function(o){
+        if (!kw) return true;
+        if (String(o.value).startsWith('__')) return true;  // 工具/分组/返回选项始终保留
+        return String(o.label).toLowerCase().includes(kw);
+      });
+      selectEl.innerHTML = filtered.map(function(o){ return '<option value="' + escapeHtml(o.value) + '">' + escapeHtml(o.label) + '</option>'; }).join('');
+      if (selectEl.value !== '__NEW__' && selectEl.value !== '__DELETE_BATCH__' && selectEl.value !== '__BACK__') {
+        // 保留当前选择（若仍在列表中）
+        const exists = filtered.some(function(o){ return o.value === selectEl.value; });
+        if (!exists) selectEl.value = filtered.length > 0 ? filtered[0].value : '';
+      }
+    }
+    window.filterBatchModalOptions = filterBatchModalOptions;
+
+    function enterBatchDeleteMode() {
+      const selectEl = document.getElementById('batchModalSelect');
+      const labelEl = document.getElementById('batchModalSelectLabel');
+      const includeArchived = document.getElementById('batchModalIncludeArchived')?.checked || false;
+      BATCH_DELETE_CANDIDATES = buildBatchList(includeArchived);
+      const removable = BATCH_DELETE_CANDIDATES.filter(function(b){ return b !== '默认批次'; });
+      if (removable.length === 0) {
+        alert('当前没有可移除的批次选项（除默认批次外没有其它批次）。');
+        populateBatchModalSelect();
+        return;
+      }
+      labelEl.innerText = '请选择要归档隐藏的批次（不会改动你的谷子）：';
+      BATCH_MODAL_DELETE_MODE = true;
+      BATCH_MODAL_DELETE_OPTIONS = [
+        { value: '__BACK__', label: '↙ 返回' },
+        ...removable.map(function(b){ return { value: b, label: b }; })
+      ];
+      filterBatchModalOptions();
+    }
+
+    function leaveBatchDeleteMode() {
+      BATCH_DELETE_MODE = false;
+      BATCH_DELETE_CANDIDATES = [];
+      BATCH_MODAL_DELETE_MODE = false;
+      BATCH_MODAL_DELETE_OPTIONS = [];
+      populateBatchModalSelect();
+    }
+
+    // 🌟 分组展开模式：选中分组后展开该组的具体批次，确认时直接改到具体批次
+    function enterBatchGroupMode(groupLabel) {
+      const labelEl = document.getElementById('batchModalSelectLabel');
+      const groups = window.BATCH_MODAL_GROUPS || {};
+      const members = groups[groupLabel] || [];
+      if (members.length === 0) return;
+      labelEl.innerText = '「' + groupLabel + '」分组内批次，请选择目标批次：';
+      BATCH_MODAL_GROUP_MODE = true;
+      BATCH_MODAL_GROUP_OPTIONS = [
+        { value: '__BACK__', label: '↙ 返回分组列表' },
+        ...members.map(function(b){ return { value: b, label: b }; })
+      ];
+      filterBatchModalOptions();
+    }
+
+    function leaveBatchGroupMode() {
+      BATCH_MODAL_GROUP_MODE = false;
+      BATCH_MODAL_GROUP_OPTIONS = [];
+      populateBatchModalSelect();
+    }
+
+    // 🌟 【全新】通用批量修改模态框系统 (状态/地区/批次)
+    // ==========================================
+
+    function openBatchSelectModal(actionType) {
+      const selected = getSelectedCacheItems();
+      if (selected.length === 0 && actionType !== 'batch') return showToast('请先勾选谷子！');
+
+      CURRENT_BATCH_ACTION_TYPE = actionType;
+      const modal = document.getElementById('batchSelectModal');
+      const titleEl = document.getElementById('batchModalTitle');
+      const descEl = document.getElementById('batchModalDesc');
+      const selectLabelEl = document.getElementById('batchModalSelectLabel');
+      const selectEl = document.getElementById('batchModalSelect');
+      const customGroup = document.getElementById('batchModalCustomInputGroup');
+      const customInput = document.getElementById('batchModalCustomInput');
+      const searchGroup = document.getElementById('batchModalSearchGroup');
+      const searchInput = document.getElementById('batchModalSearch');
+
+      descEl.innerHTML = (selected.length === 0 && actionType === 'batch')
+        ? '<span style="color:#dc2626; font-weight:600;">⚠️ 未勾选任何谷子！</span><br>请先关闭弹窗，在表格中勾选要修改的谷子。<span style="color:var(--text-muted); font-size:0.8rem;">（归档/恢复/清理空批次等工具操作无需勾选）</span>'
+        : '已选中 <strong>' + selected.length + '</strong> 件谷子';
+      customGroup.style.display = 'none';
+      customInput.value = '';
+
+      if (actionType === 'status') {
+        titleEl.innerText = '⚙️ 批量修改状态';
+        selectLabelEl.innerText = '请选择新状态：';
+        selectEl.innerHTML = STATUS_OPTIONS.map(function(opt){ return '<option value="' + opt.value + '">' + opt.label + '</option>'; }).join('');
+      } else if (actionType === 'country') {
+        titleEl.innerText = '🌍 批量修改地区';
+        selectLabelEl.innerText = '请选择新地区 (country)：';
+        selectEl.innerHTML = countryOptionsHtml('');
+      } else if (actionType === 'batch') {
+        titleEl.innerText = '📦 批量修改所属批次';
+        BATCH_DELETE_MODE = false;
+        BATCH_MODAL_DELETE_MODE = false;
+        BATCH_MODAL_DELETE_OPTIONS = [];
+        BATCH_MODAL_GROUP_MODE = false;
+        BATCH_MODAL_GROUP_OPTIONS = [];
+        const archToggle = document.getElementById('batchModalIncludeArchived');
+        if (archToggle) archToggle.checked = false;
+        if (searchInput) searchInput.value = '';
+        if (searchGroup) searchGroup.style.display = 'block';
+        populateBatchModalSelect();
+      }
+      if (actionType !== 'batch' && searchGroup) searchGroup.style.display = 'none';
+
+      modal.classList.add('active');
+    }
+    window.openBatchSelectModal = openBatchSelectModal;
+
+    function closeBatchSelectModal() {
+      const modal = document.getElementById('batchSelectModal');
+      if (modal) modal.classList.remove('active');
+      CURRENT_BATCH_ACTION_TYPE = null;
+      BATCH_MODAL_DELETE_MODE = false;
+      BATCH_MODAL_DELETE_OPTIONS = [];
+      BATCH_MODAL_GROUP_MODE = false;
+      BATCH_MODAL_GROUP_OPTIONS = [];
+    }
+    window.closeBatchSelectModal = closeBatchSelectModal;
+
+    function handleBatchModalSelectChange() {
+      const selectEl = document.getElementById('batchModalSelect');
+      const customGroup = document.getElementById('batchModalCustomInputGroup');
+      const searchInput = document.getElementById('batchModalSearch');
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && selectEl.value === '__NEW__') {
+        customGroup.style.display = 'block';
+        const newBatchInput = document.getElementById('batchModalCustomInput');
+        if (!newBatchInput.value) {
+          const now = new Date();
+          newBatchInput.value = (now.getMonth() + 1) + '.' + now.getDate() + ' ';
+        }
+        newBatchInput.focus();
+        return;
+      }
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && selectEl.value === '__DELETE_BATCH__') {
+        customGroup.style.display = 'none';
+        enterBatchDeleteMode();
+        return;
+      }
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && selectEl.value === '__BACK__') {
+        customGroup.style.display = 'none';
+        if (searchInput) searchInput.value = '';
+        if (BATCH_MODAL_GROUP_MODE) { leaveBatchGroupMode(); return; }
+        if (BATCH_MODAL_DELETE_MODE) { leaveBatchDeleteMode(); return; }
+        populateBatchModalSelect();
+        return;
+      }
+      // 选择分组 → 进入展开模式
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && String(selectEl.value || '').startsWith('__GROUP__:')) {
+        customGroup.style.display = 'none';
+        if (searchInput) searchInput.value = '';
+        const groupLabel = selectEl.value.slice('__GROUP__:'.length);
+        enterBatchGroupMode(groupLabel);
+        return;
+      }
+      customGroup.style.display = 'none';
+    }
+    window.handleBatchModalSelectChange = handleBatchModalSelectChange;
+
+    async function confirmBatchSelectAction() {
+      const selectEl = document.getElementById('batchModalSelect');
+      let targetValue = selectEl.value;
+      const selected = getSelectedCacheItems();
+
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && BATCH_DELETE_MODE) {
+        const delName = targetValue;
+        if (!delName || delName === '__BACK__') return;
+        if (!confirm('确定归档隐藏批次 [' + delName + '] 吗？你的谷子数据不会被改动。')) return;
+        addRemovedBatchOption(delName);
+        updateBatchDropdownOptions();
+        renderTable();
+        leaveBatchDeleteMode();
+        showToast('已归档隐藏批次 [' + delName + ']，谷子数据未改动。');
+        return;
+      }
+
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__RESTORE_OPTIONS__') {
+        const rem = getRemovedBatchOptions();
+        if (rem.length === 0) { alert('当前没有已归档的批次选项。'); return; }
+        if (!confirm('确定恢复所有已归档的批次选项吗？')) return;
+        setRemovedBatchOptions([]);
+        updateBatchDropdownOptions();
+        renderTable();
+        closeBatchSelectModal();
+        showToast('已恢复所有已归档批次选项。');
+        return;
+      }
+
+      // 清理空批次不需要勾选谷子，先于 0 勾选检查处理
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__PRUNE_EMPTY__') {
+        await saveDataToSupabase();
+        updateBatchDropdownOptions();
+        renderTable();
+        showToast('已清理空批次！');
+        return;
+      }
+
+      // ➕ 新建批次：先把自定义名字取出来，再过内部值防护（顺序不能反，否则新建被兜底拦截）
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && targetValue === '__NEW__') {
+        targetValue = document.getElementById('batchModalCustomInput').value.trim();
+        if (!targetValue) return alert('请输入新批次名称！');
+      }
+
+      // 🛡 分组行不允许被"确认修改"直接写入：转为展开该分组（防止内部值写进数据）
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && String(targetValue).indexOf('__GROUP__:') === 0) {
+        enterBatchGroupMode(String(targetValue).slice('__GROUP__:'.length));
+        return;
+      }
+      // 🛡 兜底：任何下划线开头的内部值都不允许写入谷子数据
+      if (CURRENT_BATCH_ACTION_TYPE === 'batch' && String(targetValue).indexOf('__') === 0) {
+        return showToast('这是内部功能选项，请选择具体批次！');
+      }
+
+      if (selected.length === 0) {
+        const hint = (CURRENT_BATCH_ACTION_TYPE === 'batch')
+          ? '请先在表格中勾选要修改的谷子，再选择目标批次！'
+          : '请先在表格中勾选要修改的谷子！';
+        return showToast('未勾选任何谷子！' + hint);
+      }
+
+      /* 🔴 2026-10-26：原来点一下「确认修改」就直接写库，没有二次确认。
+         改状态的后果最重 —— 费用条目落到「未付款/未交/已交定金」三态以外，
+         团员端「交肾核算」里整条就不显示了（等于这笔钱催不到）。 */
+      const _actName = CURRENT_BATCH_ACTION_TYPE === 'status' ? '状态'
+        : (CURRENT_BATCH_ACTION_TYPE === 'country' ? '地区' : '批次');
+      const _who = selected.slice(0, 6).map(function (x) { return x.cn; }).filter(Boolean).join('、');
+      let _warn = '';
+      if (CURRENT_BATCH_ACTION_TYPE === 'status' && ['未付款', '未交', '已交定金'].indexOf(String(targetValue)) < 0) {
+        _warn = '\n\n⚠️ 改成「' + targetValue + '」后，带「补差/补款/代购费/运费」字样的费用条目会从团员端「交肾核算」里消失（那边只列 未付款 / 未交 / 已交定金）。';
+      }
+      if (!confirm('确定把这 ' + selected.length + ' 件谷子的' + _actName + '改成「' + targetValue + '」吗？\n\n'
+        + _who + (selected.length > 6 ? ' 等' : '') + _warn)) return;
+
+      if (CURRENT_BATCH_ACTION_TYPE === 'status') {
+        selected.forEach(function(i){ var prev = i.status; i.status = targetValue; ensureStockDate(i, prev); DIRTY_ITEM_IDS.add(String(i.item_id || i.id)); });
+        showToast('已成功将选中的 ' + selected.length + ' 件谷子状态修改为 [' + targetValue + ']！');
+      } else if (CURRENT_BATCH_ACTION_TYPE === 'country') {
+        selected.forEach(function(i){ i.country = targetValue; DIRTY_ITEM_IDS.add(String(i.item_id || i.id)); });
+        showToast('已成功将选中的 ' + selected.length + ' 件谷子地区修改为 [' + targetValue + ']！');
+      } else if (CURRENT_BATCH_ACTION_TYPE === 'batch') {
+        if (targetValue === '__DELETE_BATCH__' || targetValue === '__PRUNE_EMPTY__' || targetValue === '__NEW__' || targetValue === '__RESTORE_OPTIONS__') return;
+        selected.forEach(function(i){ i.batch_name = targetValue; DIRTY_ITEM_IDS.add(String(i.item_id || i.id)); });
+        showToast('已成功将选中的 ' + selected.length + ' 件谷子批次修改为 [' + targetValue + ']！');
+      }
+
+      await saveDataToSupabase();
+      clearItemSelection(true);
+      updateBatchDropdownOptions();
+      closeBatchSelectModal();
+      renderTable();
+    }
+    window.confirmBatchSelectAction = confirmBatchSelectAction;
+
+    async function batchSetImgModal() {
+      const selected = getSelectedCacheItems();
+      if (selected.length === 0) return showToast('请先勾选谷子！');
+      const url = prompt('请输入图片 URL 链接：');
+      if (!url) return;
+      /* ⚠️ 这一批会被同一张图覆盖，且不留旧图 —— 必须让团长看清件数再动手 */
+      if (!confirm(`确定把选中的 ${selected.length} 件谷子的图片，全部改成这一张吗？\n\n${url.trim()}\n\n（原来挂的图会被替换掉）`)) return;
+      selected.forEach(i => { i.image_url = url.trim(); DIRTY_ITEM_IDS.add(String(i.item_id || i.id)); });
+      await saveDataToSupabase();
+      clearItemSelection(true);
+      renderTable(); showToast('批量补图成功！');
+    }
+    window.batchSetImgModal = batchSetImgModal;
+
+    async function batchDeleteItems() {
+      const selected = getSelectedCacheItems();
+      if (selected.length === 0) return showToast('请先勾选谷子！');
+      if (!confirm(`确定彻底删除选中的 ${selected.length} 件谷子吗？`)) return;
+      const deleteIds = new Set(selected.map(i => String(i.item_id || i.id)));
+      deleteIds.forEach(id => DELETED_ITEM_IDS.add(id));
+      RAW_ITEMS = RAW_ITEMS.filter(i => !deleteIds.has(String(i.item_id || i.id)));
+      await saveDataToSupabase();
+      clearItemSelection(true);
+      updateBatchDropdownOptions(); renderTable(); showToast('已彻底删除选中谷子！');
+    }
+    window.batchDeleteItems = batchDeleteItems;
+
+    // 🚀 核心：动态智能矩阵表格解析算法（已彻底修复 cnColIdx 变量名与格式对齐）
+    function dedupeParsedItems(parsedItems) {
+      const seen = new Set();
+      RAW_ITEMS.forEach(function(it){
+        seen.add(String(it.cn||'').trim() + '|' + String(it.name||'').trim() + '|' + String(it.batch_name||'').trim() + '|' + (it.quantity||1));
+      });
+      const fresh = [];
+      let skipped = 0;
+      parsedItems.forEach(function(it){
+        const k = String(it.cn||'').trim() + '|' + String(it.name||'').trim() + '|' + String(it.batch_name||'').trim() + '|' + (it.quantity||1);
+        if (seen.has(k)) { skipped++; } else { seen.add(k); fresh.push(it); }
+      });
+      return { fresh: fresh, skipped: skipped };
+    }
+
+    function parseMatrixImportText(raw, batchCountry, batchName) {
+      if (!raw) return [];
+      const lines = raw.split(/\r?\n/).map(l => l.replace(/\r/g, '')).filter(l => l.trim().length > 0);
+      if (lines.length < 3) return [];
+
+      let kindLineIdx = -1;
+      let priceLineIdx = -1;
+      let headerLineIdx = -1;
+      let detectedCountry = batchCountry || '日本';
+
+      for (let i = 0; i < Math.min(3, lines.length); i++) {
+        const lineText = lines[i];
+        if (lineText.includes('印尼')) detectedCountry = '印尼';
+        else if (lineText.includes('台湾')) detectedCountry = '台湾';
+        else if (lineText.includes('日本')) detectedCountry = '日本';
+        else if (lineText.includes('泰国') || lineText.includes('泰')) detectedCountry = '泰国';
+        else if (lineText.includes('韩国')) detectedCountry = '韩国';
+        else if (lineText.includes('美国')) detectedCountry = '美国';
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        const cells = lines[i].split('\t').map(c => c.trim());
+        if (kindLineIdx === -1 && cells.some(c => c === '种类' || c === '品名' || c === '名称' || c === '谷子名称')) {
+          kindLineIdx = i;
+        }
+        if (priceLineIdx === -1 && cells.some(c => c === '单价' || c === '价格')) {
+          priceLineIdx = i;
+        }
+        if (headerLineIdx === -1 && cells.some(c => c.includes('昵称') || c.includes('CN') || c.includes('圈名') || c === '总金额')) {
+          headerLineIdx = i;
+        }
+      }
+
+      if (kindLineIdx === -1) kindLineIdx = 1;
+      if (priceLineIdx === -1) priceLineIdx = kindLineIdx + 1;
+      if (headerLineIdx === -1) headerLineIdx = Math.max(kindLineIdx, priceLineIdx) + 1;
+
+      const kindCells = lines[kindLineIdx].split('\t');
+      let kindAnchorCol = kindCells.findIndex(c => c.trim() === '种类' || c.trim() === '品名' || c.trim() === '名称' || c.trim() === '谷子名称');
+      if (kindAnchorCol === -1) kindAnchorCol = 0;
+
+      const itemColumns = [];
+      for (let c = kindAnchorCol + 1; c < kindCells.length; c++) {
+        const name = kindCells[c]?.trim();
+        if (name) {
+          itemColumns.push({
+            name: name,
+            colIdx: c,
+            price: 0
+          });
+        }
+      }
+
+      if (itemColumns.length === 0) return [];
+
+      if (priceLineIdx < lines.length) {
+        const priceCells = lines[priceLineIdx].split('\t');
+        itemColumns.forEach(item => {
+          const p = parseFloat(priceCells[item.colIdx]);
+          item.price = !isNaN(p) ? p : 0;
+        });
+      }
+
+      const headerCells = lines[headerLineIdx].split('\t');
+      let cnColIdx = headerCells.findIndex(c => c.includes('昵称') || c.includes('CN') || c.includes('圈名'));
+      if (cnColIdx === -1) cnColIdx = 1;
+
+      const items = [];
+      const dataStartIdx = headerLineIdx + 1;
+
+      for (let i = dataStartIdx; i < lines.length; i++) {
+        const cells = lines[i].split('\t');
+        if (cells.length <= cnColIdx) continue;
+
+        const cn = cells[cnColIdx]?.trim();
+        if (!cn || cn === "昵称/总数" || cn === "CN" || cn === "昵称" || cn === "总数" || cn.includes("昵称/总数") || cn === "总计" || cn === "合计") {
+          continue;
+        }
+
+        itemColumns.forEach(itemCol => {
+          const qtyStr = cells[itemCol.colIdx]?.trim();
+          const qty = parseFloat(qtyStr);
+
+          if (!isNaN(qty) && qty > 0) {
+            items.push({
+              item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + Math.floor(Math.random() * 1000),
+              name: itemCol.name,
+              batch_name: (batchName && batchName.trim()) ? batchName.trim() : '默认批次',
+              country: detectedCountry,
+              price: itemCol.price,
+              quantity: qty,
+              cn: cn,
+              status: "未出荷",
+              image_url: "",
+              created_at: new Date().toISOString()
+            });
+          }
+        });
+      }
+
+      return items;
+    }
+
+    function handleExcelImport(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const defaultCountry = document.getElementById('excelDefaultCountry').value || '日本';
+      const reader = new FileReader();
+      reader.onload = async evt => {
+        try {
+          await ensureXLSX();   // 台账组件按需加载
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const csvText = XLSX.utils.sheet_to_csv(firstSheet, { FS: '\t' });
+          const batchName = (document.getElementById('pasteBatchName')?.value || '').trim();
+          let parsedItems = parseMatrixImportText(csvText, defaultCountry, batchName);
+          if (parsedItems.length === 0) {
+            const jsonRows = XLSX.utils.sheet_to_json(firstSheet);
+            jsonRows.forEach(row => {
+              const name = row['谷子名称'] || row['名称'] || row['谷子'];
+              const cn = row['认领CN'] || row['CN'] || row['姓名'];
+              if (name && cn) {
+                parsedItems.push({
+                  item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+                  name: String(name).trim(),
+                  cn: String(cn).trim(),
+                  batch_name: String(row['批次'] || row['所属批次'] || '默认批次').trim(),
+                  price: parseFloat(row['单价'] || row['价格'] || 0) || 0,
+                  quantity: parseInt(row['数量'] || 1) || 1,
+                  country: String(row['地区'] || defaultCountry).trim(),
+                  status: String(row['状态'] || '未出荷').trim(),
+                  image_url: row['图片'] || '',
+                  created_at: new Date().toISOString()
+                });
+              }
+            });
+          }
+          if (parsedItems.length === 0) return showToast('未读取到有效谷子排单数据！');
+          const dedup = dedupeParsedItems(parsedItems);
+          if (dedup.fresh.length === 0) { e.target.value = ''; return showToast('本次内容与现有数据完全重复，已自动跳过，未重复导入！'); }
+          RAW_ITEMS.push(...dedup.fresh);
+          await saveDataToSupabase();
+          updateBatchDropdownOptions();
+          CURRENT_PAGE = Math.max(1, Math.ceil(RAW_ITEMS.length / PAGE_SIZE));
+          renderTable();
+          showToast(`🎉 成功导入 ${dedup.fresh.length} 条谷子记录${dedup.skipped ? '，跳过重复 ' + dedup.skipped + ' 条' : ''}！`);
+          e.target.value = '';
+        } catch (err) { showToast('Excel 解析失败！'); }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+    window.handleExcelImport = handleExcelImport;
+
+    /* --- 粘贴导入（拼谷汇总文本，复用 parseMatrixImportText 解析器）--- */
+    let PASTE_IMPORT_PENDING = null;
+    function parsePasteImportPreview() {
+      const raw = (document.getElementById('pasteImportInput')?.value || '').trim();
+      if (!raw) return showToast('请先粘贴汇总详情文本！');
+      const country = document.getElementById('excelDefaultCountry')?.value || '日本';
+      const batchName = (document.getElementById('pasteBatchName')?.value || '').trim();
+      const parsed = parseMatrixImportText(raw, country, batchName);
+      if (!parsed.length) return showToast('没解析到数据：请确认粘贴的是完整汇总详情（需含 种类/单价/成员 行）');
+      const dedup = dedupeParsedItems(parsed);
+      PASTE_IMPORT_PENDING = dedup.fresh;
+      const box = document.getElementById('pasteImportPreview');
+      if (!dedup.fresh.length) {
+        box.style.display = '';
+        box.innerHTML = '<div style="color:var(--danger); font-size:0.85rem;">解析到 ' + parsed.length + ' 条，但全部与现有数据重复，无需导入。</div>';
+        return;
+      }
+      const totalAmt = dedup.fresh.reduce((a, i) => a + (Number(i.price) || 0) * (Number(i.quantity) || 1), 0);
+      const cns = [...new Set(dedup.fresh.map(i => i.cn))];
+      const countries = [...new Set(dedup.fresh.map(i => i.country))].join('、');
+      let html = '<div style="font-size:0.85rem; margin-bottom:6px;">解析 <strong>' + parsed.length + '</strong> 条' +
+        (dedup.skipped ? '（跳过与现有数据重复的 ' + dedup.skipped + ' 条）' : '') +
+        '，待导入 <strong>' + dedup.fresh.length + '</strong> 条：<strong>' + cns.length + '</strong> 位 CN · 合计 <strong>￥' + totalAmt.toFixed(2) + '</strong> · 批次 <strong>' + escapeHtml(batchName || '默认批次') + '</strong> · 地区 <strong>' + escapeHtml(countries) + '</strong></div>';
+      const byCn = {};
+      dedup.fresh.forEach(i => { (byCn[i.cn] = byCn[i.cn] || []).push(i.name + '×' + (i.quantity || 1)); });
+      html += '<div style="max-height:180px; overflow:auto; border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:8px 10px; font-size:0.78rem;">';
+      Object.keys(byCn).forEach(cn => { html += '<div style="padding:2px 0;"><strong>' + escapeHtml(cn) + '</strong>：' + escapeHtml(byCn[cn].join('、')) + '</div>'; });
+      html += '</div>';
+      html += '<div style="display:flex; gap:8px; margin-top:8px;"><button type="button" class="btn btn-primary" onclick="confirmPasteImport()">✅ 确认导入以上 ' + dedup.fresh.length + ' 条</button><button type="button" class="btn btn-secondary" onclick="clearPasteImport()">清空</button></div>';
+      box.style.display = '';
+      box.innerHTML = html;
+    }
+    window.parsePasteImportPreview = parsePasteImportPreview;
+
+    async function confirmPasteImport() {
+      if (!PASTE_IMPORT_PENDING || !PASTE_IMPORT_PENDING.length) return showToast('请先解析预览！');
+      RAW_ITEMS.push(...PASTE_IMPORT_PENDING);
+      await saveDataToSupabase();
+      updateBatchDropdownOptions();
+      CURRENT_PAGE = Math.max(1, Math.ceil(RAW_ITEMS.length / PAGE_SIZE));
+      renderTable();
+      const n = PASTE_IMPORT_PENDING.length;
+      clearPasteImport();
+      showToast('🎉 粘贴导入成功 ' + n + ' 条！');
+    }
+    window.confirmPasteImport = confirmPasteImport;
+
+    function clearPasteImport() {
+      PASTE_IMPORT_PENDING = null;
+      const t = document.getElementById('pasteImportInput'); if (t) t.value = '';
+      const p = document.getElementById('pasteImportPreview'); if (p) { p.style.display = 'none'; p.innerHTML = ''; }
+    }
+    window.clearPasteImport = clearPasteImport;
+
+    /* ══════════════════ ✂️ 插画集切页导入（2026-09-30） ══════════════════
+       链路：管理在独立页 /cut 传图+编号 → 生成一份目录 JSON（图已传到图床）→ 把链接发给团长；
+             团长在这里 ①粘目录链接 ②粘自己安排好的「CN + 编号」名单 → 生成 group_data 条目，
+             图跟着目录自动带进来，不用一条条手传、也不用下载 Excel。
+       ⚠️ 编号由录入页照图片文件名自动填好（数字 / P12 / 封面 都行），管理可改；这里按归一后的编号配对。
+       ⚠️ 价格由管理在录入页逐页填（可能页页不同）；他没填价的页才吃面板上的「兜底单价」。
+       ⚠️ 只新增函数，不改任何现有字段结构 / 保存逻辑。 */
+    let CUT_CATALOG = null;         // 当前读取到的目录 {album, pages:[{no,img,name}]}
+    let CUT_IMPORT_PENDING = null;  // 预览通过、待写入的条目
+    const CUT_CATALOG_LS = 'gtbot_cut_catalog_links';
+    const CUT_SUPA_HOST = 'https://oknhlfhdqbsukskdxqre.supabase.co';
+
+    /* 目录里的图存的是直连地址；预览时换成同源反代地址，
+       免得团长这台设备恰好是被 SNI 阻断的那批、预览里全是裂图。
+       （存进库里的仍然是目录原样的直连地址，不占 Pages Functions 额度。） */
+    function _cutProxyImg(url){
+      const s = String(url || '');
+      return s.indexOf(CUT_SUPA_HOST) === 0 ? (location.origin + '/sb' + s.slice(CUT_SUPA_HOST.length)) : s;
+    }
+
+    /* 编号归一：目录里可能写 12 / P12 / 012 / 封面，名单里怎么写都要能对上 */
+    function _cutNormNo(v){
+      let t = String(v == null ? '' : v).trim();
+      if (!t) return '';
+      t = t.replace(/^[Pp]\s*(?=\d)/, '');
+      if (/^\d+$/.test(t)) t = String(parseInt(t, 10));
+      return t.toLowerCase();
+    }
+
+    /* 排表里的名字：画集名 + 页号（团长口径）；纯数字页号自动补 P */
+    function _cutPageLabel(no){
+      const s = String(no == null ? '' : no).trim();
+      return /^\d+$/.test(s) ? ('P' + parseInt(s, 10)) : s;
+    }
+
+    /* 价格归一（团长口径 2026-10-01：管理在录入页一页页填、可能页页不同）：
+         空 / 认不出 → null（**没填** → 导入时用面板上的兜底单价）
+         0          → 0（真的 0 元，赠品页）
+       必须与录入页 cut.html 的 pnum **一字不差**，否则会出现「管理填了、这边当没填」。 */
+    function _cutPriceNum(v){
+      if (v === null || v === undefined || String(v).trim() === '') return null;
+      const n = parseFloat(String(v).replace(/[^\d.\-]/g, ''));
+      if (!isFinite(n) || n < 0) return null;
+      return Math.round(n * 100) / 100;
+    }
+    function _cutFmtPrice(n){ return '￥' + (Math.round(Number(n) * 100) / 100).toFixed(2); }
+
+    function _cutFillSelects(){
+      const c = document.getElementById('cutCountry');
+      const s = document.getElementById('cutStatus');
+      if (!c || !s) return false;
+      if (!c.options.length) {
+        c.innerHTML = countryOptionsHtml('');
+        c.value = '中国';                         // 国内插画集基本是国内买的（原「淘宝店」已下线）
+      }
+      if (!s.options.length) {
+        s.innerHTML = STATUS_OPTIONS.map(o => '<option value="' + o.value + '">' + o.label + '</option>').join('');
+        s.value = '已下单';                       // 团长口径：导进来先当「已下单」
+      }
+      _cutFillCatalogPresets();
+      return true;
+    }
+
+    function _cutCatalogList(){
+      try { return JSON.parse(localStorage.getItem(CUT_CATALOG_LS) || '[]') || []; } catch (e) { return []; }
+    }
+    function _cutFillCatalogPresets(){
+      const dl = document.getElementById('cutCatalogPresets');
+      if (!dl) return;
+      dl.innerHTML = _cutCatalogList().map(function(x){
+        return '<option value="' + escapeHtml(x.url) + '">' + escapeHtml((x.album || '') + ' · ' + (x.count || 0) + ' 页') + '</option>';
+      }).join('');
+    }
+    function _cutRememberCatalog(url, album, count){
+      if (!url) return;
+      const list = _cutCatalogList().filter(function(x){ return x.url !== url; });
+      list.unshift({ url: url, album: album || '', count: count || 0, at: new Date().toISOString() });
+      try { localStorage.setItem(CUT_CATALOG_LS, JSON.stringify(list.slice(0, 20))); } catch (e) {}
+      _cutFillCatalogPresets();
+    }
+
+    /* ① 读目录：链接 / 文件 / 文本 三条路都归到 _cutApplyCatalog */
+    function _cutApplyCatalog(obj, srcLabel, srcUrl){
+      if (!obj || obj.type !== 'cut_catalog' || !Array.isArray(obj.pages)) {
+        return showToast('❌ 这不是一份切页目录（内容格式不对）');
+      }
+      const pages = obj.pages.filter(p => p && p.img).map(function(p){
+        return { no: String(p.no == null ? '' : p.no).trim(), img: String(p.img), name: p.name || '',
+                 price: _cutPriceNum(p.price) };   // null = 管理没填这一页的价
+      });
+      if (!pages.length) return showToast('❌ 这份目录里没有一页带图');
+      const album = String(obj.album || '').trim();
+      CUT_CATALOG = { album: album, pages: pages };
+      const priced = pages.filter(p => p.price !== null).length;
+      const st = document.getElementById('cutCatalogState');
+      if (st) st.innerHTML = '✅ <b>' + escapeHtml(album || '(画集未命名)') + '</b> · ' + pages.length + ' 页 · '
+        + (priced === pages.length ? '每页都带价'
+           : priced ? ('<b>' + priced + '</b> 页带价、<b>' + (pages.length - priced) + '</b> 页没带价')
+                    : '<span style="color:var(--text-muted);">目录里没带价（用下面的兜底单价）</span>');
+      const strip = document.getElementById('cutCatalogStrip');
+      if (strip) {
+        strip.style.display = 'flex';
+        strip.innerHTML = pages.slice(0, 10).map(function(p){
+          return '<img src="' + escapeHtml(_cutProxyImg(p.img)) + '" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--border);" alt="" onerror="this.style.opacity=.25">' +
+                 '<span style="font-size:0.68rem;color:var(--text-muted);align-self:center;margin-right:4px;">' + escapeHtml(_cutPageLabel(p.no)) + '</span>';
+        }).join('');
+      }
+      CUT_IMPORT_PENDING = null;
+      const pv = document.getElementById('cutPreview'); if (pv) { pv.style.display = 'none'; pv.innerHTML = ''; }
+      _cutRememberCatalog(srcUrl, album, pages.length);
+      if (!document.getElementById('cutBatchName').value && album) {
+        document.getElementById('cutBatchName').value = album;   // 批次默认跟画集同名，团长可改
+      }
+      showToast('✅ 目录读取成功（' + pages.length + ' 页' + (srcLabel ? '，来自' + srcLabel : '') + '）');
+    }
+
+    async function _cutFetchJson(url){
+      const tries = [url];
+      if (url.indexOf(CUT_SUPA_HOST) === 0) tries.push(location.origin + '/sb' + url.slice(CUT_SUPA_HOST.length));
+      let lastErr = '';
+      for (let i = 0; i < tries.length; i++) {
+        try {
+          const r = await fetch(tries[i], { cache: 'no-store' });
+          if (!r.ok) { lastErr = 'HTTP ' + r.status; continue; }
+          return await r.json();
+        } catch (e) { lastErr = (e && e.message) || String(e); }
+      }
+      throw new Error(lastErr || '拉取失败');
+    }
+
+    async function loadCutCatalog(){
+      const el = document.getElementById('cutCatalogUrl');
+      const url = (el ? el.value : '').trim();
+      if (!url) return showToast('先把管理给你的目录链接粘进来');
+      const st = document.getElementById('cutCatalogState');
+      if (st) st.textContent = '⏳ 正在读取目录…';
+      try {
+        const obj = await _cutFetchJson(url);
+        _cutApplyCatalog(obj, '', url);
+      } catch (e) {
+        if (st) st.textContent = '❌ 读取失败：' + ((e && e.message) || e);
+        showToast('❌ 目录读取失败，也可以让管理直接把目录文件发给你');
+      }
+    }
+
+    function loadCutCatalogFile(e){
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!f) return;
+      const rd = new FileReader();
+      rd.onload = function(){
+        try { _cutApplyCatalog(JSON.parse(rd.result), '文件', ''); }
+        catch (err) { showToast('❌ 文件内容不是有效目录：' + err.message); }
+      };
+      rd.readAsText(f, 'utf-8');
+    }
+
+    function loadCutCatalogText(){
+      const t = (document.getElementById('cutCatalogText').value || '').trim();
+      if (!t) return showToast('先粘一段目录文本');
+      try { _cutApplyCatalog(JSON.parse(t), '粘贴文本', ''); }
+      catch (e) { showToast('❌ 这段文本不是有效目录：' + e.message); }
+    }
+
+    /* ② 名单解析：一行 =「CN + 一个或多个编号」
+       分隔符 Tab / 逗号 / 顿号 / 分号 / 空格都认；# 开头的行当注释；空行忽略。
+       万一有人写成「编号 CN」也认（第一个词是纯数字/P数字、第二个词不是时自动对调）。
+       ⚠️ 编号写成中文（封面、跨页）时不会自动对调 —— 那种情况请老老实实「CN 编号」这个顺序。 */
+    function parseCutPairing(text){
+      const rows = [];
+      const lines = String(text || '').split(/\r?\n/);
+      lines.forEach(function(raw, i){
+        const line = raw.trim();
+        if (!line || line.charAt(0) === '#') return;
+        let toks = line.split(/[\s]+/).filter(function(s){ return s !== ''; });
+        if (toks.length < 2) {
+          rows.push({ ln: i + 1, line: line, cn: '', err: '至少要「CN 编号」两段' });
+          return;
+        }
+        // 「编号 CN」自动对调（编号是中文时不会走到这里，见上面的说明）
+        if (/^[Pp]?\d+$/.test(toks[0]) && !/^[Pp]?\d+$/.test(toks[1])) {
+          const a = toks[0]; toks[0] = toks[1]; toks[1] = a;
+        }
+        const cn = toks.shift();
+        const rest = toks.join(',').split(/[,，、;；\/]+/).map(function(s){ return s.trim(); }).filter(function(s){ return s !== ''; });
+        if (!rest.length) { rows.push({ ln: i + 1, line: line, cn: cn, err: '只看到 CN，没看到编号' }); return; }
+        rest.forEach(function(no){ rows.push({ ln: i + 1, line: line, cn: cn, no: no, err: '' }); });
+      });
+      return rows;
+    }
+
+    /* ③ 预览：把名单里的编号对上目录里的图；对不上的单独列出来，绝不静默吞掉 */
+    function previewCutImport(){
+      if (!CUT_CATALOG) return showToast('先读取目录（① 那一步）');
+      const rows = parseCutPairing(document.getElementById('cutPairInput').value || '');
+      if (!rows.length) return showToast('名单是空的');
+
+      const idx = {};
+      CUT_CATALOG.pages.forEach(function(p){
+        const k = _cutNormNo(p.no);
+        if (k && !idx[k]) idx[k] = p;
+      });
+
+      const items = [], problems = [], seen = {};
+      rows.forEach(function(r){
+        if (r.err) { problems.push('第 ' + r.ln + ' 行「' + r.line + '」：' + r.err); return; }
+        const key = _cutNormNo(r.no);
+        const page = idx[key];
+        if (!page) { problems.push('第 ' + r.ln + ' 行：目录里没有编号「' + r.no + '」这一页'); return; }
+        const dk = r.cn + '|' + key;
+        if (seen[dk]) { problems.push('第 ' + r.ln + ' 行：' + r.cn + ' 的 ' + _cutPageLabel(page.no) + ' 重复了一次（已自动只保留一条）'); return; }
+        seen[dk] = 1;
+        items.push({
+          cn: r.cn,
+          no: page.no,
+          name: (CUT_CATALOG.album ? CUT_CATALOG.album + ' ' : '') + _cutPageLabel(page.no),
+          img: page.img,
+          // ⚠️ 在这里**再归一一次**，不依赖上游：目录是老格式（没 price 字段）时
+          //    page.price 会是 undefined，直接用会一路漏到落库、把价格丢掉（静默少收钱）。
+          price: _cutPriceNum(page.price)     // null = 管理没给这页定价 → 用面板上的兜底单价
+        });
+      });
+
+      const batch = (document.getElementById('cutBatchName').value || '').trim() || '默认批次';
+      const country = document.getElementById('cutCountry').value || '中国';
+      const status = document.getElementById('cutStatus').value || '已下单';
+      const price = _cutPriceNum(document.getElementById('cutPrice').value);
+      const fallback = price === null ? 0 : price;      // 兜底单价（0 = 没设）
+      const cns = {};
+      items.forEach(function(x){ cns[x.cn] = 1; });
+      // 合计：每页用管理定好的价；管理没定价的页才吃兜底单价
+      const noPriceCnt = items.filter(function(x){ return x.price === null; }).length;
+      const total = items.reduce(function(s, x){ return s + (x.price === null ? fallback : x.price); }, 0);
+      CUT_IMPORT_PENDING = { items: items, batch: batch, country: country, status: status, price: fallback };
+
+      /* 目录体检（只提醒、不拦路）：
+         ① 目录里有页**没填编号** → 一定对不上，管理那边漏填了；
+         ② 目录里有页**这份名单没用上** → 可能你漏分发了某页，也可能本来就不分，自己判。 */
+      const usedKeys = {};
+      items.forEach(function(x){ usedKeys[_cutNormNo(x.no)] = 1; });
+      const blankPages = CUT_CATALOG.pages.filter(function(p){ return !_cutNormNo(p.no); }).length;
+      const unusedPages = CUT_CATALOG.pages.filter(function(p){
+        const k = _cutNormNo(p.no); return k && !usedKeys[k];
+      }).length;
+
+      let html = '';
+      html += '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px;font-size:0.85rem;">'
+           +  '画集：<b>' + escapeHtml(CUT_CATALOG.album || '(未命名)') + '</b> · 待导入 <b>' + items.length + '</b> 条 · '
+           +  '<b>' + Object.keys(cns).length + '</b> 人 · 批次 <b>' + escapeHtml(batch) + '</b> · 地区 <b>' + escapeHtml(country) + '</b> · '
+           +  '状态 <b>' + escapeHtml(status) + '</b> · 合计 <b>' + _cutFmtPrice(total) + '</b>'
+           +  (noPriceCnt ? '<br><span style="color:var(--text-muted);">其中 <b>' + noPriceCnt + '</b> 条目录里没带价，按兜底单价 '
+                            + _cutFmtPrice(fallback) + ' 算</span>' : '')
+           +  '</div>';
+
+      if (noPriceCnt && fallback <= 0) {
+        html += '<div style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:0.8rem;">'
+             +  '⚠️ 有 <b>' + noPriceCnt + '</b> 条在目录里<b>没带价</b>、兜底单价又是 <b>￥0</b> —— 这些导入后价格会是 0。'
+             +  '要么让管理去「插画集切页录入」把价补上、重新生成目录，要么在这里填一个兜底单价。'
+             +  '</div>';
+      }
+
+      if (problems.length) {
+        html += '<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:0.8rem;max-height:150px;overflow:auto;">'
+             +  '<b>⚠️ ' + problems.length + ' 处要你核对（这些不会导入）：</b><br>' + problems.map(escapeHtml).join('<br>') + '</div>';
+      }
+
+      if (blankPages) {
+        html += '<div style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:0.8rem;">'
+             +  '⚠️ 这本画集的目录里还有 <b>' + blankPages + ' 页没填编号</b>（管理那边漏填了）—— 那几页没有任何编号，'
+             +  '永远对不上，也没法导入。要分发的话让管理去「插画集切页录入」补上编号再重新生成一次链接。'
+             +  '</div>';
+      }
+      if (unusedPages) {
+        html += '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:8px 11px;margin-top:8px;font-size:0.8rem;color:var(--text-muted);">'
+             +  'ℹ️ 目录里另有 <b>' + unusedPages + ' 页</b>不在这份名单里（本来就不分发的话不用管）。'
+             +  '</div>';
+      }
+
+      if (items.length) {
+        html += '<div style="margin-top:8px;max-height:230px;overflow:auto;">'
+             +  items.slice(0, 40).map(function(x){
+                  return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:0.8rem;">'
+                       +   '<img src="' + escapeHtml(_cutProxyImg(x.img)) + '" style="width:34px;height:34px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" alt="" onerror="this.style.opacity=.25">'
+                       +   '<span style="flex:0 0 auto;font-weight:600;">' + escapeHtml(x.cn) + '</span>'
+                       +   '<span style="color:var(--text-muted);flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(x.name) + '</span>'
+                       +   '<span style="flex:0 0 auto;font-weight:600;' + (x.price === null ? 'color:var(--text-muted);' : '') + '">'
+                       +     _cutFmtPrice(x.price === null ? fallback : x.price)
+                       +     (x.price === null ? ' 兜底' : '')
+                       +   '</span>'
+                       + '</div>';
+                }).join('')
+             +  (items.length > 40 ? '<div style="font-size:0.78rem;color:var(--text-muted);padding:6px 0;">…… 还有 ' + (items.length - 40) + ' 条</div>' : '')
+             +  '</div>';
+        html += '<div style="display:flex;gap:8px;margin-top:10px;"><button type="button" class="btn btn-primary" onclick="confirmCutImport()">✅ 确认导入这 ' + items.length + ' 条</button>'
+             +  '<button type="button" class="btn btn-secondary" onclick="clearCutImport()">清空</button></div>';
+      } else {
+        html += '<div style="margin-top:8px;font-size:0.85rem;color:var(--danger);">没有一条能导入，先检查名单和目录对不对得上。</div>';
+      }
+      const pv = document.getElementById('cutPreview');
+      pv.style.display = '';
+      pv.innerHTML = html;
+    }
+
+    function clearCutImport(){
+      CUT_IMPORT_PENDING = null;
+      const pv = document.getElementById('cutPreview'); if (pv) { pv.style.display = 'none'; pv.innerHTML = ''; }
+    }
+
+    async function confirmCutImport(){
+      if (!CUT_IMPORT_PENDING || !CUT_IMPORT_PENDING.items.length) return showToast('请先点「预览」');
+      const cfg = CUT_IMPORT_PENDING;
+      const base = Date.now();
+      const made = [];
+      cfg.items.forEach(function(x, i){
+        const pgPrice = _cutPriceNum(x.price);   // 再兜一层（null = 这页没定价 → 用兜底单价）
+        const it = {
+          item_id: 'item_' + base + '_' + i + '_' + Math.floor(Math.random() * 1000),
+          name: x.name, cn: x.cn, batch_name: cfg.batch,
+          // 每条吃**自己那一页**的价（管理在录入页定的）；只有管理没给这页定价时才用兜底单价。
+          price: (pgPrice === null ? cfg.price : pgPrice),
+          quantity: 1, country: cfg.country, status: cfg.status,
+          image_url: x.img, created_at: new Date().toISOString()
+        };
+        // 与后台其它新增路径保持一致：不在「到货组」的状态不残留囤货日期
+        ensureStockDate(it, null);
+        made.push(it);
+      });
+      RAW_ITEMS.unshift.apply(RAW_ITEMS, made);
+      const ok = await saveDataToSupabase();
+      if (!ok) {
+        // 保存失败：把刚塞进去的撤出来，免得界面看着像成功了
+        const ids = {};
+        made.forEach(function(x){ ids[x.item_id] = 1; });
+        RAW_ITEMS = RAW_ITEMS.filter(function(x){ return !ids[String(x.item_id || x.id)]; });
+        renderTable();
+        return showToast('❌ 保存失败，这批没有写进库，请重试');
+      }
+      updateBatchDropdownOptions();
+      CURRENT_PAGE = 1;
+      renderTable();
+      const n = made.length;
+      clearCutImport();
+      showToast('🎉 已导入 ' + n + ' 条切页（批次「' + cfg.batch + '」）');
+    }
+    window.loadCutCatalog = loadCutCatalog;
+    window.loadCutCatalogFile = loadCutCatalogFile;
+    window.loadCutCatalogText = loadCutCatalogText;
+    window.previewCutImport = previewCutImport;
+    window.confirmCutImport = confirmCutImport;
+    window.clearCutImport = clearCutImport;
+    if (!_cutFillSelects()) document.addEventListener('DOMContentLoaded', _cutFillSelects);
+
+    /* --- 标签页 2：排发工作台 --- */
+
+    /* ══════════════════════════════════════════════════════════════════
+       ✅ 排发勾选（团长 2026-11-05 要求）
+       打包时点一下就把这件划掉，方便分辨「这件我到底装进去了没有」。
+       · 单个品项可勾；卡片上「☑ 全部勾选」一键勾/取消这张卡的全部；
+       · 状态存在 image_data.dispatch_marks（键 = CN + '||' + 品项键），
+         所以关页面、换手机、换电脑都还在；
+       · 「一键派发」成功派发这位 CN 后自动清掉他的勾，避免下次同名谷子带着旧勾；
+       · 写库走「只写 image_data + 版本锁」的轻量通道，不弹全屏遮罩；
+         连点几下会被 1.2 秒防抖合并成一次，不打断打包节奏。
+       ⚠️ image_data 是后台整份回写：以后再加子字段，务必同时加进
+          _saveDataToSupabase 的 payload 与冲突合并分支（这一行就是提醒）。
+       ══════════════════════════════════════════════════════════════════ */
+    let RAW_DISPATCH_MARKS = {};              // { 'CN||品项键': 时间戳 }
+    const DISPATCH_MARK_REMOVED = new Set();  // 本次明确取消的键（并集合并会把取消的勾复活，必须显式剔除）
+    let _dmUnsynced = false;
+    let _dmTimer = null, _dmSaving = false, _dmAgain = false;
+    let _dmRevision = 0;   // 每次点选 +1：写库4秒内又有人点了，回来时不能拿服务器那份盖掉新点的
+
+    function _pickKey(cn, itemKey) { return String(cn || '').trim() + '||' + String(itemKey || ''); }
+    function _pickLsKey() { return 'gtbot_dispatch_marks_' + (CURRENT_QUERY_KEY || 'default'); }
+
+    /* 库里最新 marks + 我这次的增删 → 真正写回的对象。
+       ⚠️ 必须是并集：A 手机勾了 3 件、B 电脑勾了 2 件，谁的都不能丢。 */
+    function _mergeDispatchMarks(theirs) {
+      const base = (theirs && typeof theirs === 'object' && !Array.isArray(theirs)) ? Object.assign({}, theirs) : {};
+      DISPATCH_MARK_REMOVED.forEach(function (k) { delete base[k]; });
+      Object.keys(RAW_DISPATCH_MARKS).forEach(function (k) { base[k] = RAW_DISPATCH_MARKS[k]; });
+      return base;
+    }
+
+    /* 读库后调用：以服务器为准，本机缓存只接住「勾了但还没写进去」的那几下。
+       反过来（缓存盖服务器）会把别的设备取消掉的勾复活。 */
+    function _loadDispatchMarks(serverMarks) {
+      DISPATCH_MARK_REMOVED.clear();
+      const base = (serverMarks && typeof serverMarks === 'object' && !Array.isArray(serverMarks))
+        ? Object.assign({}, serverMarks) : {};
+      try {
+        const raw = localStorage.getItem(_pickLsKey());
+        if (raw) {
+          const obj = JSON.parse(raw);
+          if (obj && obj.marks && typeof obj.marks === 'object') {
+            if (obj.dirty) {
+              Object.keys(obj.marks).forEach(function (k) { if (!(k in base)) base[k] = obj.marks[k]; });
+              _dmUnsynced = true;
+              setTimeout(function () { _saveDispatchMarksNow(); }, 1500);
+            } else if (!serverMarks) {
+              Object.assign(base, obj.marks);
+            }
+          }
+        }
+      } catch (e) {}
+      RAW_DISPATCH_MARKS = base;
+    }
+
+    function _saveDispatchMarksLocal() {
+      try {
+        localStorage.setItem(_pickLsKey(), JSON.stringify({ dirty: _dmUnsynced ? 1 : 0, marks: RAW_DISPATCH_MARKS }));
+      } catch (e) {}
+    }
+
+    function _scheduleDispatchMarksSave(delay) {
+      if (_dmTimer) clearTimeout(_dmTimer);
+      _dmTimer = setTimeout(function () { _dmTimer = null; _saveDispatchMarksNow(); }, typeof delay === 'number' ? delay : 1200);
+    }
+
+    /* 轻量写库：只写 image_data（约 320KB），带版本锁 + 冲突重读重试。
+       故意不走 saveDataToSupabase —— 那条路会整份写 1.5MB 并弹全屏遮罩，
+       打包时每勾一下就卡 4 秒显然不行。 */
+    async function _saveDispatchMarksNow() {
+      if (!CURRENT_QUERY_KEY || CURRENT_RECORD_ID === null || CURRENT_RECORD_ID === undefined) return false;
+      if (_dmSaving) { _dmAgain = true; return false; }
+      _dmSaving = true;
+      const _revAtStart = _dmRevision;
+      try {
+        for (let i = 0; i < 4; i++) {
+          const { data, error } = await supabaseClient.from('leader_data')
+            .select('id,version,image_data').eq('id', CURRENT_RECORD_ID);
+          if (error || !data || !data.length) break;
+          const rec = data[0];
+          if (rec.version === undefined || rec.version === null) break;
+          let img = rec.image_data;
+          if (typeof img === 'string') { try { img = JSON.parse(img); } catch (e) { img = {}; } }
+          if (!img || typeof img !== 'object') img = {};
+          img.dispatch_marks = _mergeDispatchMarks(img.dispatch_marks);
+          const ver = Number(rec.version);
+          const { data: up, error: uerr } = await supabaseClient.from('leader_data')
+            .update({ image_data: img, version: ver + 1 })
+            .eq('id', rec.id).eq('version', ver).select('id');
+          if (!uerr && up && up.length) {
+            CURRENT_VERSION = ver + 1;   // 主保存靠这个版本锁，不跟着更新会让它白冲突一次
+            if (_dmRevision === _revAtStart) {
+              RAW_DISPATCH_MARKS = img.dispatch_marks;
+              DISPATCH_MARK_REMOVED.clear();
+              _dmUnsynced = false;
+              _saveDispatchMarksLocal();
+            } else {
+              /* ⏱ 写库这 4 秒里团长又点了几件：服务器那份是「旧的新数据」，
+                 拿它盖回去会把刚点的勾抹掉（勾会自己跳回去，像失灵）。
+                 保留内存现状，立刻再写一次把新点的带上。 */
+              _dmUnsynced = true;
+              _saveDispatchMarksLocal();
+              _scheduleDispatchMarksSave(300);
+            }
+            return true;
+          }
+          await new Promise(function (r) { setTimeout(r, 250); });   // 有人同时在写：重读再试
+        }
+      } catch (e) {
+        /* 勾选状态掉线不弹窗打扰打包：保留 _dmUnsynced，下次点击 / 切页再试 */
+      } finally {
+        _dmSaving = false;
+        if (_dmAgain) { _dmAgain = false; _scheduleDispatchMarksSave(300); }
+      }
+      return false;
+    }
+    window._saveDispatchMarksNow = _saveDispatchMarksNow;
+
+    /* 勾 / 取消一批键（整卡勾选 = 批量传进来） */
+    function _setDispatchPicks(keys, on) {
+      let changed = false;
+      (keys || []).forEach(function (k) {
+        if (!k) return;
+        if (on) {
+          if (!RAW_DISPATCH_MARKS[k]) { RAW_DISPATCH_MARKS[k] = Date.now(); DISPATCH_MARK_REMOVED.delete(k); changed = true; }
+        } else if (RAW_DISPATCH_MARKS[k]) {
+          delete RAW_DISPATCH_MARKS[k]; DISPATCH_MARK_REMOVED.add(k); changed = true;
+        }
+      });
+      if (!changed) return;
+      _dmRevision++;
+      _dmUnsynced = true;
+      _saveDispatchMarksLocal();
+      _scheduleDispatchMarksSave();
+    }
+
+    /* 按 DOM 重算一张卡的勾选态（不重画整页，保住滚动位置和展开的明细） */
+    function _refreshPickCard(card) {
+      if (!card) return;
+      const chips = Array.prototype.slice.call(card.querySelectorAll('[data-pick]'));
+      let on = 0;
+      chips.forEach(function (c) {
+        const picked = !!RAW_DISPATCH_MARKS[c.dataset.pick];
+        c.classList.toggle('is-picked', picked);
+        if (picked) on++;
+      });
+      const cnt = card.querySelector('.gip-pick-count');
+      if (cnt) cnt.textContent = on === 0 ? '一件都没勾' : ('已勾 ' + on + ' / ' + chips.length);
+      const btn = card.querySelector('[data-pick-all]');
+      if (btn) {
+        const all = chips.length > 0 && on === chips.length;
+        btn.classList.toggle('on', all);
+        btn.textContent = all ? '☑ 取消全勾' : '☑ 全部勾选';
+      }
+      card.classList.toggle('is-picked-all', chips.length > 0 && on === chips.length);
+    }
+
+    /* 事件委托绑在 #dispatchSubContent 上（它本身不会被 innerHTML 换掉，
+       重画卡片不用重新绑）。只认带 data-pick / data-pick-all 的元素。 */
+    function _bindDispatchPickHost() {
+      const host = document.getElementById('dispatchSubContent');
+      if (!host || host.dataset.pickBound === '1') return;
+      host.dataset.pickBound = '1';
+      host.addEventListener('click', function (e) {
+        const t = e.target;
+        if (!t || !t.closest) return;
+        const allBtn = t.closest('[data-pick-all]');
+        if (allBtn) {
+          e.preventDefault(); e.stopPropagation();
+          const card = allBtn.closest('.app-card');
+          if (!card) return;
+          const keys = Array.prototype.slice.call(card.querySelectorAll('[data-pick]'))
+            .map(function (c) { return c.dataset.pick; });
+          const allOn = keys.length > 0 && keys.every(function (k) { return !!RAW_DISPATCH_MARKS[k]; });
+          _setDispatchPicks(keys, !allOn);
+          _refreshPickCard(card);
+          return;
+        }
+        const chip = t.closest('[data-pick]');
+        if (chip) {
+          e.preventDefault();
+          const k = chip.dataset.pick;
+          _setDispatchPicks([k], !RAW_DISPATCH_MARKS[k]);
+          _refreshPickCard(chip.closest('.app-card'));
+        }
+      }, true);
+    }
+
+    /* 派发成功后清掉这位 CN 的勾（团长口径：发出去了划线就没意义了） */
+    function _clearPicksForCns(cns) {
+      const prefixes = {};
+      (cns || []).forEach(function (c) { prefixes[String(c || '').trim() + '||'] = 1; });
+      const pfx = Object.keys(prefixes);
+      if (!pfx.length) return 0;
+      let removed = 0;
+      Object.keys(RAW_DISPATCH_MARKS).forEach(function (k) {
+        for (let i = 0; i < pfx.length; i++) {
+          if (k.indexOf(pfx[i]) === 0) { delete RAW_DISPATCH_MARKS[k]; DISPATCH_MARK_REMOVED.add(k); removed++; return; }
+        }
+      });
+      if (removed) { _dmUnsynced = true; _saveDispatchMarksLocal(); }
+      return removed;
+    }
+
+    function clearDispatchPicks() {
+      const n = Object.keys(RAW_DISPATCH_MARKS).length;
+      if (!n) { showToast('当前没有勾选过的谷子'); return; }
+      _showDispatchModal('清空全部勾选？',
+        '<div style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:0.86rem;">'
+        + '<div>当前共勾选（划线）了 <b>' + n + '</b> 个品项。</div>'
+        + '<div style="margin-top:8px; color:#991b1b;">清空只是取消划线标记，<b>不会改动任何谷子状态、金额和申请</b>。</div>'
+        + '</div>', '确认清空', 'btn-danger',
+        async () => {
+          Object.keys(RAW_DISPATCH_MARKS).forEach(function (k) { DISPATCH_MARK_REMOVED.add(k); });
+          RAW_DISPATCH_MARKS = {};
+          _dmRevision++;
+          _dmUnsynced = true;
+          _saveDispatchMarksLocal();
+          await _saveDispatchMarksNow();
+          renderDispatchWorkbench();
+          showToast('🧹 已清空勾选');
+        });
+    }
+    window.clearDispatchPicks = clearDispatchPicks;
+
+    function switchDispatchSubTab(sub) {
+      CURRENT_DISPATCH_SUBTAB = sub;
+      document.getElementById('btnSubPending').classList.toggle('btn-primary', sub === 'pending');
+      document.getElementById('btnSubCompleted').classList.toggle('btn-primary', sub === 'completed');
+      document.getElementById('btnSubLogs').classList.remove('btn-primary');
+      document.getElementById('dispatchSubContent').style.display = '';
+      document.getElementById('dispatchLogsHost').style.display = 'none';
+      renderDispatchWorkbench();
+    }
+    window.switchDispatchSubTab = switchDispatchSubTab;
+
+    function showDispatchLogs() {
+      CURRENT_DISPATCH_SUBTAB = 'logs';
+      document.getElementById('btnSubPending').classList.remove('btn-primary');
+      document.getElementById('btnSubCompleted').classList.remove('btn-primary');
+      document.getElementById('btnSubLogs').classList.add('btn-primary');
+      document.getElementById('dispatchSubContent').style.display = 'none';
+      document.getElementById('dispatchLogsHost').style.display = '';
+      const _b = document.getElementById('btnDispatchAll'); if (_b) _b.style.display = 'none';
+      const _h = document.getElementById('dispatchMergeHint'); if (_h) _h.style.display = 'none';
+      renderTransferLogs();
+    }
+    window.showDispatchLogs = showDispatchLogs;
+
+    function chunkArray(arr, chunkSize = 10) {
+      const results = [];
+      for (let i = 0; i < arr.length; i += chunkSize) results.push(arr.slice(i, i + chunkSize));
+      return results;
+    }
+
+    // 🔗 物品汇总：同一 item_id（没有则退回 name）合并数量
+    function mergeAppItems(apps) {
+      const map = new Map();
+      (apps || []).forEach(app => {
+        (app.items || []).forEach(it => {
+          const key = String(it.item_id || it.id || ('n:' + (it.name || '')));
+          if (!map.has(key)) map.set(key, { name: it.name || '(未命名)', quantity: 0, pick_key: key });
+          map.get(key).quantity += (Number(it.quantity) || 1);
+        });
+      });
+      return Array.from(map.values());
+    }
+
+    /* ✅ 品项小方块：点一下 = 勾掉/取消（团长分拣时标记「这件已经装进去了」）。
+       data-pick 的键 = CN + '||' + 品项键，落库到 image_data.dispatch_marks。 */
+    function renderItemsGrid(items, cn) {
+      let html = '';
+      chunkArray(items, 10).forEach(chunk => {
+        html += '<div class="items-grid-10">';
+        chunk.forEach(it => {
+          const _ik = it.pick_key || it.item_id || it.id || ('n:' + (it.name || ''));
+          const key = _pickKey(cn, _ik);
+          const picked = !!RAW_DISPATCH_MARKS[key];
+          html += `<div class="grid-item-chip${picked ? ' is-picked' : ''}" data-pick="${escapeHtml(key)}" title="点一下勾掉 / 取消（只做标记，不改谷子状态）">`
+            + `<span class="gip-tick">✓</span>`
+            + `<div class="gip-name" style="font-weight:600;">${escapeHtml(it.name)}</div>`
+            + `<div class="gip-qty" style="color:var(--primary); font-weight:700;">x ${it.quantity || 1}</div></div>`;
+        });
+        html += '</div>';
+      });
+      return html;
+    }
+
+    // 🔗 待处理模式：同一 CN 的多条申请合并成一张卡（保持首次出现的顺序）
+    function renderPendingGrouped(pendingApps) {
+      const groups = [];
+      const pos = new Map();
+      pendingApps.forEach(app => {
+        const cn = String(app.cn || '').trim() || '(未署名)';
+        if (!pos.has(cn)) { pos.set(cn, groups.length); groups.push({ cn: cn, apps: [] }); }
+        groups[pos.get(cn)].apps.push(app);
+      });
+      window.APP_GROUPS = groups;
+
+      let html = '';
+      groups.forEach((g, gi) => {
+        const merged = mergeAppItems(g.apps);
+        const totalQty = merged.reduce((s, x) => s + (x.quantity || 0), 0);
+        const times = g.apps.map(a => String(a.time || '').trim()).filter(Boolean);
+        let timeText = '';
+        if (times.length === 1) { timeText = times[0]; }
+        else if (times.length > 1) {
+          // 申请数组未必按时间排列，取真正的最早 ~ 最晚
+          const parsable = times.map(t => ({ t: t, v: Date.parse(t.replace(/\//g, '-')) }));
+          if (parsable.every(x => !isNaN(x.v))) {
+            parsable.sort((a, b) => a.v - b.v);
+            timeText = parsable[0].t + ' ~ ' + parsable[parsable.length - 1].t;
+          } else {
+            timeText = times[0] + ' ~ ' + times[times.length - 1];
+          }
+        }
+        const notes = Array.from(new Set(g.apps.map(a => String(a.note || '').trim()).filter(Boolean)));
+        const noteText = notes.length ? notes.join(' / ') : '无';
+        const multi = g.apps.length > 1;
+
+        let detailHtml = '';
+        if (multi) {
+          detailHtml += `<details style="margin-top:10px;">
+            <summary style="cursor:pointer; font-size:0.82rem; color:var(--text-muted);">分条明细（${g.apps.length} 条，点开核对每条的提交时间 / 备注）</summary>
+            <div style="margin-top:8px;">`;
+          g.apps.forEach((a, ai) => {
+            const oneItems = (a.items || []).map(it => escapeHtml(it.name || '') + ' x' + (it.quantity || 1)).join('、');
+            detailHtml += `<div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start; padding:7px 0; border-bottom:1px dashed var(--border); font-size:0.82rem;">
+              <div style="flex:1; min-width:0;">
+                <div style="color:var(--text-muted); font-size:0.78rem;">${escapeHtml(a.time || '')}${a.note ? ' · 📝 ' + escapeHtml(a.note) : ''}</div>
+                <div>${oneItems}</div>
+              </div>
+              <div style="white-space:nowrap;">
+                <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.76rem;" onclick="confirmDispatchOneFromGroup(${gi}, ${ai})">确认这条</button>
+                <button class="btn btn-danger" style="padding:2px 8px; font-size:0.76rem;" onclick="deleteAppFromGroup(${gi}, ${ai})">删除</button>
+              </div>
+            </div>`;
+          });
+          detailHtml += `</div></details>`;
+        }
+
+        html += `
+          <div class="app-card" data-pick-card="${escapeHtml(g.cn)}">
+            <div class="app-header" style="flex-wrap: wrap; gap: 4px;">
+              <div style="min-width:0; flex:1 1 auto;">
+                <strong>CN: ${escapeHtml(g.cn)}</strong>
+                ${multi ? `<span class="badge" style="background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; margin-left:8px;">${g.apps.length} 条合并</span>` : ''}
+                <span style="font-size:0.8rem; color:var(--text-muted); margin-left:12px;">⏰ ${escapeHtml(timeText)}</span>
+              </div>
+              <span class="badge badge-status-待发货" style="flex:0 0 auto; white-space:nowrap;">待处理</span>
+            </div>
+            <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:6px;">📝 备注: ${escapeHtml(noteText)}</div>
+            <div style="font-size:0.82rem; color:var(--text-muted); margin-bottom:2px;">合计 ${g.apps.length} 条申请 · ${merged.length} 个品项 · ${totalQty} 件</div>
+            <div>${renderItemsGrid(merged, g.cn)}</div>
+            <div class="gip-pick-bar">
+              <button type="button" class="gip-pick-btn" data-pick-all="1">☑ 全部勾选</button>
+              <span class="gip-pick-count">一件都没勾</span>
+              <span style="opacity:.7;">（点方块勾掉一件，只做标记，不影响派发）</span>
+            </div>
+            ${detailHtml}
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
+              <button class="btn btn-success" onclick="confirmDispatchCn(${gi})">🚀 一键派发${multi ? '该 CN 全部' : ''}（${g.apps.length} 条）</button>
+            </div>
+          </div>
+        `;
+      });
+      return html;
+    }
+
+    // 🧹 找「状态错位」的申请：申请还是「待处理」，但它名下的谷子在排表里已经全部「已排发」。
+    //    这种申请会永久卡在待处理列表里（东西已寄出、申请却还挂着没办）。
+    //    ⚠️ 保守判据：只要有一条谷子找不到、或状态不是「已排发」，就不算错位。
+    function findMisalignedApps(apps) {
+      const byId = {};
+      (RAW_ITEMS || []).forEach(function (it) { byId[String(it.item_id || it.id)] = it; });
+      return (apps || []).filter(function (a) {
+        if (!a || String(a.status || '').trim() !== '待处理') return false;
+        const its = a.items || [];
+        if (!its.length) return false;
+        let found = 0;
+        for (let i = 0; i < its.length; i++) {
+          const h = byId[String(its[i].item_id || its[i].id)];
+          if (!h) return false;
+          if (String(h.status || '').trim() !== '已排发') return false;
+          found++;
+        }
+        return found > 0;
+      });
+    }
+
+    function _misalignedBannerHtml(mis) {
+      const names = {};
+      mis.forEach(function (a) { const cn = String(a.cn || ''); names[cn] = (names[cn] || 0) + 1; });
+      const list = Object.keys(names).map(function (k) { return escapeHtml(k) + ' ' + names[k] + ' 条'; }).join('、');
+      return '<div style="margin-bottom:12px; padding:10px 12px; border:1px solid #fcd34d; background:#fffbeb; border-radius:8px; font-size:0.84rem; color:#92400e;">'
+        + '<b>⚠️ 有 ' + mis.length + ' 条申请状态不一致</b><br>'
+        + '谷子已经「已排发」，申请却还留在待处理列表（' + list + '）。<br>'
+        + '<button class="btn btn-secondary" style="margin-top:8px; padding:3px 10px; font-size:0.78rem;" onclick="fixMisalignedApps()">🧹 一键整理</button>'
+        + '</div>';
+    }
+
+    // 🧹 一键整理：把「谷子已排发、申请还待处理」的申请归位成「已完成」。
+    //    只改申请状态，不动谷子、不动金额、不动凭证。
+    async function fixMisalignedApps() {
+      const mis = findMisalignedApps(RAW_APPLICATIONS);
+      if (!mis.length) { showToast('没有需要整理的申请'); return; }
+      const names = {};
+      mis.forEach(function (a) { const cn = String(a.cn || ''); names[cn] = (names[cn] || 0) + 1; });
+      const list = Object.keys(names).map(function (k) { return escapeHtml(k) + ' ' + names[k] + ' 条'; }).join('、');
+      _showDispatchModal('整理状态不一致的申请？',
+        '<div style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:0.86rem;">'
+        + '<div>以下 <b>' + mis.length + '</b> 条申请的谷子已经「已排发」，但申请还挂在「待处理」：</div>'
+        + '<div style="margin-top:6px; font-weight:700;">' + list + '</div>'
+        + '<div style="margin-top:8px; color:#166534;">整理后：这些申请标记为「已完成」并从待处理列表移出。<br><b>谷子状态不变、金额与凭证不受影响。</b></div>'
+        + '</div>', '确认整理', 'btn-success',
+        async () => {
+          mis.forEach(function (a) {
+            a.status = '已完成';
+            APP_STATUS_DIRTY.add(String(a.id));   // 🚀 标记本次改过，防止被旧页面冲回
+          });
+          await saveDataToSupabase();
+          renderDispatchWorkbench();
+          renderTable();
+          showToast('🧹 已整理 ' + mis.length + ' 条申请');
+        });
+    }
+    window.fixMisalignedApps = fixMisalignedApps;
+
+    function renderDispatchWorkbench() {
+      const pendingApps = RAW_APPLICATIONS.filter(a => a.status === '待处理');
+      const completedApps = RAW_APPLICATIONS.filter(a => a.status === '已完成');
+      document.getElementById('statPendingCount').innerText = pendingApps.length;
+      document.getElementById('statCompletedCount').innerText = completedApps.length;
+      const container = document.getElementById('dispatchSubContent');
+      const isPending = CURRENT_DISPATCH_SUBTAB === 'pending';
+      const targetList = isPending ? pendingApps : completedApps;
+      window.APP_CACHE = targetList;
+
+      const btnAll = document.getElementById('btnDispatchAll');
+      if (btnAll) btnAll.style.display = (isPending && pendingApps.length > 1) ? '' : 'none';
+      const hint = document.getElementById('dispatchMergeHint');
+      if (hint) hint.style.display = (isPending && pendingApps.length > 0) ? '' : 'none';
+      const _clrPick = document.getElementById('btnClearPicks');
+      if (_clrPick) _clrPick.style.display = isPending ? '' : 'none';
+      _bindDispatchPickHost();
+
+      if (targetList.length === 0) {
+        window.APP_GROUPS = [];   // 清掉陈旧分组，避免空列表时被误用
+        container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);">暂无记录</div>`;
+        return;
+      }
+      if (isPending) {
+        const _mis = findMisalignedApps(pendingApps);
+        container.innerHTML = (_mis.length ? _misalignedBannerHtml(_mis) : '') + renderPendingGrouped(pendingApps);
+        Array.prototype.forEach.call(container.querySelectorAll('.app-card'), _refreshPickCard);
+        return;
+      }
+
+      let html = '';
+      completedApps.forEach((app, appIndex) => {
+        const items = app.items || [];
+        const itemChunks = chunkArray(items, 10);
+        let itemsGridHtml = '';
+        itemChunks.forEach(chunk => {
+          itemsGridHtml += `<div class="items-grid-10">`;
+          chunk.forEach(it => {
+            itemsGridHtml += `<div class="grid-item-chip"><div style="font-weight:600;">${escapeHtml(it.name)}</div><div style="color:var(--primary); font-weight:700;">x ${it.quantity || 1}</div></div>`;
+          });
+          itemsGridHtml += `</div>`;
+        });
+
+        html += `
+          <div class="app-card">
+            <div class="app-header">
+              <div><strong>CN: ${escapeHtml(app.cn)}</strong><span style="font-size:0.8rem; color:var(--text-muted); margin-left:12px;">⏰ ${escapeHtml(app.time || '')}</span></div>
+              <span class="badge badge-status-已排发">${escapeHtml(app.status)}</span>
+            </div>
+            <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:6px;">📝 备注: ${escapeHtml(app.note || '无')}</div>
+            <div>${itemsGridHtml}</div>
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
+              <button class="btn btn-danger" onclick="deleteCompletedAppByIndex(${appIndex})">删除记录 (联动删除谷子)</button>
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+      Array.prototype.forEach.call(container.querySelectorAll('.app-card'), _refreshPickCard);
+    }
+
+    /* --- 🚀 合并派发：确认弹窗（自绘，规避微信/QQ 内置浏览器屏蔽原生 confirm） --- */
+    let _dispatchAction = null;
+
+    function _closeDispatchModal() {
+      _dispatchAction = null;
+      document.getElementById('dispatchConfirmModal').classList.remove('active');
+    }
+    function closeDispatchConfirm() { _closeDispatchModal(); }
+    window.closeDispatchConfirm = closeDispatchConfirm;
+
+    function _showDispatchModal(title, bodyHtml, okText, okClass, action) {
+      _dispatchAction = action;
+      document.getElementById('dispatchConfirmTitle').innerText = title;
+      document.getElementById('dispatchConfirmBody').innerHTML = bodyHtml;
+      const ok = document.getElementById('dispatchConfirmOk');
+      ok.innerText = okText;
+      ok.className = 'btn ' + okClass;
+      document.getElementById('dispatchConfirmModal').classList.add('active');
+    }
+
+    async function doDispatchConfirm() {
+      const fn = _dispatchAction;
+      _dispatchAction = null;
+      document.getElementById('dispatchConfirmModal').classList.remove('active');
+      if (typeof fn !== 'function') return;
+      try { await fn(); } catch (e) { showToast('❌ 操作失败：' + (e && e.message ? e.message : e)); }
+    }
+    window.doDispatchConfirm = doDispatchConfirm;
+
+    // 真正写库：申请标记「已完成」+ 对应谷子状态改「已排发」
+    async function _applyDispatchApps(apps) {
+      /* ✅ 派发后清掉这些 CN 的勾选划线（团长口径：货发出去了，划线留着只会误导） */
+      _clearPicksForCns((apps || []).map(function (a) { return a && a.cn; }));
+      const targetItemIds = new Set();
+      apps.forEach(app => {
+        app.status = '已完成';
+        APP_STATUS_DIRTY.add(String(app.id));   // 🚀 标记「本次改过状态」，防止被另一份旧页面冲回「待处理」
+        (app.items || []).forEach(i => targetItemIds.add(String(i.item_id || i.id)));
+      });
+      RAW_ITEMS.forEach(item => {
+        const k = String(item.item_id || item.id);
+        if (targetItemIds.has(k)) {
+          const _prevStatus = item.status;
+          item.status = '已排发';
+          ensureStockDate(item, _prevStatus);
+          DIRTY_ITEM_IDS.add(k);
+        }
+      });
+      const _ok = await saveDataToSupabase();
+      if (_ok !== false) { _dmUnsynced = false; DISPATCH_MARK_REMOVED.clear(); _saveDispatchMarksLocal(); }
+      renderDispatchWorkbench();
+      renderTable();
+    }
+
+    function _dispatchConfirmBody(groups) {
+      let totalApps = 0, totalQty = 0;
+      const blocks = groups.map(g => {
+        const merged = mergeAppItems(g.apps);
+        const qty = merged.reduce((s, x) => s + (x.quantity || 0), 0);
+        totalApps += g.apps.length; totalQty += qty;
+        return `<div style="margin-bottom:10px; padding:10px 12px; border:1px solid var(--border); border-radius:8px;">
+          <div style="font-weight:700; margin-bottom:4px;">CN: ${escapeHtml(g.cn)}
+            <span style="font-weight:400; color:var(--text-muted); font-size:0.82rem;">（${g.apps.length} 条 · ${qty} 件）</span></div>
+          <div style="font-size:0.84rem;">${merged.map(x => '· ' + escapeHtml(x.name) + ' <span style="color:var(--primary); font-weight:700;">x' + (x.quantity || 1) + '</span>').join('<br>')}</div>
+        </div>`;
+      }).join('');
+      return `<div style="margin-bottom:12px; padding:10px 12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
+          <div style="font-weight:700; color:#166534; font-size:1rem;">共 ${totalApps} 条申请 · ${totalQty} 件物品</div>
+          <div style="font-size:0.82rem; color:#166534; margin-top:2px;">确认后：这些申请标记为「已完成」，对应谷子状态改为「已排发」。</div>
+        </div>` + blocks;
+    }
+
+    // 🚀 一键派发某个 CN 的全部申请
+    function confirmDispatchCn(gi) {
+      const g = (window.APP_GROUPS || [])[gi];
+      if (!g || !g.apps.length) return;
+      _showDispatchModal('派发 CN「' + g.cn + '」的全部申请',
+        _dispatchUnpaidWarningHtml(g.apps) + _dispatchConfirmBody([g]),
+        '确认派发（' + g.apps.length + ' 条）', 'btn-success',
+        async () => { await _applyDispatchApps(g.apps); showToast('🚀 已派发 ' + g.cn + ' 的 ' + g.apps.length + ' 条申请'); });
+    }
+    window.confirmDispatchCn = confirmDispatchCn;
+
+    // 合并卡内：只确认其中一条
+    function confirmDispatchOneFromGroup(gi, ai) {
+      const g = (window.APP_GROUPS || [])[gi];
+      const app = g && g.apps[ai];
+      if (!app) return;
+      _showDispatchModal('派发「' + g.cn + '」的这 1 条申请',
+        _dispatchUnpaidWarningHtml([app]) + _dispatchConfirmBody([{ cn: g.cn, apps: [app] }]),
+        '确认派发（1 条）', 'btn-success',
+        async () => { await _applyDispatchApps([app]); showToast('🚀 已派发 1 条申请'); });
+    }
+    window.confirmDispatchOneFromGroup = confirmDispatchOneFromGroup;
+
+    // 合并卡内：删除其中一条（二次确认）
+    function deleteAppFromGroup(gi, ai) {
+      const g = (window.APP_GROUPS || [])[gi];
+      const app = g && g.apps[ai];
+      if (!app) return;
+      const items = (app.items || []).map(it => escapeHtml(it.name || '') + ' x' + (it.quantity || 1)).join('、');
+      _showDispatchModal('删除这条申请记录？',
+        `<div style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:0.86rem;">
+          <div style="font-weight:700; margin-bottom:4px;">CN: ${escapeHtml(g.cn)} · ${escapeHtml(String(app.time || ''))}</div>
+          <div>${items}</div>
+          <div style="margin-top:8px; color:#991b1b;">删除后不可恢复，但谷子本身的状态不受影响。</div>
+        </div>`, '确认删除', 'btn-danger',
+        async () => {
+          APP_DELETED_IDS.add(String(app.id));   // 🗑️ 删除墓碑：否则并集合并会把删掉的申请复活
+          RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
+          await saveDataToSupabase(); renderDispatchWorkbench(); showToast('已删除这条申请');
+        });
+    }
+    window.deleteAppFromGroup = deleteAppFromGroup;
+
+    // 🚀 全部一键派发（所有待处理申请，按 CN 分组展示）
+    function openDispatchAllConfirm() {
+      const groups = (window.APP_GROUPS || []).filter(g => g.apps.length);
+      if (!groups.length) { showToast('当前没有待处理的排发申请'); return; }
+      const total = groups.reduce((s, g) => s + g.apps.length, 0);
+      const _allApps = groups.reduce((acc, g) => acc.concat(g.apps), []);
+      _showDispatchModal('全部一键派发（' + groups.length + ' 位 CN）',
+        _dispatchUnpaidWarningHtml(_allApps) + _dispatchConfirmBody(groups),
+        '全部确认派发（' + total + ' 条）', 'btn-success',
+        async () => {
+          await _applyDispatchApps(_allApps);
+          showToast('🚀 已派发全部 ' + total + ' 条申请');
+        });
+    }
+    window.openDispatchAllConfirm = openDispatchAllConfirm;
+
+    /* 🚧 派发前置闸门（2026-10-06 团长要求，与 index.html 团员端同一口径）：
+       这些 CN 名下若还有**任何一笔未交运费**（国际段 + 🏝️岛内段，不限金额），
+       就在派发前明确列出来，让团长自己决定 —— 不静默放行、也不硬拦（团长可能有正当理由）。
+       背景：排发申请只认 status==='可排发'，而状态可以手动改；补上「钱」这道闸避免漏收。 */
+    function _dispatchUnpaidByCn(cns) {
+      const want = {}; (cns || []).forEach(function (c) { want[String(c || '').trim()] = 1; });
+      const out = {};   // cn -> [{batch, amount, island}]
+      (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+        if (!b || typeof b !== 'object') return;
+        const bn = String(b.batch_name || '').trim();
+        (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
+          if (!m || typeof m !== 'object') return;
+          const cn = String(m.cn || '').trim();
+          if (!want[cn]) return;
+          if (String(m.status || '').trim() !== '未交') return;
+          const amt = Number(m.amount_due) || 0;
+          if (amt <= 0) return;
+          (out[cn] = out[cn] || []).push({
+            batch: bn || '运费', amount: amt,
+            island: String(m.fee_type || '').trim() === 'island'
+          });
+        });
+      });
+      return out;
+    }
+    /* 在派发确认弹窗的正文最前面插一段红字警告（没欠费就不插，正文逐字不变） */
+    function _dispatchUnpaidWarningHtml(apps) {
+      const cns = (apps || []).map(function (a) { return String(a.cn || '').trim(); }).filter(Boolean);
+      const un = _dispatchUnpaidByCn(cns);
+      const hits = Object.keys(un);
+      if (!hits.length) return '';
+      let h = '<div style="margin-bottom:12px; padding:10px 12px; border:1px solid rgba(220,38,38,0.35); '
+            + 'background:rgba(220,38,38,0.06); border-radius:8px; font-size:0.85rem; line-height:1.8;">'
+            + '<div style="font-weight:700; color:#b91c1c; margin-bottom:4px;">⚠️ 这些人还有运费没交清</div>';
+      hits.forEach(function (cn) {
+        const arr = un[cn];
+        const sum = Math.round(arr.reduce(function (s, x) { return s + x.amount; }, 0) * 100) / 100;
+        h += '<div style="color:#991b1b;">· <b>' + escapeHtml(cn) + '</b> 合计 ￥' + sum.toFixed(2) + '：'
+           + arr.map(function (x) {
+               return (x.island ? '🏝️岛内' : '🌍国际') + '「' + escapeHtml(x.batch) + '」￥' + x.amount.toFixed(2);
+             }).join('、')
+           + '</div>';
+      });
+      h += '<div style="margin-top:6px; color:#7f1d1d;">仍然可以派发（你有你的判断），但请先确认钱是不是收到了。</div></div>';
+      return h;
+    }
+    window._dispatchUnpaidByCn = _dispatchUnpaidByCn;
+
+    async function confirmDispatchAppByIndex(appIndex) {
+      const app = window.APP_CACHE[appIndex];
+      if (!app) return;
+      _showDispatchModal('派发「' + (app.cn || '') + '」的申请',
+        _dispatchUnpaidWarningHtml([app]) + _dispatchConfirmBody([{ cn: app.cn || '(未署名)', apps: [app] }]),
+        '确认派发（1 条）', 'btn-success',
+        async () => { await _applyDispatchApps([app]); showToast('已确认发货！'); });
+    }
+    window.confirmDispatchAppByIndex = confirmDispatchAppByIndex;
+
+    async function deleteAppByIndex(appIndex) {
+      const app = window.APP_CACHE[appIndex];
+      if (!app) return;
+      const items = (app.items || []).map(it => escapeHtml(it.name || '') + ' x' + (it.quantity || 1)).join('、');
+      _showDispatchModal('删除这条申请记录？',
+        `<div style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:0.86rem;">
+          <div style="font-weight:700; margin-bottom:4px;">CN: ${escapeHtml(app.cn || '')} · ${escapeHtml(String(app.time || ''))}</div>
+          <div>${items}</div>
+          <div style="margin-top:8px; color:#991b1b;">删除后不可恢复。</div>
+        </div>`, '确认删除', 'btn-danger',
+        async () => {
+          APP_DELETED_IDS.add(String(app.id));   // 🗑️ 删除墓碑：否则并集合并会把删掉的申请复活
+          RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
+          await saveDataToSupabase(); renderDispatchWorkbench(); showToast('已删除申请！');
+        });
+    }
+    window.deleteAppByIndex = deleteAppByIndex;
+
+    async function deleteCompletedAppByIndex(appIndex) {
+      const app = window.APP_CACHE[appIndex];
+      if (!app || !confirm('确定删除此发货记录吗？将联动删除排表中对应谷子！')) return;
+      const targetItemIds = new Set((app.items || []).map(i => String(i.item_id || i.id)));
+      targetItemIds.forEach(id => DELETED_ITEM_IDS.add(id));
+      RAW_ITEMS = RAW_ITEMS.filter(item => !targetItemIds.has(String(item.item_id || item.id)));
+      APP_DELETED_IDS.add(String(app.id));   // 🗑️ 删除墓碑：否则并集合并会把删掉的申请复活
+      RAW_APPLICATIONS = RAW_APPLICATIONS.filter(a => String(a.id) !== String(app.id));
+      await saveDataToSupabase(); updateBatchDropdownOptions(); renderDispatchWorkbench(); renderTable(); showToast('已彻底删除！');
+    }
+    window.deleteCompletedAppByIndex = deleteCompletedAppByIndex;
+
+    /* --- 标签页 3：转单日志 --- */
+    function renderTransferLogs() {
+      const tbody = document.getElementById('transferLogsTableBody');
+      window.LOG_CACHE = RAW_LOGS;
+      if (RAW_LOGS.length === 0) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">暂无转单记录</td></tr>`; return; }
+      tbody.innerHTML = RAW_LOGS.map((log, index) => `
+        <tr>
+          <td>${escapeHtml(log.time)}</td>
+          <td><strong style="color:var(--danger);">${escapeHtml(log.from_cn)}</strong></td>
+          <td><strong style="color:var(--success);">${escapeHtml(log.to_cn)}</strong></td>
+          <td>${escapeHtml(log.item_name)}</td>
+          <td>${log.quantity || 1}</td>
+          <td><button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogByIndex(${index})">删除</button></td>
+        </tr>
+      `).join('');
+    }
+
+    async function deleteLogByIndex(logIndex) {
+      const log = window.LOG_CACHE[logIndex];
+      if (!log) return;
+      RAW_LOGS = RAW_LOGS.filter(l => String(l.id) !== String(log.id));
+      await saveDataToSupabase(); renderTransferLogs(); showToast('已删除记录');
+    }
+    window.deleteLogByIndex = deleteLogByIndex;
+
+    async function clearAllTransferLogs() {
+      if (!confirm('确定清空所有转单日志记录吗？')) return;
+      RAW_LOGS = []; await saveDataToSupabase(); renderTransferLogs(); showToast('转单日志已清空！');
+    }
+    window.clearAllTransferLogs = clearAllTransferLogs;
+
+    /* --- 标签页 4：匿名反馈箱 --- */
+    // 取件码：新反馈自带 code；老反馈没有 code 时用 id 稳定推导（算法与团员自查页一致）
+    function fbNormCode(c){ return String(c || '').trim().toUpperCase().replace(/[^0-9A-Z]/g, ''); }
+    function fbDeriveCode(id){
+      const s = String(id || '');
+      if (!s) return '';
+      let h = 2166136261;
+      for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
+      return h.toString(36).toUpperCase().replace(/[^0-9A-Z]/g, '').padStart(6, '0').slice(-6);
+    }
+    function fbCodeOf(fb){ return fbNormCode(fb && (fb.code || fbDeriveCode(fb.id))); }
+
+    function renderFeedbackList() {
+      const tbody = document.getElementById('feedbackTableBody');
+      const mobileCards = document.getElementById('feedbackMobileCardsView');
+      const unreadCount = RAW_FEEDBACK.filter(f => f.status === '未读').length;
+      const readCount = RAW_FEEDBACK.filter(f => f.status === '已读').length;
+      const handledCount = RAW_FEEDBACK.filter(f => f.status === '已处理').length;
+      document.getElementById('statFbUnread').innerText = unreadCount;
+      document.getElementById('statFbRead').innerText = readCount;
+      document.getElementById('statFbHandled').innerText = handledCount;
+      document.getElementById('statFbTotal').innerText = RAW_FEEDBACK.length;
+      window.FEEDBACK_CACHE = RAW_FEEDBACK;
+
+      if (RAW_FEEDBACK.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">暂无反馈</td></tr>`;
+        if (mobileCards) mobileCards.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">暂无反馈</div>`;
+        return;
+      }
+
+      let tableHtml = '', cardHtml = '';
+      RAW_FEEDBACK.forEach((fb, index) => {
+        tableHtml += `
+          <tr>
+            <td><code style="font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.82rem; letter-spacing:1px; background:#f1f5f9; padding:2px 6px; border-radius:4px; color:#334155;">${escapeHtml(fbCodeOf(fb))}</code></td>
+            <td><span class="badge badge-fb-${fb.status || '未读'}">${escapeHtml(fb.status || '未读')}</span></td>
+            <td><span class="badge badge-category">${escapeHtml(fb.category || '其他')}</span></td>
+            <td style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(fb.created_at || '')}</td>
+            <td style="max-width:260px; white-space:normal;">${escapeHtml(fb.content || '')}</td>
+            <td style="max-width:200px; white-space:normal; font-size:0.85rem; color:#475569;">${fb.reply ? `💬 ${escapeHtml(fb.reply)}` : '未回复'}</td>
+            <td style="text-align:right;">
+              <button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem;" onclick="openFeedbackModal(${index})">查看/回复</button>
+              <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteFeedbackByIndex(${index})">删除</button>
+            </td>
+          </tr>
+        `;
+        cardHtml += `
+          <div class="admin-card-mobile">
+            <div class="admin-card-mobile-header">
+              <span class="badge badge-category">${escapeHtml(fb.category || '其他')}</span>
+              <span class="badge badge-fb-${fb.status || '未读'}">${escapeHtml(fb.status || '未读')}</span>
+            </div>
+            <div style="font-size:0.78rem; color:var(--text-muted);">取件码 <code style="font-family:ui-monospace,Menlo,Consolas,monospace; letter-spacing:1px; background:#f1f5f9; padding:1px 6px; border-radius:4px; color:#334155;">${escapeHtml(fbCodeOf(fb))}</code></div>
+            <div style="font-size:0.9rem;">${escapeHtml(fb.content || '')}</div>
+            <div class="admin-card-mobile-actions">
+              <button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openFeedbackModal(${index})">💬 回复</button>
+              <button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteFeedbackByIndex(${index})">🗑️ 删除</button>
+            </div>
+          </div>
+        `;
+      });
+      tbody.innerHTML = tableHtml;
+      if (mobileCards) mobileCards.innerHTML = cardHtml;
+    }
+    window.renderFeedbackList = renderFeedbackList;
+
+    function openFeedbackModal(index) {
+      const fb = window.FEEDBACK_CACHE[index];
+      if (!fb) return;
+      document.getElementById('modalFbIndex').value = index;
+      document.getElementById('modalFbContent').innerText = fb.content || '';
+      document.getElementById('modalFbReply').value = fb.reply || '';
+      document.getElementById('feedbackModal').classList.add('active');
+    }
+    window.openFeedbackModal = openFeedbackModal;
+
+    function closeFeedbackModal() { document.getElementById('feedbackModal').classList.remove('active'); }
+    window.closeFeedbackModal = closeFeedbackModal;
+
+    async function setModalFbStatus(newStatus) {
+      const idx = parseInt(document.getElementById('modalFbIndex').value);
+      if (RAW_FEEDBACK[idx]) {
+        RAW_FEEDBACK[idx].status = newStatus;
+        await saveDataToSupabase();
+        renderFeedbackList();
+        showToast(`已标记为 [${newStatus}]`);
+      }
+    }
+    window.setModalFbStatus = setModalFbStatus;
+
+    async function saveModalFbReply() {
+      const idx = parseInt(document.getElementById('modalFbIndex').value);
+      if (RAW_FEEDBACK[idx]) {
+        RAW_FEEDBACK[idx].reply = document.getElementById('modalFbReply').value.trim();
+        if (RAW_FEEDBACK[idx].status === '未读') RAW_FEEDBACK[idx].status = '已读';
+        await saveDataToSupabase();
+        closeFeedbackModal();
+        renderFeedbackList();
+        showToast('回复已保存！');
+      }
+    }
+    window.saveModalFbReply = saveModalFbReply;
+
+    async function batchMarkFeedbackRead() {
+      RAW_FEEDBACK.forEach(fb => { if (fb.status === '未读') fb.status = '已读'; });
+      await saveDataToSupabase(); renderFeedbackList(); showToast('已全部标为已读！');
+    }
+    window.batchMarkFeedbackRead = batchMarkFeedbackRead;
+
+    async function deleteFeedbackByIndex(index) {
+      if (!confirm('确定删除此条匿名反馈吗？')) return;
+      RAW_FEEDBACK.splice(index, 1);
+      await saveDataToSupabase(); renderFeedbackList(); showToast('已删除！');
+    }
+    window.deleteFeedbackByIndex = deleteFeedbackByIndex;
+
+    async function clearAllFeedback() {
+      if (!confirm('确定清空所有匿名反馈吗？不可恢复！')) return;
+      RAW_FEEDBACK = []; await saveDataToSupabase(); renderFeedbackList(); showToast('已清空！');
+    }
+    window.clearAllFeedback = clearAllFeedback;
+
+    /* --- 标签页 1.5：国际运费 logistics_data --- */
+    /* 物流成员的身份键 = **圈名 + 费用类型**。
+       ⚠️ 2026-09-27 改：原来只按 cn 合并 —— 同一个人在同一批次里同时欠「国际运费」
+       和「岛内运费」时，两条会被当成同一条合并掉（岛内那笔直接消失 → 团员少交钱）。
+       国际记录没有 fee_type（回落成 'intl'），岛内记录带 fee_type='island' → 两者互不干扰。 */
+    function _logiMemberKey(m) {
+      if (!m || typeof m !== 'object') return '';
+      const cn = String(m.cn || '').trim();
+      const ft = String(m.fee_type || '').trim() || 'intl';
+      if (!cn) return 'id:' + String(m.id || '');
+      return cn + '|' + ft;
+    }
+    window._logiMemberKey = _logiMemberKey;
+
+    function mergeLogisticsData(freshList, myList, deletedSet) {
+      // 按批次名归并；同一批次内按「圈名+费用类型」做字段级合并。
+      // 关键修复：任一侧为「已交」则结果保留「已交」，付款信息以「已交」那侧为准，
+      // 避免团长保存网页时把机器人刚写入的"已交"状态覆盖掉。
+      const byName = {};
+      const addBatch = function (b, isLocal) {
+        if (!b || !b.batch_name) return;
+        if (!isLocal && deletedSet && deletedSet.has(b.batch_name)) return;
+        const name = b.batch_name;
+        const members = Array.isArray(b.fee_members) ? b.fee_members : [];
+        if (!byName[name]) {
+          byName[name] = { batch_name: name };
+          Object.keys(b).forEach(function (k) {
+            if (k === 'batch_name') return;
+            byName[name][k] = (k === 'fee_members')
+              ? members.map(function (m) { return Object.assign({}, m); })
+              : b[k];
+          });
+          return;
+        }
+        // 批次已存在：批次级字段以 local 优先（保留团长编辑），再合并成员
+        const existing = byName[name];
+        /* 到期日要允许「清空」生效：'' 也算有效值，否则合并时旧日期会复活 */
+        if (Object.prototype.hasOwnProperty.call(b, 'intl_due_date')) {
+          existing.intl_due_date = b.intl_due_date;
+          existing.intl_dropped_at = b.intl_dropped_at || '';
+          existing.intl_dropped_on = b.intl_dropped_on || '';
+        }
+        Object.keys(b).forEach(function (k) {
+          if (k === 'batch_name' || k === 'fee_members') return;
+          if (b[k] !== undefined && b[k] !== null && b[k] !== '') existing[k] = b[k];
+        });
+        const existById = {};
+        (existing.fee_members || []).forEach(function (m) {
+          if (m && (m.cn || m.id)) existById[_logiMemberKey(m)] = true;
+        });
+        const merged = (existing.fee_members || []).map(function (m) {
+          const key = _logiMemberKey(m);
+          const other = members.find(function (x) { return _logiMemberKey(x) === key; });
+          if (!other) return m;
+          const mPaid = (m.status === '已交');
+          const oPaid = (other.status === '已交');
+          const status = (mPaid || oPaid) ? '已交' : (m.status || other.status);
+          const base = mPaid ? m : (oPaid ? other : m); // 已交侧优先；都未交用 fresh
+          const res = Object.assign({}, base);
+          res.status = status;
+          if (status === '已交') {
+            const paidSide = mPaid ? m : other;
+            if (paidSide.paid_at) res.paid_at = paidSide.paid_at;
+            if (paidSide.pay_method) res.pay_method = paidSide.pay_method;
+            if (paidSide.amount_paid !== undefined && paidSide.amount_paid !== null) res.amount_paid = paidSide.amount_paid;
+          }
+          ['cn', 'item_name', 'quantity', 'amount_due'].forEach(function (f) {
+            if (res[f] === undefined || res[f] === null || res[f] === '') {
+              const alt = (base === m) ? other : m;
+              if (alt[f] !== undefined && alt[f] !== null && alt[f] !== '') res[f] = alt[f];
+            }
+          });
+          return res;
+        });
+        members.forEach(function (m) {
+          const k = _logiMemberKey(m);
+          if (!existById[k] && !(existing.fee_members || []).some(function (x) { return _logiMemberKey(x) === k; })) merged.push(m);
+        });
+        existing.fee_members = merged;
+      };
+      (Array.isArray(freshList) ? freshList : []).forEach(function (b) { addBatch(b, false); });
+      (Array.isArray(myList) ? myList : []).forEach(function (b) { addBatch(b, true); });
+      return Object.keys(byName).map(function (k) { return byName[k]; });
+    }
+
+    function parseLogisticsImportText(rawText) {
+      if (!rawText || !rawText.trim()) return null;
+      const lines = String(rawText).split(/\r?\n/).map(l => l.replace(/\u3000/g, ' ').trimEnd());
+      const nonEmpty = lines.map((l, i) => ({ l: l.trim(), i })).filter(x => x.l);
+      if (nonEmpty.length < 3) return null;
+      const batchName = nonEmpty[0].l;
+      if (!batchName) return null;
+      let headerIdx = -1;
+      for (let k = 1; k < nonEmpty.length; k++) {
+        const lower = nonEmpty[k].l.toLowerCase();
+        if (lower.includes('cn') && (lower.includes('国际') || lower.includes('金额') || lower.includes('费用'))) { headerIdx = k; break; }
+      }
+      if (headerIdx === -1) headerIdx = 1;
+      const members = [];
+      for (let k = headerIdx + 1; k < nonEmpty.length; k++) {
+        const row = nonEmpty[k].l;
+        if (['合计', '总计', '总金额', '总数', '平均', '应收', '实收', '已收', '未收', '备注'].some(w => row.includes(w))) continue;
+        const cols = row.split(/\t+/).map(x => x.trim()).filter(x => x !== '');
+        if (cols.length === 0) continue;
+        const cn = cols[0];
+        if (!cn || (cols.length === 1 && /^[0-9.]+$/.test(cn))) continue;
+        let itemName = cols[1] || '';
+        let qty = parseFloat((cols[2] || '1').replace(/[^\d.-]/g, '')) || 1;
+        let amount = 0;
+        if (cols.length >= 4) {
+          amount = parseFloat((cols[3] || '0').replace(/[^\d.-]/g, '')) || 0;
+        } else if (cols.length === 2) {
+          amount = parseFloat((cols[1] || '0').replace(/[^\d.-]/g, '')) || 0;
+          itemName = '';
+        } else if (cols.length === 3) {
+          amount = parseFloat((cols[2] || '0').replace(/[^\d.-]/g, '')) || 0;
+        }
+        if (amount <= 0) continue;
+        members.push({
+          id: 'log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+          cn: cn,
+          item_name: itemName,
+          quantity: Math.max(1, qty),
+          amount_due: Math.round(amount * 100) / 100,
+          amount_paid: 0,
+          status: '未交',
+          created_at: new Date().toISOString()
+        });
+      }
+      if (members.length === 0) return null;
+      return { batch_name: batchName, fee_members: members };
+    }
+    window.parseLogisticsImportText = parseLogisticsImportText;
+
+    async function submitLogisticsImport() {
+      const rawText = document.getElementById('logisticsInputText').value;
+      const parsed = parseLogisticsImportText(rawText);
+      if (!parsed) return showToast('解析失败！请按格式粘贴：第一行批次名，第二行 cn 柄图 数量 国际，后面是数据行');
+      LOGISTICS_DELETED_BATCHES.delete(parsed.batch_name);
+      const existingIdx = RAW_LOGISTICS.findIndex(b => b && b.batch_name === parsed.batch_name);
+      const _dueEl = document.getElementById('logisticsDueDate');
+      const _dueVal = String((_dueEl && _dueEl.value) || '').trim();
+      if (existingIdx !== -1) {
+        if (!confirm('批次「' + parsed.batch_name + '」已存在，确定用本次数据整批替换吗？')) return;
+        const _b = RAW_LOGISTICS[existingIdx];
+        _b.fee_members = parsed.fee_members;
+        _b.updated_at = new Date().toISOString();
+        _applyIntlDue(_b, _dueVal);
+      } else {
+        const _nb = { batch_name: parsed.batch_name, fee_members: parsed.fee_members, created_at: new Date().toISOString() };
+        _applyIntlDue(_nb, _dueVal);
+        RAW_LOGISTICS.push(_nb);
+      }
+      await saveDataToSupabase();
+      renderLogistics();
+      showToast('✅ 国际运费批次「' + parsed.batch_name + '」已导入 ' + parsed.fee_members.length + ' 条记录！'
+        + (_dueVal ? ('｜掉落日 ' + _dueVal + '（' + _intlDaysLeft(_dueVal) + ' 天后）') : '｜未设掉落日，不计时'));
+    }
+    window.submitLogisticsImport = submitLogisticsImport;
+
+    function logisticsBatchStats(batch) {
+      const members = Array.isArray(batch.fee_members) ? batch.fee_members : [];
+      let unpaid = 0, paid = 0, free = 0, due = 0, recv = 0;
+      members.forEach(m => {
+        const st = String(m.status || '').trim();
+        const dueAmt = Number(m.amount_due || 0);
+        const paidAmt = Number(m.amount_paid || 0);
+        due += dueAmt; recv += paidAmt;
+        if (st === '未交') unpaid++;
+        else if (st === '已交') paid++;
+        else if (st === '免交') free++;
+      });
+      return { total: members.length, unpaid: unpaid, paid: paid, free: free, due: Math.round(due * 100) / 100, recv: Math.round(recv * 100) / 100 };
+    }
+
+    function renderLogistics() {
+      renderIntlAlerts();          // 🌍 黄/红条跟着数据一起刷（涨跌都在这里统一）
+      const tbody = document.getElementById('logisticsTableBody');
+      const mobileView = document.getElementById('logisticsMobileCardsView');
+      const statsEl = document.getElementById('logisticsStats');
+      if (!tbody) return;
+      let totalMembers = 0, unpaidTotal = 0, dueTotal = 0;
+      RAW_LOGISTICS.forEach(b => { const s = logisticsBatchStats(b); totalMembers += s.total; unpaidTotal += s.unpaid; dueTotal += s.due; });
+      if (statsEl) statsEl.innerText = '共 ' + RAW_LOGISTICS.length + ' 个批次 / ' + totalMembers + ' 人 / 未交 ' + unpaidTotal + ' 人 / 应收 ￥' + dueTotal.toFixed(2);
+      if (RAW_LOGISTICS.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--text-muted);">暂无国际运费数据，请先在上方导入</td></tr>';
+        if (mobileView) mobileView.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted);">暂无国际运费数据</div>';
+        renderIslandBatchOptions();
+        return;
+      }
+      let html = '', cardsHtml = '';
+      RAW_LOGISTICS.forEach((batch, index) => {
+        const s = logisticsBatchStats(batch);
+        const batchName = batch.batch_name || '未命名批次';
+        html += '<tr><td style="font-weight:600;">' + escapeHtml(batchName) + '</td><td>' + s.total + '</td><td style="color:#dc2626; font-weight:600;">' + s.unpaid + '</td><td style="color:#16a34a;">' + s.paid + '</td><td style="color:#64748b;">' + s.free + '</td><td>￥' + s.due.toFixed(2) + '</td><td>￥' + s.recv.toFixed(2) + '</td><td>' + intlDueCellHtml(batch, index) + '</td><td><button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem;" onclick="openLogisticsDetail(' + index + ')">明细</button> <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogisticsBatch(' + index + ')">删除</button></td></tr>';
+        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(batchName) + '</span><span class="badge ' + (s.unpaid > 0 ? 'badge-status-未付款' : 'badge-status-可排发') + '">未交 ' + s.unpaid + '</span></div><div style="font-size:0.9rem; padding:6px 0;">共 ' + s.total + ' 人 | 未交 ' + s.unpaid + ' | 应收 ￥' + s.due.toFixed(2) + '</div><div style="font-size:0.82rem; padding:0 0 6px;">' + intlDueCellHtml(batch, index) + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openLogisticsDetail(' + index + ')">📋 明细</button> <button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteLogisticsBatch(' + index + ')">🗑️ 删除</button></div></div>';
+      });
+      tbody.innerHTML = html;
+      if (mobileView) mobileView.innerHTML = cardsHtml;
+      renderIslandBatchOptions();
+    }
+    window.renderLogistics = renderLogistics;
+
+    function openLogisticsDetail(index) {
+      const batch = RAW_LOGISTICS[index];
+      if (!batch) return;
+      LOGISTICS_DETAIL_INDEX = index;
+      document.getElementById('logisticsDetailTitle').innerText = '🌍 国际运费明细 - ' + (batch.batch_name || '未命名批次');
+      const members = Array.isArray(batch.fee_members) ? batch.fee_members : [];
+      const s = logisticsBatchStats(batch);
+      document.getElementById('logisticsDetailSummary').innerText = '共 ' + s.total + ' 人 | 未交 ' + s.unpaid + ' | 已交 ' + s.paid + ' | 免交 ' + s.free + ' | 应收 ￥' + s.due.toFixed(2) + ' | 实收 ￥' + s.recv.toFixed(2);
+      const tbody = document.getElementById('logisticsDetailBody');
+      if (members.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">该批次暂无成员记录</td></tr>';
+      } else {
+        tbody.innerHTML = members.map((m, i) => {
+          const st = String(m.status || '未交').trim();
+          const stBadge = st === '已交' ? 'badge-status-已交' : (st === '免交' ? 'badge-status-custom' : 'badge-status-未付款');
+          const pmHtml = getPayMethodBadge(m.pay_method);   // 🐷 零钱罐等分类统一走这一个函数，别各处自己判
+          let ops = '';
+          if (st !== '已交') ops += '<button class="btn btn-success" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'已交\')">标已交</button> ';
+          if (st !== '免交') ops += '<button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'免交\')">免交</button> ';
+          if (st !== '未交') ops += '<button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="setLogisticsMemberStatus(' + i + ', \'未交\')">改未交</button>';
+          return '<tr><td><strong>' + escapeHtml(m.cn) + '</strong></td><td>' + pmHtml + '</td><td>' + escapeHtml(m.item_name || '国际运费') + '</td><td>' + (m.quantity || 1) + '</td><td>￥' + Number(m.amount_due || 0).toFixed(2) + '</td><td><span class="badge ' + stBadge + '">' + escapeHtml(st) + '</span></td><td>' + ops + '</td></tr>';
+        }).join('');
+      }
+      document.getElementById('logisticsDetailModal').classList.add('active');
+    }
+    window.openLogisticsDetail = openLogisticsDetail;
+
+    function closeLogisticsDetail() { document.getElementById('logisticsDetailModal').classList.remove('active'); }
+    window.closeLogisticsDetail = closeLogisticsDetail;
+
+    async function setLogisticsMemberStatus(memberIdx, status) {
+      const batch = RAW_LOGISTICS[LOGISTICS_DETAIL_INDEX];
+      if (!batch || !Array.isArray(batch.fee_members)) return;
+      const m = batch.fee_members[memberIdx];
+      if (!m) return;
+      m.status = status;
+      if (status === '已交') { m.amount_paid = Number(m.amount_due || 0); m.paid_at = new Date().toISOString(); }
+      if (status === '未交') { m.amount_paid = 0; delete m.paid_at; }
+      await saveDataToSupabase();
+      renderLogistics();
+      openLogisticsDetail(LOGISTICS_DETAIL_INDEX);
+      showToast('已将 ' + m.cn + ' 标记为 [' + status + ']');
+    }
+    window.setLogisticsMemberStatus = setLogisticsMemberStatus;
+
+    async function markAllLogisticsPaid() {
+      const batch = RAW_LOGISTICS[LOGISTICS_DETAIL_INDEX];
+      if (!batch || !Array.isArray(batch.fee_members)) return;
+      if (!confirm('确定将批次「' + (batch.batch_name || '') + '」全部成员标记为已交吗？')) return;
+      batch.fee_members.forEach(m => {
+        if (String(m.status || '').trim() !== '免交') { m.status = '已交'; m.amount_paid = Number(m.amount_due || 0); m.paid_at = new Date().toISOString(); }
+      });
+      await saveDataToSupabase();
+      renderLogistics();
+      openLogisticsDetail(LOGISTICS_DETAIL_INDEX);
+      showToast('该批次已全部标记已交！');
+    }
+    window.markAllLogisticsPaid = markAllLogisticsPaid;
+
+    async function deleteLogisticsBatch(index) {
+      const batch = RAW_LOGISTICS[index];
+      if (!batch) return;
+      if (!confirm('确定删除国际运费批次「' + (batch.batch_name || '') + '」吗？不可恢复！')) return;
+      LOGISTICS_DELETED_BATCHES.add(batch.batch_name);
+      RAW_LOGISTICS.splice(index, 1);
+      await saveDataToSupabase();
+      renderLogistics();
+      showToast('国际运费批次已删除！');
+    }
+    window.deleteLogisticsBatch = deleteLogisticsBatch;
+
+    /* ══ 🌍 国际运费「掉落」告警条 + 到期自动改状态（2026-11-04 团长需求）══
+       团长口径（逐条确认过）：
+         · 到期日＝**导入国际运费时手选**；页面默认填「今天+3 天」，清空 = 不计时、不告警。
+         · 黄条 = 还没到期的批次倒计时（常驻，不自动消失，也没有关闭按钮）。
+         · 红条 = **今日到期 / 已过期**且还有人未交的批次；条上只写人数，点「查看名单」看 CN。
+         · 到期日当天**只提醒、不动数据**；**过了到期日**，下次打开/刷新后台时自动把这批
+           没交的人的谷子状态改成「未交国际掉落」——只改状态，谷子保留、金额不变。
+           补交之后走原有那条「审核通过 → 该批次该 CN 自动可排发」的规则就恢复了。
+       ⚠️ 岛内运费（fee_type='island'）挂在同一份 logistics_data 里，绝不参与掉落。
+       ⚠️ 只动 RAW_ITEMS（不碰归档区），只改「已下单 / 收国际中 / 国际运输中」这三种在途状态；
+          「未付款 / 可排发 / 待发货 / 已排发 / 已到货」一律不碰。
+       ⚠️ 写库走 saveDataToSupabase（带版本锁），且只在真的改到东西时才调用。 */
+    var INTL_DROP_STATUS = '未交国际掉落';
+    var INTL_DROP_SRC = ['已下单', '收国际中', '国际运输中'];
+
+    function _intlYmd(dt) {
+      var y = dt.getFullYear();
+      var m = String(dt.getMonth() + 1).padStart(2, '0');
+      var d = String(dt.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + d;
+    }
+    function _intlTodayStr() { var d = new Date(); d.setHours(0, 0, 0, 0); return _intlYmd(d); }
+    function _intlYmdPlus(n) {
+      var d = new Date(); d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() + (n === undefined ? 0 : Number(n) || 0));
+      return _intlYmd(d);
+    }
+    function _intlParseYmd(s) {
+      var p = String(s || '').trim().split('-');
+      if (p.length !== 3) return null;
+      var y = Number(p[0]), m = Number(p[1]), d = Number(p[2]);
+      if (!y || !m || !d) return null;
+      var dt = new Date(y, m - 1, d);
+      dt.setHours(0, 0, 0, 0);
+      return isNaN(dt.getTime()) ? null : dt;
+    }
+    /* 距到期还有几天：>0 还没到，0 = 今天到期，<0 已过期；null = 没有/解析不了 */
+    function _intlDaysLeft(dateStr) {
+      var dt = _intlParseYmd(dateStr);
+      if (!dt) return null;
+      var t = new Date(); t.setHours(0, 0, 0, 0);
+      return Math.round((dt.getTime() - t.getTime()) / 86400000);
+    }
+    function _intlMd(dateStr) {
+      var p = String(dateStr || '').split('-');
+      return p.length === 3 ? (p[1] + '-' + p[2]) : String(dateStr || '');
+    }
+
+    /* 国际运费成员（排除岛内那一段）。岛内记录带 fee_type='island'。 */
+    function _intlFeeMembers(batch) {
+      var arr = (batch && Array.isArray(batch.fee_members)) ? batch.fee_members : [];
+      return arr.filter(function (m) { return m && String(m.fee_type || '').trim() !== 'island'; });
+    }
+    /* 未交的人，按 CN 去重（一个人多条合并金额） */
+    function _intlUnpaidList(batch) {
+      var out = [], seen = {};
+      _intlFeeMembers(batch).forEach(function (m) {
+        if (String(m.status || '').trim() !== '未交') return;
+        var cn = String(m.cn || '').trim();
+        if (!cn) return;
+        var k = cn.toLowerCase();
+        if (seen[k]) { seen[k].amount += Number(m.amount_due || 0); return; }
+        seen[k] = { cn: cn, amount: Number(m.amount_due || 0) };
+        out.push(seen[k]);
+      });
+      return out;
+    }
+    function _intlSumAmount(list) {
+      var t = 0;
+      (list || []).forEach(function (x) { t += Number(x.amount || 0); });
+      return Math.round(t * 100) / 100;
+    }
+
+    /* 写日期：'' = 不计时。日期一变就把「已掉落」标记清掉，允许按新日期重算。 */
+    function _applyIntlDue(batch, due) {
+      if (!batch) return;
+      var d = String(due || '').trim();
+      var prev = String(batch.intl_due_date || '').trim();
+      batch.intl_due_date = d;
+      if (!d || d !== prev) { batch.intl_dropped_at = ''; batch.intl_dropped_on = ''; }
+    }
+    function fillLogisticsDueDate(days, onlyIfEmpty) {
+      var el = document.getElementById('logisticsDueDate');
+      if (!el) return;
+      if (onlyIfEmpty && el.value) return;
+      el.value = _intlYmdPlus(days === undefined ? 3 : days);
+    }
+    window.fillLogisticsDueDate = fillLogisticsDueDate;
+
+    /* 手机端顶部导航是 position:sticky 的横条 → 告警条吸顶要避让它。
+       宽度 >768 时导航是左侧固定栏，不占顶部高度，置 0。 */
+    function _syncAdminNavH() {
+      var nav = document.querySelector('.side-nav');
+      var h = 0;
+      if (nav && window.innerWidth <= 768) h = Math.round(nav.getBoundingClientRect().height) || 0;
+      document.documentElement.style.setProperty('--admin-nav-h', h + 'px');
+    }
+    window._syncAdminNavH = _syncAdminNavH;
+    window.addEventListener('resize', function () { try { _syncAdminNavH(); } catch (e) {} });
+    window.addEventListener('orientationchange', function () { setTimeout(function () { try { _syncAdminNavH(); } catch (e) {} }, 200); });
+
+    /* ── 黄/红条 ────────────────────────────────────────────────────── */
+    function renderIntlAlerts() {
+      try { _syncAdminNavH(); } catch (e) {}
+      var wrap = document.getElementById('intlAlertBars');
+      var yEl = document.getElementById('intlAlertYellow');
+      var rEl = document.getElementById('intlAlertRed');
+      var yBody = document.getElementById('intlAlertYellowBody');
+      var rBody = document.getElementById('intlAlertRedBody');
+      if (!wrap || !yEl || !rEl || !yBody || !rBody) return;
+
+      var yellow = [], red = [];
+      (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+        if (!b || !b.batch_name) return;
+        var due = String(b.intl_due_date || '').trim();
+        if (!due) return;                       // 没设置期 = 不计时，不打扰
+        var days = _intlDaysLeft(due);
+        if (days === null) return;
+        var unpaid = _intlUnpaidList(b);
+        if (!unpaid.length) return;             // 都交清了就不显示
+        var row = {
+          name: b.batch_name, due: due, days: days, unpaid: unpaid,
+          dropped: !!String(b.intl_dropped_at || '').trim()
+        };
+        (days > 0 ? yellow : red).push(row);
+      });
+      yellow.sort(function (a, b) { return a.days - b.days; });
+      red.sort(function (a, b) { return a.days - b.days; });
+
+      var hasAny = (yellow.length + red.length) > 0;
+      wrap.style.display = hasAny ? 'flex' : 'none';
+      if (!hasAny) { yEl.style.display = 'none'; rEl.style.display = 'none'; return; }
+
+      if (yellow.length) {
+        yEl.style.display = '';
+        yBody.innerHTML = '<div class="intl-alert-head">国际运费还在收 · 到期会掉落</div>'
+          + yellow.map(function (it) {
+              return '<div class="intl-alert-line"><b>「' + escapeHtml(it.name) + '」国际 ' + it.days + ' 天后掉落</b>'
+                + '<span class="intl-alert-meta">' + _intlMd(it.due) + ' 到期 · ' + it.unpaid.length + ' 人未交 · 尚欠 ￥'
+                + _intlSumAmount(it.unpaid).toFixed(2) + '</span></div>';
+            }).join('');
+      } else { yEl.style.display = 'none'; }
+
+      if (red.length) {
+        rEl.style.display = '';
+        rBody.innerHTML = '<div class="intl-alert-head">国际运费已到期 · 还有人没交</div>'
+          + red.map(function (it) {
+              var when = (it.days === 0) ? '今日到期' : ('已过期 ' + (-it.days) + ' 天');
+              return '<div class="intl-alert-line"><b>' + when + '「' + escapeHtml(it.name) + '」' + it.unpaid.length + ' 人未交</b>'
+                + '<span class="intl-alert-meta">' + _intlMd(it.due) + ' 到期 · 尚欠 ￥' + _intlSumAmount(it.unpaid).toFixed(2)
+                + (it.dropped ? ' · 谷子已标「' + INTL_DROP_STATUS + '」' : '') + '</span></div>';
+            }).join('');
+      } else { rEl.style.display = 'none'; }
+    }
+    window.renderIntlAlerts = renderIntlAlerts;
+
+    /* 批次列表里的那一格 */
+    function intlDueCellHtml(batch, index) {
+      var due = String((batch && batch.intl_due_date) || '').trim();
+      var days = due ? _intlDaysLeft(due) : null;
+      var btn = '<button class="btn btn-secondary" style="padding:1px 7px;font-size:.74rem;margin-top:3px;" onclick="openIntlDueModal(' + index + ')">'
+              + (days === null ? '设置' : '改期') + '</button>';
+      if (days === null) return '<span style="color:var(--text-muted);font-size:.8rem;">未设置</span><div>' + btn + '</div>';
+      var cls, txt;
+      if (days > 0) { cls = 'background:#fef3c7;color:#b45309;border:1px solid #fde68a;'; txt = days + ' 天后'; }
+      else if (days === 0) { cls = 'background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;'; txt = '今日到期'; }
+      else { cls = 'background:#e5e7eb;color:#374151;border:1px solid #d1d5db;'; txt = '已过期 ' + (-days) + ' 天'; }
+      return '<span style="display:inline-block;padding:1px 6px;border-radius:6px;font-weight:600;font-size:.78rem;' + cls + '">' + txt + '</span>'
+           + '<div style="font-size:.72rem;color:#64748b;margin-top:2px;">' + _intlMd(due) + ' 到期</div>' + btn;
+    }
+
+    /* ── 到期日弹窗 ─────────────────────────────────────────────────── */
+    var INTL_DUE_INDEX = -1;
+    function openIntlDueModal(index) {
+      var b = RAW_LOGISTICS[index];
+      if (!b) return;
+      INTL_DUE_INDEX = index;
+      document.getElementById('intlDueBatchName').innerText = '「' + (b.batch_name || '未命名批次') + '」';
+      document.getElementById('intlDueDateInput').value = String(b.intl_due_date || '').trim();
+      document.getElementById('intlDueModal').classList.add('active');
+    }
+    window.openIntlDueModal = openIntlDueModal;
+    function closeIntlDueModal() { document.getElementById('intlDueModal').classList.remove('active'); }
+    window.closeIntlDueModal = closeIntlDueModal;
+
+    async function saveIntlDueDate() {
+      var b = RAW_LOGISTICS[INTL_DUE_INDEX];
+      if (!b) return;
+      var v = String(document.getElementById('intlDueDateInput').value || '').trim();
+      if (v && !_intlParseYmd(v)) return showToast('日期格式不对，请重新选');
+      _applyIntlDue(b, v);
+      await saveDataToSupabase();
+      closeIntlDueModal();
+      renderLogistics();
+      var days = v ? _intlDaysLeft(v) : null;
+      showToast(v
+        ? ('✅ 「' + b.batch_name + '」国际掉落日：' + v + (days !== null && days < 0 ? '（已过期，马上结算）' : '（' + days + ' 天后）'))
+        : ('已清除「' + b.batch_name + '」的掉落计时'));
+      if (v && days !== null && days < 0) {
+        var n = await checkIntlDropExpiry();
+        if (n > 0) { try { renderTable(); } catch (e) {} renderLogistics(); }
+      }
+    }
+    window.saveIntlDueDate = saveIntlDueDate;
+
+    async function clearIntlDueDate() {
+      var b = RAW_LOGISTICS[INTL_DUE_INDEX];
+      if (!b) return;
+      _applyIntlDue(b, '');
+      await saveDataToSupabase();
+      closeIntlDueModal();
+      renderLogistics();
+      showToast('已清除「' + b.batch_name + '」的掉落计时');
+    }
+    window.clearIntlDueDate = clearIntlDueDate;
+
+    /* ── 红条「查看名单」 ───────────────────────────────────────────── */
+    function openIntlDropList() {
+      var body = document.getElementById('intlDropListBody');
+      if (!body) return;
+      var rows = [];
+      (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+        if (!b || !b.batch_name) return;
+        var due = String(b.intl_due_date || '').trim();
+        if (!due) return;
+        var days = _intlDaysLeft(due);
+        if (days === null || days > 0) return;
+        var unpaid = _intlUnpaidList(b);
+        if (!unpaid.length) return;
+        rows.push({ name: b.batch_name, due: due, days: days, unpaid: unpaid,
+                    dropped: !!String(b.intl_dropped_at || '').trim() });
+      });
+      rows.sort(function (a, b) { return a.days - b.days; });
+      if (!rows.length) {
+        body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);">没有到期未交的批次 ✅</div>';
+      } else {
+        body.innerHTML = rows.map(function (r) {
+          var when = (r.days === 0) ? '今日到期' : ('已过期 ' + (-r.days) + ' 天');
+          return '<div style="margin-bottom:16px;">'
+            + '<div style="font-weight:700;font-size:.92rem;margin-bottom:6px;">' + escapeHtml(r.name)
+            + ' <span style="font-weight:400;font-size:.8rem;color:var(--text-muted);">· ' + when + ' · '
+            + _intlMd(r.due) + ' 到期 · ' + r.unpaid.length + ' 人 · 尚欠 ￥' + _intlSumAmount(r.unpaid).toFixed(2)
+            + (r.dropped ? ' · 谷子已标「' + INTL_DROP_STATUS + '」' : '') + '</span></div>'
+            + '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
+            + r.unpaid.map(function (u) {
+                return '<span style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:6px;padding:2px 8px;font-size:.82rem;font-weight:600;">'
+                  + escapeHtml(u.cn) + ' ￥' + Number(u.amount || 0).toFixed(2) + '</span>';
+              }).join('')
+            + '</div></div>';
+        }).join('');
+      }
+      document.getElementById('intlDropListModal').classList.add('active');
+    }
+    window.openIntlDropList = openIntlDropList;
+    function closeIntlDropList() { document.getElementById('intlDropListModal').classList.remove('active'); }
+    window.closeIntlDropList = closeIntlDropList;
+
+    /* ── 到期结算：过期即掉落（只改状态）───────────────────────────── */
+    async function checkIntlDropExpiry() {
+      if (!Array.isArray(RAW_LOGISTICS) || !RAW_LOGISTICS.length) return 0;
+      if (!Array.isArray(RAW_ITEMS)) return 0;
+
+      var jobs = [];
+      RAW_LOGISTICS.forEach(function (b) {
+        if (!b || !b.batch_name) return;
+        var due = String(b.intl_due_date || '').trim();
+        if (!due) return;
+        var days = _intlDaysLeft(due);
+        if (days === null || days >= 0) return;                     // 到期日当天只提醒，不落刀
+        if (String(b.intl_dropped_on || '').trim() === due) return; // 这个到期日已经掉过了
+        var unpaid = _intlUnpaidList(b);
+        if (!unpaid.length) return;
+        jobs.push({ b: b, due: due, unpaid: unpaid });
+      });
+      if (!jobs.length) return 0;
+
+      var total = 0, notes = [];
+      jobs.forEach(function (job) {
+        var bk = _normBatchKey(job.b.batch_name || '');
+        var cnMap = {};
+        job.unpaid.forEach(function (u) { cnMap[String(u.cn || '').trim().toLowerCase()] = 1; });
+        var n = 0;
+        RAW_ITEMS.forEach(function (it) {
+          if (!it || typeof it !== 'object') return;
+          if (_normBatchKey(it.batch_name || '') !== bk) return;
+          var ck = String(it.cn || '').trim().toLowerCase();
+          if (!ck || !cnMap[ck]) return;
+          if (INTL_DROP_SRC.indexOf(String(it.status || '').trim()) < 0) return;
+          it.status = INTL_DROP_STATUS;
+          DIRTY_ITEM_IDS.add(String(it.item_id || it.id || ''));
+          n++;
+        });
+        job.b.intl_dropped_at = new Date().toISOString();
+        job.b.intl_dropped_on = job.due;
+        job.b.intl_dropped_count = n;
+        total += n;
+        notes.push('「' + job.b.batch_name + '」' + n + ' 件');
+      });
+
+      await saveDataToSupabase();
+      if (total > 0) {
+        showToast('⚠️ 国际运费到期：' + notes.join('、') + ' 谷子已自动标为「' + INTL_DROP_STATUS + '」', 9000);
+      }
+      return total;
+    }
+    window.checkIntlDropExpiry = checkIntlDropExpiry;
+
+    /* 每次数据加载完跑一次（错开首屏渲染，别跟开场动画抢帧） */
+    var _intlDropRunning = false;
+    function scheduleIntlDropCheck() {
+      if (_intlDropRunning) return;
+      _intlDropRunning = true;
+      setTimeout(function () {
+        checkIntlDropExpiry().then(function (n) {
+          if (n > 0) { try { renderTable(); } catch (e) {} renderLogistics(); }
+        }).catch(function () {}).then(function () { _intlDropRunning = false; });
+      }, 800);
+    }
+    window.scheduleIntlDropCheck = scheduleIntlDropCheck;
+
+    /* ─────────────── 🧮 岛内运费（2026-09-27 团长要求） ───────────────
+       数据源：**「排表管理」group_data 里的批次**（2026-09-27 团长指正后改正 ——
+       不是国际运费 logistics_data 里的批次；批次名 = 排表谷子的 batch_name）。
+       两种用法：
+         ① 按件数自动均摊：选排表批次 + 填岛内总额 → 按每人件数占比摊到分；
+         ② 自己粘贴导入：第一行＝这次岛内名称，之后每行 `cn 点数 金额`，
+            金额就是那个人该交的钱，页面不再重算（= 团长要的「自主导入」）。
+       两条路都写进 image_data.logistics_data（挂到同名批次，没有就新建），
+       团员在自查网站「交肾核算」里就能看到这条费用。
+       ⚠️ 岛内记录带 fee_type='island' 标记：合并键靠它和「国际运费」区分开
+          （`_logiMemberKey`），否则同一个人两条会被并成一条、岛内那笔凭空消失。 */
+    const ISLAND_ITEM_NAME = '岛内运费';
+    const ISLAND_FEE_TYPE = 'island';
+
+    function _islandRound(x) { return Math.round((Number(x) || 0) * 100) / 100; }
+    function _islandNum(s) {          // 允许「￥12.5」「12.5元」这种写法
+      const t = String(s == null ? '' : s).replace(/[^\d.\-]/g, '');
+      if (!t) return NaN;
+      const v = Number(t);
+      return isFinite(v) ? v : NaN;
+    }
+
+    /* 排表里的批次名（与「排表管理」的批次筛选同源，排除已归档 / 被手动隐藏的）。 */
+    function buildIslandBatchList() {
+      const removed = (typeof getRemovedBatchOptions === 'function') ? getRemovedBatchOptions() : [];
+      const set = new Set();
+      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it) {
+        const bn = String((it && it.batch_name) || '').trim();
+        if (bn) set.add(bn);
+      });
+      return Array.from(set).filter(function (b) {
+        if (removed.indexOf(b) !== -1) return false;
+        return !(typeof isArchivedBatchName === 'function' && isArchivedBatchName(b));
+      });
+    }
+    window.buildIslandBatchList = buildIslandBatchList;
+
+    /* 排表某批次：按 CN 汇总件数（同一个人多条谷子会相加）。 */
+    function islandQtyByCn(batchName) {
+      const byCn = {};
+      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        if (String(it.batch_name || '').trim() !== batchName) return;
+        const cn = String(it.cn || '').trim();
+        if (!cn) return;
+        let q = Number(it.quantity);
+        if (!isFinite(q) || q <= 0) q = 1;
+        byCn[cn] = (byCn[cn] || 0) + q;
+      });
+      return byCn;
+    }
+    window.islandQtyByCn = islandQtyByCn;
+
+    /* 取（必要时新建）logistics_data 里的批次对象；落库统一交给 saveDataToSupabase。 */
+    function _ensureLogisticsBatch(batchName) {
+      const bn = String(batchName || '').trim();
+      if (!bn) return null;
+      let b = (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : [])
+        .find(function (x) { return x && String(x.batch_name || '').trim() === bn; });
+      if (!b) {
+        b = { batch_name: bn, fee_members: [], updated_at: new Date().toISOString() };
+        if (!Array.isArray(RAW_LOGISTICS)) RAW_LOGISTICS = [];
+        RAW_LOGISTICS.push(b);
+      }
+      if (!Array.isArray(b.fee_members)) b.fee_members = [];
+      LOGISTICS_DELETED_BATCHES.delete(bn);   // 同名批次以前被删过 → 取消墓碑，否则会被合并逻辑过滤掉
+      return b;
+    }
+
+    function _islandOldRecords(batch) {
+      return (Array.isArray(batch && batch.fee_members) ? batch.fee_members : [])
+        .filter(function (m) { return m && String(m.fee_type || '').trim() === ISLAND_FEE_TYPE; });
+    }
+
+    /* 该批次里被标「免交」的 CN（读国际运费那份数据）。 */
+    function _islandFreeCnSet(batchName) {
+      const b = (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : [])
+        .find(function (x) { return x && String(x.batch_name || '').trim() === batchName; });
+      const s = {};
+      if (b) (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
+        if (m && String(m.status || '').trim() === '免交') s[String(m.cn || '').trim()] = true;
+      });
+      return s;
+    }
+
+    /* 模式切换（自动均摊 / 粘贴导入） */
+    function switchIslandMode(mode) {
+      const isAuto = mode !== 'import';
+      const a = document.getElementById('islandMode_auto');
+      const b = document.getElementById('islandMode_import');
+      const ba = document.getElementById('islandModeBtn_auto');
+      const bb = document.getElementById('islandModeBtn_import');
+      if (a) a.style.display = isAuto ? '' : 'none';
+      if (b) b.style.display = isAuto ? 'none' : '';
+      if (ba) ba.className = 'btn ' + (isAuto ? 'btn-primary' : 'btn-secondary');
+      if (bb) bb.className = 'btn ' + (isAuto ? 'btn-secondary' : 'btn-primary');
+      cancelIslandPreview();
+    }
+    window.switchIslandMode = switchIslandMode;
+
+    /* 两个下拉都填「排表批次」 */
+    function renderIslandBatchOptions() {
+      const list = buildIslandBatchList();
+      [document.getElementById('islandBatchSelect'),
+       document.getElementById('islandImportBatchSelect')].forEach(function (sel) {
+        if (!sel) return;
+        const cur = sel.value;
+        sel.innerHTML = list.length
+          ? list.map(function (bn) {
+              return '<option value="' + escapeHtml(bn) + '">' + escapeHtml(bn) + '</option>';
+            }).join('')
+          : '<option value="">（排表里还没有批次）</option>';
+        if (cur && list.indexOf(cur) !== -1) sel.value = cur;
+      });
+    }
+    window.renderIslandBatchOptions = renderIslandBatchOptions;
+
+    let ISLAND_PREVIEW = null;
+
+    /* ① 自动均摊（纯计算，不碰数据）。 */
+    function calcIslandAllocation(batchName, totalAmount, skipFree) {
+      const total = Number(totalAmount);
+      if (!isFinite(total) || total <= 0) return { error: '岛内总额要填一个大于 0 的数字' };
+      const qtyByCn = islandQtyByCn(batchName);
+      const freeSet = skipFree ? _islandFreeCnSet(batchName) : {};
+      const list = [];
+      Object.keys(qtyByCn).forEach(function (cn) {
+        if (freeSet[cn]) return;                       // 已标免交 → 不参与（不算分母、不摊钱）
+        list.push({ cn: cn, qty: qtyByCn[cn], amount: 0 });
+      });
+      if (!list.length) return { error: '这个批次在排表里没有可分摊的人（是不是都标了「免交」？）' };
+      const totalQty = list.reduce(function (s, x) { return s + x.qty; }, 0);
+      if (!totalQty) return { error: '这批总件数是 0，没法摊' };
+      list.forEach(function (x) {
+        x.ratio = x.qty / totalQty;
+        x.amount = _islandRound(total * x.ratio);      // ④ 各自四舍五入到分
+      });
+      list.sort(function (a, b) { return (b.amount - a.amount) || a.cn.localeCompare(b.cn, 'zh'); });
+      const sum = _islandRound(list.reduce(function (s, x) { return s + x.amount; }, 0));
+      return { batchName: batchName, itemName: ISLAND_ITEM_NAME, list: list, totalQty: totalQty,
+               total: _islandRound(total), sum: sum, diff: _islandRound(sum - total), source: 'auto' };
+    }
+    window.calcIslandAllocation = calcIslandAllocation;
+
+    function previewIslandAllocation() {
+      const sel = document.getElementById('islandBatchSelect');
+      const batchName = sel ? String(sel.value || '').trim() : '';
+      if (!batchName) return showToast('请先选一个排表批次');
+      const freeBox = document.getElementById('islandSkipFree');
+      const r = calcIslandAllocation(batchName, document.getElementById('islandTotalInput').value,
+                                     freeBox ? !!freeBox.checked : true);
+      if (r.error) return showToast('⚠️ ' + r.error);
+      ISLAND_PREVIEW = r;
+      renderIslandPreview();
+    }
+    window.previewIslandAllocation = previewIslandAllocation;
+
+    /* ② 粘贴导入：解析文本。第一行（不是数据行的第一行）当名称，其余每行 `cn 点数 金额`。 */
+    function parseIslandImportText(raw) {
+      const lines = String(raw || '').split(/\r?\n/);
+      let name = '';
+      const rows = [], bad = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = String(lines[i] || '').trim();
+        if (!line) continue;
+        if (/^cn\b/i.test(line)) continue;                                      // 表头行
+        if (line.indexOf('点数') >= 0 && line.indexOf('金额') >= 0) continue;     // 表头行
+        const parts = line.split(/[\s\u3000]+/).filter(Boolean);
+        let cn = '', qty = NaN, amt = NaN;
+        if (parts.length >= 3) {
+          amt = _islandNum(parts[parts.length - 1]);
+          qty = _islandNum(parts[parts.length - 2]);
+          cn = parts.slice(0, parts.length - 2).join(' ').trim();
+        } else if (parts.length === 2) {
+          amt = _islandNum(parts[1]);
+          cn = parts[0];
+        }
+        if (parts.length >= 2 && cn && isFinite(amt)) {
+          rows.push({ cn: cn, qty: (isFinite(qty) && qty > 0) ? qty : 1, amount: _islandRound(amt) });
+        } else if (!name) {
+          name = line;                                        // 第一行 = 这次岛内名称
+        } else {
+          bad.push(i + 1);                                    // 中间冒出来的怪行 → 报出来
+        }
+      }
+      return { name: name, rows: rows, bad: bad };
+    }
+    window.parseIslandImportText = parseIslandImportText;
+
+    function previewIslandImport() {
+      const rawEl = document.getElementById('islandImportText');
+      const p = parseIslandImportText(rawEl ? rawEl.value : '');
+      if (!p.rows.length) return showToast('没解析到数据行，格式要像「某某 1 0.5」');
+      if (p.bad.length) return showToast('第 ' + p.bad.join('、') + ' 行看不懂，请检查');
+      const nameEl = document.getElementById('islandImportName');
+      if (nameEl && !String(nameEl.value || '').trim() && p.name) nameEl.value = p.name;
+      const itemName = String((nameEl && nameEl.value) || p.name || ISLAND_ITEM_NAME).trim() || ISLAND_ITEM_NAME;
+      const sel = document.getElementById('islandImportBatchSelect');
+      const batchName = sel ? String(sel.value || '').trim() : '';
+      if (!batchName) return showToast('请选这笔账要挂到哪个排表批次');
+      // 同一个 CN 出现多行 → 金额累加（宁可算多也不丢钱）
+      const seen = {};
+      const list = [];
+      p.rows.forEach(function (row) {
+        if (seen[row.cn]) {
+          seen[row.cn].amount = _islandRound(seen[row.cn].amount + row.amount);
+          seen[row.cn].qty += row.qty;
+          return;
+        }
+        seen[row.cn] = { cn: row.cn, qty: row.qty, amount: row.amount };
+        list.push(seen[row.cn]);
+      });
+      list.sort(function (a, b) { return (b.amount - a.amount) || a.cn.localeCompare(b.cn, 'zh'); });
+      const total = _islandRound(list.reduce(function (s, x) { return s + x.amount; }, 0));
+      const totalQty = list.reduce(function (s, x) { return s + x.qty; }, 0);
+      ISLAND_PREVIEW = { batchName: batchName, itemName: itemName, list: list, totalQty: totalQty,
+                         total: total, sum: total, diff: 0, source: 'import' };
+      renderIslandPreview();
+    }
+    window.previewIslandImport = previewIslandImport;
+
+    /* 预览渲染（两种模式共用） */
+    function renderIslandPreview() {
+      const r = ISLAND_PREVIEW;
+      if (!r) return;
+      const oldBatch = (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : [])
+        .find(function (b) { return b && String(b.batch_name || '').trim() === r.batchName; });
+      const oldN = oldBatch ? _islandOldRecords(oldBatch).length : 0;
+      const off = Math.abs(r.diff) > 0.004;
+      const src = (r.source === 'import')
+        ? '自己粘贴导入（金额照你给的写，不重算）'
+        : '按件数自动均摊';
+      let html = '批次「<b>' + escapeHtml(r.batchName) + '</b>」· 费用名「<b>' + escapeHtml(r.itemName) + '</b>」<br>'
+        + '方式：' + src + '　|　<b>' + r.list.length + '</b> 人 / 共 <b>' + r.totalQty + '</b> 件<br>'
+        + '合计 <b>￥' + r.sum.toFixed(2) + '</b>';
+      if (r.source === 'import') {
+        html += '（= 你粘贴的金额总和）';
+      } else {
+        html += '　|　你输入的总额 ￥' + r.total.toFixed(2)
+          + '　|　差额 <b style="color:' + (off ? '#dc2626' : '#16a34a') + ';">'
+          + (r.diff >= 0 ? '+' : '') + r.diff.toFixed(2) + '</b>'
+          + (off ? '（<span style="color:#dc2626;">四舍五入的零头，属正常</span>）' : '');
+      }
+      if (oldN) {
+        html += '<br><span style="color:#a16207;">⚠️ 这个批次已有 ' + oldN
+          + ' 条「岛内运费」：写入时按圈名<b>覆盖金额</b>（不新增、不会重复收钱）。</span>';
+      }
+      document.getElementById('islandPreviewSummary').innerHTML = html;
+      document.getElementById('islandPreviewBody').innerHTML = r.list.map(function (x, i) {
+        return '<tr><td style="white-space:normal; word-break:break-word;"><strong>' + escapeHtml(x.cn)
+          + '</strong></td><td>' + x.qty + '</td>'
+          + '<td><input type="number" step="0.01" min="0" data-island-idx="' + i + '" value="'
+          + Number(x.amount).toFixed(2) + '" style="width:100%;"></td></tr>';
+      }).join('');
+      document.getElementById('islandPreviewBox').style.display = '';
+      const btn = document.getElementById('islandApplyBtn');
+      btn.dataset.confirming = '';
+      btn.innerText = oldN
+        ? '覆盖写入 ' + r.list.length + ' 条「' + r.itemName + '」'
+        : '写入账目（新增 ' + r.list.length + ' 条「' + r.itemName + '」）';
+    }
+    window.renderIslandPreview = renderIslandPreview;
+
+    function cancelIslandPreview() {
+      ISLAND_PREVIEW = null;
+      const box = document.getElementById('islandPreviewBox');
+      if (box) box.style.display = 'none';
+    }
+    window.cancelIslandPreview = cancelIslandPreview;
+
+    /* 真正写账。⚠️ 两段式：第一次点只把按钮变成「再点一次确认」，第二次才写 ——
+       不用原生 confirm（微信/QQ 内置浏览器会静默屏蔽原生弹窗）。 */
+    async function applyIslandAllocation() {
+      const btn = document.getElementById('islandApplyBtn');
+      if (!ISLAND_PREVIEW) return showToast('请先算一次或解析一次');
+      const r = ISLAND_PREVIEW;
+      const inputs = document.querySelectorAll('#islandPreviewBody input[data-island-idx]');
+      if (inputs.length !== r.list.length) return showToast('预览已失效，请重新计算');
+      const amounts = [];
+      for (let i = 0; i < inputs.length; i++) {
+        const v = Number(inputs[i].value);
+        if (!isFinite(v) || v < 0) return showToast('第 ' + (i + 1) + ' 行的金额不合法');
+        amounts.push(_islandRound(v));
+      }
+      if (btn.dataset.confirming !== '1') {
+        btn.dataset.confirming = '1';
+        btn.innerText = '⚠️ 再点一次，确认写入 ' + r.list.length + ' 条？';
+        return;
+      }
+      btn.dataset.confirming = '';
+      const batch = _ensureLogisticsBatch(r.batchName);
+      if (!batch) return showToast('批次名不对，请刷新后重试');
+
+      const oldByCn = {};
+      _islandOldRecords(batch).forEach(function (m) {
+        const cn = String(m.cn || '').trim();
+        if (cn && !oldByCn[cn]) oldByCn[cn] = m;      // 同 cn 有多条时只认第一条
+      });
+      const nowIso = new Date().toISOString();
+      const touched = {};
+      let updated = 0, added = 0;
+      r.list.forEach(function (x, i) {
+        touched[x.cn] = true;
+        const amt = amounts[i];
+        const old = oldByCn[x.cn];
+        if (old) {
+          // ⚠️ 原地改金额、**id 保持不变** —— 团员端与后台审核按 `intl:<id>` 认这条，
+          //    换 id 会让团员已提交的付款凭证对不上账。
+          old.item_name = r.itemName;
+          old.fee_type = ISLAND_FEE_TYPE;
+          old.quantity = x.qty;
+          old.amount_due = amt;
+          if (String(old.status || '').trim() === '免交') old.status = '未交';  // 之前作废过、这次又回名单
+          updated++;
+        } else {
+          batch.fee_members.push({
+            id: 'log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+            cn: x.cn,
+            item_name: r.itemName,
+            fee_type: ISLAND_FEE_TYPE,
+            quantity: x.qty,
+            amount_due: amt,
+            amount_paid: 0,
+            status: '未交',
+            created_at: nowIso
+          });
+          added++;
+        }
+      });
+      // 上次算过、这次已不在名单里的（换过人）→ 作废成 0 元 + 免交，绝不让人多交钱
+      let voided = 0;
+      Object.keys(oldByCn).forEach(function (cn) {
+        if (touched[cn]) return;
+        const m = oldByCn[cn];
+        if (String(m.status || '').trim() === '免交' && _islandRound(m.amount_due) === 0) return;
+        m.amount_due = 0;
+        m.status = '免交';
+        voided++;
+      });
+      batch.updated_at = nowIso;
+
+      const okSave = await saveDataToSupabase();
+      if (okSave === false) return showToast('⚠️ 保存失败，账目没有改动，请重试');
+      ISLAND_PREVIEW = null;
+      document.getElementById('islandPreviewBox').style.display = 'none';
+      renderLogistics();
+      showToast('✅ 已写入：新增 ' + added + ' 条、覆盖 ' + updated + ' 条'
+                + (voided ? '、作废 ' + voided + ' 条（不在本次名单里）' : ''));
+    }
+    window.applyIslandAllocation = applyIslandAllocation;
+
+    /* --- 标签页 1.6：批次管理 batches --- */
+    function generateBatchId(dateStr) {
+      let d;
+      if (dateStr) { d = new Date(dateStr + 'T00:00:00'); } else { d = new Date(); }
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const prefix = 'batch_' + mm + dd + '_';
+      let maxNum = 0;
+      (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).forEach(b => {
+        const bid = String(b.batch_id || '');
+        if (bid.startsWith(prefix)) {
+          const n = parseInt(bid.slice(prefix.length), 10);
+          if (!isNaN(n) && n > maxNum) maxNum = n;
+        }
+      });
+      return prefix + String(maxNum + 1).padStart(2, '0');
+    }
+
+    function updateBatchIdPreview() {
+      const el = document.getElementById('batchIdPreview');
+      if (!el) return;
+      const dateVal = document.getElementById('batchOpenDate')?.value || '';
+      el.value = dateVal ? generateBatchId(dateVal) : 'batch_MMDD_01';
+    }
+    window.updateBatchIdPreview = updateBatchIdPreview;
+
+    async function loadBatches() {
+      try {
+        const { data, error } = await supabaseClient.from('batches').select('*').eq('query_key', CURRENT_QUERY_KEY).order('created_at', { ascending: false });
+        if (error) {
+          if (String(error.code || '') === 'PGRST205' || String(error.message || '').indexOf('Could not find the table') !== -1) {
+            showToast('⚠️ batches 表尚未创建，请先在 Supabase 执行建表 SQL');
+          } else {
+            showToast('批次读取失败: ' + error.message);
+          }
+          RAW_BATCHES = [];
+          renderBatches();
+          return;
+        }
+        RAW_BATCHES = Array.isArray(data) ? data : [];
+        renderBatches();
+        updateBatchDropdownOptions();
+      } catch (e) {
+        RAW_BATCHES = [];
+        renderBatches();
+        showToast('批次读取异常');
+      }
+    }
+    window.loadBatches = loadBatches;
+
+    async function insertBatch(data) {
+      for (let i = 0; i < 6; i++) {
+        const candidate = Object.assign({}, data, { batch_id: generateBatchId(data.open_date) });
+        const { error } = await supabaseClient.from('batches').insert([candidate]);
+        if (!error) { RAW_BATCHES.push(candidate); return { ok: true, row: candidate }; }
+        if (String(error.code || '') === '23505') { await loadBatches(); continue; }
+        return { ok: false, error: error.message };
+      }
+      return { ok: false, error: 'batch_id 生成冲突，请重试' };
+    }
+
+    async function saveManualBatch() {
+      const diskName = (document.getElementById('batchDiskName').value || '').trim();
+      const goodsTitle = (document.getElementById('batchGoodsTitle').value || '').trim();
+      const diskTag = (document.getElementById('batchDiskTag').value || '').trim();
+      const openDate = (document.getElementById('batchOpenDate').value || '').trim();
+      const status = document.getElementById('batchStatus').value || '活跃';
+      if (!diskName || !goodsTitle || !openDate) return showToast('大盘名称、制品名称、开团日期为必填！');
+      const res = await insertBatch({
+        query_key: CURRENT_QUERY_KEY,
+        disk_name: diskName,
+        goods_title: goodsTitle,
+        disk_tag: diskTag,
+        open_date: openDate,
+        status: status,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        version: 1
+      });
+      if (!res.ok) return showToast('保存失败: ' + res.error);
+      clearBatchForm();
+      await loadBatches();
+      showToast('✅ 批次已创建: ' + res.row.batch_id);
+    }
+    window.saveManualBatch = saveManualBatch;
+
+    function clearBatchForm() {
+      document.getElementById('batchDiskName').value = '';
+      document.getElementById('batchGoodsTitle').value = '';
+      document.getElementById('batchDiskTag').value = '';
+      document.getElementById('batchOpenDate').value = '';
+      document.getElementById('batchStatus').value = '活跃';
+      updateBatchIdPreview();
+    }
+    window.clearBatchForm = clearBatchForm;
+
+    function parseBatchGoodsTitles(rawText) {
+      const titles = [];
+      const lines = String(rawText || '').split(/\r?\n/);
+      for (const line of lines) {
+        const cells = line.split(/\t+/).map(c => c.trim()).filter(Boolean);
+        if (cells.length < 2) continue;
+        const first = cells[0].replace(/[:：]/g, '');
+        if (first.includes('种类')) {
+          cells.slice(1).forEach(c => {
+            if (c && !/^(默认|合计|总计|总金额|单价|数量|小计)/.test(c)) titles.push(c);
+          });
+          if (titles.length) break;
+        }
+      }
+      return titles;
+    }
+
+    function openBatchImportConfirm() {
+      const rawText = document.getElementById('batchPasteInput').value;
+      const titles = parseBatchGoodsTitles(rawText);
+      if (titles.length === 0) return showToast('未识别到“种类”行，请确认粘贴的是拼谷助手表格文本');
+      PENDING_BATCH_TITLES = titles;
+      PENDING_BATCH_RAW = rawText;
+      document.getElementById('batchImportDiskName').value = '';
+      document.getElementById('batchImportDiskTag').value = '';
+      document.getElementById('batchImportOpenDate').value = '';
+      document.getElementById('batchImportStatus').value = '活跃';
+      document.getElementById('batchImportPreview').innerHTML = titles.map(t => '<div style="padding:3px 0;">• ' + escapeHtml(t) + '</div>').join('');
+      document.getElementById('batchImportModal').classList.add('active');
+    }
+    window.openBatchImportConfirm = openBatchImportConfirm;
+
+    function closeBatchImportModal() { document.getElementById('batchImportModal').classList.remove('active'); }
+    window.closeBatchImportModal = closeBatchImportModal;
+
+    async function confirmBatchImport() {
+      const diskName = (document.getElementById('batchImportDiskName').value || '').trim();
+      const diskTag = (document.getElementById('batchImportDiskTag').value || '').trim();
+      const openDate = (document.getElementById('batchImportOpenDate').value || '').trim();
+      const status = document.getElementById('batchImportStatus').value || '活跃';
+      if (!diskName || !openDate || PENDING_BATCH_TITLES.length === 0) return showToast('请填写所属批次和开团日期！');
+      let okCount = 0;
+      const errors = [];
+      const createdBatches = [];
+      for (const title of PENDING_BATCH_TITLES) {
+        const res = await insertBatch({
+          query_key: CURRENT_QUERY_KEY,
+          disk_name: diskName,
+          goods_title: title,
+          disk_tag: diskTag,
+          open_date: openDate,
+          status: status,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          version: 1
+        });
+        if (res.ok) { okCount++; createdBatches.push({ title: title, batch_id: res.row.batch_id }); }
+        else errors.push(title + ': ' + res.error);
+      }
+
+      let syncedItems = 0;
+      const parsed = parsePasteOrderRows(PENDING_BATCH_RAW);
+      if (parsed && parsed.rows.length && createdBatches.length) {
+        const defaultCountry = document.getElementById('excelDefaultCountry')?.value || '其它';
+        const now = new Date().toISOString();
+        const items = [];
+        parsed.rows.forEach(row => {
+          row.qtys.forEach((qty, j) => {
+            if (qty > 0 && createdBatches[j]) {
+              items.push({
+                item_id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + Math.floor(Math.random() * 1000),
+                name: createdBatches[j].title,
+                cn: row.cn,
+                batch_name: diskName,
+                batch_id: createdBatches[j].batch_id,
+                open_date: openDate,
+                price: parsed.prices[j] || 0,
+                quantity: qty,
+                country: defaultCountry,
+                status: '未出荷',
+                image_url: '',
+                created_at: now
+              });
+            }
+          });
+        });
+        if (items.length) {
+          RAW_ITEMS.push(...items);
+          const saved = await saveDataToSupabase();
+          if (saved) {
+            syncedItems = items.length;
+            updateBatchDropdownOptions();
+            renderTable();
+          } else {
+            errors.push('排表同步失败，请手动检查');
+          }
+        }
+      }
+
+      closeBatchImportModal();
+      document.getElementById('batchPasteInput').value = '';
+      PENDING_BATCH_TITLES = [];
+      PENDING_BATCH_RAW = '';
+      await loadBatches();
+      if (errors.length) showToast('完成 ' + okCount + ' 个批次，失败 ' + errors.length + ' 条；同步排表 ' + syncedItems + ' 条');
+      else showToast('✅ 已生成 ' + okCount + ' 个批次，并同步排表 ' + syncedItems + ' 条记录！');
+    }
+    window.confirmBatchImport = confirmBatchImport;
+
+    function renderBatches() {
+      const filterMode = document.getElementById('batchFilterMode')?.value || 'active';
+      const st = b => String(b.status || '活跃').trim();
+      const visible = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(b => {
+        if (filterMode === 'all') return true;
+        if (filterMode === 'archived') return st(b) === '归档';
+        return st(b) !== '归档';
+      });
+      const tbody = document.getElementById('batchesTableBody');
+      const mobileView = document.getElementById('batchesMobileCardsView');
+      const dropdown = document.getElementById('batchDropdown');
+      if (dropdown) {
+        dropdown.innerHTML = '<option value="">—— 选择批次预览 ——</option>' + visible.map(b => {
+          const tag = String(b.disk_tag || '').trim();
+          const label = b.batch_id + ' ' + b.disk_name + ' ' + b.goods_title + (tag ? ' ' + tag : '');
+          return '<option value="' + escapeHtml(b.batch_id) + '">' + escapeHtml(label) + '</option>';
+        }).join('');
+      }
+      if (!tbody) return;
+      if (visible.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-muted);">暂无批次数据，请先新建或批量导入</td></tr>';
+        if (mobileView) mobileView.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted);">暂无批次数据</div>';
+        return;
+      }
+      let html = '', cardsHtml = '';
+      visible.forEach(b => {
+        const tag = String(b.disk_tag || '').trim();
+        const tagHtml = tag ? escapeHtml(tag) : '<span style="color:#cbd5e1;">—</span>';
+        const status = String(b.status || '活跃').trim();
+        const statusLabel = status === '归档' ? '已完全全部收款并完整录入' : '未完成未完全收款';
+        const stCls = status === '归档' ? 'badge-status-custom' : 'badge-status-可排发';
+        const bid = escapeHtml(String(b.batch_id || ''));
+        const archBtn = status === '归档'
+          ? '<button class="btn btn-secondary" style="padding:2px 8px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">恢复未完成</button>'
+          : '<button class="btn btn-secondary" style="padding:2px 8px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">标记已完结</button>';
+        html += '<tr>'
+          + '<td><input type="checkbox" class="batch-checkbox" value="' + bid + '" ' + (BATCH_SELECTED_IDS.has(String(b.batch_id)) ? 'checked' : '') + ' onchange="toggleBatchSelect(this.value, this.checked)"></td>'
+          + '<td style="font-family:monospace;font-size:0.85rem;">' + escapeHtml(b.batch_id) + '</td>'
+          + '<td>' + escapeHtml(b.disk_name) + '</td>'
+          + '<td>' + escapeHtml(b.goods_title) + '</td>'
+          + '<td>' + tagHtml + '</td>'
+          + '<td>' + escapeHtml(b.open_date || '') + '</td>'
+          + '<td><span class="badge ' + stCls + '">' + escapeHtml(statusLabel) + '</span></td>'
+          + '<td><button class="btn btn-primary" style="padding:2px 8px;font-size:0.8rem;" onclick="copyBatchById(\'' + bid + '\')">复制</button> ' + archBtn + '</td>'
+          + '</tr>';
+        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><input type="checkbox" class="batch-checkbox" value="' + bid + '" ' + (BATCH_SELECTED_IDS.has(String(b.batch_id)) ? 'checked' : '') + ' onchange="toggleBatchSelect(this.value, this.checked)"> <span class="badge badge-batch">' + escapeHtml(b.batch_id) + '</span><span class="badge ' + stCls + '">' + escapeHtml(statusLabel) + '</span></div><div style="font-size:0.9rem;padding:6px 0;"><strong>' + escapeHtml(b.disk_name) + '</strong><br>' + escapeHtml(b.goods_title) + (tag ? '<br>车次: ' + escapeHtml(tag) : '') + '<br>开团: ' + escapeHtml(b.open_date || '') + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px;font-size:0.8rem;" onclick="copyBatchById(\'' + bid + '\')">复制</button> <button class="btn btn-secondary" style="padding:4px 10px;font-size:0.8rem;" onclick="toggleBatchStatus(\'' + bid + '\')">' + (status === '归档' ? '恢复活跃' : '归档') + '</button></div></div>';
+      });
+      tbody.innerHTML = html;
+      if (mobileView) mobileView.innerHTML = cardsHtml;
+      updateBatchSelectAllState();
+    }
+    window.renderBatches = renderBatches;
+
+    function copyBatchById(batchId) {
+      const b = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).find(x => String(x.batch_id) === String(batchId));
+      if (!b) return;
+      document.getElementById('batchDiskName').value = b.disk_name || '';
+      document.getElementById('batchDiskTag').value = b.disk_tag || '';
+      document.getElementById('batchOpenDate').value = b.open_date || '';
+      document.getElementById('batchGoodsTitle').value = '';
+      document.getElementById('batchStatus').value = '活跃';
+      updateBatchIdPreview();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      showToast('已复制：' + (b.disk_name || '') + '，只需修改制品名称');
+    }
+    window.copyBatchById = copyBatchById;
+
+    // 与排表管理保存逻辑一致：改本地 → 立即刷新界面 → 后台异步落库
+    async function persistBatchStatusChanges() {
+      try {
+        // 后台同步数据库最新状态（失败不阻塞界面）
+        await loadBatches();
+      } catch (e) {}
+    }
+
+    async function toggleBatchStatus(batchId) {
+      const b = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).find(x => String(x.batch_id) === String(batchId));
+      if (!b) return;
+      const next = String(b.status || '活跃').trim() === '归档' ? '活跃' : '归档';
+      // ① 立即更新本地缓存并刷新界面（不依赖网络）
+      b.status = next;
+      try { renderBatches(); updateBatchDropdownOptions(); renderTable(); } catch (e) {}
+      showToast(next === '归档' ? '已标记为已完全全部收款并完整录入: ' + b.batch_id : '已恢复为未完成未完全收款: ' + b.batch_id);
+      // ② 后台异步落库（失败也不阻塞界面，稍后 loadBatches 拉最新）
+      const { error } = await supabaseClient.from('batches').update({ status: next, updated_at: new Date().toISOString() }).eq('id', b.id);
+      if (error) showToast('状态同步失败: ' + error.message + '（已本地更新，请稍后刷新）');
+      setTimeout(function(){ loadBatches().catch(function(){}); }, 0);
+    }
+    window.toggleBatchStatus = toggleBatchStatus;
+
+    function handleBatchSelectChange() {
+      // 选择所属批次后无需额外处理
+    }
+    window.handleBatchSelectChange = handleBatchSelectChange;
+
+    function parsePasteOrderRows(rawText) {
+      const lines = String(rawText || '').split(/\r?\n/);
+      let colIndexes = [], titles = [], prices = [], cnColIdx = -1, startRow = -1;
+      for (let i = 0; i < lines.length; i++) {
+        const cells = lines[i].replace(/^\t+/, '').split('\t').map(c => c.trim());
+        const first = (cells[0] || '').replace(/[:：]/g, '');
+        if (first.includes('种类')) {
+          cells.slice(1).forEach((c, idx) => {
+            if (c && !/^(默认|合计|总计|总金额|单价|数量|小计)/.test(c)) {
+              colIndexes.push(idx + 1);
+              titles.push(c);
+            }
+          });
+        } else if (first.includes('单价')) {
+          prices = colIndexes.map(j => parseFloat(String(cells[j] === undefined ? '' : cells[j]).replace(/[^\d.-]/g, '')) || 0);
+        } else if (first.includes('总金额') || first.includes('昵称/总数')) {
+          for (let j = 0; j < cells.length; j++) {
+            if (String(cells[j] || '').indexOf('昵称') !== -1 || String(cells[j] || '').indexOf('总数') !== -1) { cnColIdx = j; break; }
+          }
+          startRow = i + 1;
+          break;
+        }
+      }
+      if (!titles.length || cnColIdx < 0 || startRow < 0) return null;
+      const rows = [];
+      for (let i = startRow; i < lines.length; i++) {
+        const cells = lines[i].replace(/^\t+/, '').split('\t').map(c => c.trim());
+        if (cells.length <= cnColIdx) continue;
+        const cn = cells[cnColIdx];
+        if (!cn || /^(总金额|合计|总计)/.test(cn) || cn.indexOf('昵称/总数') !== -1 || cn === '总数') continue;
+        const qtys = colIndexes.map(j => parseFloat(String(cells[cnColIdx + j] === undefined ? '' : cells[cnColIdx + j]).replace(/[^\d.-]/g, '')) || 0);
+        rows.push({ cn: cn, qtys: qtys });
+      }
+      return { titles: titles, prices: prices, rows: rows };
+    }
+
+    function toggleBatchSelect(batchId, checked) {
+      const id = String(batchId || '');
+      if (checked) BATCH_SELECTED_IDS.add(id); else BATCH_SELECTED_IDS.delete(id);
+      updateBatchSelectAllState();
+    }
+    window.toggleBatchSelect = toggleBatchSelect;
+
+    function toggleSelectAllBatches(checked) {
+      const filterMode = document.getElementById('batchFilterMode')?.value || 'active';
+      const st2 = b => String(b.status || '活跃').trim();
+      const visible = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(b => {
+        if (filterMode === 'all') return true;
+        if (filterMode === 'archived') return st2(b) === '归档';
+        return st2(b) !== '归档';
+      });
+      BATCH_SELECTED_IDS.clear();
+      if (checked) visible.forEach(b => BATCH_SELECTED_IDS.add(String(b.batch_id)));
+      document.querySelectorAll('.batch-checkbox').forEach(cb => { cb.checked = checked; });
+      updateBatchSelectAllState();
+    }
+    window.toggleSelectAllBatches = toggleSelectAllBatches;
+
+    function updateBatchSelectAllState() {
+      const boxes = document.querySelectorAll('.batch-checkbox');
+      const all = document.getElementById('batchSelectAll');
+      if (all) all.checked = boxes.length > 0 && Array.from(boxes).every(cb => cb.checked);
+      const btn = document.getElementById('batchDeleteBtn');
+      if (btn) btn.innerText = '🗑 批量删除' + (BATCH_SELECTED_IDS.size ? ' (' + BATCH_SELECTED_IDS.size + ')' : '');
+    }
+    window.updateBatchSelectAllState = updateBatchSelectAllState;
+
+    async function batchDeleteSelected() {
+      if (BATCH_SELECTED_IDS.size === 0) return alert('请先勾选要删除的批次！');
+      const list = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(b => BATCH_SELECTED_IDS.has(String(b.batch_id)));
+      if (list.length === 0) return showToast('勾选的批次已不存在，请刷新后重试');
+      if (!confirm('确定删除 ' + list.length + ' 个批次吗？\n此操作只删除批次记录，不会删除排表明细里的谷子数据。')) return;
+      let ok = 0, fail = 0;
+      for (const b of list) {
+        const { error } = await supabaseClient.from('batches').delete().eq('id', b.id);
+        if (error) fail++; else ok++;
+      }
+      BATCH_SELECTED_IDS.clear();
+      await loadBatches();
+      updateBatchDropdownOptions();
+      if (ok) showToast('✅ 已删除 ' + ok + ' 个批次' + (fail ? '，失败 ' + fail + ' 个' : ''));
+      else showToast('删除失败，请稍后重试');
+    }
+    window.batchDeleteSelected = batchDeleteSelected;
+
+    // ⚙️ 批量修改批次状态（选中批次 → 切换"未完成未完全收款"/"已完全全部收款并完整录入"）
+    function openBatchStatusModal() {
+      if (BATCH_SELECTED_IDS.size === 0) return alert('请先勾选要修改状态的批次！');
+      const list = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(b => BATCH_SELECTED_IDS.has(String(b.batch_id)));
+      if (list.length === 0) return showToast('勾选的批次已不存在，请刷新后重试');
+      const descEl = document.getElementById('batchStatusModalDesc');
+      if (descEl) descEl.innerHTML = '已选中 <strong>' + list.length + '</strong> 个批次，将统一切换为下方状态：';
+      const modal = document.getElementById('batchStatusModal');
+      if (modal) modal.classList.add('active');
+    }
+    window.openBatchStatusModal = openBatchStatusModal;
+
+    function closeBatchStatusModal() {
+      const modal = document.getElementById('batchStatusModal');
+      if (modal) modal.classList.remove('active');
+    }
+    window.closeBatchStatusModal = closeBatchStatusModal;
+
+    async function confirmBatchStatusChange() {
+      const target = document.getElementById('batchStatusTarget')?.value || '归档';
+      const list = (Array.isArray(RAW_BATCHES) ? RAW_BATCHES : []).filter(b => BATCH_SELECTED_IDS.has(String(b.batch_id)));
+      if (list.length === 0) return showToast('勾选的批次已不存在，请刷新后重试');
+      const targetLabel = target === '归档' ? '已完全全部收款并完整录入' : '未完成未完全收款';
+      if (!confirm('确定将 ' + list.length + ' 个批次状态修改为 [' + targetLabel + '] 吗？')) return;
+      let ok = 0, fail = 0;
+      for (const b of list) {
+        const { error } = await supabaseClient.from('batches').update({ status: target, updated_at: new Date().toISOString() }).eq('id', b.id);
+        if (error) fail++; else { ok++; b.status = target; }  // 立即更新本地缓存
+      }
+      BATCH_SELECTED_IDS.clear();
+      // ① 先本地刷新（不依赖网络）→ 保证即时反馈
+      try { renderBatches(); updateBatchDropdownOptions(); renderTable(); } catch (e) {}
+      // ② 立刻关弹窗 + 给成功/失败提示（绝不被网络请求卡住）
+      closeBatchStatusModal();
+      if (ok > 0 && fail === 0) showToast('✅ 已修改 ' + ok + ' 个批次状态为 [' + targetLabel + ']');
+      else if (ok > 0 && fail > 0) showToast('⚠️ 已修改 ' + ok + ' 个，失败 ' + fail + ' 个');
+      else showToast('❌ 修改失败，请稍后重试');
+      // ③ 后台同步数据库最新状态（异步执行，不阻塞上面的即时反馈）
+      setTimeout(function(){ loadBatches().catch(function(){}); }, 0);
+    }
+    window.confirmBatchStatusChange = confirmBatchStatusChange;
+
+    function copyMemberLink() {
+      const url = `${window.location.origin}/index.html?key=${encodeURIComponent(CURRENT_QUERY_KEY)}`;
+      navigator.clipboard.writeText(url).then(() => showToast('自查链接已复制！')).catch(() => prompt('请手动复制链接：', url));
+    }
+    window.copyMemberLink = copyMemberLink;
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+  
+
+// ================== 算账中心（砍配/二调/台账），表格填单，无需代码 ==================
+function _c(x){ if(x==null||isNaN(x))return 0; return Math.round((Number(x)+Number.EPSILON)*100); }
+function _f(c){ var n=Number(c); return (n/100).toFixed(2); }
+var _busy2={};
+function _lock(k){ if(_busy2[k])return false; _busy2[k]=true; return true; }
+function _unlock(k){ _busy2[k]=false; }
+function _out(id,t){ var el=document.getElementById(id); if(el) el.textContent=t; }
+function pane(name){
+  document.querySelectorAll('.tab-content#tabCalc .card.pane').forEach(function(x){x.classList.remove('active');});
+  var t=document.getElementById('pane-'+name); if(t) t.classList.add('active');
+  /* 选中态改用 data-pane 精确匹配：原来靠 textContent 找中文子串，
+     一旦改文案或加图标就会静默点不亮。 */
+  document.querySelectorAll('.tab-content#tabCalc .tabbar .tab-btn').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-pane') === name);
+  });
+  /* 二级选项也改顶部标题：「算账中心 · 砍配计算」 */
+  var meta={kanpei:['砍配计算','CUT ALLOCATION'],erdiao:['盲抽二调','BLIND DRAW'],
+            export:['台账','LEDGER'],refund:['退款补录','REFUND ENTRY'],
+            deposit:['定金设置','DEPOSIT SETTINGS'],piggy:['零钱罐','PIGGY BANK']};
+  if(meta[name] && typeof setPageTitle==='function') setPageTitle('算账中心 · '+meta[name][0], meta[name][1]);
+  if(name==='refund'&&typeof loadRefundList==='function') loadRefundList();
+  if(name==='deposit'&&typeof renderBatchPlans==='function') renderBatchPlans();
+  if(name==='piggy'&&typeof renderPiggyBank==='function') renderPiggyBank();
+}
+function addOrderRow(){
+  var tb=document.getElementById('kOrderRows'), tr=document.createElement('tr');
+  tr.innerHTML='<td><select class="k-type"><option value="整配">整配</option><option value="单品">单品</option></select></td>'+
+    '<td><input class="k-grp" style="width:60px" placeholder="1"></td>'+
+    '<td><input class="k-role" placeholder="角色/谷子名" style="min-width:130px"></td>'+
+    '<td><input class="k-price" type="number" step="0.01" style="width:80px" placeholder="单价"></td>'+
+    '<td><input class="k-cn" placeholder="认领人/CN" style="min-width:90px"></td>'+
+    '<td><input class="k-qty" type="number" value="1" style="width:56px"></td>'+
+    '<td><button class="btn btn-secondary" onclick="this.parentElement.parentElement.remove()">✕</button></td>';
+  tb.appendChild(tr);
+}
+function addArrRow(){
+  var tb=document.getElementById('kArrRows'), tr=document.createElement('tr');
+  tr.innerHTML='<td><input class="a-role" placeholder="角色/谷子名" style="min-width:130px"></td>'+
+    '<td><input class="a-num" type="number" value="0" style="width:70px"></td>'+
+    '<td><button class="btn btn-secondary" onclick="this.parentElement.parentElement.remove()">✕</button></td>';
+  tb.appendChild(tr);
+}
+function addRoleRow(){
+  var tb=document.getElementById('eRoleRows'), tr=document.createElement('tr');
+  tr.innerHTML='<td><input class="r-name" placeholder="角色/谷子名" style="min-width:130px"></td>'+
+    '<td><input class="r-price" type="number" step="0.01" style="width:80px" placeholder="当前单价"></td>'+
+    '<td><input class="r-plan" type="number" style="width:70px" value="0"></td>'+
+    '<td><input class="r-qty" type="number" style="width:70px" placeholder="实际数"></td>'+
+    '<td style="text-align:center"><input class="r-cold" type="checkbox" title="已降价，只降不升"></td>'+
+    '<td><button class="btn btn-secondary" onclick="this.parentElement.parentElement.remove()">✕</button></td>';
+  tb.appendChild(tr);
+}
+function _collectOrders(){
+  var orders=[], groups={};
+  [].forEach.call(document.querySelectorAll('#kOrderRows tr'),function(tr){
+    var type=tr.querySelector('.k-type').value, role=(tr.querySelector('.k-role').value||'').trim();
+    if(!role) return;
+    var price=Number(tr.querySelector('.k-price').value||0), cn=(tr.querySelector('.k-cn').value||'').trim(), qty=Number(tr.querySelector('.k-qty').value||1);
+    if(type==='整配'){ var g=(tr.querySelector('.k-grp').value||'1').trim();
+      if(!groups[g]){ groups[g]={type:'整配',groupName:'组'+g,roles:[],claims:[]}; orders.push(groups[g]); }
+      groups[g].roles.push({role_id:role,role_name:role,original_price:price});
+      groups[g].claims.push({role_id:role,member_cn:cn,member_qq:'',qty:qty});
+    } else { orders.push({type:'单品单领',role_id:role,role_name:role,original_price:price,member_cn:cn,member_qq:'',qty:qty}); }
+  });
+  return orders;
+}
+function _collectArrival(){ var o={}; [].forEach.call(document.querySelectorAll('#kArrRows tr'),function(tr){ var r=(tr.querySelector('.a-role').value||'').trim(); if(r) o[r]=Number(tr.querySelector('.a-num').value||0); }); return o; }
+function _collectRoles(){ var roles=[], cold=[]; [].forEach.call(document.querySelectorAll('#eRoleRows tr'),function(tr){ var n=(tr.querySelector('.r-name').value||'').trim(); if(!n) return; var base=Number(tr.querySelector('.r-price').value||0), plan=Number(tr.querySelector('.r-plan').value||0), real=Number(tr.querySelector('.r-qty').value||0); roles.push({role_id:n,role_name:n,base_price:base,plan_qty:plan,real_qty:real}); if(tr.querySelector('.r-cold').checked) cold.push(n); }); return {roles:roles,cold:cold}; }
+function _mk(o,c,role,type,reason,amtCents){
+  var rr=role||{};
+  return {query_key:CURRENT_QUERY_KEY,batch_name:o.groupName||o.batch_name||'',order_type:type==='整配砍配'?'整配订单':'单品单领',
+    member_cn:(c&&c.member_cn)||o.member_cn||'',member_qq:(c&&c.member_qq)||o.member_qq||'',item_id:String(o.item_id||rr.role_id||o.role_id||''),
+    item_name:String(o.item_name||o.name||rr.role_name||o.role_name||''),role_id:String(rr.role_id||o.role_id||''),role_name:String(rr.role_name||o.role_name||''),
+    original_price:Number(o.original_price||rr.original_price||0),settled_price:Number(o.settled_price||o.original_price||rr.original_price||0),
+    kanpei_type:type,kanpei_reason:reason,refund_amount:_f(amtCents),refund_status:amtCents>0?'待退款':'无需退款',source:'web'};
+}
+async function runKanpei(){
+  if(!_lock('kanpei')){ _out('kOut','⏳ 正在计算/写入中…'); return; }
+  try{
+    var orders=_collectOrders(), arrival=_collectArrival();
+    if(!orders.length) throw new Error('请先添加(至少一行)订单');
+    var rows=[];
+    orders.forEach(function(o){
+      if(o.type==='整配'){
+        var need={}; o.claims.forEach(function(c){ var rid=String(c.role_id||''); need[rid]=(need[rid]||0)+Number(c.qty||1); });
+        var cut=null; o.roles.forEach(function(r){ var rid=String(r.role_id||''); if(Number(arrival[rid]||0)<(need[rid]||0)&&!cut) cut=r; });
+        if(cut){ var reason='【整配砍配】'+o.groupName+' 角色「'+cut.role_name+'」到货不足（需 '+(need[cut.role_id]||0)+' / 实到 '+(arrival[cut.role_id]||0)+'）';
+          o.claims.forEach(function(c){ var pr=c.original_price||cut.original_price||0; rows.push(_mk(o,c,cut,'整配砍配',reason,Math.round(Number(c.qty||1)*_c(pr)))); });
+        } else { o.claims.forEach(function(c){ rows.push(_mk(o,c,null,'整配砍配','货源充足，无需退款',0)); }); }
+      } else {
+        var rid=String(o.role_id||''), want=Number(o.qty||1), have=Number(arrival[rid]||0);
+        if(have<want){ rows.push(_mk(o,null,{role_id:rid,role_name:o.role_name},'单品砍配','【单品砍配】角色「'+o.role_name+'」到货不足（需 '+want+' / 实到 '+have+'）',Math.round(Number(o.qty||1)*_c(o.original_price||0)))); }
+        else { rows.push(_mk(o,null,{role_id:rid,role_name:o.role_name},'单品砍配','货源充足',0)); }
+      }
+    });
+    rows.forEach(function(r){ if(Number(r.refund_amount)<0) throw new Error('应退金额不能为负，已中止且未写库'); });
+    var nz=rows.filter(function(r){return Number(r.refund_amount)>0;});
+    if(nz.length){ var {error}=await supabaseClient.from('refunds').upsert(nz,{onConflict:'query_key,item_id,member_qq'}); if(error) throw new Error('写入 refunds 失败: '+error.message); }
+    var lines=['✅ 共 '+rows.length+' 条砍配结果，应退>0 的 '+nz.length+' 条已写入 refunds'];
+    rows.forEach(function(r){ lines.push(r.member_cn+' | '+r.item_name+' | 应退 ¥'+r.refund_amount+' | '+r.refund_status+' | '+r.kanpei_reason); });
+    _out('kOut',lines.join('\n')); showToast('砍配完成');
+  }catch(e){ _out('kOut','❌ '+e.message); }
+  finally{ _unlock('kanpei'); }
+}
+function loadErdiaoRoles(){
+  var roles={};
+  (RAW_ITEMS||[]).forEach(function(it){
+    var n=String(it.name||'').trim(); if(!n) return;
+    if(!roles[n]) roles[n]={name:n, base:Number(it.settled_price||it.price||0), plan:0};
+    roles[n].plan += Number(it.quantity||1);
+    var b=Number(it.settled_price||it.price||0); if(b>roles[n].base) roles[n].base=b;
+  });
+  var tb=document.getElementById('eRoleRows'); if(!tb) return;
+  var names=Object.keys(roles);
+  if(!names.length){ alert('当前排表没有角色数据'); return; }
+  if(!confirm('将从当前排表按角色载入 '+names.length+' 行（会覆盖当前已填行）。计划配数=排表数量合计，实际配数需你填真实到手数。继续？')) return;
+  tb.innerHTML='';
+  names.forEach(function(n){ var r=roles[n]; var tr=document.createElement('tr');
+    tr.innerHTML='<td><input class="r-name" value="'+_rc_esc(n)+'"></td>'+
+      '<td><input class="r-price" type="number" step="0.01" style="width:80px" value="'+r.base+'"></td>'+
+      '<td><input class="r-plan" type="number" style="width:70px" value="'+r.plan+'"></td>'+
+      '<td><input class="r-qty" type="number" style="width:70px" placeholder="实际数"></td>'+
+      '<td style="text-align:center"><input class="r-cold" type="checkbox" title="已降价，只降不升"></td>'+
+      '<td><button class="btn btn-secondary" onclick="this.parentElement.parentElement.remove()">✕</button></td>';
+    tb.appendChild(tr); });
+}
+
+async function runErdiao(){
+  if(!_lock('erdiao')){ _out('eOut','⏳ 正在计算/写入中…'); return; }
+  try{
+    var data=_collectRoles(), roles=data.roles;
+    if(!roles.length) throw new Error('请先添加(至少一行)角色');
+    roles.forEach(function(r){
+      if(!(Number(r.plan_qty)>0)) throw new Error('角色「'+r.role_name+'」计划配数必须大于0');
+      if(!(Number(r.real_qty)>0)) throw new Error('角色「'+r.role_name+'」请填写实际配数（真实到手数）');
+    });
+    var cold={}; data.cold.forEach(function(n){ cold[n]=true; });
+    // 目标总价 T = 当前单价×计划配数；现价总价 R = 当前单价×实际配数
+    var T=0, R=0;
+    roles.forEach(function(r){ T+=_c(r.base_price)*r.plan_qty; R+=_c(r.base_price)*r.real_qty; });
+    var np={};
+    var mode='';
+    if(R>T){
+      // 情况一：总价偏大 → 所有角色统一按比例降价
+      mode='总价偏大，全部降价';
+      roles.forEach(function(r){ np[String(r.role_id)]=Math.round(_c(r.base_price)*T/R); });
+    } else if(R<T){
+      // 情况二：总价偏小 → 冷门(已降价)只降不升，热门继续+价补足
+      mode='总价偏小，冷门只降/热门续涨';
+      var coldTotal=0, hotTotal=0, hotRoles=[];
+      roles.forEach(function(r){
+        if(cold[r.role_id]){
+          var nv=Math.min(_c(r.base_price), Math.round(_c(r.base_price)*r.plan_qty/r.real_qty));
+          np[String(r.role_id)]=nv; coldTotal+=nv*r.real_qty;
+        } else { hotRoles.push(r); hotTotal+=_c(r.base_price)*r.real_qty; }
+      });
+      var need=T-coldTotal-hotTotal;
+      if(need<0) need=0;
+      if(!hotRoles.length) throw new Error('没有非冷门(热门)角色可补回差额');
+      var hotQty=hotRoles.reduce(function(s,r){return s+r.real_qty;},0);
+      var per=Math.round(need/hotQty);
+      hotRoles.forEach(function(r){ np[String(r.role_id)]=_c(r.base_price)+per; });
+    } else {
+      // 总价相等：价格不变
+      mode='总价一致，价格不变';
+      roles.forEach(function(r){ np[String(r.role_id)]=_c(r.base_price); });
+    }
+    // 尾差（四舍五入）修正：优先调到配数最多的非冷门
+    var after=0; roles.forEach(function(r){ after+=np[String(r.role_id)]*r.real_qty; });
+    var residual=T-after;
+    if(residual!==0){
+      var pool=roles.filter(function(r){ return !cold[r.role_id]; });
+      if(!pool.length) pool=roles;
+      var maxr=pool.reduce(function(a,b){return b.real_qty>=a.real_qty?b:a;});
+      var per2=Math.round(residual/maxr.real_qty);
+      if(per2!==0){ np[String(maxr.role_id)]+=per2; after+=per2*maxr.real_qty; }
+    }
+    var eps=Math.abs(T-after);
+    if(eps>50) throw new Error('调价前后总货值误差 '+eps+' 分，异常，拒绝写入');
+    var log=[];
+    roles.forEach(function(r){
+      var base=_c(r.base_price), nv=np[String(r.role_id)];
+      var tag;
+      if(cold[r.role_id]) tag=(nv<base?'（冷门，降价）':'（冷门，不升）');
+      else tag=(nv>base?'（热门，涨价）':(nv<base?'（降价）':'（持平）'));
+      log.push(r.role_name+' | ¥'+_f(base)+' → ¥'+_f(nv)+tag);
+    });
+    var lr=roles.map(function(r){return {query_key:CURRENT_QUERY_KEY,role_id:String(r.role_id),role_name:r.role_name,old_price:_f(_c(r.base_price)),new_price:_f(np[String(r.role_id)]),before_total:_f(T),after_total:_f(after),diff:_f(T-after)};});
+    var {error:le}=await supabaseClient.from('price_adjust_log').upsert(lr,{onConflict:'query_key,role_id'}); if(le) throw new Error('写入调价日志失败: '+le.message);
+    var upd=0; RAW_ITEMS=RAW_ITEMS.map(function(it){ var rn=String(it.name||'').trim(); if(np[rn]!=null){ var nv=_f(np[rn]); if(String(it.settled_price||'')!==nv){ upd++; var c=Object.assign({},it); c.settled_price=Number(nv); return c; } } return it; });
+    if(upd){ await _saveItems(); }
+    var lines=['✅ '+mode+'：目标总价 ¥'+_f(T)+'，调价后 ¥'+_f(after)+'（误差 '+eps+' 分，四舍五入）'+(upd?'，已更新 '+upd+' 条结算价':'')]; lines.push('角色 | 旧价 → 新价'); lines.push.apply(lines,log);
+    _out('eOut',lines.join('\n')); showToast('二调完成');
+  }catch(e){ _out('eOut','❌ '+e.message); }
+  finally{ _unlock('erdiao'); }
+}
+function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); return saveDataToSupabase(); }
+    /* ============================================================
+       🐷 零钱罐（存肾）· 2026-10-14 团长需求
+       数据：image_data.piggy_bank（数组，一条 = 一笔团员存款）
+       状态机：待审核 ──通过──▶ 可用 ──(抵扣)──▶ 还是「可用」，余额动态算
+                          ──驳回──▶ 已驳回
+                          ──退回──▶ 已退回（同时往 refunds 表插一条，走现有退款流程）
+       余额(cn) = Σ(amount - used - refunded)，只算「可用」的。
+       ⚠️ 铁律：所有写入一律走 saveDataToSupabase()（内部带版本锁 + 合并分支），
+               绝不直接 update —— 直接写会被别人（团员/机器人）的整份回写盖掉。
+       ⚠️ _piggyNormCn() 必须与团员端 index.html 里的同名函数【逐字一致】。
+       ============================================================ */
+    const PIGGY_ST_PENDING = '待审核';
+    const PIGGY_ST_OK = '可用';
+    const PIGGY_ST_REJECT = '已驳回';
+    const PIGGY_ST_REFUND = '已退回';
+
+    /* 圈名归一化 —— 只用于「把同一个人认出来」：去 ❄ 之类装饰符、剥 _1992 后缀、忽略大小写与空格 */
+    function _piggyNormCn(s) {
+      return String(s == null ? '' : s)
+        .replace(/[\u2744\u2745\u2746\u273b\u273c\u273d\u273e\u273f]/g, '')
+        .replace(/_[0-9]+$/, '')
+        .replace(/\s+/g, '')
+        .toLowerCase();
+    }
+    function _piggySameCn(a, b) { return !!_piggyNormCn(a) && _piggyNormCn(a) === _piggyNormCn(b); }
+
+    /* 单条存款现在还剩多少可用（待审核 / 已驳回 / 已退回 = 0） */
+    function piggyRemain(rec) {
+      if (!rec) return 0;
+      const st = String(rec.status || '');
+      if (st === PIGGY_ST_PENDING || st === PIGGY_ST_REJECT || st === PIGGY_ST_REFUND) return 0;
+      const v = Number(rec.amount || 0) - Number(rec.used || 0) - Number(rec.refunded || 0);
+      return Math.round(Math.max(0, v) * 100) / 100;
+    }
+    /* 某人当前可用余额 */
+    function piggyBalanceOf(cn) {
+      let s = 0;
+      (Array.isArray(RAW_PIGGY) ? RAW_PIGGY : []).forEach(function (r) {
+        if (r && _piggySameCn(r.cn, cn)) s += piggyRemain(r);
+      });
+      return Math.round(s * 100) / 100;
+    }
+    function _piggyPendingCount() {
+      return (Array.isArray(RAW_PIGGY) ? RAW_PIGGY : []).filter(function (r) {
+        return String((r && r.status) || '') === PIGGY_ST_PENDING;
+      }).length;
+    }
+    window.piggyBalanceOf = piggyBalanceOf;
+    window._piggyPendingCount = _piggyPendingCount;
+
+    /* 一条存款的卡片（待审核区用） */
+    function _piggyCardHtml(r) {
+      const id = escapeHtml(String(r.id || ''));
+      const rawUrl = _payProofPublicUrl(r.img_path);
+      const thumb = rawUrl
+        ? '<img src="' + escapeHtml(sbImg(rawUrl)) + '" data-orig="' + escapeHtml(rawUrl) + '" onerror="imgFallback(this)" ' +
+          'onclick="window.open(this.src,\'_blank\')" style="width:132px;height:132px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in;background:#f1f5f9;" alt="存款截图" loading="lazy">'
+        : '<div style="width:132px;height:132px;border-radius:8px;border:1px solid var(--border);background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:0.72rem;color:var(--text-muted);">无截图</div>';
+      const amt = Number(r.amount || 0);
+      return '' +
+        '<div style="display:flex; gap:14px; align-items:flex-start; padding:12px; border:1px solid var(--border); border-radius:10px; background:#fff; margin-bottom:10px; flex-wrap:wrap;">' +
+          '<div style="flex:0 0 132px;">' + thumb + '</div>' +
+          '<div style="flex:1 1 260px; min-width:220px;">' +
+            '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+              '<strong style="font-size:0.95rem;">' + escapeHtml(r.cn || '(未填CN)') + '</strong>' +
+              '<span class="badge" style="background:#fef3c7; color:#a16207; border:1px solid #a1620744;">💰 待审核存款</span>' +
+            '</div>' +
+            '<div style="margin-top:6px; font-size:0.86rem; line-height:1.9; color:var(--text-muted);">' +
+              '金额：<b style="color:#b91c1c; font-size:1rem;">￥' + amt.toFixed(2) + '</b><br>' +
+              (r.note ? ('备注：' + escapeHtml(r.note) + '<br>') : '') +
+              '提交：' + escapeHtml(r.created_at || '') +
+            '</div>' +
+            '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">' +
+              '<button class="btn btn-primary" style="padding:6px 14px; font-size:0.85rem;" onclick="approvePiggyDeposit(\'' + id + '\')">✅ 确认到账·入罐</button>' +
+              '<button class="btn btn-danger" style="padding:6px 14px; font-size:0.85rem;" onclick="showPiggyRejectBox(\'' + id + '\')">❌ 驳回</button>' +
+            '</div>' +
+            '<div id="piggyRejectBox_' + id + '" style="display:none; margin-top:10px;">' +
+              '<input id="piggyRejectReason_' + id + '" placeholder="驳回原因（必填，团员能看到。例如：金额和截图对不上 / 没收到这笔钱）" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; box-sizing:border-box;">' +
+              '<div style="margin-top:6px; font-size:0.76rem; color:var(--text-muted); line-height:1.6;">⚠️ 这段话会原样显示给团员，系统不会替你编理由。</div>' +
+              '<div style="margin-top:8px; display:flex; gap:8px;">' +
+                '<button class="btn btn-danger" style="padding:5px 12px; font-size:0.82rem;" onclick="rejectPiggyDeposit(\'' + id + '\')">确认驳回</button>' +
+                '<button class="btn btn-secondary" style="padding:5px 12px; font-size:0.82rem;" onclick="hidePiggyRejectBox(\'' + id + '\')">取消</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+
+    function showPiggyRejectBox(id) {
+      const b = document.getElementById('piggyRejectBox_' + id);
+      if (b) { b.style.display = 'block'; const i = document.getElementById('piggyRejectReason_' + id); if (i) i.focus(); }
+    }
+    function hidePiggyRejectBox(id) {
+      const b = document.getElementById('piggyRejectBox_' + id);
+      if (b) b.style.display = 'none';
+    }
+    window.showPiggyRejectBox = showPiggyRejectBox;
+    window.hidePiggyRejectBox = hidePiggyRejectBox;
+
+    function _piggyFind(id) {
+      return (Array.isArray(RAW_PIGGY) ? RAW_PIGGY : []).filter(function (x) {
+        return String((x && x.id) || '') === String(id);
+      })[0] || null;
+    }
+
+    /* '2026/11/6 12:08:37' → 可比较数值（单个数字的月/日也能正确排序） */
+    function _piggyTs(s) {
+      const m = String(s || '').match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+      if (!m) return 0;
+      return Number(m[1]) * 1e10 + Number(m[2]) * 1e8 + Number(m[3]) * 1e6 +
+             Number(m[4] || 0) * 1e4 + Number(m[5] || 0) * 1e2 + Number(m[6] || 0);
+    }
+    function renderPiggyBank() {
+      const pendEl = document.getElementById('piggyPendingList');
+      const balEl = document.getElementById('piggyBalanceList');
+      const allEl = document.getElementById('piggyAllList');
+      const useEl = document.getElementById('piggyUsageList');
+      if (!pendEl && !balEl && !allEl && !useEl) return;
+      const allRaw = Array.isArray(RAW_PIGGY) ? RAW_PIGGY : [];
+      /* 2026-11-06 团长口径：已退回的钱已经不在罐里，别再混在余额/存入记录里。
+         只从页面隐藏，库里那条底账一条不删（要对账随时能翻出来）。 */
+      const all = allRaw.filter(function (r) { return String((r && r.status) || '') !== PIGGY_ST_REFUND; });
+
+      /* ── 待审核 ── */
+      const pend = all.filter(function (r) { return String((r && r.status) || '') === PIGGY_ST_PENDING; })
+        .sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
+      if (pendEl) {
+        pendEl.innerHTML = pend.length
+          ? pend.map(_piggyCardHtml).join('')
+          : '<div class="box" style="color:var(--text-muted);">暂时没有待审核的存款。团员在自查终端「我要存钱」提交后会出现在这里。</div>';
+      }
+
+      /* ── 各人余额一览 ── */
+      const byCn = {};
+      all.forEach(function (r) {
+        if (!r) return;
+        const k = _piggyNormCn(r.cn) || '\u0000none';
+        if (!byCn[k]) byCn[k] = { cn: r.cn || '(未填CN)', bal: 0, pend: 0, used: 0, refunded: 0, n: 0 };
+        const o = byCn[k];
+        o.bal += piggyRemain(r);
+        o.used += Number(r.used || 0);
+        o.refunded += Number(r.refunded || 0);
+        o.n++;
+        if (String(r.status || '') === PIGGY_ST_PENDING) o.pend += Number(r.amount || 0);
+      });
+      const list = Object.keys(byCn).map(function (k) { return byCn[k]; })
+        .filter(function (o) { return o.bal > 0.004 || o.pend > 0.004; })
+        .sort(function (a, b) { return b.bal - a.bal; });
+      if (balEl) {
+        if (!list.length) {
+          balEl.innerHTML = '<div class="box" style="color:var(--text-muted);">现在还没有人有余额。</div>';
+        } else {
+          let h = '<div class="piggy-scroll" style="overflow:auto; border:1px solid var(--line); border-radius:10px;">' +
+            '<table class="piggy-t" style="width:100%; font-size:13px; border-collapse:collapse;">' +
+            '<thead><tr style="background:#f1f5f9;">' +
+              /* ⚠️ 每个 th 必须显式写 text-align，与下面 td 一致 ——
+                 全局 `table{text-align:left}` 会让 th 继承左对齐，而数据 td 是居中的，
+                 结果表头永远"飘"在列左侧、跟数字对不上（2026-10-15 团长报）。 */
+              '<th style="padding:7px; text-align:left;">团员</th>' +
+              '<th style="padding:7px; text-align:center;">可用余额</th><th style="padding:7px; text-align:center;">待审核</th>' +
+              '<th style="padding:7px; text-align:center;">已抵扣</th><th style="padding:7px; text-align:center;">笔数</th>' +
+            '</tr></thead><tbody>';
+          list.forEach(function (o) {
+            h += '<tr style="border-top:1px solid var(--line);">' +
+              '<td class="piggy-main" data-l="" style="padding:7px; font-weight:600;">' + escapeHtml(o.cn) + '</td>' +
+              '<td class="piggy-amt" data-l="" style="padding:7px; text-align:center; font-weight:700; color:#15803d;">￥' + o.bal.toFixed(2) + '</td>' +
+              '<td data-l="待审核"' + (o.pend > 0.004 ? '' : ' data-empty="1"') + ' style="padding:7px; text-align:center; color:#a16207;">' + (o.pend > 0.004 ? ('￥' + o.pend.toFixed(2)) : '—') + '</td>' +
+              '<td data-l="已抵扣"' + (o.used > 0.004 ? '' : ' data-empty="1"') + ' style="padding:7px; text-align:center; color:var(--text-muted);">' + (o.used > 0.004 ? ('￥' + o.used.toFixed(2)) : '—') + '</td>' +
+              '<td data-l="笔数" style="padding:7px; text-align:center; color:var(--text-muted);">' + o.n + '</td>' +
+            '</tr>';
+          });
+          h += '</tbody></table></div>';
+          const totalBal = list.reduce(function (s, o) { return s + o.bal; }, 0);
+          h += '<div style="margin-top:8px; font-size:0.82rem; color:var(--text-muted);">共 ' + list.length +
+               ' 人有余额，合计 <b style="color:#15803d;">￥' + totalBal.toFixed(2) + '</b>（这笔钱是你代管的，不是你的收入）</div>';
+          balEl.innerHTML = h;
+        }
+      }
+
+      /* ── 全部存入记录 ── */
+      if (allEl) {
+        const rows = all.slice().sort(function (a, b) {
+          return String((b && b.created_at) || '').localeCompare(String((a && a.created_at) || ''));
+        });
+        if (!rows.length) {
+          allEl.innerHTML = '<div class="box" style="color:var(--text-muted);">还没有任何存入记录。</div>';
+        } else {
+          let h = '<div class="piggy-scroll" style="overflow:auto; max-height:460px; border:1px solid var(--line); border-radius:10px;">' +
+            '<table class="piggy-t" style="width:100%; font-size:13px; border-collapse:collapse;">' +
+            '<thead><tr style="background:#f1f5f9;">' +
+              '<th style="padding:7px; text-align:left;">团员</th><th style="padding:7px; text-align:center;">金额</th>' +
+              '<th style="padding:7px; text-align:center;">状态</th><th style="padding:7px; text-align:center;">已抵扣</th>' +
+              '<th style="padding:7px; text-align:left;">备注</th><th style="padding:7px; text-align:center;">提交时间</th><th style="padding:7px; text-align:center;">操作</th>' +
+            '</tr></thead><tbody>';
+          rows.forEach(function (r) {
+            const st = String(r.status || PIGGY_ST_PENDING);
+            const remain = piggyRemain(r);
+            const used = Number(r.used || 0), refunded = Number(r.refunded || 0);
+            /* 💰 2026-10-15 团长口径：钱被抵扣光了就别再写「可用」（会让人以为还能花）。
+               用光 → 红字「已抵 ￥50.00」；没用光 → 绿字「可用」+ 小字「已抵 ￥30 · 余 ￥20」。 */
+            const spentOut = (st === PIGGY_ST_OK) && remain <= 0.004 && used > 0.004;
+            const color = spentOut ? '#dc2626'
+              : (st === PIGGY_ST_OK ? '#15803d' : (st === PIGGY_ST_REJECT ? '#dc2626' : (st === PIGGY_ST_REFUND ? '#64748b' : '#a16207')));
+            const stLabel = spentOut ? ('已抵 ￥' + used.toFixed(2)) : st;
+            const stSub = (st === PIGGY_ST_OK && !spentOut && remain > 0.004)
+              ? ('<br><span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">' +
+                 (used > 0.004 ? ('已抵 ￥' + used.toFixed(2) + ' · ') : '') + '余 ￥' + remain.toFixed(2) + '</span>')
+              : '';
+            const canRefund = remain > 0.004 && (st === PIGGY_ST_OK);
+            h += '<tr style="border-top:1px solid var(--line);">' +
+              '<td class="piggy-main" data-l="" style="padding:7px; font-weight:600;">' + escapeHtml(r.cn || '(未填CN)') + '</td>' +
+              '<td class="piggy-amt" data-l="" style="padding:7px; text-align:center; font-weight:700;">￥' + Number(r.amount || 0).toFixed(2) + '</td>' +
+              '<td data-l="状态" style="padding:7px; text-align:center; color:' + color + '; font-weight:600;">' + escapeHtml(stLabel) + stSub +
+              '</td>' +
+              '<td data-l="已抵扣"' + ((used <= 0.004 && refunded <= 0.004) ? ' data-empty="1"' : '') + ' style="padding:7px; text-align:center; color:var(--text-muted); font-size:0.8rem;">' +
+                (used > 0.004 ? ('抵 ￥' + used.toFixed(2)) : '') + (used > 0.004 && refunded > 0.004 ? '<br>' : '') +
+                (refunded > 0.004 ? ('退 ￥' + refunded.toFixed(2)) : '') + ((used <= 0.004 && refunded <= 0.004) ? '—' : '') +
+              '</td>' +
+              '<td data-l="备注"' + (!r.note && !(st === PIGGY_ST_REJECT && r.reject_reason) ? ' data-empty="1"' : '') + ' style="padding:7px; color:var(--text-muted); font-size:0.82rem;">' + escapeHtml(r.note || '') +
+                (st === PIGGY_ST_REJECT && r.reject_reason ? ('<br><span style="color:#dc2626;">驳回：' + escapeHtml(r.reject_reason) + '</span>') : '') +
+              '</td>' +
+              '<td data-l="提交时间" style="padding:7px; text-align:center; color:var(--text-muted); font-size:0.78rem;">' + escapeHtml(r.created_at || '') + '</td>' +
+              '<td data-l="操作"' + (canRefund ? '' : ' data-empty="1"') + ' style="padding:7px; text-align:center;">' +
+                (canRefund ? '<button class="btn btn-secondary" style="padding:3px 9px; font-size:0.78rem;" onclick="refundPiggyDeposit(\'' + escapeHtml(String(r.id || '')) + '\')">↩️ 退回</button>' : '<span style="color:#cbd5e1; font-size:0.8rem;">—</span>') +
+              '</td>' +
+            '</tr>';
+          });
+          h += '</tbody></table></div>';
+          allEl.innerHTML = h;
+        }
+      }
+
+      /* ── 🧾 使用记录（抵扣明细）· 2026-11-06 ──
+         数据源 = 每条存款的 used_log[]。新流水带 reason/time；
+         老流水只有 note「交款抵扣 批次名」+ at，这里兼容读出来，不改历史数据。
+         用 allRaw（含已退回）统计，免得以前抵过的钱因为后来退回就从流水里凭空消失。 */
+      if (useEl) {
+        const logs = [];
+        allRaw.forEach(function (r) {
+          if (!r || !Array.isArray(r.used_log)) return;
+          r.used_log.forEach(function (L) {
+            if (!L) return;
+            const why = String(L.reason || L.note || '').replace(/^交款抵扣\s*/, '').trim();
+            const when = String(L.time || L.at || '');
+            logs.push({ cn: String(r.cn || '(未填CN)'),
+                        amount: Math.round(Number(L.amount || 0) * 100) / 100,
+                        why: why || '（没写批次名）', when: when || '—', _t: _piggyTs(when) });
+          });
+        });
+        logs.sort(function (a, b) { return b._t - a._t; });
+        if (!logs.length) {
+          useEl.innerHTML = '<div class="box" style="color:var(--text-muted);">还没有抵扣记录。团员交款时勾了「用零钱罐抵扣」，扣的每一笔都会自动记在这里。</div>';
+        } else {
+          let u = '<div class="piggy-scroll" style="overflow:auto; max-height:460px; border:1px solid var(--line); border-radius:10px;">' +
+            '<table class="piggy-t" style="width:100%; font-size:13px; border-collapse:collapse;">' +
+            '<thead><tr style="background:#f1f5f9;">' +
+              '<th style="padding:7px; text-align:left;">团员</th>' +
+              '<th style="padding:7px; text-align:center;">扣除金额</th>' +
+              '<th style="padding:7px; text-align:left;">扣除原因（抵扣的批次）</th>' +
+              '<th style="padding:7px; text-align:center;">扣除时间</th>' +
+            '</tr></thead><tbody>';
+          logs.forEach(function (L) {
+            u += '<tr style="border-top:1px solid var(--line);">' +
+              '<td class="piggy-main" data-l="" style="padding:7px; font-weight:600;">' + escapeHtml(L.cn) + '</td>' +
+              '<td class="piggy-amt" data-l="" style="padding:7px; text-align:center; font-weight:700; color:#dc2626;">-￥' + L.amount.toFixed(2) + '</td>' +
+              '<td data-l="扣除原因" style="padding:7px; color:var(--text-main);">' + escapeHtml(L.why) + '</td>' +
+              '<td data-l="扣除时间" style="padding:7px; text-align:center; color:var(--text-muted); font-size:0.78rem;">' + escapeHtml(L.when) + '</td>' +
+            '</tr>';
+          });
+          u += '</tbody></table></div>';
+          const sum = logs.reduce(function (s, L) { return s + L.amount; }, 0);
+          u += '<div style="margin-top:8px; font-size:0.82rem; color:var(--text-muted);">共 <b>' + logs.length +
+               '</b> 笔抵扣，合计 <b style="color:#dc2626;">￥' + sum.toFixed(2) + '</b></div>';
+          useEl.innerHTML = u;
+        }
+      }
+    }
+    window.renderPiggyBank = renderPiggyBank;
+
+    /* 审核通过：钱进罐（只改内存 + 走带版本锁的保存） */
+    async function approvePiggyDeposit(id) {
+      const r = _piggyFind(id);
+      if (!r) return showToast('找不到这条存款记录');
+      if (String(r.status || '') !== PIGGY_ST_PENDING) return showToast('这条已经处理过了');
+      const amt = Number(r.amount || 0);
+      if (!(amt > 0)) return showToast('金额不对，没法通过');
+      if (!confirm('确认收到「' + (r.cn || '') + '」的 ￥' + amt.toFixed(2) + ' 了吗？\n\n' +
+                   '· 通过后这笔钱进他的零钱罐\n' +
+                   '· 他交谷子费/运费时可以直接勾选「用零钱罐抵扣」\n' +
+                   '· 钱还没到账就别点 —— 可在「全部存入记录」里退回')) return;
+      const oldSt = r.status, oldAt = r.reviewed_at;
+      r.status = PIGGY_ST_OK;
+      r.reviewed_at = new Date().toLocaleString('zh-CN');
+      r.reject_reason = '';
+      const ok = await saveDataToSupabase();
+      if (!ok) { r.status = oldSt; r.reviewed_at = oldAt; showToast('❌ 保存失败，已回滚，请重试'); }
+      else showToast('✅ 已入罐 ￥' + amt.toFixed(2));
+      renderPiggyBank();
+    }
+    window.approvePiggyDeposit = approvePiggyDeposit;
+
+    /* 驳回：团员能看到原因 */
+    async function rejectPiggyDeposit(id) {
+      const r = _piggyFind(id);
+      if (!r) return showToast('找不到这条存款记录');
+      if (String(r.status || '') !== PIGGY_ST_PENDING) return showToast('这条已经处理过了');
+      const box = document.getElementById('piggyRejectReason_' + id);
+      const reason = box ? String(box.value || '').trim() : '';
+      if (!reason) return showToast('请填驳回原因（团员会看到）');
+      const oldSt = r.status, oldRs = r.reject_reason, oldAt = r.reviewed_at;
+      r.status = PIGGY_ST_REJECT;
+      r.reject_reason = reason;
+      r.reviewed_at = new Date().toLocaleString('zh-CN');
+      const ok = await saveDataToSupabase();
+      if (!ok) { r.status = oldSt; r.reject_reason = oldRs; r.reviewed_at = oldAt; showToast('❌ 保存失败，已回滚'); }
+      else showToast('已驳回');
+      renderPiggyBank();
+    }
+    window.rejectPiggyDeposit = rejectPiggyDeposit;
+
+    /* 退回：把这条还剩的钱退给团员 —— 往 refunds 表插一条（跟手动补录退款同一张表、同一套流程），
+       再把这条标成「已退回」。之后你照老办法（/通知退款 让他交收款码）把钱退给他。 */
+    async function refundPiggyDeposit(id) {
+      const r = _piggyFind(id);
+      if (!r) return showToast('找不到这条存款记录');
+      const remain = piggyRemain(r);
+      if (!(remain > 0)) return showToast('这条没有可退的余额');
+      const cn = String(r.cn || '').trim();
+      if (!cn) return showToast('这条没填圈名，退不了');
+      if (!confirm('把「' + cn + '」零钱罐里剩下的 ￥' + remain.toFixed(2) + ' 退给他？\n\n' +
+                   '会在退款表里生成一条「待退款」（退款类型 = 零钱罐退回），\n' +
+                   '之后跟其它退款一起处理（让他交收款码 → 你打款 → 后台批量标记已退）。')) return;
+      let qq = '';
+      try {
+        const bd = await supabaseClient.from('qq_bindings').select('qq_number').eq('buyer_cn', cn);
+        if (bd.data && bd.data.length) qq = String(bd.data[0].qq_number || '');
+      } catch (e) {}
+      try {
+        const row = {
+          query_key: CURRENT_QUERY_KEY, batch_name: '', order_type: '零钱罐退回',
+          member_qq: qq, member_cn: cn,
+          item_id: 'piggy_' + String(r.id || ''), item_name: '', role_id: '', role_name: cn,
+          original_price: 0, settled_price: 0,
+          kanpei_type: '零钱罐退回', kanpei_reason: '零钱罐余额退回',
+          refund_amount: Math.round(remain * 100) / 100, refund_status: '待退款', source: 'web'
+        };
+        const re = await supabaseClient.from('refunds').insert([row]);
+        if (re.error) throw new Error(re.error.message);
+      } catch (e) {
+        return showToast('❌ 写退款表失败：' + (e.message || e));
+      }
+      /* 🔴 必须把状态标成「已退回」（2026-10-14 修正：原代码只加 refunded 不改状态 →
+         团员端会显示成「可用 · 已抵扣，已用完」，看不出钱是团长退回来的）。 */
+      const oldRef = r.refunded, oldAt = r.refund_at, oldSt2 = r.status;
+      r.refunded = Math.round((Number(r.refunded || 0) + remain) * 100) / 100;
+      r.refund_at = new Date().toLocaleString('zh-CN');
+      r.status = PIGGY_ST_REFUND;
+      const ok = await saveDataToSupabase();
+      if (!ok) { r.refunded = oldRef; r.refund_at = oldAt; r.status = oldSt2; showToast('⚠️ 退款表已写入，但零钱罐状态没保存成功 —— 请点「🔄 重画列表」后重试（别重复退）'); }
+      else showToast('✅ 已生成待退款 ￥' + remain.toFixed(2) + '（在「退款补录」里能看到）');
+      renderPiggyBank();
+      if (typeof loadRefundList === 'function') loadRefundList();
+    }
+    window.refundPiggyDeposit = refundPiggyDeposit;
+
+async function saveManualRefund(){
+  var cn=(document.getElementById('mr-cn').value||'').trim();
+  var amt=Number(document.getElementById('mr-amt').value||0);
+  var type=document.getElementById('mr-type').value;
+  var reason=(document.getElementById('mr-reason').value||'').trim();
+  var out=document.getElementById('mrOut');
+  if(!cn){ out.textContent='❌ 请填团员CN'; return; }
+  if(!(amt>0)){ out.textContent='❌ 请填正确的应退金额'; return; }
+  var qq=''; try{ var bd=await supabaseClient.from('qq_bindings').select('qq_number').eq('buyer_cn',cn); if(bd.data&&bd.data.length) qq=String(bd.data[0].qq_number||''); }catch(e){}
+  var row={ query_key:CURRENT_QUERY_KEY, batch_name:'', order_type:'手动补录', member_qq:qq, member_cn:cn,
+    item_id:'manual_'+Date.now(), item_name:'', role_id:'', role_name:cn, original_price:0, settled_price:0,
+    kanpei_type:type, kanpei_reason:reason, refund_amount:amt, refund_status:'待退款', source:'web' };
+  try{ var re=await supabaseClient.from('refunds').insert([row]); if(re.error) throw new Error(re.error.message);
+    out.textContent='✅ 已补录 '+cn+' 退款 ¥'+amt+'（'+type+(reason?' / '+reason:'')+'）';
+    document.getElementById('mr-cn').value=''; document.getElementById('mr-amt').value=''; document.getElementById('mr-reason').value='';
+    showToast('退款已补录'); await loadRefundList(); }catch(err){ out.textContent='❌ '+err.message; }
+}
+function _rc_esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];}); }
+/* ═══════════════════════════════════════════════════════════════════════
+   💰 待退款记录 + 收款码（2026-10-15 团长需求）
+   团长要「一路扫过去」：在退款记录里直接看到团员交的收款码，扫一笔勾一笔。
+   收款码不在 refunds 表里 —— 它由机器人上传到公开桶 pay-qr，对象名
+   refund_<退款记录id>_<32位随机>.<ext>（随机段不可枚举＝老红线；id 段用来对回记录）。
+   所以这里先 list 一次桶，建「记录id → 对象名」映射，再渲染。同一个 id 重复交过码的，
+   取 updated_at 最新的那张。
+   ⚠️ 桶读不到时**绝不能显示成「未提交」** —— 那会骗团长，让他以为团员没交码。
+   ═══════════════════════════════════════════════════════════════════════ */
+var REF_QR_MAP = {};      // '28' -> {name, t}
+var REF_QR_OK = false;    // 桶列表是否真的读到了（false 时表格显示「读取失败」而不是「未提交」）
+var REF_LIST_CACHE = [];  // 当前待退款行（点开/收起时复用，不重新请求）
+var REF_OPEN_ID = null;   // 当前展开了哪一条
+
+function _refQrDirect(name){ return SUPABASE_DIRECT + '/storage/v1/object/public/pay-qr/' + name; }
+
+async function _refLoadQrMap(){
+  REF_QR_MAP = {}; REF_QR_OK = false;
+  try{
+    var re = await supabaseClient.storage.from('pay-qr').list('', { limit: 1000 });
+    if (re && re.error) throw new Error(re.error.message || 'list 失败');
+    var arr = (re && re.data) || [];
+    arr.forEach(function(o){
+      var m = /^refund_(\d+)_/.exec(String((o && o.name) || ''));
+      if (!m) return;
+      var id = m[1], t = String((o && (o.updated_at || o.created_at)) || '');
+      if (!REF_QR_MAP[id] || t > REF_QR_MAP[id].t) REF_QR_MAP[id] = { name: o.name, t: t };
+    });
+    REF_QR_OK = true;
+  }catch(e){ REF_QR_OK = false; }
+  return REF_QR_MAP;
+}
+
+function refToggleQr(id){
+  id = String(id);
+  REF_OPEN_ID = (String(REF_OPEN_ID) === id) ? null : id;
+  _refRenderRows();
+  if (REF_OPEN_ID) {
+    /* 展开后把那一条滚进视野 —— 不放这句的话，靠下的行点开后大图落在框外，
+       团长还得自己滚一下才能扫（真机实测 onScreen=false）。 */
+    try {
+      var tb = document.getElementById('refRows');
+      var trs = tb ? tb.children : [];
+      for (var i = 0; i < trs.length; i++) {
+        var im = trs[i].querySelector ? trs[i].querySelector('img') : null;
+        if (im && im.getBoundingClientRect().width > 200) { trs[i].scrollIntoView({ block: 'center' }); break; }
+      }
+    } catch (e) {}
+  }
+}
+
+/* 勾选范围扩大到整行（2026-10-15 团长要求）：
+   点这一行的任意位置都能勾上/取消，不用去戳那个小方框。
+   ⚠️ 必须让开三类控件的点击，否则会互相打架：
+     · 勾选框自己（浏览器已切过一次，再切就变回原样）
+     · 收款码缩略图（点了要放大，不能顺手把勾选翻掉）
+     · 展开区里的按钮 */
+function _refTrOf(cb){ return (cb && cb.parentNode) ? cb.parentNode.parentNode : null; }
+
+/* 表头「全选」跟随实际勾选数：全中=勾、部分=半勾、零=空。
+   ⚠️ 原来只有点「全选」才会更新它，单条勾/取消时表头一直是空的 → 团长看着像没选中任何东西。 */
+function _refreshRefAllState(){
+  var all = document.getElementById('refAll');
+  if (!all) return;
+  var boxes = document.querySelectorAll('.refChk');
+  var on = 0;
+  Array.prototype.forEach.call(boxes, function(c){ if (c.checked) on++; });
+  all.checked = boxes.length > 0 && on === boxes.length;
+  all.indeterminate = on > 0 && on < boxes.length;
+}
+
+function refRowPaint(tr){
+  if (!tr || !tr.querySelector) return;
+  var cb = tr.querySelector('.refChk');
+  if (!cb) return;
+  tr.style.background = cb.checked ? 'rgba(21,128,61,0.09)' : '';
+  _refreshRefAllState();
+}
+
+function refRowClick(ev, tr){
+  var t = ev && ev.target;
+  if (!t || !tr) return;
+  var tag = String(t.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'img' || tag === 'button' || tag === 'a') return;
+  if (t.closest && (t.closest('img') || t.closest('button') || t.closest('a'))) return;
+  var cb = tr.querySelector('.refChk');
+  if (!cb) return;
+  cb.checked = !cb.checked;
+  refRowPaint(tr);
+}
+
+function _refBigRow(r, q){
+  var amt = Number(r.refund_amount || 0).toFixed(2);
+  return '<tr><td colspan="8" style="padding:14px; background:#f8fafc; border-top:1px dashed var(--line);">' +
+    '<div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">' +
+      '<img src="' + escapeHtml(sbImg(_refQrDirect(q.name))) + '" data-orig="' + escapeHtml(_refQrDirect(q.name)) + '" ' +
+        'onerror="imgFallback(this)" alt="收款码" ' +
+        'style="width:380px; max-width:46vw; background:#fff; border:1px solid var(--line); border-radius:10px;">' +
+      '<div style="font-size:0.88rem; line-height:2.05;">' +
+        '<div style="font-weight:700; font-size:1.1rem;">' + _rc_esc(r.member_cn || '') + '</div>' +
+        '<div>应退 <b style="font-size:1.35rem; color:#b45309;">￥' + amt + '</b></div>' +
+        '<div style="color:var(--text-muted);">' + _rc_esc(r.kanpei_type || '') + (r.kanpei_reason ? (' · ' + _rc_esc(r.kanpei_reason)) : '') + '</div>' +
+        '<div style="color:var(--text-muted); font-size:0.8rem;">手机扫码 → 转 ￥' + amt + ' → 回来勾上左边那格</div>' +
+        '<button class="btn btn-secondary" style="margin-top:8px;" onclick="refToggleQr(\'' + String(r.id) + '\')">收起</button>' +
+      '</div>' +
+    '</div></td></tr>';
+}
+
+function _refRenderRows(){
+  var tb = document.getElementById('refRows'); if (!tb) return;
+  var rows = REF_LIST_CACHE || [];
+  if (!rows.length){ tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:12px;">没有待退款的记录了 🎉</td></tr>'; _refreshRefAllState(); return; }
+  tb.innerHTML = rows.map(function(r){
+    var id = String(r.id), q = REF_QR_MAP[id], cell;
+    if (!REF_QR_OK){
+      cell = '<span style="color:#dc2626; font-size:0.78rem;">读取失败</span>';
+    } else if (q){
+      cell = '<img src="' + escapeHtml(sbImg(_refQrDirect(q.name))) + '" data-orig="' + escapeHtml(_refQrDirect(q.name)) + '" ' +
+             'onerror="imgFallback(this)" title="点一下看大图" onclick="event.stopPropagation(); refToggleQr(\'' + id + '\')" ' +
+             'style="width:90px;height:90px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px;cursor:zoom-in;display:block;margin:0 auto;">' +
+             /* 这行小字原来没挂 onclick → 点它什么都不发生（只有点图本身才行），
+                现在补上，并且阻止冒泡去勾选整行。 */
+             '<div style="font-size:10px;color:var(--text-muted);text-align:center;margin-top:2px;cursor:zoom-in;" ' +
+             'onclick="event.stopPropagation(); refToggleQr(\'' + id + '\')">点开看大图</div>';
+    } else {
+      cell = '<span style="color:#cbd5e1; font-size:0.78rem;">未提交</span>';
+    }
+    var tr = '<tr class="refRow" style="border-top:1px solid var(--line); cursor:pointer;" onclick="refRowClick(event, this)">' +
+      '<td style="text-align:center;padding:6px;"><input type="checkbox" class="refChk" data-id="' + escapeHtml(id) + '" onclick="refRowPaint(this.parentNode.parentNode)"></td>' +
+      '<td style="padding:6px;">' + _rc_esc(r.member_cn || '') + '</td>' +
+      '<td style="padding:6px;text-align:center;font-weight:700;">¥' + Number(r.refund_amount || 0).toFixed(2) + '</td>' +
+      '<td style="padding:6px;text-align:center;">' + cell + '</td>' +
+      '<td style="padding:6px;text-align:center;">' + _rc_esc(r.kanpei_type || '') + '</td>' +
+      '<td style="padding:6px;text-align:center;">' + _rc_esc(r.kanpei_reason || '') + '</td>' +
+      '<td style="padding:6px;text-align:center;font-size:11px;color:var(--text-muted);">' + _rc_esc((r.created_at || '').slice(0, 10)) + '</td>' +
+      /* 删除按钮只用来纠错（补录时搞错人）。stopPropagation 必须留着，
+         否则点删除会先触发整行勾选（refRowClick 的 tag 判断只是第二道保险）。 */
+      '<td style="padding:6px;text-align:center;">' +
+        '<button class="btn btn-secondary" style="padding:2px 7px;font-size:11px;line-height:1.6;color:#b42318;border-color:#f0c2bd;" ' +
+        'title="删掉这条退款记录（纠错用）" ' +
+        'onclick="event.stopPropagation(); delRefundRecord(\'' + _rc_esc(id) + '\')">删除</button></td></tr>';
+    if (REF_OPEN_ID === id && q && REF_QR_OK) tr += _refBigRow(r, q);
+    return tr;
+  }).join('');
+  _refreshRefAllState();   /* 重画后全选框归零，别留着上一轮的勾/半勾 */
+}
+
+async function loadRefundList(){
+  var tb=document.getElementById('refRows'); if(!tb) return;
+  var msg=document.getElementById('refListMsg'); if(msg) msg.textContent='加载中…';
+  var stat=document.getElementById('refStats');
+  REF_OPEN_ID=null;
+  try{
+    await _refLoadQrMap();
+    var re=await supabaseClient.from('refunds').select('id,member_cn,refund_amount,kanpei_type,kanpei_reason,refund_status,created_at').order('id',{ascending:false}).limit(500);
+    if(re.error) throw new Error(re.error.message);
+    var all=re.data||[];
+    var pend=all.filter(function(r){ return String(r.refund_status||'').trim()==='待退款'; });
+    REF_LIST_CACHE=pend;
+    var withQr=0, total=0;
+    pend.forEach(function(r){ if(REF_QR_MAP[String(r.id)]) withQr++; total+=Number(r.refund_amount||0); });
+    if(stat){
+      /* ⚠️ 桶没读到的时候，「已收到收款码 / 未提交」这两个数**一个都不能报** ——
+         报 0 就等于告诉团长「团员都没交码」，是假的。一律显示 ?。 */
+      var qrTxt = REF_QR_OK
+        ? ('已收到收款码 <b style="color:#15803d;font-size:1rem;">'+withQr+'</b> 笔'+
+           ' · 未提交 <b style="color:'+(pend.length-withQr ? '#dc2626' : '#15803d')+';font-size:1rem;">'+(pend.length-withQr)+'</b> 笔')
+        : ('已收到收款码 <b style="color:#94a3b8;font-size:1rem;">?</b> 笔'+
+           ' · 未提交 <b style="color:#94a3b8;font-size:1rem;">?</b> 笔');
+      stat.innerHTML='待退款 <b style="color:#b45309;font-size:1rem;">'+pend.length+'</b> 笔（合计 ￥'+total.toFixed(2)+'）'+
+        ' · '+qrTxt+
+        ' · 已退 '+(all.length-pend.length)+' 笔（不在下表）'+
+        (REF_QR_OK ? '' : '<br><b style="color:#dc2626;">⚠️ 收款码列表没读到，所以上面两个数是「?」；表格里的「读取失败」也不代表团员没交码 —— 点「🔄 重画列表」重试</b>');
+    }
+    _refRenderRows();
+    if(msg) msg.textContent = pend.length ? ('下表只列未退的 '+pend.length+' 笔；扫完一笔勾一格，最后点「批量标记已退」') : '';
+  }catch(err){ if(msg) msg.textContent='❌ '+err.message; }
+}
+function toggleAllRef(){
+  var all=document.getElementById('refAll');
+  /* ⚠️ 先记住目标状态：循环里 refRowPaint → _refreshRefAllState 会回头改 all.checked，
+     边循环边读会让后半部分行按错的状态设值（全选只勾一半）。 */
+  var want = !!all.checked;
+  document.querySelectorAll('.refChk').forEach(function(c){
+    c.checked = want;
+    refRowPaint(_refTrOf(c));   /* 整行选中高亮也得跟着走 */
+  });
+  _refreshRefAllState();
+}
+async function batchMarkRefunded(){
+  var ids=[]; document.querySelectorAll('.refChk').forEach(function(c){ if(c.checked) ids.push(c.getAttribute('data-id')); });
+  var msg=document.getElementById('refListMsg');
+  if(!ids.length){ msg.textContent='请先勾选要标记“已退”的记录'; return; }
+  try{ var re=await supabaseClient.from('refunds').update({refund_status:'已退'}).in('id',ids); if(re.error) throw new Error(re.error.message);
+    msg.textContent='✅ 已将 '+ids.length+' 条标记为已退'; loadRefundList(); showToast('已标记已退'); }
+  catch(err){ msg.textContent='❌ '+err.message; }
+}
+
+/* 🗑 删除一条退款记录（2026-10-29 团长需求：补录时搞错人，要能删掉重录）
+   · 只删 refunds 表这一行 —— 不动排表、不动凭证、不动已收的钱。
+   · 确认框走自绘 adminConfirm（手机微信内置浏览器屏蔽原生 confirm）。
+   · .select('id') 是关键：RLS 静默拒绝时 supabase 不报错，只有拿回行数才证明真删了。 */
+async function delRefundRecord(id){
+  var r = (REF_LIST_CACHE || []).filter(function(x){ return String(x.id) === String(id); })[0];
+  if(!r){ showToast('这条已不在列表里，点「🔄 重画列表」刷新一下'); return; }
+  var amt = Number(r.refund_amount || 0).toFixed(2);
+  var hasQr = !!REF_QR_MAP[String(id)];
+  var ok = await adminConfirm({
+    title: '删除这条退款记录？',
+    body: '团员：' + (r.member_cn || '(未填)') +
+          '\n应退：￥' + amt +
+          (r.kanpei_type ? ('\n类型：' + r.kanpei_type) : '') +
+          (r.kanpei_reason ? ('\n原因：' + r.kanpei_reason) : '') +
+          (hasQr ? '\n\n⚠️ 这笔已经收到收款码了，删掉之后码就对不上号了。' : '') +
+          '\n\n删了不能恢复，排表和已收的钱都不会跟着变。\n只是名字填错的话，删掉再重新补录一条就行。',
+    okText: '删除'
+  });
+  if(!ok) return;
+  try{
+    var re = await supabaseClient.from('refunds').delete().eq('id', id).select('id');
+    if(re.error) throw new Error(re.error.message);
+    if(!re.data || !re.data.length) throw new Error('数据库一行都没删掉（可能没有删除权限），请刷新后重试');
+    showToast('已删除 ' + (r.member_cn || '') + ' ￥' + amt);
+    loadRefundList();
+  }catch(err){ showToast('❌ ' + err.message); }
+}
+window.delRefundRecord = delRefundRecord;
+async function exportLedger(){
+  try { await ensureXLSX(); } catch (err) { showToast('❌ ' + err.message); return; }
+  var rows=RAW_ITEMS.map(function(it){ return [it.name,it.cn,it.quantity,it.price,it.country,it.batch_name,it.status,it.item_id,it.settled_price]; });
+  var ws=XLSX.utils.aoa_to_sheet([['名称','CN','数量','单价','地区','批次','状态','item_id','二调结算价']].concat(rows));
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'台账');
+  var d=new Date(); var ts=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  XLSX.writeFile(wb,'谷团台账_'+CURRENT_QUERY_KEY+'_'+ts+'.xlsx');
+}
+function importLedger(e){
+  var file=e.target.files[0]; if(!file) return;
+  var rd=new FileReader();
+  rd.onload=async function(){ try{ await ensureXLSX(); var wb=XLSX.read(rd.result,{type:'array'}); var arr=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1}); if(!arr||arr.length<2) throw new Error('文件无数据'); var items=[]; for(var i=1;i<arr.length;i++){var row=arr[i]; if(row&&row.length) items.push({cn:row[1],name:row[0],quantity:Number(row[2])||1,price:Number(row[3])||0,country:row[4]||'',batch_name:row[5]||'默认批次',status:row[6]||'未出荷',item_id:'item_'+Date.now()+'_'+i});} RAW_ITEMS=RAW_ITEMS.concat(items); await _saveItems(); _out('impMsg','✅ 已导入 '+items.length+' 条并写入 group_data'); showToast('导入完成'); }catch(err){ _out('impMsg','❌ '+err.message); } };
+  rd.readAsArrayBuffer(file);
+  }
+  
