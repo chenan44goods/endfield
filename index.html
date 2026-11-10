@@ -702,6 +702,9 @@
       white-space: pre-line;
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    /* 2026-11-10 拍卖浮层（遮罩 9000 / 面板 9001 / 确认框 9100 / 看大图 9200）打开时，
+       提示条必须浮在上面，否则「你已经是最高出价人」会被盖住看不清 */
+    .toast { z-index: 9900; }
 
     /* 键盘焦点可见性（无障碍） */
     .entry:focus-visible, .qp-back:focus-visible {
