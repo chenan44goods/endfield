@@ -12104,8 +12104,8 @@ function importLedger(e){
             <input id="aucCode" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;" placeholder="选填"></label>
           <label style="font-size:12px;">起拍价
             <input id="aucStart" type="number" min="0" step="0.01" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;" placeholder="¥"></label>
-          <label style="font-size:12px;">每档加价
-            <input id="aucStep" type="number" min="0.01" step="0.01" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;" placeholder="¥"></label>
+          <label style="font-size:12px;">建议加价 <span style="color:var(--c-text-sub);font-weight:400;">· 选填，只用来预填团员出价框</span>
+            <input id="aucStep" type="number" min="1" step="1" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;" placeholder="默认 ¥1"></label>
           <label style="font-size:12px;">截止时间（北京时间）
             <input id="aucEnd" type="datetime-local" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;"></label>
           <label style="font-size:12px;">备注
@@ -12512,7 +12512,7 @@ function aucRenderItems(){
          '<span style="font-size:11px;color:var(--c-text-sub);">' +
          (phase === 'soon' ? '未开始' : ended ? '已结束' : '进行中') + '</span></div>';
     h += '<div style="font-size:12px;color:var(--c-text-sub);margin-top:6px;line-height:1.8;">起拍 ' +
-         _aucMoney(it.start_price) + ' · 每档 ' + _aucMoney(it.step_price) +
+         _aucMoney(it.start_price) + ' · 建议加 ' + _aucMoney(it.step_price) +
          (it.starts_at ? ' · 开拍 ' + _aucBeijing(it.starts_at) : '') +
          ' · 截止 ' + _aucBeijing(it.ends_at) + '（北京时间）</div>';
     h += '<div style="font-size:13px;margin-top:4px;">当前最高 ' +
@@ -12584,9 +12584,10 @@ async function aucOpenItem(){
   var g = function (id) { var e = document.getElementById(id); return e ? String(e.value || '').trim() : ''; };
   var title = g('aucTitle'), code = g('aucCode'), sp = g('aucStart'),
       st = g('aucStep'), end = g('aucEnd'), note = g('aucNote'), startAt = g('aucStartAt');
-  if (!title || !sp || !st || !end) { _aucMsg('aucFormMsg', '拍品名称、起拍价、每档加价、截止时间都要填', true); return; }
-  var spN = Number(sp), stN = Number(st);
-  if (!(spN >= 0) || !(stN > 0)) { _aucMsg('aucFormMsg', '起拍价和每档加价要填有效数字', true); return; }
+  if (!title || !sp || !end) { _aucMsg('aucFormMsg', '拍品名称、起拍价、截止时间都要填', true); return; }
+  /* 2026-11-10 自由出价：加价档位取消，这个数只是「建议加价」（预填团员出价框），留空按 1 元 */
+  var spN = Number(sp), stN = st === '' ? 1 : Math.round(Number(st));
+  if (!(spN >= 0) || !(stN >= 1)) { _aucMsg('aucFormMsg', '起拍价要填有效数字，建议加价至少 1 元（或留空）', true); return; }
   var endIso = _aucToIso(end);
   if (!endIso) { _aucMsg('aucFormMsg', '截止时间格式不对', true); return; }
   var startIso = '';
@@ -12681,7 +12682,7 @@ function aucExport(){
   if (!_aucWinners.length) { if (typeof showToast === 'function') showToast('还没有已结束的竞拍'); return; }
   var byId = {};
   _aucItems.forEach(function (x) { byId[String(x.id)] = x; });
-  var rows = [['拍品名称', '编号', '起拍价', '每档加价', '成交价', '中标圈名', '出价笔数', '开始时间', '截止时间']];
+  var rows = [['拍品名称', '编号', '起拍价', '建议加价', '成交价', '中标圈名', '出价笔数', '开始时间', '截止时间']];
   _aucWinners.forEach(function (w) {
     var it = byId[String(w.item_id)] || {};
     rows.push([
