@@ -3850,6 +3850,13 @@
       const inner = document.getElementById('qpLeftInner');
       const btn = document.getElementById('foldFormBtn');
       if (!panel || !inner || !btn) return;
+      /* 🔓 登录身份直通面板：没有表单可收起，既不折叠也不露按钮 */
+      if (typeof AUTH_ID_PANELS !== 'undefined' && AUTH_ID_PANELS[currentPanel]) {
+        btn.style.display = 'none';
+        panel.classList.remove('folded');
+        inner.style.maxHeight = 'none';
+        return;
+      }
       btn.style.display = 'flex';
       panel.classList.remove('folded');
       inner.style.maxHeight = inner.scrollHeight + 'px';
@@ -3867,6 +3874,14 @@
         const inner = document.getElementById('qpLeftInner');
         const btn = document.getElementById('foldFormBtn');
         if (!panel || !inner || !btn) return;
+        /* 🔓 手机端照旧自动折叠（收款码仍在第一屏），但没表单可展开，别再露展开按钮 */
+        if (typeof AUTH_ID_PANELS !== 'undefined' && AUTH_ID_PANELS[currentPanel]) {
+          if (panel.classList.contains('folded')) return;
+          panel.classList.add('folded');
+          inner.style.maxHeight = '0px';
+          btn.style.display = 'none';
+          return;
+        }
         if (panel.classList.contains('folded')) return;
         panel.classList.add('folded');
         inner.style.maxHeight = '0px';
@@ -3971,6 +3986,15 @@
       if (_who) _who.style.display = _auto ? 'block' : 'none';
       if (qBtn) qBtn.style.display = (!_auto && needCn && !isPiggy) ? 'block' : 'none';
       if (fb) fb.style.display = isFeedback ? 'block' : 'none';
+      /* 🔓 这四个面板已经没有表单可填，桌面端那个「收起表单」按钮也就没意义了，收掉。 */
+      if (_auto) {
+        const _fold = document.getElementById('foldFormBtn');
+        const _inner = document.getElementById('qpLeftInner');
+        const _qp2 = document.getElementById('queryPanel');
+        if (_fold) _fold.style.display = 'none';
+        if (_inner) _inner.style.maxHeight = 'none';
+        if (_qp2) _qp2.classList.remove('folded');
+      }
       const fbm = document.getElementById('fbMyFeedback');
       if (fbm) fbm.style.display = isFeedback ? 'block' : 'none';
       const pgy = document.getElementById('piggyFields');
