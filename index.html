@@ -4865,7 +4865,7 @@
 </div>
 
 <div class="auc-viewer" id="aucViewer" onclick="aucViewClose()">
-  <img id="aucViewerImg" alt="拍品大图">
+  <img id="aucViewerImg" alt="拍品大图" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
   <div class="auc-viewer-tip">点任意处关闭</div>
 </div>
 
@@ -5041,7 +5041,7 @@ function aucViewClose(){
   var v = document.getElementById('aucViewer');
   if (v) v.classList.remove('on');
   var im = document.getElementById('aucViewerImg');
-  if (im) im.removeAttribute('src');
+  if (im) im.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 }
 async function aucLoad(){
   try {
