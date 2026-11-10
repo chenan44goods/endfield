@@ -5250,12 +5250,13 @@ async function aucConfirmYes(){
     '.qmodal-mask.open', '#aucPanel.on', '#aucMask.on',
     '#aucConfirm.on', '#aucViewer.on'
   ];
+  /* ⚠️ 故意不看 #queryResultOverlay：它是 #queryPanel 的子元素，父面板关掉后
+     异步查询仍可能把它设成 display:block，但那时它根本不在屏幕上。
+     只认父面板的 .open，避免「面板关了、状态栏还不回来」。 */
   function covered(){
     for (var i = 0; i < COVER.length; i++) {
       try { if (document.querySelector(COVER[i])) return true; } catch (e) {}
     }
-    var r = document.getElementById('queryResultOverlay');
-    if (r && r.style.display && r.style.display !== 'none') return true;
     var g = document.getElementById('loginGate');
     return !!(g && !g.classList.contains('hidden'));   /* 整站登录门本身也算 */
   }
