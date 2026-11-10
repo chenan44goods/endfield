@@ -1043,6 +1043,90 @@
       scrollbar-width: none;
     }
     .result-carousel::-webkit-scrollbar { display: none; }
+
+    /* ===== 查询结果页改版（2026-11-10 团长定稿）=====
+       只对「自助查询 / 交肾核算 / 排发调度」三个面板生效（qp-railoff = 撤左栏）。
+       ⚠️ 存钱 / 匿名反馈 的左栏装着整套表单，不加这个 class，一点不动。
+       ⚠️ 状态栏按 11-10 定论只留首屏，这里不放；顶栏只有「返回 + 入口胶囊」一层。 */
+    .query-panel.qp-railoff { display: block; }
+    .query-panel.qp-railoff .qp-left { display: none; }
+    .query-panel.qp-railoff .qp-right {
+      padding: 112px 3vw 6vh;
+      overflow: visible;
+    }
+    .query-panel.qp-railoff #queryResultOverlay {
+      /* ⚠️ 必须 !important：这个节点身上有 inline 的 width:min(820px,88%)，
+         inline 优先级高于任何类选择器，不加就一直还是 820px。 */
+      width: 78% !important;
+      max-width: 1100px;
+    }
+    /* 结果卡放大约 15%（原样式全是写死 px，只能逐个覆盖，别改成 em 连锁以免牵动别处） */
+    /* 轮播原本上下各留 36vh 让首尾卡也能吸附到中心 —— 撤左栏后这 36vh 会把内容顶到屏幕下半截，
+       缩到 8vh：首尾不再强吸中心（不影响看内容），主要几张仍然居中放大。 */
+    .query-panel.qp-railoff .result-carousel { padding: 8vh 8px; }
+    .query-panel.qp-railoff .result-item { padding: 18px; gap: 18px; }
+    .query-panel.qp-railoff .result-item .r-img,
+    .query-panel.qp-railoff .result-item .r-img-empty { width: 128px; height: 128px; }
+    .query-panel.qp-railoff .result-item .r-name,
+    .query-panel.qp-railoff .result-item .r-price { font-size: 18px; }
+    .query-panel.qp-railoff .result-item .r-meta { font-size: 13.5px; }
+    .query-panel.qp-railoff .result-item .r-badge { font-size: 12px; padding: 5px 10px; }
+    .query-panel.qp-railoff .result-header { flex-wrap: nowrap; }
+    .query-panel.qp-railoff .stat-pill,
+    .query-panel.qp-railoff .batch-label-pill { white-space: nowrap; }
+
+    /* 顶栏：左上返回 + 右上入口选项组。fixed 相对面板定位（面板有 transform，本身就是包含块），
+       面板关掉时跟着移出屏幕，不会浮在首页上。 */
+    .panel-top {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 6;
+      padding: 16px 30px 12px;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      pointer-events: none;      /* 空白处不挡结果区点击 */
+    }
+    .query-panel.qp-railoff .panel-top { display: flex; }
+    .panel-top .qp-back, .panel-top .entry-nav { pointer-events: auto; }
+    /* 「返回」不能被胶囊挤成两行（手机 390 实测会竖排成「返 / 回」） */
+    .panel-top .qp-back { white-space: nowrap; flex: 0 0 auto; }
+    .entry-nav { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; max-width: 100%; }
+    .entry-nav .cap { font-size: 10px; letter-spacing: .22em; color: var(--muted); }
+    .entry-nav .chip {
+      font-size: 11px; padding: 8px 11px; border-radius: 999px;
+      border: 1px solid rgba(33,33,33,.16); background: rgba(255,255,255,.55);
+      color: #4A5058; white-space: nowrap; cursor: pointer; font-family: var(--sans);
+      transition: background .18s, border-color .18s, color .18s;
+    }
+    .entry-nav .chip:hover { background: rgba(255,255,255,.92); }
+    .entry-nav .chip.cur { background: var(--paper); border-color: rgba(33,33,33,.28); color: var(--ink); font-weight: 700; }
+
+    @media (max-width: 900px) {
+      .query-panel.qp-railoff .qp-right { padding: 152px 5vw 8vh; }
+      .query-panel.qp-railoff #queryResultOverlay { width: 92% !important; }
+      .query-panel.qp-railoff .result-header { flex-wrap: wrap; }
+      .query-panel.qp-railoff .result-carousel { padding: 3vh 8px 5vh; }
+      .query-panel.qp-railoff .result-item { padding: 14px; gap: 14px; }
+      .query-panel.qp-railoff .result-item .r-img,
+      .query-panel.qp-railoff .result-item .r-img-empty { width: 96px; height: 96px; }
+      .query-panel.qp-railoff .result-item .r-name,
+      .query-panel.qp-railoff .result-item .r-price { font-size: 16px; }
+      .query-panel.qp-railoff .result-item .r-meta { font-size: 12.5px; }
+      /* 手机顶栏改成上下两层：第一行只有返回，第二行是整行胶囊（左对齐折行）。
+         原来挤在一行里，「返回」会被压成竖排，胶囊还会出现「第二行只剩两个靠右」的怪样子。 */
+      .panel-top {
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: 8px;
+        padding: 12px 16px 10px;
+      }
+      .entry-nav { justify-content: flex-start; }
+      .entry-nav .chip { font-size: 10px; padding: 6px 9px; }
+      .entry-nav .cap { display: none; }
+    }
     /* 桌面端：鼠标滚轮在卡片区滚到头后，要能继续带动外层结果区滚动。
        contain 会把滚轮"卡"在卡片上，看起来就像整页滚不动。 */
     @media (min-width: 901px) {
@@ -1464,6 +1548,25 @@
 
   <!-- 自助查询面板 -->
   <div class="query-panel" id="queryPanel">
+    <!-- 🧭 查询结果页改版顶栏（2026-11-10）：左上返回，右上入口选项组。
+         只在 自助查询 / 交肾核算 / 排发调度 三个面板显示（见 .query-panel.qp-railoff）。
+         胶囊必须真能切面板，不是装饰 —— 点「我要存钱 / 匿名反馈」会切到原样式面板（它们左栏有表单）。 -->
+    <div class="panel-top" id="panelTop">
+      <button type="button" class="qp-back" onclick="closePanel()" aria-label="返回首页">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        <span>返回</span><span class="qp-slash">/</span>
+      </button>
+      <nav class="entry-nav" id="panelEntryNav">
+        <span class="cap">ENTRY</span>
+        <button type="button" class="chip" data-panel="todo" onclick="panelNavGo(this)">查看我的待办</button>
+        <button type="button" class="chip" data-panel="fee" onclick="panelNavGo(this)">交肾核算</button>
+        <button type="button" class="chip" data-panel="piggy" onclick="panelNavGo(this)">我要存钱</button>
+        <button type="button" class="chip cur" data-panel="query" onclick="panelNavGo(this)">自助查询</button>
+        <button type="button" class="chip" data-panel="dispatch" onclick="panelNavGo(this)">排发调度</button>
+        <button type="button" class="chip" data-panel="feedback" onclick="panelNavGo(this)">匿名反馈</button>
+        <button type="button" class="chip" data-panel="auction" id="navAuction" style="display:none;" onclick="panelNavGo(this)">匿名拍卖</button>
+      </nav>
+    </div>
     <div class="qp-left">
       <!-- 🧭 返回键：团长要求钉在**这个白色方框的左上角**，压在那行眉标上方。
            ⚠️ 藏在 #qpLeftInner 外面是有原因的：手机端出结果后 autoFoldFormOnMobile()
@@ -3941,6 +4044,14 @@
       window.__AUTH_WAIT_Q__ = [];
       for (var i = 0; i < q.length; i++) { try { q[i](); } catch(e){} }
     }
+    /* 🧭 查询结果页入口胶囊（2026-11-10）：点一下切到对应面板，跟首页那张卡一个效果 */
+    function panelNavGo(el){
+      if (!el) return;
+      var p = el.getAttribute('data-panel');
+      if (p === 'todo') { if (typeof openMyTodo === 'function') openMyTodo(); return; }
+      if (p === 'auction') { if (typeof aucOpen === 'function') aucOpen(); return; }
+      if (typeof openPanel === 'function') openPanel(p);
+    }
     function openPanel(type){
       if (AUTH_ID_PANELS[type]) {
         if (window.__LOGGED_IN__ === 'checking') {
@@ -3965,6 +4076,33 @@
       if (rStat) { rStat.innerText = ''; }
 
       currentPanel = type;
+      /* 🧭 查询结果页改版（2026-11-10）：只有这三个面板撤左栏 —— 它们的左栏在登录身份直通后已经空了。
+         存钱 / 匿名反馈 的左栏装着整套表单，绝不能撤，保持原样。 */
+      window.__QP_RAIL__ = (type === 'query' || type === 'fee' || type === 'dispatch');
+      const _qpRail = document.getElementById('queryPanel');
+      if (_qpRail) _qpRail.classList.toggle('qp-railoff', window.__QP_RAIL__);
+      const _nav = document.getElementById('panelEntryNav');
+      if (_nav) {
+        const _chips = _nav.querySelectorAll('.chip');
+        for (let _i = 0; _i < _chips.length; _i++) {
+          _chips[_i].classList.toggle('cur', _chips[_i].getAttribute('data-panel') === type);
+        }
+      }
+      /* 左栏一撤，「共用设备？清除本机记录」会被一起带走 —— 搬进结果区（轮播下面），
+         功能不能丢；切回存钱 / 反馈时再搬回原位（原位在 #qpLeftInner 末尾）。
+         ⚠️ 目标必须是 #queryResultOverlay，不能是 .qp-right —— 后者是 flex 横排，
+            搬进去会跟结果卡并排挤在一起。 */
+      const _crr = document.getElementById('clearRememberRow');
+      const _qrt = document.getElementById('queryResultOverlay');
+      if (_crr && _qrt) {
+        if (!_crr.__home) _crr.__home = _crr.parentNode;
+        if (window.__QP_RAIL__) {
+          if (_crr.parentNode !== _qrt) _qrt.appendChild(_crr);
+        } else if (_crr.__home && _crr.parentNode !== _crr.__home) {
+          _crr.parentNode.removeChild(_crr);
+          _crr.__home.appendChild(_crr);
+        }
+      }
       document.getElementById('panelTitle').innerText = PANEL_TITLES[type] || '自助查询';
       const _psub = document.getElementById('panelSub');
       if (_psub) _psub.innerText = PANEL_SUBS[type] || 'AS / PAYMENT · FEE';
@@ -4314,8 +4452,10 @@
       if (foldBtn) { foldBtn.style.display = 'none'; }
       const qpInner = document.getElementById('qpLeftInner');
       if (qpInner) { qpInner.style.maxHeight = 'none'; }
+      /* 关面板时把改版状态一起摘掉：顶栏是 fixed 相对面板定位的，
+         不摘的话下次从别的入口打开会莫名带上顶栏。 */
       const qPanel = document.getElementById('queryPanel');
-      if (qPanel) { qPanel.classList.remove('folded'); }
+      if (qPanel) { qPanel.classList.remove('folded'); qPanel.classList.remove('qp-railoff'); }
     }
     /* ===== 🔑 记住查询密钥 / CN（2026-10-26）=====
        团长反馈：团员每次打开网站都要把密钥和 CN 重打一遍。
@@ -5199,6 +5339,9 @@ function _aucSyncEntry(){
     else if (soon > 0) { badge.style.display = ''; badge.textContent = soon + ' 件即将开拍'; }
     else { badge.style.display = 'none'; }
   }
+  /* 结果页顶栏那个「匿名拍卖」胶囊跟首页入口同进同出，没拍品就一个都不浮出 */
+  var _navAuc = document.getElementById('navAuction');
+  if (_navAuc) _navAuc.style.display = card.style.display;
 }
 function aucViewImg(id){
   var it = null;
