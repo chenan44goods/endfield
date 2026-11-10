@@ -5235,5 +5235,55 @@ async function aucConfirmYes(){
   }, 60000);
 })();
 </script>
+<!-- 🔒 2026-11-10：登录状态栏只停留在首页首屏（团长定）。
+     打开任何功能面板 / 待办卡 / 拍卖 / 弹层时自动收起，关掉回到首屏再出现。
+     只监听浮层开合，不改动任何现有函数；登录身份直通四个面板的逻辑一行不动。 -->
+<style>
+  #loginBadge.sb-inpanel{display:none !important;}
+</style>
+<script>
+(function(){
+  /* 页面上所有会盖住首屏的浮层：侧滑查询面板、待办卡、饕餮卡、通用弹窗、
+     拍卖侧栏 / 遮罩 / 确认框 / 大图查看器。开合都是改 class，统一监听即可。 */
+  var COVER = [
+    '#queryPanel.open', '#myTodoOverlay.open', '#taotieOverlay.open',
+    '.qmodal-mask.open', '#aucPanel.on', '#aucMask.on',
+    '#aucConfirm.on', '#aucViewer.on'
+  ];
+  function covered(){
+    for (var i = 0; i < COVER.length; i++) {
+      try { if (document.querySelector(COVER[i])) return true; } catch (e) {}
+    }
+    var r = document.getElementById('queryResultOverlay');
+    if (r && r.style.display && r.style.display !== 'none') return true;
+    var g = document.getElementById('loginGate');
+    return !!(g && !g.classList.contains('hidden'));   /* 整站登录门本身也算 */
+  }
+  function sync(){
+    var b = document.getElementById('loginBadge');
+    if (!b) return;
+    var want = covered();
+    /* 状态没变就一个 DOM 都不碰，避免 observer 自己触发自己 */
+    if (b.classList.contains('sb-inpanel') === want) return;
+    b.classList.toggle('sb-inpanel', want);
+  }
+  var pending = false;
+  function schedule(){
+    if (pending) return;
+    pending = true;
+    var run = function(){ pending = false; sync(); };
+    if (window.requestAnimationFrame) requestAnimationFrame(run);
+    else setTimeout(run, 16);
+  }
+  sync();
+  try {
+    new MutationObserver(schedule).observe(document.body,
+      { subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+  } catch (e) {
+    document.addEventListener('click', function(){ setTimeout(sync, 200); }, true);
+  }
+  window.addEventListener('pageshow', schedule);
+})();
+</script>
 </body>
 </html>
