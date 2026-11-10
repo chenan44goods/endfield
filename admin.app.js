@@ -965,6 +965,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         RAW_BATCH_PLANS = (iData.batch_plans && typeof iData.batch_plans === 'object' && !Array.isArray(iData.batch_plans)) ? iData.batch_plans : {};
         RAW_ARCHIVED = Array.isArray(iData.archived_items) ? iData.archived_items : [];
         _loadDispatchMarks(iData.dispatch_marks);   // ✅ 排发勾选（image_data.dispatch_marks）
+        SAVE_SNAP = _snapBuild(RAW_ITEMS, iData);   // 🚀 B1 基线：刚读进来的这一份
         CURRENT_PAGE = 1;
         updateBatchDropdownOptions();
         /* 💾 数据到位后再恢复上次的筛选（批次要在 RAW_ITEMS 上校验过才敢用）。
@@ -1380,6 +1381,88 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       }, wait);
     }
 
+    /* ═══════════════════════════════════════════════════════════════════
+       🚀 2026-11-10 保存提速（B1）：只上传本次真正改过的那几条
+       原来每点一次保存，都把 1.7MB 的排表整份传上去（上行 150–380KB/s
+       → 光上传就 4–8 秒，条数越多越慢）。现在拿「上次落库时的基线」跟
+       当前内存逐条对比，只把变了的条目 / 切片交给数据库原地替换、追加、
+       删除，顺序一个都不动。
+
+       安全边界（任何一条不满足就落回原来的整份保存，老逻辑一行没删）：
+         · 没读到基线（刚打开页面还没保存过）→ 走整份保存
+         · 改动条数 > 600（批量改整批）→ 走整份保存
+         · 数据库返回 conflict（别人刚写过）/ guard（会整批删光）/ 任何报错
+           → 走整份保存，由老逻辑合并重试
+         · 回退开关：控制台 window.__FULL_SAVE__ = true
+       ═══════════════════════════════════════════════════════════════════ */
+    let SAVE_SNAP = null;          // { items: {id: JSON串}, image: {切片名: JSON串} }
+    let _diffSaveBroken = false;   // 函数没装 / 报错 → 本次会话不再尝试
+    const _DIFF_MAX_UPSERTS = 600;
+    const _DIFF_IMG_KEYS = ['applications', 'transfer_logs', 'feedback', 'logistics_data',
+      'archived_items', 'pay_proofs', 'batch_plans', 'piggy_bank', 'dispatch_marks',
+      'deleted_item_ids'];
+
+    function _jstr(x) { try { return JSON.stringify(x); } catch (e) { return ''; } }
+
+    function _snapBuild(items, img) {
+      const m = Object.create(null);
+      const arr = Array.isArray(items) ? items : [];
+      for (let i = 0; i < arr.length; i++) {
+        const it = arr[i];
+        if (!it || typeof it !== 'object') continue;
+        const id = String(it.item_id || it.id || '');
+        if (id) m[id] = _jstr(it);
+      }
+      const im = Object.create(null);
+      _DIFF_IMG_KEYS.forEach(function (k) {
+        if (img && typeof img === 'object' && (k in img)) im[k] = _jstr(img[k]);
+      });
+      return { items: m, image: im };
+    }
+
+    /* 返回 null = 这次不走增量（走原来的整份保存） */
+    function _buildDiff(payload, myDeleted) {
+      try {
+        if (typeof window !== 'undefined' && window.__FULL_SAVE__) return null;
+        if (!SAVE_SNAP) return null;
+        if (!payload || !Array.isArray(payload.group_data)) return null;
+        const upserts = [];
+        const arr = payload.group_data;
+        for (let i = 0; i < arr.length; i++) {
+          const it = arr[i];
+          if (!it || typeof it !== 'object') continue;
+          const id = String(it.item_id || it.id || '');
+          if (!id) continue;
+          if (SAVE_SNAP.items[id] !== _jstr(it)) upserts.push(it);
+        }
+        const deletes = [];
+        if (myDeleted && myDeleted.forEach) myDeleted.forEach(function (x) { deletes.push(String(x)); });
+        const img = {};
+        let imgCount = 0;
+        _DIFF_IMG_KEYS.forEach(function (k) {
+          const v = (payload.image_data && typeof payload.image_data === 'object')
+            ? payload.image_data[k] : undefined;
+          const now = (v === undefined) ? null : _jstr(v);
+          const before = (k in SAVE_SNAP.image) ? SAVE_SNAP.image[k] : null;
+          if (now !== before) { img[k] = v; imgCount++; }
+        });
+        return { upserts: upserts, deletes: deletes, img: (imgCount ? img : null), imgKeys: imgCount };
+      } catch (e) { return null; }
+    }
+
+    async function _applyDiff(d) {
+      const { data, error } = await supabaseClient.rpc('leader_items_apply', {
+        p_query_key: CURRENT_QUERY_KEY,
+        p_version: (CURRENT_VERSION === null || CURRENT_VERSION === undefined)
+          ? null : Number(CURRENT_VERSION),
+        p_upserts: d.upserts,
+        p_deletes: d.deletes,
+        p_image: d.img
+      });
+      if (error) throw error;
+      return data;
+    }
+
     function saveDataToSupabase() {
       const run = function () { return _saveDataToSupabase(); };
       /* 遮罩从「进入队列」就开始计时：连点两下时，第二下等的这段时间也是用户在等。 */
@@ -1518,6 +1601,37 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             }
           }
         } catch (e) { /* 读不到就照原样保存，服务端护栏兜底 */ }
+        /* 🚀 B1：先试「只发改动」。数据库那边不认 / 版本不符 / 会整批删光
+           → 落回下面的整份保存（原来那套合并、护栏一个没少）。 */
+        try {
+          if (!_diffSaveBroken) {
+            const _d = _buildDiff(payload, MY_DELETED);
+            if (_d && _d.upserts.length <= _DIFF_MAX_UPSERTS) {
+              window.__DIFF_SAVE_LAST__ = { upserts: _d.upserts.length,
+                deletes: _d.deletes.length, imgKeys: _d.imgKeys, mode: 'diff', at: Date.now() };
+              _saveStage('正在保存 ' + _d.upserts.length + ' 条改动…');
+              const _r = await _applyDiff(_d);
+              if (_r && _r.ok) {
+                CURRENT_VERSION = Number(_r.version);
+                RAW_IMAGE_DATA_BASE = payload.image_data;
+                SAVE_SNAP = _snapBuild(payload.group_data, payload.image_data);
+                window.__DIFF_SAVE_LAST__.ok = true;
+                clearMine();
+                return true;
+              }
+              window.__DIFF_SAVE_LAST__.ok = false;
+              window.__DIFF_SAVE_LAST__.reason = (_r && (_r.conflict ? 'conflict' : (_r.guard ? 'guard' : 'other'))) || 'empty';
+              /* conflict / guard → 落到整份保存，由它合并重试 */
+            } else if (_d) {
+              window.__DIFF_SAVE_LAST__ = { upserts: _d.upserts.length, deletes: _d.deletes.length,
+                imgKeys: _d.imgKeys, mode: 'full-too-many', at: Date.now() };
+            }
+          }
+        } catch (e) {
+          _diffSaveBroken = true;
+          window.__DIFF_SAVE_LAST__ = { mode: 'full-error', msg: String(e && e.message || e),
+            at: Date.now() };
+        }
         _saveStage('正在保存 ' + (RAW_ITEMS ? RAW_ITEMS.length : 0) + ' 条谷子…');
         if (CURRENT_VERSION !== null) {
           const nextVersion = (Number(CURRENT_VERSION) || 0) + 1;
@@ -1630,10 +1744,12 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             else if (hadDirty || hadDeleted) alert('✅ 已保存！检测到数据有更新，已自动合并保留你的修改/删除操作。');
             else alert('⚠️ 检测到数据有更新，已刷新为最新数据，请重新操作。');
             RAW_IMAGE_DATA_BASE = mergeResult.fullImageData || RAW_IMAGE_DATA_BASE;
+            SAVE_SNAP = _snapBuild(RAW_ITEMS, RAW_IMAGE_DATA_BASE);   // 🚀 B1 合并保存成功 → 基线跟新
             return true;
           }
           CURRENT_VERSION = nextVersion;
           RAW_IMAGE_DATA_BASE = payload.image_data;   // 下一次保存以刚写进去的完整对象垫底
+          SAVE_SNAP = _snapBuild(payload.group_data, payload.image_data);   // 🚀 B1 保存成功 → 基线跟新
           clearMine();
           return true;
         }
@@ -1663,6 +1779,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         }
         CURRENT_VERSION = fallbackVer + 1;
         RAW_IMAGE_DATA_BASE = payload.image_data;
+        SAVE_SNAP = _snapBuild(payload.group_data, payload.image_data);   // 🚀 B1 兜底保存成功 → 基线跟新
         clearMine();
         return true;
       } catch (err) { showToast('保存异常'); return false; }
