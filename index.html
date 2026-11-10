@@ -5063,6 +5063,11 @@ function _aucLatest(id){
     if (String(_aucState[i].id) === String(id)) return _aucState[i];
   return null;
 }
+/* 2026-11-10 拦截用：本机已经是最高价（只比 my_bid / highest，不取别人 CN） */
+function _aucIAmLead(it){
+  var mine = Number(it.my_bid) || 0, hi = Number(it.highest) || 0;
+  return mine > 0 && mine >= hi;
+}
 function _aucStandingHtml(it, ended){
   var mine = Number(it.my_bid) || 0, hi = Number(it.highest) || 0;
   if (mine <= 0) return '';
@@ -5252,7 +5257,14 @@ function aucClose(){
   aucViewClose();
   if (_aucTimer) { clearInterval(_aucTimer); _aucTimer = null; }
 }
-function aucBidClick(id){
+function _aucOpenConfirm(it){
+  _aucPending = it;
+  var body = document.getElementById('aucConfirmBody');
+  if (body) { _aucConfirmHtml = _aucConfirmBodyHtml(it); body.innerHTML = _aucConfirmHtml; }
+  var c = document.getElementById('aucConfirm');
+  if (c) c.classList.add('on');
+}
+async function aucBidClick(id){
   if (_aucBusy) return;
   var it = null;
   for (var i = 0; i < _aucState.length; i++) if (_aucState[i].id === id) { it = _aucState[i]; break; }
@@ -5260,11 +5272,23 @@ function aucBidClick(id){
   if (_aucSoon(it)) { if (typeof showToast === 'function') showToast('还没到开拍时间'); return; }
   var idt = (typeof todoIdentity === 'function') ? todoIdentity() : { cn: '' };
   if (!idt || !idt.cn) { if (typeof showToast === 'function') showToast('请先登录'); return; }
-  _aucPending = it;
-  var body = document.getElementById('aucConfirmBody');
-  if (body) { _aucConfirmHtml = _aucConfirmBodyHtml(it); body.innerHTML = _aucConfirmHtml; }
-  var c = document.getElementById('aucConfirm');
-  if (c) c.classList.add('on');
+  if (_aucIAmLead(it)) {
+    /* 看着像自己领先 → 先拉一次最新价，别把「刚被别人超过」的人拦在门外 */
+    _aucBusy = true;
+    try { await aucLoad(); } catch (e) {}
+    _aucBusy = false;
+    var fresh = _aucLatest(id) || it;
+    if (_aucEnded(fresh) || _aucSoon(fresh)) return;
+    if (_aucIAmLead(fresh)) {                 // 确实是最高价本人：不弹确认框，直接说清楚
+      if (typeof showToast === 'function')
+        showToast('你现在已经是最高出价人（' + _aucMoney(fresh.my_bid) +
+                  '），不用再加 · 有人超过你会提醒你');
+      return;
+    }
+    _aucOpenConfirm(fresh);                   // 已被超过：按最新档走正常出价
+    return;
+  }
+  _aucOpenConfirm(it);
 }
 function aucConfirmNo(){
   _aucPending = null;
@@ -5295,6 +5319,9 @@ async function aucConfirmYes(){
         _aucKeepConfirm = true;          // 不关确认框，等 aucLoad 把金额改到最新档
         if (typeof showToast === 'function')
           showToast('刚有人加价 · 已按最新档重算，请重新确认');
+      } else if ((res && res.already_lead) || msg.indexOf('已经是最高') >= 0) {
+        if (typeof showToast === 'function')
+          showToast('你现在已经是最高出价人，不用再加 · 有人超过你会提醒你');
       } else if (typeof showToast === 'function') {
         showToast(msg);
       }
