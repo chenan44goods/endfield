@@ -1506,6 +1506,9 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       <div class="user-info">
         <span id="userEmailSpan" style="color: var(--text-muted);">已登录: 检查中...</span>
         <a href="index.html" target="_blank" class="btn btn-secondary" style="text-decoration: none;">打开团员自查页 &nearr;</a>
+        <!-- AUC_BTN_BEGIN 2026-11-10 -->
+        <button class="btn btn-secondary" type="button" onclick="aucAdminOpen()" style="text-decoration:none;">拍卖</button>
+        <!-- AUC_BTN_END 2026-11-10 -->
         <button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.8rem;" onclick="handleSignOut()">退出登录</button>
       </div>
     </header>
@@ -12056,5 +12059,502 @@ function importLedger(e){
     });
   })();
   </script>
+<!-- AUC_ADMIN_BEGIN 2026-11-10 -->
+<!-- 匿名拍卖 · 后台管理（纯增量弹层，复用现有 .modal-overlay / .btn 样式） -->
+<div class="modal-overlay" id="aucAdminModal">
+  <div class="modal" style="max-width:880px;width:calc(100% - 32px);max-height:88vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;">
+      <div>
+        <div style="font-size:11px;letter-spacing:.12em;color:var(--c-text-sub);">AS / AUCTION</div>
+        <h3 style="margin:4px 0 0;font-size:20px;">拍卖管理</h3>
+      </div>
+      <button class="btn btn-secondary" type="button" onclick="aucAdminClose()">关闭</button>
+    </div>
+
+    <div id="aucPassBox" style="background:#f8fafc;border:1px solid rgba(0,0,0,.08);border-radius:10px;padding:14px;margin-bottom:14px;">
+      <div style="font-weight:700;margin-bottom:4px;">需要管理口令</div>
+      <div style="font-size:12px;color:var(--c-text-sub);margin-bottom:10px;">只有团长和管理组知道，别发群里</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input type="password" id="aucPass" placeholder="管理口令" autocomplete="off"
+               style="flex:1;min-width:180px;padding:8px 10px;border:1px solid rgba(0,0,0,.18);border-radius:8px;"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();aucAdminUnlock();}">
+        <button class="btn btn-primary" type="button" onclick="aucAdminUnlock()">解锁</button>
+      </div>
+      <div id="aucPassMsg" style="font-size:12px;margin-top:8px;"></div>
+    </div>
+
+    <div id="aucMain" style="display:none;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+        <button class="btn btn-primary" type="button" id="aucTabSetupBtn" onclick="aucAdminTab('setup')">拍品设置</button>
+        <button class="btn btn-secondary" type="button" id="aucTabWinBtn" onclick="aucAdminTab('winners')">竞拍成功名单</button>
+        <span style="font-size:11px;color:var(--c-text-sub);margin-left:auto;">刷新页面后需重新输入口令</span>
+      </div>
+
+      <!-- 页签 1：拍品设置 -->
+      <div id="aucPaneSetup">
+        <form id="aucForm" onsubmit="event.preventDefault();aucOpenItem();"
+              style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;
+                     background:#fafafa;border:1px solid rgba(0,0,0,.08);border-radius:10px;padding:14px;">
+          <label style="font-size:12px;">拍品名称
+            <input id="aucTitle" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;" placeholder="拍品名称"></label>
+          <label style="font-size:12px;">编号
+            <input id="aucCode" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;" placeholder="选填"></label>
+          <label style="font-size:12px;">起拍价
+            <input id="aucStart" type="number" min="0" step="0.01" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;" placeholder="¥"></label>
+          <label style="font-size:12px;">每档加价
+            <input id="aucStep" type="number" min="0.01" step="0.01" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;" placeholder="¥"></label>
+          <label style="font-size:12px;">截止时间（北京时间）
+            <input id="aucEnd" type="datetime-local" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;"></label>
+          <label style="font-size:12px;">备注
+            <input id="aucNote" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;" placeholder="选填"></label>
+          <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-primary" type="submit">开拍</button>
+            <span id="aucFormMsg" style="font-size:12px;"></span>
+          </div>
+        </form>
+
+        <div style="margin:14px 0 8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-secondary" type="button" onclick="aucToggleReal()">查看实名出价</button>
+          <span style="font-size:11px;color:var(--c-text-sub);">实名列表需要管理口令，团员端看不到</span>
+        </div>
+        <div id="aucRealBox" style="display:none;margin-bottom:14px;"></div>
+        <div id="aucItemList"></div>
+      </div>
+
+      <!-- 页签 2：竞拍成功名单 -->
+      <div id="aucPaneWinners" style="display:none;">
+        <div id="aucWinnerList"></div>
+        <div id="aucWinnerSum" style="font-size:13px;font-weight:700;margin:10px 0;"></div>
+        <div style="font-size:11px;color:var(--c-text-sub);margin-bottom:12px;">流拍不进名单：无人出价的拍品不显示、也不导入</div>
+        <div style="background:#fafafa;border:1px solid rgba(0,0,0,.08);border-radius:10px;padding:14px;">
+          <div style="font-size:12px;font-weight:700;margin-bottom:6px;">导入会写入排表，请先强制刷新后台页面再操作</div>
+          <label style="font-size:12px;display:block;margin-bottom:10px;">导入到批次（手填，默认 11.10 竞拍成交）
+            <input id="aucBatch" value="11.10 竞拍成交"
+                   style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;"></label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-secondary" type="button" onclick="aucExport()">导出成交清单</button>
+            <button class="btn btn-primary" type="button" onclick="aucImport()">导入排表</button>
+          </div>
+          <div id="aucImportMsg" style="font-size:12px;margin-top:10px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* 匿名拍卖 · 后台管理（2026-11-10 纯增量）
+   ⚠️ 所有管理操作统一走 auction_admin(p_pass, p_action, p_payload)；
+      口令只存在内存变量 _aucPass，不写 localStorage、不写进页面源码、刷新即失效。
+   ⚠️ 导入排表复用 saveDataToSupabase() 主保存链路
+      （按 item_id 自动对齐 / 服务端 409 护栏 / 删除墓碑 全在链路上），不新开写库路径。 */
+var _aucPass = '', _aucItems = [], _aucWinners = [], _aucTabNow = 'setup', _aucBusy = false;
+
+function _aucEsc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function _aucMoney(v){
+  var n = Number(v) || 0;
+  return '¥' + (Math.round(n * 100) / 100);
+}
+function _aucSbBase(){
+  try { if (typeof SB_ACTIVE_BASE !== 'undefined' && SB_ACTIVE_BASE) return SB_ACTIVE_BASE; } catch (e) {}
+  try { return sbPageBase(); } catch (e) { return location.origin + '/sb'; }
+}
+function _aucSbKey(){
+  try { return (typeof SUPABASE_KEY !== 'undefined') ? SUPABASE_KEY : ''; } catch (e) { return ''; }
+}
+function _aucFetcher(){
+  return (typeof sbFetchWithFallback === 'function') ? sbFetchWithFallback : window.fetch;
+}
+function _aucRpc(fn, body){
+  var key = _aucSbKey();
+  return _aucFetcher()(_aucSbBase() + '/rest/v1/rpc/' + fn, {
+    method: 'POST',
+    headers: { 'apikey': key, 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  }).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  });
+}
+function _aucRelock(msg){
+  _aucPass = '';
+  var box = document.getElementById('aucPassBox');
+  var main = document.getElementById('aucMain');
+  if (box) box.style.display = 'block';
+  if (main) main.style.display = 'none';
+  _aucMsg('aucPassMsg', msg || '口令不对', true);
+}
+function _aucAdm(action, payload){
+  return _aucRpc('auction_admin', {
+    p_pass: _aucPass, p_action: action, p_payload: payload || {}
+  }).then(function (r) {
+    if (r && r.ok === false && /口令/.test(String(r.msg || ''))) _aucRelock(r.msg);
+    return r;
+  });
+}
+function _aucMsg(id, text, bad){
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.color = bad ? '#b91c1c' : '#15803d';
+}
+function _aucBeijing(iso){
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleString('zh-CN', {
+      timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    });
+  } catch (e) { return String(iso); }
+}
+function _aucDay(iso){
+  if (!iso) return '';
+  try {
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date(iso));
+    var o = {};
+    parts.forEach(function (x) { o[x.type] = x.value; });
+    return o.year && o.month && o.day ? (o.year + '-' + o.month + '-' + o.day) : '';
+  } catch (e) { return ''; }
+}
+
+function aucAdminOpen(){
+  var m = document.getElementById('aucAdminModal');
+  if (m) m.classList.add('active');
+  if (_aucPass) aucLoadState();
+}
+function aucAdminClose(){
+  var m = document.getElementById('aucAdminModal');
+  if (m) m.classList.remove('active');
+}
+async function aucAdminUnlock(){
+  var el = document.getElementById('aucPass');
+  var v = el ? String(el.value || '').trim() : '';
+  if (!v) { _aucMsg('aucPassMsg', '请先输入管理口令', true); return; }
+  _aucPass = v;
+  _aucMsg('aucPassMsg', '正在核对…');
+  try {
+    var r = await _aucAdm('state');
+    if (!r || r.ok !== true) { _aucRelock((r && r.msg) || '口令不对'); return; }
+    if (el) el.value = '';
+    _aucMsg('aucPassMsg', '');
+    var box = document.getElementById('aucPassBox');
+    var main = document.getElementById('aucMain');
+    if (box) box.style.display = 'none';
+    if (main) main.style.display = 'block';
+    _aucItems = r.items || [];
+    aucRenderItems();
+    aucRenderReal();
+    aucAdminTab(_aucTabNow);
+  } catch (e) {
+    _aucRelock('没连上数据库，再试一次');
+  }
+}
+function aucAdminTab(t){
+  _aucTabNow = t;
+  var s = document.getElementById('aucPaneSetup');
+  var w = document.getElementById('aucPaneWinners');
+  var a = document.getElementById('aucTabSetupBtn');
+  var b = document.getElementById('aucTabWinBtn');
+  if (s) s.style.display = (t === 'setup') ? 'block' : 'none';
+  if (w) w.style.display = (t === 'winners') ? 'block' : 'none';
+  if (a) a.className = 'btn ' + (t === 'setup' ? 'btn-primary' : 'btn-secondary');
+  if (b) b.className = 'btn ' + (t === 'winners' ? 'btn-primary' : 'btn-secondary');
+  if (t === 'winners') aucLoadWinners();
+}
+async function aucLoadState(){
+  try {
+    var r = await _aucAdm('state');
+    if (!r || r.ok !== true) { _aucMsg('aucFormMsg', (r && r.msg) || '读取失败', true); return; }
+    _aucItems = r.items || [];
+    aucRenderItems();
+    aucRenderReal();
+  } catch (e) { _aucMsg('aucFormMsg', '没连上数据库，再试一次', true); }
+}
+function aucRenderItems(){
+  var box = document.getElementById('aucItemList');
+  if (!box) return;
+  if (!_aucItems.length) {
+    box.innerHTML = '<div style="padding:24px;text-align:center;color:var(--c-text-sub);font-size:13px;">还没有拍品，填上面的表单开拍</div>';
+    return;
+  }
+  var h = '';
+  _aucItems.forEach(function (it, i) {
+    var ended = it.status === 'ended' ||
+      (it.ends_at && new Date(it.ends_at).getTime() <= Date.now());
+    h += '<div style="border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:12px;margin-bottom:10px;">';
+    h += '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">' +
+         '<div style="font-weight:700;">' + _aucEsc(it.title) +
+         '<span style="font-size:11px;color:var(--c-text-sub);font-weight:400;margin-left:6px;">' + _aucEsc(it.code) + '</span></div>' +
+         '<span style="font-size:11px;color:var(--c-text-sub);">' + (ended ? '已结束' : '进行中') + '</span></div>';
+    h += '<div style="font-size:12px;color:var(--c-text-sub);margin-top:6px;line-height:1.8;">起拍 ' +
+         _aucMoney(it.start_price) + ' · 每档 ' + _aucMoney(it.step_price) +
+         ' · 截止 ' + _aucBeijing(it.ends_at) + '（北京时间）</div>';
+    h += '<div style="font-size:13px;margin-top:4px;">当前最高 ' +
+         _aucMoney(it.highest == null ? it.start_price : it.highest) +
+         ' · ' + (Number(it.bid_count) || 0) + ' 人已出价</div>';
+    h += '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">';
+    if (!ended) h += '<button class="btn btn-secondary" type="button" onclick="aucEndItem(' + i + ')">结束本件</button>';
+    h += '<button class="btn btn-danger" type="button" onclick="aucDelItem(' + i + ')">删除本件</button></div>';
+    h += '</div>';
+  });
+  box.innerHTML = h;
+}
+function aucToggleReal(){
+  var b = document.getElementById('aucRealBox');
+  if (!b) return;
+  b.style.display = (b.style.display === 'none' || !b.style.display) ? 'block' : 'none';
+  if (b.style.display === 'block') aucRenderReal();
+}
+function aucRenderReal(){
+  var box = document.getElementById('aucRealBox');
+  if (!box) return;
+  var devs = {};
+  _aucItems.forEach(function (it) {
+    (it.bids || []).forEach(function (b) {
+      var d = String(b.device || '');
+      if (!d) return;
+      if (!devs[d]) devs[d] = {};
+      devs[d][String(b.cn)] = 1;
+    });
+  });
+  var risky = {};
+  Object.keys(devs).forEach(function (d) {
+    if (Object.keys(devs[d]).length > 1) risky[d] = 1;
+  });
+  var h = '<div style="font-size:12px;color:var(--c-text-sub);margin-bottom:8px;">这份列表只在后台可见，团员端看不到</div>';
+  var any = false;
+  _aucItems.forEach(function (it) {
+    var bs = it.bids || [];
+    if (!bs.length) return;
+    any = true;
+    h += '<div style="border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:12px;margin-bottom:10px;">' +
+         '<div style="font-weight:700;margin-bottom:8px;">' + _aucEsc(it.title) + '</div>' +
+         '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+         '<th style="text-align:left;padding:6px 4px;">圈名 CN</th>' +
+         '<th style="text-align:left;padding:6px 4px;">出价金额</th>' +
+         '<th style="text-align:left;padding:6px 4px;">出价时间</th>' +
+         '<th style="text-align:left;padding:6px 4px;">设备编号</th></tr></thead><tbody>';
+    bs.forEach(function (b) {
+      var flag = risky[String(b.device || '')];
+      h += '<tr style="border-top:1px solid rgba(0,0,0,.06);' + (flag ? 'background:#fff1f2;' : '') + '">' +
+           '<td style="padding:6px 4px;">' + _aucEsc(b.cn) + (flag ? ' ⚠' : '') + '</td>' +
+           '<td style="padding:6px 4px;">' + _aucMoney(b.amount) + '</td>' +
+           '<td style="padding:6px 4px;">' + _aucBeijing(b.at) + '</td>' +
+           '<td style="padding:6px 4px;font-size:11px;word-break:break-all;">' + _aucEsc(String(b.device || '').slice(0, 20)) + '</td></tr>';
+    });
+    h += '</tbody></table></div>';
+  });
+  if (!any) h += '<div style="padding:18px;text-align:center;color:var(--c-text-sub);font-size:13px;">还没有人出价</div>';
+  if (Object.keys(risky).length) {
+    h += '<div style="font-size:12px;color:#b91c1c;">⚠ 同一台设备用过多个圈名出价（列表里高亮标记）</div>';
+  }
+  box.innerHTML = h;
+}
+async function aucOpenItem(){
+  if (_aucBusy) return;
+  var g = function (id) { var e = document.getElementById(id); return e ? String(e.value || '').trim() : ''; };
+  var title = g('aucTitle'), code = g('aucCode'), sp = g('aucStart'),
+      st = g('aucStep'), end = g('aucEnd'), note = g('aucNote');
+  if (!title || !sp || !st || !end) { _aucMsg('aucFormMsg', '起拍价、每档加价、截止时间都要填', true); return; }
+  var spN = Number(sp), stN = Number(st);
+  if (!(spN >= 0) || !(stN > 0)) { _aucMsg('aucFormMsg', '起拍价和每档加价要填有效数字', true); return; }
+  var t = end.replace(' ', 'T');
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(t)) t += ':00';
+  var iso = '';
+  try { iso = new Date(t + '+08:00').toISOString(); } catch (e) { iso = ''; }
+  if (!iso || isNaN(new Date(iso).getTime())) { _aucMsg('aucFormMsg', '截止时间格式不对', true); return; }
+  _aucBusy = true;
+  _aucMsg('aucFormMsg', '正在开拍…');
+  try {
+    var r = await _aucAdm('open', {
+      title: title, code: code, start_price: spN, step_price: stN, ends_at: iso, note: note
+    });
+    if (r && r.ok) {
+      ['aucTitle', 'aucCode', 'aucStart', 'aucStep', 'aucEnd', 'aucNote'].forEach(function (id) {
+        var e = document.getElementById(id); if (e) e.value = '';
+      });
+      _aucMsg('aucFormMsg', '已开拍');
+      await aucLoadState();
+    } else {
+      _aucMsg('aucFormMsg', (r && r.msg) || '没开成', true);
+    }
+  } catch (e) {
+    _aucMsg('aucFormMsg', '没连上数据库，再试一次', true);
+  } finally { _aucBusy = false; }
+}
+async function aucEndItem(i){
+  var it = _aucItems[i];
+  if (!it) return;
+  if (!confirm('结束后不能再出价，确定吗？')) return;
+  try {
+    var r = await _aucAdm('end', { id: it.id });
+    if (r && r.ok) { await aucLoadState(); await aucLoadWinners(); }
+    else if (typeof showToast === 'function') showToast((r && r.msg) || '没成功');
+  } catch (e) { if (typeof showToast === 'function') showToast('没连上数据库，再试一次'); }
+}
+async function aucDelItem(i){
+  var it = _aucItems[i];
+  if (!it) return;
+  if (!confirm('删除「' + it.title + '」及它的全部出价记录，确定吗？')) return;
+  try {
+    var r = await _aucAdm('delete', { id: it.id });
+    if (r && r.ok) { await aucLoadState(); await aucLoadWinners(); }
+    else if (typeof showToast === 'function') showToast((r && r.msg) || '没成功');
+  } catch (e) { if (typeof showToast === 'function') showToast('没连上数据库，再试一次'); }
+}
+async function aucLoadWinners(){
+  try {
+    var r = await _aucAdm('winners');
+    if (!r || r.ok !== true) { _aucMsg('aucImportMsg', (r && r.msg) || '读取失败', true); return; }
+    _aucWinners = r.winners || [];
+    aucRenderWinners();
+  } catch (e) { _aucMsg('aucImportMsg', '没连上数据库，再试一次', true); }
+}
+function aucRenderWinners(){
+  var box = document.getElementById('aucWinnerList');
+  var sum = document.getElementById('aucWinnerSum');
+  if (!box) return;
+  if (!_aucWinners.length) {
+    box.innerHTML = '<div style="padding:24px;text-align:center;color:var(--c-text-sub);font-size:13px;">还没有已结束的竞拍</div>';
+    if (sum) sum.textContent = '';
+    return;
+  }
+  var h = '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          '<th style="text-align:left;padding:8px 4px;">拍品名称</th>' +
+          '<th style="text-align:left;padding:8px 4px;">编号</th>' +
+          '<th style="text-align:left;padding:8px 4px;">中标圈名</th>' +
+          '<th style="text-align:left;padding:8px 4px;">成交价</th>' +
+          '<th style="text-align:left;padding:8px 4px;">出价笔数</th>' +
+          '<th style="text-align:left;padding:8px 4px;">截止时间</th></tr></thead><tbody>';
+  var total = 0;
+  _aucWinners.forEach(function (w) {
+    total += Number(w.amount) || 0;
+    h += '<tr style="border-top:1px solid rgba(0,0,0,.07);">' +
+         '<td style="padding:8px 4px;">' + _aucEsc(w.title) + '</td>' +
+         '<td style="padding:8px 4px;">' + _aucEsc(w.code) + '</td>' +
+         '<td style="padding:8px 4px;font-weight:700;">' + _aucEsc(w.cn) + '</td>' +
+         '<td style="padding:8px 4px;">' + _aucMoney(w.amount) + '</td>' +
+         '<td style="padding:8px 4px;">' + (Number(w.bid_count) || 0) + '</td>' +
+         '<td style="padding:8px 4px;">' + _aucBeijing(w.ends_at) + '</td></tr>';
+  });
+  box.innerHTML = h + '</tbody></table>';
+  if (sum) sum.textContent = '共 ' + _aucWinners.length + ' 笔成交 · 合计 ' + _aucMoney(total);
+}
+function aucExport(){
+  if (!_aucWinners.length) { if (typeof showToast === 'function') showToast('还没有已结束的竞拍'); return; }
+  var byId = {};
+  _aucItems.forEach(function (x) { byId[String(x.id)] = x; });
+  var rows = [['拍品名称', '编号', '起拍价', '每档加价', '成交价', '中标圈名', '出价笔数', '开始时间', '截止时间']];
+  _aucWinners.forEach(function (w) {
+    var it = byId[String(w.item_id)] || {};
+    rows.push([
+      w.title, w.code,
+      it.start_price == null ? '' : it.start_price,
+      it.step_price == null ? '' : it.step_price,
+      w.amount, w.cn, w.bid_count,
+      it.created_at ? _aucBeijing(it.created_at) : '',
+      _aucBeijing(w.ends_at)
+    ]);
+  });
+  var csv = rows.map(function (r) {
+    return r.map(function (c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(',');
+  }).join('\r\n');
+  var blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '竞拍成交清单_' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { try { URL.revokeObjectURL(a.href); } catch (e) {} }, 2000);
+}
+async function _aucFreshGroup(){
+  var key = _aucSbKey();
+  var qk = (typeof CURRENT_QUERY_KEY !== 'undefined' && CURRENT_QUERY_KEY) ? CURRENT_QUERY_KEY : '4goods';
+  var r = await _aucFetcher()(_aucSbBase() + '/rest/v1/leader_data?select=group_data&query_key=eq.' + encodeURIComponent(qk), {
+    headers: { 'apikey': key, 'Authorization': 'Bearer ' + key }, cache: 'no-store'
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  var rows = await r.json();
+  var gd = rows && rows[0] && rows[0].group_data;
+  if (typeof gd === 'string') gd = JSON.parse(gd);
+  return Array.isArray(gd) ? gd : null;
+}
+async function aucImport(){
+  if (_aucBusy) return;
+  var batchEl = document.getElementById('aucBatch');
+  var batch = batchEl ? String(batchEl.value || '').trim() : '';
+  if (!batch) { _aucMsg('aucImportMsg', '请先填导入到哪个批次', true); return; }
+  if (!_aucWinners.length) { _aucMsg('aucImportMsg', '还没有已结束的竞拍', true); return; }
+  if (!confirm('确认导入排表\n\n将把 ' + _aucWinners.length + ' 笔成交写入「' + batch +
+               '」，单价=成交价、数量=1、状态=未付款\n\n成功后请到「排表管理」核对；已导入过的会自动跳过')) return;
+  _aucBusy = true;
+  _aucMsg('aucImportMsg', '正在写入…');
+  var startLen = -1, added = [];
+  try {
+    /* ① 先拉服务器最新排表，按固定 item_id 去重（防同一场导两次 / 旧页面重复） */
+    var fresh = await _aucFreshGroup();
+    var exist = {};
+    (fresh || []).forEach(function (x) { if (x && x.item_id) exist[String(x.item_id)] = 1; });
+    if (typeof RAW_ITEMS !== 'undefined' && Array.isArray(RAW_ITEMS)) {
+      RAW_ITEMS.forEach(function (x) { if (x && x.item_id) exist[String(x.item_id)] = 1; });
+    }
+    var skipped = 0;
+    _aucWinners.forEach(function (w) {
+      var id = 'aucwin_' + String(w.item_id);
+      if (exist[id]) { skipped++; return; }
+      var row = {
+        item_id: id,
+        name: String(w.title || ''),
+        cn: String(w.cn || ''),
+        batch_name: batch,
+        price: Number(w.amount) || 0,
+        quantity: 1,
+        country: '',
+        status: '未付款',
+        image_url: '',
+        created_at: new Date().toISOString()
+      };
+      var day = _aucDay(w.ends_at);
+      if (day) row.order_date = day;      /* 没算出来的日期一律不带，不估算 */
+      added.push(row);
+      exist[id] = 1;
+    });
+    if (!added.length) {
+      _aucMsg('aucImportMsg', '✅ 已导入 0 条，跳过 ' + skipped + ' 条（已导入过）');
+      return;
+    }
+    /* ② 追加后复用主保存链路（自动对齐 / 409 护栏 / 删除墓碑） */
+    startLen = RAW_ITEMS.length;
+    RAW_ITEMS.push.apply(RAW_ITEMS, added);
+    var saved = await saveDataToSupabase();
+    /* ③ 回读逐条核对，硬证据才算成功 */
+    var after = await _aucFreshGroup();
+    var ids = {};
+    (after || []).forEach(function (x) { if (x && x.item_id) ids[String(x.item_id)] = x; });
+    var missing = added.filter(function (r) { return !ids[r.item_id]; });
+    if (saved === false || missing.length) {
+      if (startLen >= 0) RAW_ITEMS.splice(startLen);
+      _aucMsg('aucImportMsg', '没保存成功，名单没动，再试一次', true);
+      return;
+    }
+    var msg = '✅ 已导入 ' + added.length + ' 条，跳过 ' + skipped + ' 条（已导入过）';
+    _aucMsg('aucImportMsg', msg);
+    if (typeof showToast === 'function') showToast(msg);
+  } catch (e) {
+    if (startLen >= 0 && typeof RAW_ITEMS !== 'undefined' && Array.isArray(RAW_ITEMS)) {
+      RAW_ITEMS.splice(startLen);
+    }
+    _aucMsg('aucImportMsg', '没保存成功，名单没动，再试一次', true);
+  } finally { _aucBusy = false; }
+}
+</script>
+<!-- AUC_ADMIN_END 2026-11-10 -->
 </body>
 </html>
