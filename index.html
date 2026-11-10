@@ -4936,6 +4936,12 @@
 .auc-viewer img{max-width:100%;max-height:86vh;object-fit:contain;border-radius:8px;}
 .auc-viewer-tip{position:absolute;bottom:22px;left:0;right:0;text-align:center;
   color:#ddd;font-size:12px;font-family:var(--sans,sans-serif);}
+/* 2026-11-10 实时竞价：领先 / 被超过 / 中标 常驻状态条（只在拍卖卡片内） */
+.auc-standing{margin-top:10px;width:100%;box-sizing:border-box;border-radius:10px;
+  padding:10px 12px;font-size:13px;font-weight:700;line-height:1.6;}
+.auc-standing.lead,.auc-standing.win{background:#e9f7ee;color:#166b34;border:1px solid #b9e3c6;}
+.auc-standing.out{background:#fff3e2;color:#8a5100;border:1px solid #f3d9ac;}
+.auc-standing.plain{background:rgba(33,33,33,.05);color:var(--ink-soft,#777);}
 </style>
 
 <div class="auc-mask" id="aucMask" onclick="aucClose()"></div>
@@ -4973,6 +4979,8 @@
 var _aucState = [], _aucPending = null, _aucBusy = false, _aucTimer = null, _aucBoot = false;
 /* v2：图片按 id 缓存，轮询重画时不闪图；_aucNeedReload 让「到点」那一刻自动重拉状态 */
 var _aucImgCache = {}, _aucNeedReload = false;
+/* 2026-11-10：整卡 HTML 指纹（避免无变化也重画）、确认框文案指纹、撞价后保留确认框 */
+var _aucLastHtml = '', _aucConfirmHtml = '', _aucKeepConfirm = false;
 
 function _aucEsc(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -5049,6 +5057,62 @@ function _aucResultText(it){
   if (mine > 0 && mine >= hi) return '你中标了 · 成交价 ' + _aucMoney(hi);
   return '本场已结束 · 成交价 ' + _aucMoney(hi);
 }
+/* ===== 2026-11-10 实时竞价：领先状态 + 最新档确认（只在本机判断，不取别人 CN） ===== */
+function _aucLatest(id){
+  for (var i = 0; i < _aucState.length; i++)
+    if (String(_aucState[i].id) === String(id)) return _aucState[i];
+  return null;
+}
+function _aucStandingHtml(it, ended){
+  var mine = Number(it.my_bid) || 0, hi = Number(it.highest) || 0;
+  if (mine <= 0) return '';
+  var cls = 'plain', txt;
+  if (ended) {
+    if (mine >= hi) { cls = 'win'; txt = '你中标了 · 成交价 ' + _aucMoney(hi); }
+    else { txt = '本场已结束 · 你出过 ' + _aucMoney(mine) + '，这次没中标'; }
+  } else if (mine >= hi) {
+    cls = 'lead'; txt = '你现在是最高出价人 · ' + _aucMoney(mine);
+  } else {
+    cls = 'out'; txt = '你已被超过 · 当前最高 ' + _aucMoney(hi) + '，可继续加价';
+  }
+  return '<div class="auc-standing ' + cls + '">' + txt + '</div>';
+}
+function _aucConfirmBodyHtml(it){
+  return '为「' + _aucEsc(it.title) + '」出价 ' + _aucMoney(_aucNext(it)) +
+         '（当前最高 ' + _aucMoney(it.highest) + '）<br>出价后不能撤回';
+}
+/* 3 秒轮询拿到新价时，把已打开的确认框同步到最新档；绝不自动替团员提交 */
+function _aucSyncPending(){
+  var c = document.getElementById('aucConfirm');
+  if (!c || !c.classList.contains('on') || !_aucPending) return;
+  var fresh = _aucLatest(_aucPending.id);
+  if (!fresh) return;
+  var oldAmount = _aucNext(_aucPending);
+  _aucPending = fresh;
+  if (_aucSoon(fresh) || _aucEnded(fresh)) { aucConfirmNo(); return; }
+  var html = _aucConfirmBodyHtml(fresh), b = document.getElementById('aucConfirmBody');
+  if (b && html !== _aucConfirmHtml) {
+    b.innerHTML = html; _aucConfirmHtml = html;
+    if (_aucNext(fresh) !== oldAmount && typeof showToast === 'function')
+      showToast('价格刚更新 · 最新档 ' + _aucMoney(_aucNext(fresh)) + '，请重新确认');
+  }
+}
+/* 只在「原来领先 → 现在被超过」那一刻提醒一次，不每次轮询刷屏 */
+function _aucLeadNotice(prev){
+  var p = document.getElementById('aucPanel');
+  var c = document.getElementById('aucConfirm');
+  if (!p || !p.classList.contains('on') || typeof showToast !== 'function') return;
+  if (c && c.classList.contains('on')) return;
+  var done = false;
+  _aucState.forEach(function(it){
+    if (done || !prev[String(it.id)] || _aucEnded(it)) return;
+    var mine = Number(it.my_bid) || 0, hi = Number(it.highest) || 0;
+    if (mine > 0 && mine < hi) {
+      done = true;
+      showToast('有人超过你了 · ' + String(it.title || '拍品') + ' 当前最高 ' + _aucMoney(hi));
+    }
+  });
+}
 function _aucCardHtml(it){
   var ended = _aucEnded(it), soon = !ended && _aucSoon(it);
   var hi = _aucMoney(it.highest), cnt = Number(it.bid_count) || 0;
@@ -5063,11 +5127,12 @@ function _aucCardHtml(it){
   h += '<div class="auc-price">当前最高 ' + hi + '</div>';
   h += '<div class="auc-meta">' + cnt + ' 人已出价 · 出价人匿名</div>';
   h += '<div class="auc-mine">' + (mine > 0 ? '我出过 ' + _aucMoney(mine) : '我还没出价') + '</div>';
+  h += _aucStandingHtml(it, ended);
   if (it.starts_at) h += '<div class="auc-start">开拍 ' + _aucBeijing(it.starts_at) + '（北京时间）</div>';
   if (it.note) h += '<div class="auc-note">' + _aucEsc(it.note) + '</div>';
   h += '<div class="auc-time" data-auc-end="' + _aucEsc(it.ends_at) + '"' +
        (it.starts_at ? ' data-auc-start="' + _aucEsc(it.starts_at) + '"' : '') +
-       (soon ? ' data-soon="1"' : '') + '>' + _aucLeft(it, soon) + '</div>';
+       (soon ? ' data-soon="1"' : '') + '></div>';   // 倒计时由 _aucTick 填，避免整卡重画闪图
   if (soon) {
     h += '<div class="auc-soon">还没开拍 · 到点自动开放出价</div>';
   } else if (!ended) {
@@ -5094,11 +5159,14 @@ function _aucTick(){
 function _aucRender(){
   var box = document.getElementById('aucList');
   if (!box) return;
-  if (!_aucState.length) {
-    box.innerHTML = '<div class="auc-empty">现在没有正在进行的拍卖</div>';
-    return;
+  var html = _aucState.length ? _aucState.map(_aucCardHtml).join('')
+                              : '<div class="auc-empty">现在没有正在进行的拍卖</div>';
+  if (html !== _aucLastHtml) {
+    var top = box.scrollTop;
+    box.innerHTML = html;
+    box.scrollTop = top;
+    _aucLastHtml = html;
   }
-  box.innerHTML = _aucState.map(_aucCardHtml).join('');
   _aucTick();
 }
 function _aucRunningCount(){
@@ -5144,18 +5212,26 @@ async function aucLoad(){
   try {
     var arr = await _aucRpc('auction_public_state', { p_device: _aucDevice() });
     if (!Array.isArray(arr)) arr = [];
+    var prev = {};
+    _aucState.forEach(function(x){
+      var m = Number(x.my_bid) || 0, hi = Number(x.highest) || 0;
+      prev[String(x.id)] = (m > 0 && m >= hi && !_aucEnded(x));
+    });
     _aucState = arr.map(function(it){
       var k = String(it.id);
       if (it.image_data) _aucImgCache[k] = it.image_data;
       else if (_aucImgCache[k]) it.image_data = _aucImgCache[k];
       return it;
     });
+    _aucSyncPending();      // 确认框开着时，把金额同步到最新档（不自动提交）
     _aucRender();
     _aucSyncEntry();
+    _aucLeadNotice(prev);   // 从领先变被超过，只提醒一次
   } catch (e) {
     var box = document.getElementById('aucList');
     if (box && document.getElementById('aucPanel').classList.contains('on')) {
       box.innerHTML = '<div class="auc-empty">网络没连上，暂时看不到拍卖，稍后再试</div>';
+      _aucLastHtml = '';
     }
     _aucSyncEntry();
   }
@@ -5185,9 +5261,8 @@ function aucBidClick(id){
   var idt = (typeof todoIdentity === 'function') ? todoIdentity() : { cn: '' };
   if (!idt || !idt.cn) { if (typeof showToast === 'function') showToast('请先登录'); return; }
   _aucPending = it;
-  var amount = _aucNext(it), body = document.getElementById('aucConfirmBody');
-  if (body) body.innerHTML = '为「' + _aucEsc(it.title) + '」出价 ' + _aucMoney(amount) +
-    '（当前最高 ' + _aucMoney(it.highest) + '）<br>出价后不能撤回';
+  var body = document.getElementById('aucConfirmBody');
+  if (body) { _aucConfirmHtml = _aucConfirmBodyHtml(it); body.innerHTML = _aucConfirmHtml; }
   var c = document.getElementById('aucConfirm');
   if (c) c.classList.add('on');
 }
@@ -5198,7 +5273,8 @@ function aucConfirmNo(){
 }
 async function aucConfirmYes(){
   if (_aucBusy || !_aucPending) return;
-  var it = _aucPending, amount = _aucNext(it);
+  var it = _aucLatest(_aucPending.id) || _aucPending;   // 3 秒轮询后别再用旧档
+  var amount = _aucNext(it);
   if (_aucSoon(it) || _aucEnded(it)) { aucConfirmNo(); return; }
   _aucBusy = true;
   var ok = document.getElementById('aucConfirmOk');
@@ -5213,15 +5289,23 @@ async function aucConfirmYes(){
         showToast(res.leading ? '出价成功 · 你目前是最高价 ' + _aucMoney(amount)
                              : '出价成功 · 当前最高 ' + _aucMoney(res.highest || amount) + '，可继续加价');
       }
-    } else if (typeof showToast === 'function') {
-      showToast((res && res.msg) || '出价没提交，再试一次');
+    } else {
+      var msg = (res && res.msg) || '出价没提交，再试一次';
+      if (msg.indexOf('抢先') >= 0) {
+        _aucKeepConfirm = true;          // 不关确认框，等 aucLoad 把金额改到最新档
+        if (typeof showToast === 'function')
+          showToast('刚有人加价 · 已按最新档重算，请重新确认');
+      } else if (typeof showToast === 'function') {
+        showToast(msg);
+      }
     }
   } catch (e) {
     if (typeof showToast === 'function') showToast('网络没连上，出价没提交，再试一次');
   } finally {
     _aucBusy = false;
     if (ok) { ok.disabled = false; ok.textContent = '确认出价'; }
-    aucConfirmNo();
+    if (_aucKeepConfirm) _aucKeepConfirm = false;   // 这次保留确认框，下次照常关
+    else aucConfirmNo();
     await aucLoad();
   }
 }
@@ -5229,10 +5313,21 @@ async function aucConfirmYes(){
   if (_aucBoot) return;
   _aucBoot = true;
   aucLoad();                                    // 进首页静默查一次：没拍卖就一个元素都不浮出
-  setInterval(function(){                       // 只读轮询，不写任何库
-    if (!document.getElementById('aucPanel') ||
-        !document.getElementById('aucPanel').classList.contains('on')) aucLoad();
-  }, 60000);
+  /* 2026-11-10：面板打开时每 3 秒拉最新价（原先写反了，开着反而不刷）；
+     面板关着时仍 60 秒一次只为更新入口角标。全程只读，不写库。
+     手机锁屏回来 / 切回标签页立刻补一次，避免盯着旧价出价被抢先。 */
+  var _aucLastPoll = Date.now();
+  setInterval(function(){
+    var p = document.getElementById('aucPanel');
+    var on = !!(p && p.classList.contains('on'));
+    var now = Date.now();
+    if (on || now - _aucLastPoll >= 60000) { _aucLastPoll = now; aucLoad(); }
+  }, 3000);
+  function _aucResume(){
+    if (document.visibilityState === 'visible') { _aucLastPoll = Date.now(); aucLoad(); }
+  }
+  document.addEventListener('visibilitychange', _aucResume);
+  window.addEventListener('pageshow', _aucResume);
 })();
 </script>
 <!-- 🔒 2026-11-10：登录状态栏只停留在首页首屏（团长定）。
