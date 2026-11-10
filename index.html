@@ -4826,6 +4826,19 @@
 .auc-modal-actions .auc-btn{margin-top:0;flex:1;}
 @media(max-width:600px){.auc-head{padding:20px 20px 14px;}.auc-list{padding:14px 20px 24px;}
   .auc-foot{padding:12px 20px;}.auc-panel{width:100%;}}
+/* v2 · 拍品图 / 定时开拍 */
+.auc-thumb{display:block;width:100%;max-height:190px;object-fit:contain;background:#f6f6f6;
+  border:1px solid rgba(33,33,33,.1);border-radius:10px;margin:12px 0 0;cursor:zoom-in;}
+.auc-start{margin-top:6px;font-size:12px;line-height:1.7;color:var(--ink-soft,#777);}
+.auc-note{margin-top:6px;font-size:12px;line-height:1.7;color:var(--ink-soft,#777);white-space:pre-wrap;}
+.auc-soon{margin-top:14px;width:100%;box-sizing:border-box;border-radius:10px;padding:12px;
+  background:rgba(33,33,33,.06);color:var(--ink-soft,#777);font-size:13px;font-weight:700;text-align:center;}
+.auc-viewer{position:fixed;inset:0;z-index:9200;background:rgba(15,15,15,.88);display:none;
+  align-items:center;justify-content:center;padding:20px;cursor:zoom-out;}
+.auc-viewer.on{display:flex;}
+.auc-viewer img{max-width:100%;max-height:86vh;object-fit:contain;border-radius:8px;}
+.auc-viewer-tip{position:absolute;bottom:22px;left:0;right:0;text-align:center;
+  color:#ddd;font-size:12px;font-family:var(--sans,sans-serif);}
 </style>
 
 <div class="auc-mask" id="aucMask" onclick="aucClose()"></div>
@@ -4851,11 +4864,18 @@
   </div>
 </div>
 
+<div class="auc-viewer" id="aucViewer" onclick="aucViewClose()">
+  <img id="aucViewerImg" alt="拍品大图">
+  <div class="auc-viewer-tip">点任意处关闭</div>
+</div>
+
 <script>
 /* 匿名拍卖 · 团员端（2026-11-10）
    ⚠️ 只调 auction_public_state / auction_place_bid 两个数据库函数。
       这两张表本身对 anon 不可读，前端连 CN 字段都拿不到 → F12 也翻不出出价人。 */
 var _aucState = [], _aucPending = null, _aucBusy = false, _aucTimer = null, _aucBoot = false;
+/* v2：图片按 id 缓存，轮询重画时不闪图；_aucNeedReload 让「到点」那一刻自动重拉状态 */
+var _aucImgCache = {}, _aucNeedReload = false;
 
 function _aucEsc(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -4888,19 +4908,43 @@ async function _aucRpc(fn, body){
 function _aucEnded(it){
   return it.status === 'ended' || (it.ends_at && new Date(it.ends_at).getTime() <= Date.now());
 }
+function _aucSoon(it){
+  return !!(it.starts_at && new Date(it.starts_at).getTime() > Date.now());
+}
 function _aucNext(it){
   var hi = Number(it.highest) || 0, step = Number(it.step_price) || 1;
   return hi + step;                       // 无人出价时服务端返回 start-step → 下一档正好是起拍价
 }
-function _aucLeft(it){
-  var ms = new Date(it.ends_at).getTime() - Date.now();
+function _aucBeijing(iso){
+  if (!iso) return '';
+  try {
+    var p = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    }).formatToParts(new Date(iso));
+    var o = {}; p.forEach(function(x){ o[x.type] = x.value; });
+    return o.month && o.day ? (o.month + '月' + o.day + '日 ' + (o.hour || '') + ':' + (o.minute || '')) : '';
+  } catch (e) { return ''; }
+}
+/* 只认我们自己压出来的 data:image/jpeg;base64,... 或 https 图片地址；
+   别的协议（javascript:、svg、data:text…）一律不往 <img src> 里塞。 */
+function _aucSafeImg(s){
+  var v = String(s == null ? '' : s);
+  if (/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(v)) return v;
+  if (/^https:\/\//i.test(v)) return v;
+  return '';
+}
+function _aucLeft(it, toStart){
+  var target = toStart ? it.starts_at : it.ends_at;
+  var ms = new Date(target).getTime() - Date.now();
   if (isNaN(ms)) return '';
-  if (ms <= 0) return '已截止';
+  if (ms <= 0) return toStart ? '马上开拍' : '已截止';
   var d = Math.floor(ms / 86400000), h = Math.floor(ms % 86400000 / 3600000),
       m = Math.floor(ms % 3600000 / 60000), s = Math.floor(ms % 60000 / 1000);
-  if (d > 0) return '剩余 ' + d + ' 天 ' + h + ' 小时';
+  var pre = toStart ? '距开拍 ' : '剩余 ';
+  if (d > 0) return pre + d + ' 天 ' + h + ' 小时';
   function p2(x){ return (x < 10 ? '0' : '') + x; }
-  return '剩余 ' + p2(h) + ':' + p2(m) + ':' + p2(s);
+  return pre + p2(h) + ':' + p2(m) + ':' + p2(s);
 }
 function _aucResultText(it){
   if (Number(it.bid_count) === 0) return '本场无人出价 · 流拍';
@@ -4909,17 +4953,27 @@ function _aucResultText(it){
   return '本场已结束 · 成交价 ' + _aucMoney(hi);
 }
 function _aucCardHtml(it){
-  var ended = _aucEnded(it), hi = _aucMoney(it.highest), cnt = Number(it.bid_count) || 0;
+  var ended = _aucEnded(it), soon = !ended && _aucSoon(it);
+  var hi = _aucMoney(it.highest), cnt = Number(it.bid_count) || 0;
   var mine = Number(it.my_bid) || 0;
+  var img = _aucSafeImg(it.image_data);
   var h = '<div class="auc-card' + (ended ? ' done' : '') + '">';
   h += '<div class="auc-card-top"><div class="auc-name">' + _aucEsc(it.title) +
        '<span class="auc-code">' + _aucEsc(it.code) + '</span></div>' +
-       '<div class="auc-state">' + (ended ? '已结束' : '进行中') + '</div></div>';
+       '<div class="auc-state">' + (soon ? '未开始' : ended ? '已结束' : '进行中') + '</div></div>';
+  if (img) h += '<img class="auc-thumb" src="' + _aucEsc(img) + '" alt="拍品图：' + _aucEsc(it.title) +
+       '" onclick="aucViewImg(\'' + _aucEsc(it.id) + '\')">';
   h += '<div class="auc-price">当前最高 ' + hi + '</div>';
   h += '<div class="auc-meta">' + cnt + ' 人已出价 · 出价人匿名</div>';
   h += '<div class="auc-mine">' + (mine > 0 ? '我出过 ' + _aucMoney(mine) : '我还没出价') + '</div>';
-  h += '<div class="auc-time" data-auc-end="' + _aucEsc(it.ends_at) + '">' + _aucLeft(it) + '</div>';
-  if (!ended) {
+  if (it.starts_at) h += '<div class="auc-start">开拍 ' + _aucBeijing(it.starts_at) + '（北京时间）</div>';
+  if (it.note) h += '<div class="auc-note">' + _aucEsc(it.note) + '</div>';
+  h += '<div class="auc-time" data-auc-end="' + _aucEsc(it.ends_at) + '"' +
+       (it.starts_at ? ' data-auc-start="' + _aucEsc(it.starts_at) + '"' : '') +
+       (soon ? ' data-soon="1"' : '') + '>' + _aucLeft(it, soon) + '</div>';
+  if (soon) {
+    h += '<div class="auc-soon">还没开拍 · 到点自动开放出价</div>';
+  } else if (!ended) {
     h += '<button class="auc-btn" type="button" onclick="aucBidClick(\'' +
          _aucEsc(it.id) + '\')">加一档 ' + _aucMoney(it.step_price) + '</button>';
   } else {
@@ -4930,9 +4984,15 @@ function _aucCardHtml(it){
 function _aucTick(){
   var els = document.querySelectorAll('[data-auc-end]');
   for (var i = 0; i < els.length; i++) {
-    var t = _aucLeft({ ends_at: els[i].getAttribute('data-auc-end') });
-    if (t) els[i].textContent = t;
+    var el = els[i];
+    var st = el.getAttribute('data-auc-start');
+    var soon = !!(st && new Date(st).getTime() > Date.now());
+    var d = { ends_at: el.getAttribute('data-auc-end'), starts_at: st };
+    var t = _aucLeft(d, soon);
+    if (t) el.textContent = t;
+    if (el.getAttribute('data-soon') === '1' && !soon) _aucNeedReload = true;
   }
+  if (_aucNeedReload) { _aucNeedReload = false; aucLoad(); }
 }
 function _aucRender(){
   var box = document.getElementById('aucList');
@@ -4950,24 +5010,49 @@ function _aucRunningCount(){
 function _aucSyncEntry(){
   var card = document.getElementById('aucEntry');
   if (!card) return;
-  var running = _aucRunningCount();
+  var live = 0, soon = 0;
+  _aucState.forEach(function(x){
+    if (_aucEnded(x)) return;
+    if (_aucSoon(x)) soon++; else live++;
+  });
   // 全部结束后，若本机出过价，仍保留入口让团员能看到中标结果（7 天内）
   var hasMine = _aucState.some(function(x){
     return _aucEnded(x) && (Number(x.my_bid) || 0) > 0;
   });
-  var show = running > 0 || hasMine;
-  card.style.display = show ? '' : 'none';
+  card.style.display = (live > 0 || soon > 0 || hasMine) ? '' : 'none';
   var badge = document.getElementById('aucEntryCount');
   if (badge) {
-    if (running > 0) { badge.style.display = ''; badge.textContent = running + ' 件进行中'; }
+    if (live > 0) { badge.style.display = ''; badge.textContent = live + ' 件进行中'; }
+    else if (soon > 0) { badge.style.display = ''; badge.textContent = soon + ' 件即将开拍'; }
     else { badge.style.display = 'none'; }
   }
+}
+function aucViewImg(id){
+  var it = null;
+  for (var i = 0; i < _aucState.length; i++) if (_aucState[i].id === id) { it = _aucState[i]; break; }
+  var src = it ? _aucSafeImg(it.image_data || _aucImgCache[String(it.id)] || '') : '';
+  if (!src) return;
+  var im = document.getElementById('aucViewerImg');
+  var v = document.getElementById('aucViewer');
+  if (im) im.src = src;
+  if (v) v.classList.add('on');
+}
+function aucViewClose(){
+  var v = document.getElementById('aucViewer');
+  if (v) v.classList.remove('on');
+  var im = document.getElementById('aucViewerImg');
+  if (im) im.removeAttribute('src');
 }
 async function aucLoad(){
   try {
     var arr = await _aucRpc('auction_public_state', { p_device: _aucDevice() });
     if (!Array.isArray(arr)) arr = [];
-    _aucState = arr;
+    _aucState = arr.map(function(it){
+      var k = String(it.id);
+      if (it.image_data) _aucImgCache[k] = it.image_data;
+      else if (_aucImgCache[k]) it.image_data = _aucImgCache[k];
+      return it;
+    });
     _aucRender();
     _aucSyncEntry();
   } catch (e) {
@@ -4991,6 +5076,7 @@ function aucClose(){
   if (m) m.classList.remove('on');
   var c = document.getElementById('aucConfirm');
   if (c) c.classList.remove('on');
+  aucViewClose();
   if (_aucTimer) { clearInterval(_aucTimer); _aucTimer = null; }
 }
 function aucBidClick(id){
@@ -4998,6 +5084,7 @@ function aucBidClick(id){
   var it = null;
   for (var i = 0; i < _aucState.length; i++) if (_aucState[i].id === id) { it = _aucState[i]; break; }
   if (!it || _aucEnded(it)) return;
+  if (_aucSoon(it)) { if (typeof showToast === 'function') showToast('还没到开拍时间'); return; }
   var idt = (typeof todoIdentity === 'function') ? todoIdentity() : { cn: '' };
   if (!idt || !idt.cn) { if (typeof showToast === 'function') showToast('请先登录'); return; }
   _aucPending = it;
@@ -5015,6 +5102,7 @@ function aucConfirmNo(){
 async function aucConfirmYes(){
   if (_aucBusy || !_aucPending) return;
   var it = _aucPending, amount = _aucNext(it);
+  if (_aucSoon(it) || _aucEnded(it)) { aucConfirmNo(); return; }
   _aucBusy = true;
   var ok = document.getElementById('aucConfirmOk');
   if (ok) { ok.disabled = true; ok.textContent = '正在提交'; }

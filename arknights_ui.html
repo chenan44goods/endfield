@@ -12084,6 +12084,9 @@ function importLedger(e){
     </div>
 
     <div id="aucMain" style="display:none;">
+      <div id="aucSchemaMsg" style="display:none;background:#fff7ed;border:1px solid #fdba74;
+           border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;
+           line-height:1.7;color:#9a3412;"></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
         <button class="btn btn-primary" type="button" id="aucTabSetupBtn" onclick="aucAdminTab('setup')">拍品设置</button>
         <button class="btn btn-secondary" type="button" id="aucTabWinBtn" onclick="aucAdminTab('winners')">竞拍成功名单</button>
@@ -12107,6 +12110,22 @@ function importLedger(e){
             <input id="aucEnd" type="datetime-local" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;"></label>
           <label style="font-size:12px;">备注
             <input id="aucNote" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;" placeholder="选填"></label>
+          <label style="font-size:12px;">开启时间（北京时间）<span style="color:var(--c-text-sub);font-weight:400;">· 选填</span>
+            <input id="aucStartAt" type="datetime-local" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;"></label>
+          <div style="grid-column:1/-1;background:#fff;border:1px dashed rgba(0,0,0,.18);border-radius:10px;padding:10px 12px;">
+            <div style="font-size:12px;font-weight:700;margin-bottom:8px;">拍品图片
+              <span style="color:var(--c-text-sub);font-weight:400;">· 选填，让老师看清拍的是什么</span></div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <button class="btn btn-secondary" type="button" onclick="aucPickImg()">选择图片</button>
+              <input type="file" id="aucImgFile" accept="image/jpeg,image/png,image/webp"
+                     style="display:none;" onchange="aucImgPicked(event)">
+              <img id="aucImgPreview" alt="拍品预览"
+                   style="display:none;width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid rgba(0,0,0,.12);">
+              <button class="btn btn-secondary" type="button" id="aucImgDel"
+                      style="display:none;" onclick="aucImgRemove()">移除</button>
+              <span id="aucImgMsg" style="font-size:11px;color:var(--c-text-sub);line-height:1.6;">不传也能开拍；大图会自动压小，不会拖慢手机</span>
+            </div>
+          </div>
           <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
             <button class="btn btn-primary" type="submit">开拍</button>
             <span id="aucFormMsg" style="font-size:12px;"></span>
@@ -12149,6 +12168,8 @@ function importLedger(e){
    ⚠️ 导入排表复用 saveDataToSupabase() 主保存链路
       （按 item_id 自动对齐 / 服务端 409 护栏 / 删除墓碑 全在链路上），不新开写库路径。 */
 var _aucPass = '', _aucItems = [], _aucWinners = [], _aucTabNow = 'setup', _aucBusy = false;
+/* v2：_aucSchemaOk 未确认前禁止开拍（避免没跑升级 SQL 时图片/开启时间被静默丢掉） */
+var _aucSchemaOk = false, _aucImageData = '';
 
 function _aucEsc(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -12202,6 +12223,119 @@ function _aucMsg(id, text, bad){
   el.textContent = text || '';
   el.style.color = bad ? '#b91c1c' : '#15803d';
 }
+/* ===== v2 · 图片压缩 / 版本探测 / 时间换算 ===== */
+function _aucToIso(v){
+  var s = String(v || '').trim().replace(' ', 'T');
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) s += ':00';
+  var d = new Date(s + '+08:00');
+  return isNaN(d.getTime()) ? '' : d.toISOString();
+}
+function _aucSafeImg(s){
+  var v = String(s == null ? '' : s);
+  if (/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(v)) return v;
+  if (/^https:\/\//i.test(v)) return v;
+  return '';
+}
+function _aucPhase(it){
+  var now = Date.now();
+  if (it.status === 'ended' || (it.ends_at && new Date(it.ends_at).getTime() <= now)) return 'ended';
+  if (it.starts_at && new Date(it.starts_at).getTime() > now) return 'soon';
+  return 'live';
+}
+function _aucSetSchema(ok){
+  _aucSchemaOk = !!ok;
+  var box = document.getElementById('aucSchemaMsg');
+  var btn = document.querySelector('#aucForm button[type="submit"]');
+  if (box) {
+    box.style.display = ok ? 'none' : 'block';
+    box.innerHTML = ok ? '' :
+      '⚠️ 数据库还没升级到 v2，现在开拍会丢掉图片和开启时间。<br>' +
+      '请先让维护者在 Supabase SQL Editor 跑一次 <b>auction_upgrade_v2_READY_20261110.sql</b>' +
+      '（两个项目各一次），跑完刷新本页再开拍。';
+  }
+  if (btn) btn.disabled = !ok;
+}
+async function _aucCheckSchema(){
+  try {
+    var r = await _aucAdm('schema');
+    _aucSetSchema(r && r.ok === true && r.v === 2 && r.image === true && r.starts === true);
+  } catch (e) { _aucSetSchema(false); }
+}
+function _aucImgStatus(text, bad){
+  var el = document.getElementById('aucImgMsg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.color = bad ? '#b91c1c' : 'var(--c-text-sub)';
+}
+function aucImgRemove(){
+  _aucImageData = '';
+  var f = document.getElementById('aucImgFile'); if (f) f.value = '';
+  var p = document.getElementById('aucImgPreview');
+  if (p) { p.style.display = 'none'; p.removeAttribute('src'); }
+  var d = document.getElementById('aucImgDel'); if (d) d.style.display = 'none';
+  _aucImgStatus('不传也能开拍；大图会自动压小，不会拖慢手机', false);
+}
+function aucPickImg(){
+  var f = document.getElementById('aucImgFile'); if (f) f.click();
+}
+/* 只收 jpg/png/webp，原图 ≤10MB；canvas 重编码成白底 JPEG，最长边 900px 起，
+   循环降质/缩边把 dataURL 压到 120KB 字符以内（约 90KB 二进制）。
+   输出永远是 data:image/jpeg;base64,... —— 不会把用户文件里的脚本带进页面。 */
+function _aucCompress(file){
+  return new Promise(function(resolve, reject){
+    var reader = new FileReader();
+    reader.onerror = function(){ reject(new Error('读不了这张图')); };
+    reader.onload = function(ev){
+      var img = new Image();
+      img.onerror = function(){ reject(new Error('这张图打不开')); };
+      img.onload = function(){
+        var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+        if (!w || !h) { reject(new Error('这张图尺寸不对')); return; }
+        var side = 900, q = 0.72, n = 0, out = '';
+        function draw(){
+          var s = Math.min(1, side / Math.max(w, h));
+          var cw = Math.max(1, Math.round(w * s)), ch = Math.max(1, Math.round(h * s));
+          var cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+          var cx = cv.getContext('2d');
+          cx.fillStyle = '#fff'; cx.fillRect(0, 0, cw, ch);
+          cx.drawImage(img, 0, 0, cw, ch);
+          return cv.toDataURL('image/jpeg', q);
+        }
+        out = draw();
+        while (out.length > 120000 && n < 8) {
+          n++;
+          if (n % 2 === 1) q = Math.max(0.42, q - 0.08);
+          else side = Math.max(420, Math.round(side * 0.8));
+          out = draw();
+        }
+        if (!/^data:image\/jpeg;base64,/.test(out)) { reject(new Error('压缩没成功')); return; }
+        resolve(out);
+      };
+      img.src = ev.target && ev.target.result ? ev.target.result : '';
+    };
+    reader.readAsDataURL(file);
+  });
+}
+async function aucImgPicked(ev){
+  var f = ev && ev.target && ev.target.files ? ev.target.files[0] : null;
+  if (!f) return;
+  var ext = String(f.name || '').split('.').pop().toLowerCase();
+  if (!/^(jpg|jpeg|png|webp)$/.test(ext)) { _aucImgStatus('只支持 jpg / png / webp', true); return; }
+  if (f.size > 10 * 1024 * 1024) { _aucImgStatus('原图不能超过 10MB，这张太大了', true); return; }
+  _aucImgStatus('正在压小这张图…', false);
+  try {
+    var data = await _aucCompress(f);
+    _aucImageData = data;
+    var p = document.getElementById('aucImgPreview');
+    if (p) { p.src = data; p.style.display = 'block'; }
+    var d = document.getElementById('aucImgDel'); if (d) d.style.display = 'inline-block';
+    _aucImgStatus('已就绪（约 ' + Math.round(data.length * 3 / 4 / 1024) + 'KB），点「开拍」一起存上去', false);
+  } catch (e) {
+    _aucImageData = '';
+    _aucImgStatus('这张图没读出来，换一张试试（' + (e && e.message ? e.message : '') + '）', true);
+  }
+}
 function _aucBeijing(iso){
   if (!iso) return '';
   try {
@@ -12247,6 +12381,7 @@ async function aucAdminUnlock(){
     var main = document.getElementById('aucMain');
     if (box) box.style.display = 'none';
     if (main) main.style.display = 'block';
+    await _aucCheckSchema();
     _aucItems = r.items || [];
     aucRenderItems();
     aucRenderReal();
@@ -12285,15 +12420,19 @@ function aucRenderItems(){
   }
   var h = '';
   _aucItems.forEach(function (it, i) {
-    var ended = it.status === 'ended' ||
-      (it.ends_at && new Date(it.ends_at).getTime() <= Date.now());
-    h += '<div style="border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:12px;margin-bottom:10px;">';
+    var phase = _aucPhase(it), ended = phase === 'ended';
+    var img = _aucSafeImg(it.image_data);
+    h += '<div style="border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:12px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start;">';
+    if (img) h += '<img src="' + _aucEsc(img) + '" alt="拍品图" style="width:76px;height:76px;object-fit:cover;flex:none;border-radius:8px;border:1px solid rgba(0,0,0,.1);">';
+    h += '<div style="flex:1;min-width:0;">';
     h += '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">' +
          '<div style="font-weight:700;">' + _aucEsc(it.title) +
          '<span style="font-size:11px;color:var(--c-text-sub);font-weight:400;margin-left:6px;">' + _aucEsc(it.code) + '</span></div>' +
-         '<span style="font-size:11px;color:var(--c-text-sub);">' + (ended ? '已结束' : '进行中') + '</span></div>';
+         '<span style="font-size:11px;color:var(--c-text-sub);">' +
+         (phase === 'soon' ? '未开始' : ended ? '已结束' : '进行中') + '</span></div>';
     h += '<div style="font-size:12px;color:var(--c-text-sub);margin-top:6px;line-height:1.8;">起拍 ' +
          _aucMoney(it.start_price) + ' · 每档 ' + _aucMoney(it.step_price) +
+         (it.starts_at ? ' · 开拍 ' + _aucBeijing(it.starts_at) : '') +
          ' · 截止 ' + _aucBeijing(it.ends_at) + '（北京时间）</div>';
     h += '<div style="font-size:13px;margin-top:4px;">当前最高 ' +
          _aucMoney(it.highest == null ? it.start_price : it.highest) +
@@ -12301,7 +12440,7 @@ function aucRenderItems(){
     h += '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">';
     if (!ended) h += '<button class="btn btn-secondary" type="button" onclick="aucEndItem(' + i + ')">结束本件</button>';
     h += '<button class="btn btn-danger" type="button" onclick="aucDelItem(' + i + ')">删除本件</button></div>';
-    h += '</div>';
+    h += '</div></div>';
   });
   box.innerHTML = h;
 }
@@ -12358,28 +12497,39 @@ function aucRenderReal(){
 }
 async function aucOpenItem(){
   if (_aucBusy) return;
+  if (!_aucSchemaOk) {
+    _aucMsg('aucFormMsg', '数据库还没升级到 v2，请先跑升级 SQL 再开拍', true); return;
+  }
   var g = function (id) { var e = document.getElementById(id); return e ? String(e.value || '').trim() : ''; };
   var title = g('aucTitle'), code = g('aucCode'), sp = g('aucStart'),
-      st = g('aucStep'), end = g('aucEnd'), note = g('aucNote');
-  if (!title || !sp || !st || !end) { _aucMsg('aucFormMsg', '起拍价、每档加价、截止时间都要填', true); return; }
+      st = g('aucStep'), end = g('aucEnd'), note = g('aucNote'), startAt = g('aucStartAt');
+  if (!title || !sp || !st || !end) { _aucMsg('aucFormMsg', '拍品名称、起拍价、每档加价、截止时间都要填', true); return; }
   var spN = Number(sp), stN = Number(st);
   if (!(spN >= 0) || !(stN > 0)) { _aucMsg('aucFormMsg', '起拍价和每档加价要填有效数字', true); return; }
-  var t = end.replace(' ', 'T');
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(t)) t += ':00';
-  var iso = '';
-  try { iso = new Date(t + '+08:00').toISOString(); } catch (e) { iso = ''; }
-  if (!iso || isNaN(new Date(iso).getTime())) { _aucMsg('aucFormMsg', '截止时间格式不对', true); return; }
+  var endIso = _aucToIso(end);
+  if (!endIso) { _aucMsg('aucFormMsg', '截止时间格式不对', true); return; }
+  var startIso = '';
+  if (startAt) {
+    startIso = _aucToIso(startAt);
+    if (!startIso) { _aucMsg('aucFormMsg', '开启时间格式不对', true); return; }
+    if (Date.parse(startIso) >= Date.parse(endIso)) {
+      _aucMsg('aucFormMsg', '开启时间要早于截止时间', true); return;
+    }
+    if (Date.parse(startIso) <= Date.now()) startIso = '';   // 填了过去的时间 = 立刻开拍
+  }
   _aucBusy = true;
   _aucMsg('aucFormMsg', '正在开拍…');
   try {
     var r = await _aucAdm('open', {
-      title: title, code: code, start_price: spN, step_price: stN, ends_at: iso, note: note
+      title: title, code: code, start_price: spN, step_price: stN,
+      ends_at: endIso, starts_at: startIso, note: note, image_data: _aucImageData
     });
     if (r && r.ok) {
-      ['aucTitle', 'aucCode', 'aucStart', 'aucStep', 'aucEnd', 'aucNote'].forEach(function (id) {
+      ['aucTitle', 'aucCode', 'aucStart', 'aucStep', 'aucEnd', 'aucNote', 'aucStartAt'].forEach(function (id) {
         var e = document.getElementById(id); if (e) e.value = '';
       });
-      _aucMsg('aucFormMsg', '已开拍');
+      aucImgRemove();
+      _aucMsg('aucFormMsg', startIso ? '已排定，到点自动开拍' : '已开拍');
       await aucLoadState();
     } else {
       _aucMsg('aucFormMsg', (r && r.msg) || '没开成', true);
