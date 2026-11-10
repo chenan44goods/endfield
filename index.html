@@ -1477,7 +1477,10 @@
         <div class="qp-sub" id="panelSub">AS / PAYMENT · FEE</div>
         <div class="qp-title" id="panelTitle">交肾核算</div>
 
-        <div class="field" style="margin-top: 32px;">
+        <!-- 🔓 2026-11-10：登录时已经验过 CN + 密钥，这四个面板不再让团员重填一遍。
+             两个 input 保留但隐藏，值由登录身份同步 —— 查询 / 交款 / 存钱 / 验权全都不用改。 -->
+        <div id="panelWho" style="display:none; margin-top:32px; font-size:12px; line-height:1.85; color:var(--ink-soft);"></div>
+        <div class="field" id="panelKeyField" style="margin-top: 32px;">
           <label for="panelKey">Password · 查询密码</label>
           <input id="panelKey" placeholder="全团统一密码：4goods" oninput="if(typeof currentPanel!=='undefined'){ if(currentPanel==='feedback') loadMyFeedback(); if(currentPanel==='piggy') piggyDebouncedLoad(); }">
           <div style="font-size:0.72rem; line-height:1.75; color:var(--ink-soft); margin-top:8px;">
@@ -1485,7 +1488,7 @@
             以前自己改过密码的，就用你改的那个；忘了就私聊机器人发 <b>/绑定 你的圈名 4goods</b> 重置回来。
           </div>
         </div>
-        <div class="field">
+        <div class="field" id="panelCnField">
           <label for="panelCn">CN · 圈名</label>
           <input id="panelCn" placeholder="输入你的 CN / 圈名" oninput="if(typeof currentPanel!=='undefined' && currentPanel==='piggy') piggyDebouncedLoad();">
         </div>
@@ -3880,7 +3883,59 @@
       }
     });
 
+    /* ===== 🔓 2026-11-10：登录身份直通查询面板（团长要求去掉重复输入 CN / 密钥）=====
+       这四个面板共用一份查询表单。登录那层已经把验过的 CN + 密钥记在本机，
+       这里直接同步进（隐藏的）input，下游 doQuery / submitPayProof /
+       submitPiggyDeposit / withdrawPayProof 一行都不用改，验权口径完全不变。
+       ⚠️ 没登录（含点 × 收起登录页）一律叫回登录页，登完自动进刚才那个面板。 */
+    var AUTH_ID_PANELS = { query: 1, fee: 1, dispatch: 1, piggy: 1 };
+    function _authLs(k){ try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } }
+    function authPanelId(){ return { cn: _authLs('shantu_qcn'), key: _authLs('shantu_qkey') }; }
+    function authSyncPanelInputs(){
+      var id = authPanelId();
+      if (!id.cn || !id.key) return;   // 没登录身份时不碰面板里可能来自 ?key= 链接预填的值
+      var pk = document.getElementById('panelKey'), pc = document.getElementById('panelCn');
+      if (pk) pk.value = id.key;
+      if (pc) pc.value = id.cn;
+      var who = document.getElementById('panelWho');
+      if (who) who.textContent = '🔓 已按登录身份查询：' + id.cn + ' · 换人请点「退出登录」';
+    }
+    function authRequireLogin(type){
+      window.__AUTH_PENDING_PANEL__ = type;
+      if (typeof authShowLogin === 'function') authShowLogin();
+      var g = document.getElementById('loginGate');
+      if (g) g.classList.remove('hidden');
+      /* 旧的 ?key= 专属链接：把链接里的密钥预填进登录框，团员只需补 CN，不至于链接直接失效 */
+      try {
+        var k = new URLSearchParams(location.search).get('key');
+        var ke = document.getElementById('loginKey');
+        if (k && ke && !ke.value) ke.value = String(k).trim();
+        var ce = document.getElementById('loginCn');
+        if (ce && !ce.value) ce.value = authPanelId().cn;
+      } catch(e){}
+      var err = document.getElementById('loginErr');
+      if (err) { err.textContent = '查自己的账要先登录一次（CN + 密钥）。'; err.className = 'login-err on'; }
+    }
+    /* 首屏自动校验登录是异步的；这期间点了入口卡就排队，校验一有结果立刻继续，不空转不递归 */
+    function _authSettle(ok){
+      window.__LOGGED_IN__ = !!ok;
+      var q = window.__AUTH_WAIT_Q__ || [];
+      window.__AUTH_WAIT_Q__ = [];
+      for (var i = 0; i < q.length; i++) { try { q[i](); } catch(e){} }
+    }
     function openPanel(type){
+      if (AUTH_ID_PANELS[type]) {
+        if (window.__LOGGED_IN__ === 'checking') {
+          (window.__AUTH_WAIT_Q__ = window.__AUTH_WAIT_Q__ || []).push(function(){ openPanel(type); });
+          return;
+        }
+        var _id = authPanelId();
+        if (window.__LOGGED_IN__ !== true || !_id.cn || !_id.key) {
+          authRequireLogin(type);
+          return;
+        }
+        authSyncPanelInputs();
+      }
       if (typeof closeMyTodo === 'function') closeMyTodo();   // 📌 换面板时别把上一个人的待办留在屏幕上
       // 切换面板时先隐藏并清空遗留的查询结果，避免数据表卡住
       const overlay = document.getElementById('queryResultOverlay');
@@ -3905,9 +3960,16 @@
       // 自助查询/交肾核算/排发调度/零钱罐 需要 个人密码+CN；匿名反馈只需要密码（用来定位写入的数据行），不需要 CN
       const needKey = (type === 'query' || type === 'fee' || type === 'dispatch' || type === 'feedback' || isPiggy);
       const needCn = (type === 'query' || type === 'fee' || type === 'dispatch' || isPiggy);
-      if (q) q.parentElement.style.display = needKey ? 'block' : 'none';
-      if (cn) cn.parentElement.style.display = needCn ? 'block' : 'none';
-      if (qBtn) qBtn.style.display = (needCn && !isPiggy) ? 'block' : 'none';
+      /* 🔓 四个面板直接用登录身份：两个输入框和「PROCEED SEARCH」都不再露面；
+         匿名反馈保持原样（它只需要密钥定位写入行，靠本机编号认人）。 */
+      const _auto = !!AUTH_ID_PANELS[type];
+      const _kf = document.getElementById('panelKeyField');
+      const _cf = document.getElementById('panelCnField');
+      const _who = document.getElementById('panelWho');
+      if (_kf) _kf.style.display = (needKey && !_auto) ? 'block' : 'none';
+      if (_cf) _cf.style.display = (needCn && !_auto) ? 'block' : 'none';
+      if (_who) _who.style.display = _auto ? 'block' : 'none';
+      if (qBtn) qBtn.style.display = (!_auto && needCn && !isPiggy) ? 'block' : 'none';
       if (fb) fb.style.display = isFeedback ? 'block' : 'none';
       const fbm = document.getElementById('fbMyFeedback');
       if (fbm) fbm.style.display = isFeedback ? 'block' : 'none';
@@ -3934,6 +3996,11 @@
       //    上次滚到一半就关掉的话，下次打开会停在中间 —— 每次打开都回到顶部。
       if (_qpOpen) _qpOpen.scrollTop = 0;
       if (_qpOpen) _qpOpen.classList.add('open');
+      /* 🔓 点入口卡就直接出结果，不用再按一次「PROCEED SEARCH」。
+         零钱罐在上面 openPanel 里已经 loadPiggyPanel()，不重复发请求。 */
+      if (_auto && !isPiggy && typeof panelAction === 'function') {
+        try { panelAction(); } catch(e){}
+      }
     }
     async function submitFeedback(){
       if (window.__FEEDBACK_SUBMITTING) return showToast('正在提交，请勿重复点击！');
@@ -4650,7 +4717,8 @@
        不新增密码体系、不覆盖任何原有函数、不拦 fetch、不写数据库。
        登录后自动查一次「有没有待办」只取条数，不渲染账单、不显示金额。
        未登录时一次都不查；× 收起登录页 = 只读首页，「点此登录」可回来。 */
-    window.__LOGGED_IN__ = false;
+    window.__LOGGED_IN__ = 'checking';   // 首屏自动校验进行中；_authSettle 落 true / false
+    window.__AUTH_WAIT_Q__ = [];
     function authBadge(mode, cn, btnText, fn){
       var d = document.getElementById('loginBadgeDot');
       var l = document.getElementById('loginBadgeLbl');
@@ -4668,7 +4736,7 @@
       if (b) b.classList.add('hidden');
       var e = document.getElementById('loginErr');
       if (e) { e.textContent = ''; e.className = 'login-err'; }
-      window.__LOGGED_IN__ = false;
+      _authSettle(false);
       authBadge('off', '', '退出登录', 'authLogout');
       if (typeof closeMyTodo === 'function') closeMyTodo();
       if (typeof todoSetDot === 'function') todoSetDot(false);
@@ -4690,7 +4758,7 @@
       var b = document.getElementById('loginBadge');
       if (b) b.classList.remove('hidden');
       authBadge('off', '', '点此登录', 'authShowLogin');
-      window.__LOGGED_IN__ = false;
+      _authSettle(false);
       if (typeof closeMyTodo === 'function') closeMyTodo();
       if (typeof todoSetDot === 'function') todoSetDot(false);
     }
@@ -4706,6 +4774,7 @@
       cn = String(cn || '').trim(); key = String(key || '').trim();
       var e = document.getElementById('loginErr');
       if (!cn || !key) {
+        if (window.__LOGGED_IN__ === 'checking') _authSettle(false);
         if (e) { e.textContent = 'CN 和密钥都要填。'; e.className = 'login-err on'; }
         return false;
       }
@@ -4719,14 +4788,18 @@
             : '密钥校验暂时用不了，请过几分钟再点一次「登录」。';
           e.className = 'login-err on';
         }
+        _authSettle(false);
         return false;
       }
       if (e) { e.textContent = ''; e.className = 'login-err'; }
       _lsSet(LS_QCN, cn); _lsSet(LS_QKEY, key);
-      /* 顺手把查询面板里的 CN / 密钥预填同步成当前登录身份。
-         沿用网站原有「只预填、不自动查询」的规矩，不替团员点查询。 */
-      try { if (typeof restoreQueryId === 'function') restoreQueryId(); } catch(err){}
+      /* 查询面板里的 CN / 密钥直接同步成当前登录身份（面板不再显示这两个框）。 */
+      try { authSyncPanelInputs(); } catch(err){}
       authHideLogin(cn);
+      _authSettle(true);
+      /* 刚才被登录门拦下来的那个入口：登完自动接着打开，不让人多点一次 */
+      var _pend = window.__AUTH_PENDING_PANEL__;
+      if (_pend) { window.__AUTH_PENDING_PANEL__ = null; try { openPanel(_pend); } catch(err){} }
       /* 登录后只自动查一次：只更新红点，不摊开任何账单 */
       try { await todoRefreshDot(); } catch(err){}
       return true;
@@ -4754,7 +4827,7 @@
        自动登录失败时门保持显示，不会静默放行。 */
     var __savedCn = _lsGet(LS_QCN), __savedKey = _lsGet(LS_QKEY);
     if (__savedCn && __savedKey) { authEnter(__savedCn, __savedKey); }
-    else { authShowLogin(); }
+    else { authShowLogin(); _authSettle(false); }
 
     /* ===== 🖼 团长自备登录背景图：丢进 images\ 命名 login_bg.* 即自动生效 ===== */
     (function(){
