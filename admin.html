@@ -12090,7 +12090,7 @@ function importLedger(e){
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
         <button class="btn btn-primary" type="button" id="aucTabSetupBtn" onclick="aucAdminTab('setup')">拍品设置</button>
         <button class="btn btn-secondary" type="button" id="aucTabWinBtn" onclick="aucAdminTab('winners')">竞拍成功名单</button>
-        <span style="font-size:11px;color:var(--c-text-sub);margin-left:auto;">刷新页面后需重新输入口令</span>
+        <span id="aucAuthHint" style="font-size:11px;color:var(--c-text-sub);margin-left:auto;">已用后台登录身份，刷新无需重输</span>
       </div>
 
       <!-- 页签 1：拍品设置 -->
@@ -12201,16 +12201,55 @@ function _aucRpc(fn, body){
     return r.json();
   });
 }
+/* v3（2026-11-10）：管理接口带后台 Supabase 登录凭证，数据库认「已登录的管理」，
+   不用再手输一遍管理口令。凭证只在登录后临时从会话读，绝不写进页面源码 /
+   localStorage，也不发给团员端接口。没登录时退回匿名 key，由服务端口令兜底。 */
+async function _aucSessionToken(){
+  try {
+    if (typeof supabaseClient !== 'undefined' && supabaseClient && supabaseClient.auth) {
+      var r = await supabaseClient.auth.getSession();
+      var s = r && r.data && r.data.session;
+      if (s && s.access_token) return s.access_token;
+    }
+  } catch (e) {}
+  /* 兜底：某些页面把 client 关在闭包里时，从 supabase-js 的会话键里取。
+     取到过期凭证也没关系 —— 服务端验不过会自动回退到口令框。 */
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (!k || !/^sb-.*-auth-token$/.test(k)) continue;
+      var j = JSON.parse(localStorage.getItem(k) || '{}');
+      if (j && j.access_token) return j.access_token;
+    }
+  } catch (e) {}
+  return '';
+}
+async function _aucAdmRpc(fn, body){
+  var key = _aucSbKey();
+  var tok = await _aucSessionToken();
+  return _aucFetcher()(_aucSbBase() + '/rest/v1/rpc/' + fn, {
+    method: 'POST',
+    headers: { 'apikey': key, 'Authorization': 'Bearer ' + (tok || key),
+               'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  }).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  });
+}
 function _aucRelock(msg){
   _aucPass = '';
+  _aucAutoOk = false;
   var box = document.getElementById('aucPassBox');
   var main = document.getElementById('aucMain');
   if (box) box.style.display = 'block';
   if (main) main.style.display = 'none';
   _aucMsg('aucPassMsg', msg || '口令不对', true);
+  var hint = document.getElementById('aucAuthHint');
+  if (hint) hint.textContent = '登录状态已失效，请用口令或重新登录后台';
 }
 function _aucAdm(action, payload){
-  return _aucRpc('auction_admin', {
+  return _aucAdmRpc('auction_admin', {
     p_pass: _aucPass, p_action: action, p_payload: payload || {}
   }).then(function (r) {
     if (r && r.ok === false && /口令/.test(String(r.msg || ''))) _aucRelock(r.msg);
@@ -12357,10 +12396,50 @@ function _aucDay(iso){
   } catch (e) { return ''; }
 }
 
-function aucAdminOpen(){
+var _aucAutoOk = false;
+function _aucShowPass(show, msg){
+  var box = document.getElementById('aucPassBox');
+  var main = document.getElementById('aucMain');
+  if (box) box.style.display = show ? 'block' : 'none';
+  if (show && main) main.style.display = 'none';
+  if (!show && main) main.style.display = 'block';
+  if (msg) _aucMsg('aucPassMsg', msg, true);
+  var hint = document.getElementById('aucAuthHint');
+  if (hint) hint.textContent = show
+    ? '后台未登录，可用管理口令应急'
+    : '已用后台登录身份，刷新无需重输';
+}
+async function _aucAutoUnlock(){
+  _aucAutoOk = false;
+  var tok = await _aucSessionToken();
+  if (!tok) { _aucShowPass(true); return; }   // 没登录后台 → 口令应急框
+  var box = document.getElementById('aucPassBox');
+  if (box) box.style.display = 'none';        // 已登录则不闪出口令框
+  try {
+    var r = await _aucAdmRpc('auction_admin',
+      { p_pass: '', p_action: 'state', p_payload: {} });
+    if (!r || r.ok !== true) {
+      _aucShowPass(true, (r && r.msg) || '后台登录身份未通过');
+      return;
+    }
+    _aucPass = '';                            // 内存里不放任何口令
+    _aucShowPass(false);
+    _aucMsg('aucPassMsg', '');
+    _aucAutoOk = true;
+    await _aucCheckSchema();
+    _aucItems = r.items || [];
+    aucRenderItems();
+    aucRenderReal();
+    aucAdminTab(_aucTabNow);
+  } catch (e) {
+    _aucShowPass(true, '没连上数据库，再试一次');
+  }
+}
+async function aucAdminOpen(){
   var m = document.getElementById('aucAdminModal');
   if (m) m.classList.add('active');
-  if (_aucPass) aucLoadState();
+  if (_aucPass) { await aucLoadState(); return; }
+  await _aucAutoUnlock();
 }
 function aucAdminClose(){
   var m = document.getElementById('aucAdminModal');
@@ -12386,6 +12465,8 @@ async function aucAdminUnlock(){
     aucRenderItems();
     aucRenderReal();
     aucAdminTab(_aucTabNow);
+    var hint = document.getElementById('aucAuthHint');
+    if (hint) hint.textContent = '本次用管理口令解锁，刷新后需重新登录';
   } catch (e) {
     _aucRelock('没连上数据库，再试一次');
   }
