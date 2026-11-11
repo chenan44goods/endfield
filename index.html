@@ -5173,6 +5173,8 @@ var _aucState = [], _aucPending = null, _aucBusy = false, _aucTimer = null, _auc
 var _aucImgCache = {}, _aucNeedReload = false;
 /* 2026-11-10：整卡 HTML 指纹（避免无变化也重画）、确认框文案指纹、撞价后保留确认框 */
 var _aucLastHtml = '', _aucConfirmHtml = '', _aucKeepConfirm = false;
+/* 2026-11-11：列表里当前画了几张「未结束」的卡 —— 倒计时归零那一刻用它判断要不要撤卡 */
+var _aucShownLive = null, _aucRedrawBusy = false;
 
 function _aucEsc(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -5389,13 +5391,22 @@ function _aucTick(){
     if (t) el.textContent = t;
     if (el.getAttribute('data-soon') === '1' && !soon) _aucNeedReload = true;
   }
-  if (_aucNeedReload) { _aucNeedReload = false; aucLoad(); }
+  if (_aucNeedReload) { _aucNeedReload = false; aucLoad(); return; }
+  /* 2026-11-11：某件刚倒计时归零 → 本地重画一次把卡撤掉（只重排 DOM，不重新拉库） */
+  if (_aucShownLive !== null && !_aucRedrawBusy && _aucRunningCount() !== _aucShownLive) {
+    _aucRedrawBusy = true;
+    try { _aucRender(); _aucSyncEntry(); } finally { _aucRedrawBusy = false; }
+  }
 }
 function _aucRender(){
   var box = document.getElementById('aucList');
   if (!box) return;
-  var html = _aucState.length ? _aucState.map(_aucCardHtml).join('')
-                              : '<div class="auc-empty">现在没有正在进行的拍卖</div>';
+  /* 2026-11-11 团长定：已结束的拍卖在团员端不再显示，一件都不留。
+     只在「画」这一层过滤，_aucState 保持完整 —— 出价、看图、入口判断都还要用它。 */
+  var live = _aucState.filter(function(x){ return !_aucEnded(x); });
+  _aucShownLive = live.length;
+  var html = live.length ? live.map(_aucCardHtml).join('')
+                         : '<div class="auc-empty">现在没有正在进行的拍卖</div>';
   if (html !== _aucLastHtml) {
     /* 重画会把正在输入的数字和光标冲掉（拍卖面板开着时每 3 秒一次）——
        先记下谁在输入、光标在哪，画完按草稿还原，绝不擅自把团员填的数改掉 */
@@ -5427,11 +5438,9 @@ function _aucSyncEntry(){
     if (_aucEnded(x)) return;
     if (_aucSoon(x)) soon++; else live++;
   });
-  // 全部结束后，若本机出过价，仍保留入口让团员能看到中标结果（7 天内）
-  var hasMine = _aucState.some(function(x){
-    return _aucEnded(x) && (Number(x.my_bid) || 0) > 0;
-  });
-  card.style.display = (live > 0 || soon > 0 || hasMine) ? '' : 'none';
+  /* 2026-11-11 团长定：已结束的一律藏掉 —— 不再为「自己出过价的已结束」保留入口。
+     没有进行中、也没有即将开拍时，首页入口卡和顶栏胶囊一起消失。 */
+  card.style.display = (live > 0 || soon > 0) ? '' : 'none';
   var badge = document.getElementById('aucEntryCount');
   if (badge) {
     if (live > 0) { badge.style.display = ''; badge.textContent = live + ' 件进行中'; }
