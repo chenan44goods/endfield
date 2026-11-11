@@ -1048,11 +1048,17 @@
        只对「自助查询 / 交肾核算 / 排发调度」三个面板生效（qp-railoff = 撤左栏）。
        ⚠️ 存钱 / 匿名反馈 的左栏装着整套表单，不加这个 class，一点不动。
        ⚠️ 状态栏按 11-10 定论只留首屏，这里不放；顶栏只有「返回 + 入口胶囊」一层。 */
-    .query-panel.qp-railoff { display: block; }
+    /* 🖱 单滚动区（2026-11-11 团长反馈「滑到一半就不动了 / 像卡死」）
+       以前这里三层都能滚：外层面板 .query-panel（只剩几十像素僵尸余量）、
+       右栏 .qp-right（overflow:visible 后不滚但会撑高面板）、结果卡 #resultList（真滚的那个，
+       而且滚动条被藏了）。滚轮先喂内层，内层到底的同时外层也到底 → 滚着滚着突然不动，
+       又没有滚动条提示，主观上就是卡死。
+       现在：外两层一律不许滚，高度由 JS 按视口算给 #resultList，整页只剩一个滚动区。 */
+    .query-panel.qp-railoff { display: block; overflow: hidden; }
     .query-panel.qp-railoff .qp-left { display: none; }
     .query-panel.qp-railoff .qp-right {
       padding: 112px 3vw 6vh;
-      overflow: visible;
+      overflow: hidden;
     }
     .query-panel.qp-railoff #queryResultOverlay {
       /* ⚠️ 必须 !important：这个节点身上有 inline 的 width:min(820px,88%)，
@@ -3755,7 +3761,59 @@
     // 避免每帧强制浏览器重新排版（这是原先手机上滑动卡顿、掉帧的主因）。
     let __carouselRaf = null;
     let __carouselGeom = [];
+    /* 🖱 只给结果卡一个滚动区（2026-11-11）：把「屏幕还剩多少高」算给它。
+       外层面板和右栏都不许滚（CSS 已改 overflow:hidden），所以滚轮 100% 落在卡片区，
+       不会再出现「内层滚到底 + 外层也到底 = 完全不动」。
+       不是撤左栏的三个面板（存钱 / 匿名反馈）一律走 CSS 原样，不碰。 */
+    function _fitResultListHeight(){
+      const c = document.getElementById('resultList');
+      const panel = document.getElementById('queryPanel');
+      if (!c || !panel) return;
+      const ov = document.getElementById('queryResultOverlay');
+      const rail = panel.classList.contains('qp-railoff');
+      const shown = ov && getComputedStyle(ov).display !== 'none';
+      if (!rail || !shown){                       // 其它面板 / 还没出结果：交还原样式
+        if (c.style.height) c.style.height = '';
+        if (c.hasAttribute('data-fit-h')) c.removeAttribute('data-fit-h');
+        const r0 = panel.querySelector('.qp-right');
+        if (r0 && r0.style.paddingTop) r0.style.paddingTop = '';   // 顶部内边距也还回去
+        return;
+      }
+      const right = panel.querySelector('.qp-right');
+      if (!right) return;
+      /* 手机端有个站的结果页上方压着「贺图」（.query-panel::before 占位），右栏已经被推到贺图下面，
+         此时再留 152px 顶部内边距就是纯空白（实测白扔 150px，卡片区只剩 126px）。
+         右栏 top > 8 就说明前面有东西占位 → 内边距收到 8；没有占位（top≈0）就保持原样。 */
+      const rt = Math.round(right.getBoundingClientRect().top);
+      if (rt > 8){
+        if (right.style.paddingTop !== '8px') right.style.paddingTop = '8px';
+      } else if (right.style.paddingTop){
+        right.style.paddingTop = '';
+      }
+      const padB = parseFloat(getComputedStyle(right).paddingBottom) || 0;
+      /* 结果卡下面可能还挂着别的东西（「共用设备？清除本机记录」被搬进来了），
+         一起把高度留出来，否则会把它们顶出屏幕外。这些节点的高度不随卡片区变化，量了不抖动。 */
+      let tail = 0;
+      if (ov){
+        let seen = false;
+        for (let i = 0; i < ov.children.length; i++){
+          const el = ov.children[i];
+          if (el === c){ seen = true; continue; }
+          if (!seen) continue;
+          const r = el.getBoundingClientRect();
+          if (r.height > 0) tail += r.height + (parseFloat(getComputedStyle(el).marginTop) || 0);
+        }
+      }
+      const top = c.getBoundingClientRect().top;
+      const avail = Math.round(window.innerHeight - top - padB - tail);
+      if (!isFinite(avail) || avail <= 0) return;
+      const px = Math.max(120, avail) + 'px';     // 屏幕特别矮时给个下限，别压成一条缝（120 也够看一张卡）
+      if (c.style.height !== px) c.style.height = px;
+      c.setAttribute('data-fit-h', px);           // 自检用
+    }
+
     function measureCarousel(){
+      _fitResultListHeight();                     // 先按视口定卡片区高度，再量卡片位置
       const c = document.getElementById('resultList');
       if (!c) return;
       const cards = c.querySelectorAll('.result-item');
@@ -3800,7 +3858,68 @@
         imgs[i].addEventListener('error', scheduleMeasureCarousel, { once: true });
       }
     }
+    /* 🖱 滚动桥（2026-11-11）：单滚动区之后，卡片区之外（黄框、筛选栏、空白）没有滚动容器，
+       鼠标停在那儿滚 / 手指从那儿划 = 一点反应都没有，看起来还是「滑不动」。
+       这里把右栏的 wheel / touch 转给结果卡区；落在卡片区里的照旧走原生滚动，不抢手感。 */
+    function _bindScrollBridge(){
+      const right = document.querySelector('#queryPanel .qp-right');
+      if (!right || right.__scrollBridge) return;
+      right.__scrollBridge = true;
+      const isRail = function(){
+        const p = document.getElementById('queryPanel');
+        const c = document.getElementById('resultList');
+        if (!p || !c || !p.classList.contains('qp-railoff')) return null;
+        if (c.scrollHeight - c.clientHeight <= 0) return null;   // 内容不够长，没得滚
+        return c;
+      };
+      right.addEventListener('wheel', function(ev){
+        const c = isRail();
+        if (!c || !ev.deltaY) return;
+        if (c.contains(ev.target)) return;                       // 卡片区里：原生滚，别插手
+        ev.preventDefault();
+        const max = c.scrollHeight - c.clientHeight;
+        c.scrollTop = Math.max(0, Math.min(max, c.scrollTop + ev.deltaY));
+        onCarouselScroll();
+      }, { passive: false });
+      let ty = null;
+      /* 手动转滚时先把吸附关掉：容器是 scroll-snap(proximity)，一次只挪二十来像素会被判成
+         「离原卡更近」立刻吸回原位 —— 8 次手划全白费，看起来还是不动（2026-11-11 实测踩到）。
+         松手 120ms 后再交还吸附，最后由浏览器吸到最近的卡，手感和原生一致。 */
+      const _snapOff = function(c){ c.style.scrollSnapType = 'none'; };
+      let _snapTimer = null;
+      const _snapBack = function(){
+        const c = document.getElementById('resultList');
+        if (!c) return;
+        if (_snapTimer) clearTimeout(_snapTimer);
+        _snapTimer = setTimeout(function(){
+          _snapTimer = null;
+          c.style.scrollSnapType = '';
+        }, 120);
+      };
+      right.addEventListener('touchstart', function(ev){
+        const c = document.getElementById('resultList');
+        if (!c || ev.touches.length !== 1 || c.contains(ev.target)) { ty = null; return; }
+        ty = ev.touches[0].clientY;
+        _snapOff(c);
+      }, { passive: true });
+      right.addEventListener('touchmove', function(ev){
+        if (ty === null || ev.touches.length !== 1) return;
+        const c = isRail();
+        if (!c) { ty = null; return; }
+        const dy = ty - ev.touches[0].clientY;
+        if (!dy) return;
+        ev.preventDefault();
+        const max = c.scrollHeight - c.clientHeight;
+        c.scrollTop = Math.max(0, Math.min(max, c.scrollTop + dy));
+        ty = ev.touches[0].clientY;
+        onCarouselScroll();
+      }, { passive: false });
+      right.addEventListener('touchend', function(){ ty = null; _snapBack(); }, { passive: true });
+      right.addEventListener('touchcancel', function(){ ty = null; _snapBack(); }, { passive: true });
+    }
+
     (function initCarousel(){
+      _bindScrollBridge();
       const rl = document.getElementById('resultList');
       if (rl) rl.addEventListener('scroll', onCarouselScroll, { passive: true });
       window.addEventListener('resize', scheduleMeasureCarousel);
