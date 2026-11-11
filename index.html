@@ -1989,6 +1989,27 @@
       return await res.json();
     }
 
+    /* 🚀 2026-11-10 查询提速（member_fetch）
+       一次 RPC 同时做两件事：① 校验「CN + 密码」② 只返回**这个 CN 自己的条目**。
+       以前是「验密码 1 次请求 + 拉整行 1.6MB 1 次请求」，3–4 秒；现在 1 次请求、几百 KB。
+       返回 null = 这条快路走不了（函数没装 / 网络失败 / 返回格式不对），
+       调用方自动退回 verifyMember + fetchLeaderData 的老两步，行为与改动前一模一样。
+       ⚠️ 只能用于**只读展示**（查询 / 交肾核算 / 排发调度）。
+          写入路径必须继续走 fetchLeaderData 拿全量 —— 否则整份 PATCH 会把别人的排表删光。 */
+    async function fetchMemberData(key, cn){
+      try {
+        const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json' };
+        const res = await sbFetch('/rest/v1/rpc/member_fetch', {
+          method: 'POST', headers: h, cache: 'no-store',
+          body: JSON.stringify({ p_query_key: DATA_KEY, p_cn: String(cn || ''), p_pwd: String(key || '') })
+        });
+        if (!res.ok) return null;
+        const j = await res.json();
+        if (!j || typeof j !== 'object' || typeof j.ok !== 'boolean') return null;
+        return j;
+      } catch (e) { return null; }
+    }
+
     async function doQuery(mode){
       mode = mode || 'query';
       const key = (document.getElementById('panelKey').value || '').trim();
@@ -2007,20 +2028,40 @@
         list.innerHTML = '<div class="result-empty"><span class="qspin"></span>正在连接数据库，查询中……</div>';
       }
       try {
-        // 🔐 先验「这个人 + 这个密码」对不对，再决定要不要把档案读下去
-        const _auth = await verifyMember(cn, key);
-        if (_auth !== true) {
-          if (list) list.innerHTML = (_auth === false) ? _pwdHintHtml() : _authDownHtml();
-          if (stat) stat.innerText = '';
-          showToast(_auth === false ? '密码不对，看下面的提示' : '校验服务暂时不可用，请稍后重试');
-          return;
-        }
-        const data = await fetchLeaderData(key);
-        if (!data || !data.length) {
-          // ⚠️ 不能只弹 toast：结果区会永远停在转圈上（弱网下 toast 3 秒就没了）
-          if (list) list.innerHTML = '<div class="result-empty">没找到「这个密码 + 圈名」对应的档案\n请确认圈名和密码有没有写错，或联系团长</div>';
-          if (stat) stat.innerText = '';
-          return showToast('没查到档案，请确认圈名和密码');
+        /* 🚀 先走快路：一次 RPC（验密码 + 只取我的条目）。
+           快路不可用就原样退回「验密码 → 整份读」的老流程，提示文案一字不改。 */
+        let data = null;
+        const _fast = await fetchMemberData(key, cn);
+        if (_fast) {
+          if (_fast.auth === false) {
+            if (list) list.innerHTML = _pwdHintHtml();
+            if (stat) stat.innerText = '';
+            showToast('密码不对，看下面的提示');
+            return;
+          }
+          if (!_fast.ok) {
+            if (list) list.innerHTML = '<div class="result-empty">没找到「这个密码 + 圈名」对应的档案\n请确认圈名和密码有没有写错，或联系团长</div>';
+            if (stat) stat.innerText = '';
+            return showToast('没查到档案，请确认圈名和密码');
+          }
+          data = [{ query_key: DATA_KEY, version: _fast.version,
+                    group_data: _fast.group_data || [], image_data: _fast.image_data || {} }];
+        } else {
+          // 🔐 原来那两步（快路没装或被网络打断时用）
+          const _auth = await verifyMember(cn, key);
+          if (_auth !== true) {
+            if (list) list.innerHTML = (_auth === false) ? _pwdHintHtml() : _authDownHtml();
+            if (stat) stat.innerText = '';
+            showToast(_auth === false ? '密码不对，看下面的提示' : '校验服务暂时不可用，请稍后重试');
+            return;
+          }
+          data = await fetchLeaderData(key);
+          if (!data || !data.length) {
+            // ⚠️ 不能只弹 toast：结果区会永远停在转圈上（弱网下 toast 3 秒就没了）
+            if (list) list.innerHTML = '<div class="result-empty">没找到「这个密码 + 圈名」对应的档案\n请确认圈名和密码有没有写错，或联系团长</div>';
+            if (stat) stat.innerText = '';
+            return showToast('没查到档案，请确认圈名和密码');
+          }
         }
         window.__LAST_ROW = data[0];
         const gd = data[0].group_data || [];
@@ -5309,7 +5350,8 @@ function _aucCardHtml(it){
   /* 没人出价时 it.highest 是 start-step 的假值，显示起拍价才对 */
   h += '<div class="auc-price">' +
        (_aucHasBid(it) ? '当前最高 ' + hi : '起拍价 ' + _aucMoney(it.start_price)) + '</div>';
-  h += '<div class="auc-meta">' + cnt + ' 人已出价 · 出价人匿名</div>';
+  /* 🔴 2026-11-11 团长指出：cnt 是「出价次数」不是「人数」，别写成「X 人已出价」 */
+  h += '<div class="auc-meta">' + (cnt ? cnt + ' 次出价' : '还没人出价') + ' · 出价人匿名</div>';
   h += '<div class="auc-mine">' + (mine > 0 ? '我出过 ' + _aucMoney(mine) : '我还没出价') + '</div>';
   h += _aucStandingHtml(it, ended);
   if (it.starts_at) h += '<div class="auc-start">开拍 ' + _aucBeijing(it.starts_at) + '（北京时间）</div>';

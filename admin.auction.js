@@ -329,6 +329,20 @@ async function aucLoadState(){
     aucRenderReal();
   } catch (e) { _aucMsg('aucFormMsg', '没连上数据库，再试一次', true); }
 }
+/* 🔴 2026-11-11 团长指出：bid_count 是「出价次数」，不是「几个人」。
+   以前直接写成「X 人已出价」→ 两个人各出三次就显示成「6 人」，看着像六个人在抢。
+   现在：人数按圈名去重算（后台接口带 bids 才拿得到），次数单独报，两个都写清楚。 */
+function _aucBidStat(it){
+  var n = Number(it.bid_count) || 0;
+  if (!n) return '还没人出价';
+  var seen = {}, ppl = 0;
+  (it.bids || []).forEach(function (b) {
+    var k = String((b && b.cn) || '').trim();
+    if (k && !seen[k]) { seen[k] = 1; ppl++; }
+  });
+  if (ppl > 0) return ppl + ' 人出价（共 ' + n + ' 次）';
+  return '共 ' + n + ' 次出价';        // 明细没取到时退化成只报次数，不能说成「人」
+}
 function aucRenderItems(){
   var box = document.getElementById('aucItemList');
   if (!box) return;
@@ -354,7 +368,7 @@ function aucRenderItems(){
          ' · 截止 ' + _aucBeijing(it.ends_at) + '（北京时间）</div>';
     h += '<div style="font-size:13px;margin-top:4px;">当前最高 ' +
          _aucMoney(it.highest == null ? it.start_price : it.highest) +
-         ' · ' + (Number(it.bid_count) || 0) + ' 人已出价</div>';
+         ' · ' + _aucBidStat(it) + '</div>';
     h += '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">';
     if (!ended) h += '<button class="btn btn-secondary" type="button" onclick="aucEndItem(' + i + ')">结束本件</button>';
     h += '<button class="btn btn-danger" type="button" onclick="aucDelItem(' + i + ')">删除本件</button></div>';
