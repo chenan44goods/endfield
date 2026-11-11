@@ -1060,16 +1060,36 @@
       padding: 112px 3vw 6vh;
       overflow: hidden;
     }
+    /* 🖱 交肾核算滑不动（2026-11-12，第二次修，这次是真根因）
+       交款区（收款码 / 上传截图 / 批次卡）长在结果卡**上面**，两个都不在同一个滚动容器里：
+       交款区一高（实测 600px 就把视口吃掉），卡片区被挤到屏幕外，外层 .qp-right 又是
+       overflow:hidden —— 整页没有任何能滚的地方，表现就是「滑不动」。而且交款区是
+       查询完成后才异步画出来的，任何「按卡片区算高度」的写法都算不准。
+       现在：整个右栏内容（筛选栏 + 交款区 + 结果卡 + 清除记录）装在 #queryResultOverlay 里，
+       由它一个容器滚。卡片区 height:auto / overflow:visible，不再自己限高。
+       ⚠️ 以后往结果页加任何东西，都放进 #queryResultOverlay 里面，别放到它外面。 */
     .query-panel.qp-railoff #queryResultOverlay {
       /* ⚠️ 必须 !important：这个节点身上有 inline 的 width:min(820px,88%)，
          inline 优先级高于任何类选择器，不加就一直还是 820px。 */
       width: 78% !important;
       max-width: 1100px;
+      /* 唯一滚动容器。高度上限由 _fitResultListHeight() 按视口算，这里只给能滚的能力。 */
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      scrollbar-width: none;          /* 观感保持原样（要细滚动条说一声，一行就能开） */
     }
+    .query-panel.qp-railoff #queryResultOverlay::-webkit-scrollbar { display: none; }
     /* 结果卡放大约 15%（原样式全是写死 px，只能逐个覆盖，别改成 em 连锁以免牵动别处） */
     /* 轮播原本上下各留 36vh 让首尾卡也能吸附到中心 —— 撤左栏后这 36vh 会把内容顶到屏幕下半截，
        缩到 8vh：首尾不再强吸中心（不影响看内容），主要几张仍然居中放大。 */
-    .query-panel.qp-railoff .result-carousel { padding: 8vh 8px; }
+    .query-panel.qp-railoff .result-carousel {
+      padding: 2px 8px 4vh;
+      height: auto;                 /* 高度交给内容，整列由结果容器滚 */
+      overflow: visible;
+      scroll-snap-type: none;       /* 整列滚之后不能再按卡片吸附：想滚到上面交款区会被拉回来 */
+    }
     .query-panel.qp-railoff .result-item { padding: 18px; gap: 18px; }
     .query-panel.qp-railoff .result-item .r-img,
     .query-panel.qp-railoff .result-item .r-img-empty { width: 128px; height: 128px; }
@@ -1113,7 +1133,7 @@
       .query-panel.qp-railoff .qp-right { padding: 152px 5vw 8vh; }
       .query-panel.qp-railoff #queryResultOverlay { width: 92% !important; }
       .query-panel.qp-railoff .result-header { flex-wrap: wrap; }
-      .query-panel.qp-railoff .result-carousel { padding: 3vh 8px 5vh; }
+      .query-panel.qp-railoff .result-carousel { padding: 2px 8px 3vh; }
       .query-panel.qp-railoff .result-item { padding: 14px; gap: 14px; }
       .query-panel.qp-railoff .result-item .r-img,
       .query-panel.qp-railoff .result-item .r-img-empty { width: 96px; height: 96px; }
@@ -3765,61 +3785,78 @@
        外层面板和右栏都不许滚（CSS 已改 overflow:hidden），所以滚轮 100% 落在卡片区，
        不会再出现「内层滚到底 + 外层也到底 = 完全不动」。
        不是撤左栏的三个面板（存钱 / 匿名反馈）一律走 CSS 原样，不碰。 */
+    /* 🖱 单滚动区（2026-11-12 定稿，针对「交肾核算滑不动」）
+       自助查询 / 交肾核算 / 排发调度 三个面板只有一个滚动容器 = #queryResultOverlay，
+       筛选栏、交款区、结果卡、清除记录全在里面，一起滚。
+       这里只把这个容器的高度限制在视口内；卡片区高度永远交还给内容（height:auto）。
+       ⚠️ 别再给 #resultList 单独写死高度 —— 交款区一高就会把它挤出屏幕外。 */
     function _fitResultListHeight(){
-      const c = document.getElementById('resultList');
       const panel = document.getElementById('queryPanel');
-      if (!c || !panel) return;
       const ov = document.getElementById('queryResultOverlay');
+      const c = document.getElementById('resultList');
+      if (!panel || !ov || !c) return;
       const rail = panel.classList.contains('qp-railoff');
-      const shown = ov && getComputedStyle(ov).display !== 'none';
-      if (!rail || !shown){                       // 其它面板 / 还没出结果：交还原样式
+      const shown = getComputedStyle(ov).display !== 'none';
+      const right = panel.querySelector('.qp-right');
+      const clearOv = function(){
+        if (ov.style.maxHeight) ov.style.maxHeight = '';
+        if (ov.hasAttribute('data-fit-h')) ov.removeAttribute('data-fit-h');
+      };
+      const clearList = function(){
         if (c.style.height) c.style.height = '';
         if (c.hasAttribute('data-fit-h')) c.removeAttribute('data-fit-h');
-        const r0 = panel.querySelector('.qp-right');
-        if (r0 && r0.style.paddingTop) r0.style.paddingTop = '';   // 顶部内边距也还回去
-        return;
-      }
-      const right = panel.querySelector('.qp-right');
-      if (!right) return;
-      /* 手机端有个站的结果页上方压着「贺图」（.query-panel::before 占位），右栏已经被推到贺图下面，
-         此时再留 152px 顶部内边距就是纯空白（实测白扔 150px，卡片区只剩 126px）。
-         右栏 top > 8 就说明前面有东西占位 → 内边距收到 8；没有占位（top≈0）就保持原样。 */
-      const rt = Math.round(right.getBoundingClientRect().top);
-      if (rt > 8){
-        if (right.style.paddingTop !== '8px') right.style.paddingTop = '8px';
-      } else if (right.style.paddingTop){
-        right.style.paddingTop = '';
-      }
-      const padB = parseFloat(getComputedStyle(right).paddingBottom) || 0;
-      /* 结果卡下面可能还挂着别的东西（「共用设备？清除本机记录」被搬进来了），
-         一起把高度留出来，否则会把它们顶出屏幕外。这些节点的高度不随卡片区变化，量了不抖动。 */
-      let tail = 0;
-      if (ov){
-        let seen = false;
-        for (let i = 0; i < ov.children.length; i++){
-          const el = ov.children[i];
-          if (el === c){ seen = true; continue; }
-          if (!seen) continue;
-          const r = el.getBoundingClientRect();
-          if (r.height > 0) tail += r.height + (parseFloat(getComputedStyle(el).marginTop) || 0);
+      };
+      if (!rail || !shown){ clearOv(); clearList(); return; }
+      /* 手机端（粥团站）结果页上方压着「贺图」（.query-panel::before 占位），右栏已经被推到贺图下面，
+         此时再留 152px 顶部内边距就是纯空白（实测白扔 150px）。右栏 top > 8 说明前面有东西占位 → 收到 8。 */
+      if (right){
+        const rt = Math.round(right.getBoundingClientRect().top);
+        if (rt > 8){
+          if (right.style.paddingTop !== '8px') right.style.paddingTop = '8px';
+        } else if (right.style.paddingTop){
+          right.style.paddingTop = '';
         }
       }
-      const top = c.getBoundingClientRect().top;
-      const avail = Math.round(window.innerHeight - top - padB - tail);
-      if (!isFinite(avail) || avail <= 0) return;
-      const px = Math.max(120, avail) + 'px';     // 屏幕特别矮时给个下限，别压成一条缝（120 也够看一张卡）
-      if (c.style.height !== px) c.style.height = px;
-      c.setAttribute('data-fit-h', px);           // 自检用
+      clearList();                                   // 卡片区永远不再自己限高
+      const padB = right ? (parseFloat(getComputedStyle(right).paddingBottom) || 0) : 0;
+      const top = ov.getBoundingClientRect().top;
+      let avail = Math.round(window.innerHeight - top - padB - 4);
+      if (!isFinite(avail)) return;
+      /* 兜底不能再大：这里要是给一个比剩余空间还大的高度，容器底部就会伸出屏幕，
+         被 .qp-right 的 overflow:hidden 裁掉，末段内容永远滚不到 —— 就是原来那个 bug。 */
+      if (avail < 80) avail = 80;
+      const px = avail + 'px';
+      if (ov.style.maxHeight !== px) ov.style.maxHeight = px;
+      ov.setAttribute('data-fit-h', px);             // 自检用
+    }
+
+    /* 滚动容器：railoff 的三个面板 = 结果容器（整列一起滚）；其它面板 = 卡片区本身。
+       所有跟滚动位置有关的计算都必须走这里，别再各处写死 #resultList。 */
+    function _carScroller(){
+      const panel = document.getElementById('queryPanel');
+      if (panel && panel.classList.contains('qp-railoff')){
+        const ov = document.getElementById('queryResultOverlay');
+        if (ov) return ov;
+      }
+      return document.getElementById('resultList');
     }
 
     function measureCarousel(){
-      _fitResultListHeight();                     // 先按视口定卡片区高度，再量卡片位置
+      _fitResultListHeight();                     // 先按视口定滚动容器高度，再量卡片位置
       const c = document.getElementById('resultList');
       if (!c) return;
+      const sc = _carScroller() || c;
       const cards = c.querySelectorAll('.result-item');
+      /* 先摘掉上一轮的缩放：卡片带 transform 时 getBoundingClientRect 量到的是缩放后的盒子，
+         不清掉会一轮比一轮偏。 */
+      for (let i = 0; i < cards.length; i++){
+        if (cards[i].style && cards[i].style.transform) cards[i].style.transform = '';
+      }
+      const origin = sc.getBoundingClientRect().top - sc.scrollTop;   // 滚动容器的内容坐标原点
       const geom = new Array(cards.length);
       for (let i = 0; i < cards.length; i++){
-        geom[i] = { el: cards[i], top: cards[i].offsetTop, h: cards[i].offsetHeight, last: '' };
+        const r = cards[i].getBoundingClientRect();
+        geom[i] = { el: cards[i], top: r.top - origin, h: r.height, last: '' };
       }
       __carouselGeom = geom;
       updateCarousel();
@@ -3827,9 +3864,10 @@
     function updateCarousel(){
       const c = document.getElementById('resultList');
       if (!c || !__carouselGeom.length) return;
-      const center = c.clientHeight / 2;
+      const sc = _carScroller() || c;
+      const center = sc.clientHeight / 2;
       const half = Math.max(center, 1);
-      const st = c.scrollTop;
+      const st = sc.scrollTop;
       for (let i = 0; i < __carouselGeom.length; i++){
         const g = __carouselGeom[i];
         const cardCenter = g.top + g.h / 2 - st;
@@ -3861,67 +3899,56 @@
     /* 🖱 滚动桥（2026-11-11）：单滚动区之后，卡片区之外（黄框、筛选栏、空白）没有滚动容器，
        鼠标停在那儿滚 / 手指从那儿划 = 一点反应都没有，看起来还是「滑不动」。
        这里把右栏的 wheel / touch 转给结果卡区；落在卡片区里的照旧走原生滚动，不抢手感。 */
+    /* 🖱 滚动桥（2026-11-11，11-12 改成跟着滚动容器走）：
+       滚动容器只覆盖自己的盒子，右栏左右两侧的空白、容器外的边距上滚轮/手指没有任何反应，
+       看起来还是「滑不动」。这里把这部分手势转给滚动容器；落在容器里的走原生滚动，不抢手感。 */
     function _bindScrollBridge(){
       const right = document.querySelector('#queryPanel .qp-right');
       if (!right || right.__scrollBridge) return;
       right.__scrollBridge = true;
-      const isRail = function(){
+      const target = function(){
         const p = document.getElementById('queryPanel');
-        const c = document.getElementById('resultList');
-        if (!p || !c || !p.classList.contains('qp-railoff')) return null;
-        if (c.scrollHeight - c.clientHeight <= 0) return null;   // 内容不够长，没得滚
-        return c;
+        if (!p || !p.classList.contains('qp-railoff')) return null;
+        const sc = _carScroller();
+        if (!sc || sc.scrollHeight - sc.clientHeight <= 0) return null;   // 内容不够长，没得滚
+        return sc;
       };
       right.addEventListener('wheel', function(ev){
-        const c = isRail();
-        if (!c || !ev.deltaY) return;
-        if (c.contains(ev.target)) return;                       // 卡片区里：原生滚，别插手
+        const sc = target();
+        if (!sc || !ev.deltaY) return;
+        if (sc.contains(ev.target)) return;                        // 容器里：原生滚，别插手
         ev.preventDefault();
-        const max = c.scrollHeight - c.clientHeight;
-        c.scrollTop = Math.max(0, Math.min(max, c.scrollTop + ev.deltaY));
+        const max = sc.scrollHeight - sc.clientHeight;
+        sc.scrollTop = Math.max(0, Math.min(max, sc.scrollTop + ev.deltaY));
         onCarouselScroll();
       }, { passive: false });
       let ty = null;
-      /* 手动转滚时先把吸附关掉：容器是 scroll-snap(proximity)，一次只挪二十来像素会被判成
-         「离原卡更近」立刻吸回原位 —— 8 次手划全白费，看起来还是不动（2026-11-11 实测踩到）。
-         松手 120ms 后再交还吸附，最后由浏览器吸到最近的卡，手感和原生一致。 */
-      const _snapOff = function(c){ c.style.scrollSnapType = 'none'; };
-      let _snapTimer = null;
-      const _snapBack = function(){
-        const c = document.getElementById('resultList');
-        if (!c) return;
-        if (_snapTimer) clearTimeout(_snapTimer);
-        _snapTimer = setTimeout(function(){
-          _snapTimer = null;
-          c.style.scrollSnapType = '';
-        }, 120);
-      };
       right.addEventListener('touchstart', function(ev){
-        const c = document.getElementById('resultList');
-        if (!c || ev.touches.length !== 1 || c.contains(ev.target)) { ty = null; return; }
+        const sc = target();
+        if (!sc || ev.touches.length !== 1 || sc.contains(ev.target)) { ty = null; return; }
         ty = ev.touches[0].clientY;
-        _snapOff(c);
       }, { passive: true });
       right.addEventListener('touchmove', function(ev){
         if (ty === null || ev.touches.length !== 1) return;
-        const c = isRail();
-        if (!c) { ty = null; return; }
+        const sc = target();
+        if (!sc) { ty = null; return; }
         const dy = ty - ev.touches[0].clientY;
         if (!dy) return;
         ev.preventDefault();
-        const max = c.scrollHeight - c.clientHeight;
-        c.scrollTop = Math.max(0, Math.min(max, c.scrollTop + dy));
+        const max = sc.scrollHeight - sc.clientHeight;
+        sc.scrollTop = Math.max(0, Math.min(max, sc.scrollTop + dy));
         ty = ev.touches[0].clientY;
         onCarouselScroll();
       }, { passive: false });
-      right.addEventListener('touchend', function(){ ty = null; _snapBack(); }, { passive: true });
-      right.addEventListener('touchcancel', function(){ ty = null; _snapBack(); }, { passive: true });
+      right.addEventListener('touchend', function(){ ty = null; }, { passive: true });
+      right.addEventListener('touchcancel', function(){ ty = null; }, { passive: true });
     }
-
     (function initCarousel(){
       _bindScrollBridge();
       const rl = document.getElementById('resultList');
       if (rl) rl.addEventListener('scroll', onCarouselScroll, { passive: true });
+      const ovEl = document.getElementById('queryResultOverlay');
+      if (ovEl) ovEl.addEventListener('scroll', onCarouselScroll, { passive: true });   // railoff 面板真正滚的是它
       window.addEventListener('resize', scheduleMeasureCarousel);
       window.addEventListener('orientationchange', scheduleMeasureCarousel);
     })();
