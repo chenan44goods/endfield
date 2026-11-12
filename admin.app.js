@@ -252,6 +252,9 @@
     let DELETED_ITEM_IDS = new Set();
     let DIRTY_ITEM_IDS = new Set();
     let CURRENT_QUERY_KEY = '4goods';
+    // 🔑 团员统一密码：只用于「复制自查链接」时预填（index.html 的 ?key= 是密码，不是数据源密钥）。
+    //    以前这里误用了 CURRENT_QUERY_KEY，密码一改链接就填错 —— 现在分开写。
+    const MEMBER_PWD = '4goods';
     let RAW_ITEMS = [];
     /* 2026-11-07：保存时用来「垫底」的完整 image_data 原件。
        以前保存是按固定字段清单重抄一份，清单外的新字段（机器人 / 自查页写的）会被抹掉。
@@ -8272,7 +8275,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     window.confirmBatchStatusChange = confirmBatchStatusChange;
 
     function copyMemberLink() {
-      const url = `${window.location.origin}/index.html?key=${encodeURIComponent(CURRENT_QUERY_KEY)}`;
+      // ?key= 在团员自查页里是「预填密码」，不是数据源密钥。
+      const url = `${window.location.origin}/index.html?key=${encodeURIComponent(MEMBER_PWD)}`;
       navigator.clipboard.writeText(url).then(() => showToast('自查链接已复制！')).catch(() => prompt('请手动复制链接：', url));
     }
     window.copyMemberLink = copyMemberLink;
