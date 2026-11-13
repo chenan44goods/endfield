@@ -195,9 +195,18 @@
       try { _syncFilterStatusUI(); } catch (e) {}
     }
 
-    /* 老入口保留：renderTable 每次都会调它（数据变了 / 勾了「显示已收款完结批次」），
-       现在等价于「按当前条件重建地区下拉」。 */
-    function syncCountryFilterExtras() { _rebuildCountrySelect(); }
+    /* 老入口保留：renderTable 每次都会调它。
+       ⚠️ 只在「条目条数变了」时重建 —— 翻页/搜索/静默刷新都会走 renderTable，
+          每次都重建 innerHTML 的话，团长正好拉着地区下拉时会被关掉，看着像「点不动」。
+          筛选条件变化由 onFilterChange → _refreshFacetOptions() 负责；
+          数据被编辑（条数不变、地区变了）由 updateBatchDropdownOptions 末尾补的那次负责。 */
+    let _FACET_LEN = -1;
+    function syncCountryFilterExtras() {
+      if (!Array.isArray(RAW_ITEMS) || !RAW_ITEMS.length) return;
+      if (_FACET_LEN === RAW_ITEMS.length) return;
+      _FACET_LEN = RAW_ITEMS.length;
+      _rebuildCountrySelect();
+    }
 
     const SUPABASE_KEY = 'sb_publishable_UW9cgyBOeV6zIZCicI2SlQ_bqm0MeJa';
     /* ── 数据通道（2026-09-25）────────────────────────────────────────────
@@ -1896,6 +1905,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       // 构建批次级联数据源（B+D 方案）：一级 = 分组，二级 = 组内具体批次
       // 🎯 2026-11-13 联动：只列「当前地区/状态条件下真的有货」的批次
             buildFilterCascadeData(_facetBatchNames());
+      /* 数据本身变了（导入/编辑/删除/勾选完结批次）→ 地区候选跟着更新 */
+      try { _rebuildCountrySelect(); } catch (e) {}
           }
 
           // ===== 批次级联选择器（筛选区：B+D 方案 一级分组 → 二级具体批次） =====
