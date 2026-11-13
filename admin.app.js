@@ -187,12 +187,84 @@
       if (cur) sel.value = cur;
     }
 
+    /* 全量批次名（不受地区/状态影响，只去掉归档和手动移除的）。
+       = 改动前批次下拉用的那份名单，专门用来保住分组结构。 */
+    function _facetAllBatchNames() {
+      var removed = getRemovedBatchOptions();
+      var inc = document.getElementById('filterIncludeArchived');
+      var includeArchived = !!(inc && inc.checked);
+      var set = new Set(['默认批次']);
+      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        var bn = String(it.batch_name || '').trim();
+        if (!bn) return;
+        if (!includeArchived && isArchivedBatchName(bn)) return;
+        set.add(bn);
+      });
+      var cur = stripBatchCountLabel(window.SELECTED_FILTER_BATCH || '').trim();
+      if (cur) set.add(cur);
+      return Array.from(set).filter(function (b) {
+        return b === '默认批次' ||
+          (removed.indexOf(b) === -1 && (includeArchived || !isArchivedBatchName(b)));
+      });
+    }
+
+    /* 现在留下几个批次 / 一共几个 —— 给提示用。
+       🎯 2026-11-13 团长反馈「找不到我的批次」：联动本身没错（区域筛选就该收窄批次），
+          但「92 个被砍到 17 个」在界面上一点都看不见，触发器还写着「全部批次」
+          → 团长以为批次被删了。这个函数负责把落差算出来。 */
+    function _facetBatchStats() {
+      var cEl = document.getElementById('filterCountry');
+      var sEl = document.getElementById('filterStatus');
+      var country = String((cEl && cEl.value) || '').trim();
+      var statusRaw = String((sEl && sEl.value) || '').trim();
+      /* 口径必须和下拉列表一致，否则提示写 3/5 而列表里只有 4 个真批次。
+         「默认批次」是下拉里永远兜底出现的一项：库里真有同名批次就照常算（正式站有 42 条），
+         没有就只是虚拟项，统计时剔掉。 */
+      var items = Array.isArray(RAW_ITEMS) ? RAW_ITEMS : [];
+      var realDefault = items.some(function (it) { return it && String(it.batch_name || '').trim() === '默认批次'; });
+      var real = function (arr) { return (arr || []).filter(function (b) { return realDefault || b !== '默认批次'; }); };
+      var allN = real(_facetAllBatchNames()).length;
+      var hitN = real(_facetBatchNames()).length;
+      return { all: allN, hit: hitN, country: country, status: statusRaw };
+    }
+
+    /* 触发器上的字：收窄了就明说，别让团长以为批次被删了 */
+    function _syncBatchTriggerText() {
+      var t = document.getElementById('filterBatchCascadeText');
+      if (!t) return;
+      var batch = window.SELECTED_FILTER_BATCH || '';
+      var detail = window.SELECTED_BATCH_DETAIL || '';
+      var txt = batch ? (detail ? batch + ' - ' + detail : batch) : '全部批次';
+      var st = _facetBatchStats();
+      if (st.hit < st.all) {
+        var why = [];
+        if (st.country) why.push(st.country);
+        if (st.status) why.push(st.status);
+        txt += '（' + why.join('·') + ' 筛着：' + st.hit + '/' + st.all + '）';
+      }
+      t.innerText = txt;
+    }
+
+    /* 面板顶部那条横条点一下 → 把地区/状态全清掉，批次立刻全部回来 */
+    function clearFacetNarrowing() {
+      var c = document.getElementById('filterCountry');
+      var s = document.getElementById('filterStatus');
+      if (c) c.value = '';
+      if (s) s.value = '';
+      try { closeFilterBatchCascade(); } catch (e) {}
+      onFilterChange();
+      if (typeof showToast === 'function') showToast('已清掉地区/状态筛选，批次全部回来了');
+    }
+    window.clearFacetNarrowing = clearFacetNarrowing;
+
     /* 筛选条件一变就把另外两个的候选集刷一遍（onFilterChange / 恢复筛选 里调用）。
        顺序无所谓：每个函数都从 DOM 读当前值，并且都会先忽略自己那一维。 */
     function _refreshFacetOptions() {
-      try { buildFilterCascadeData(_facetBatchNames()); } catch (e) {}
+      try { buildFilterCascadeData(_facetBatchNames(), _facetAllBatchNames()); } catch (e) {}
       try { _rebuildCountrySelect(); } catch (e) {}
       try { _syncFilterStatusUI(); } catch (e) {}
+      try { _syncBatchTriggerText(); } catch (e) {}
     }
 
     /* 老入口保留：renderTable 每次都会调它。
@@ -1049,8 +1121,20 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
            ⚠️ 必须告诉团长「筛选被恢复了」—— 否则他只看到 20 条，会以为数据丢了。 */
         let _filterRestored = false;
         try { _filterRestored = restoreFilterState(); } catch (e) {}
-        showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)`
-                  + (_filterRestored ? '｜已恢复上次的筛选条件，看全部点批次框选「全部批次」' : ''));
+        let _restoredWhat = '';
+        if (_filterRestored) {
+          const _rp = [];
+          if (window.SELECTED_FILTER_BATCH) _rp.push('批次=' + window.SELECTED_FILTER_BATCH);
+          const _rc = (document.getElementById('filterCountry') || {}).value || '';
+          const _rs = (document.getElementById('filterStatus') || {}).value || '';
+          if (_rc) _rp.push('地区=' + _rc);
+          if (_rs) _rp.push('状态=' + _rs);
+          if (_rp.length) {
+            _restoredWhat = '｜已恢复上次筛选：' + _rp.join(' · ')
+                          + '（批次列表也只剩这些，点批次框顶部的横条可全部显示）';
+          }
+        }
+        showToast(`已加载 Key [${CURRENT_QUERY_KEY}] 的数据 (${RAW_ITEMS.length} 条谷子)` + _restoredWhat);
         renderTable(); renderDispatchWorkbench(); renderTransferLogs(); renderFeedbackList(); renderLogistics();
         renderPayReview(); renderPayStats(); renderQrCodes(); renderBatchPlans(); renderPiggyBank();
         loadBatches();
@@ -1904,7 +1988,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       }
       // 构建批次级联数据源（B+D 方案）：一级 = 分组，二级 = 组内具体批次
       // 🎯 2026-11-13 联动：只列「当前地区/状态条件下真的有货」的批次
-            buildFilterCascadeData(_facetBatchNames());
+            buildFilterCascadeData(_facetBatchNames(), _facetAllBatchNames());
       /* 数据本身变了（导入/编辑/删除/勾选完结批次）→ 地区候选跟着更新 */
       try { _rebuildCountrySelect(); } catch (e) {}
           }
@@ -1913,26 +1997,35 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           let FILTER_CASCADE_GROUPS = [];      // [{ label, members: [批次名...] }] 多批次分组
           let FILTER_CASCADE_STANDALONE = [];  // 单批次直接展示的独立项
 
-          function buildFilterCascadeData(batchNames) {
+          function buildFilterCascadeData(batchNames, allBatchNames) {
             const ARCHIVED_LABEL = '⚪ 已收款完结';
+            /* 🎯 2026-11-13 返工：分组结构按「全量批次」算，组内成员按「当前候选」算。
+               否则地区一收窄，原本 12 批的「📅 10月」只剩 1 批 → 被降级成独立项，
+               团长按老习惯点「10月」就点不到了（这就是「找不到我的批次」）。
+               组头显示「可见/全量」，被筛掉多少一眼看见。 */
+            const universe = (Array.isArray(allBatchNames) && allBatchNames.length) ? allBatchNames : (batchNames || []);
+            const keep = {};
+            (batchNames || []).forEach(function(b){ keep[b] = 1; });
             const groups = {};
             const groupOrder = [];
-            const standalone = [];
-            (batchNames || []).forEach(function(b){
-              if (b === '默认批次') { standalone.push(b); return; }
+            universe.forEach(function(b){
+              if (b === '默认批次') return;
               const g = isArchivedBatchName(b) ? ARCHIVED_LABEL : getBatchGroupName(b);
               if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
               groups[g].push(b);
             });
-            // 单批次组直接作为独立项展示；多批次组折叠为分组头
             FILTER_CASCADE_GROUPS = [];
             FILTER_CASCADE_STANDALONE = [];
+            const loose = [];
+            if (universe.indexOf('默认批次') >= 0) loose.push('默认批次');
             groupOrder.forEach(function(g){
-              const members = groups[g];
-              if (members.length <= 1) { standalone.push(members[0]); return; }
-              FILTER_CASCADE_GROUPS.push({ label: g, members: members });
+              const all = groups[g];
+              const vis = all.filter(function(b){ return keep[b]; });
+              if (!vis.length) return;                        // 整组都被筛掉：不显示
+              if (all.length <= 1) { if (loose.indexOf(vis[0]) < 0) loose.push(vis[0]); return; }
+              FILTER_CASCADE_GROUPS.push({ label: g, members: vis, total: all.length });
             });
-            FILTER_CASCADE_STANDALONE = standalone;
+            FILTER_CASCADE_STANDALONE = loose;
           }
 
           function toggleFilterBatchCascade() {
@@ -1944,10 +2037,25 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             if (opening) {
               // 渲染一级选项：全部批次 + 分组头 + 独立批次
               const cur = window.SELECTED_FILTER_BATCH || '';
-              let html = '<div class="cascade-option' + (cur === '' ? ' selected' : '') + '" data-group="" data-batch="" onclick="selectFilterCascadeL1(this)">全部批次</div>';
+              const _st = _facetBatchStats();
+              let html = '';
+              /* 🎯 被地区/状态砍掉的批次：这里明说，并给一键清除 */
+              if (_st.hit < _st.all) {
+                const _why = [];
+                if (_st.country) _why.push('地区=' + _st.country);
+                if (_st.status) _why.push('状态=' + _st.status);
+                html += '<div class="cascade-narrow-tip" onclick="clearFacetNarrowing()" title="点一下清掉地区/状态筛选，批次全部回来">'
+                      + '🔎 ' + escapeHtml(_why.join(' · ')) + ' 筛着，批次只剩 <b>' + _st.hit + '</b> / ' + _st.all
+                      + '　<span class="cnt-clear">点这里全部显示</span></div>';
+              }
+              html += '<div class="cascade-option' + (cur === '' ? ' selected' : '') + '" data-group="" data-batch="" onclick="selectFilterCascadeL1(this)">全部批次</div>';
               FILTER_CASCADE_GROUPS.forEach(function(grp){
                 const sel = (cur && grp.members.indexOf(cur) !== -1) ? ' selected' : '';
-                html += '<div class="cascade-option' + sel + '" data-group="' + escapeHtml(grp.label) + '" data-batch="" onclick="selectFilterCascadeL1(this)">' + escapeHtml(grp.label) + ' (' + grp.members.length + '批)</div>';
+                const total = grp.total || grp.members.length;
+                const cnt = grp.members.length < total
+                  ? ('(' + grp.members.length + '/' + total + '批)')
+                  : ('(' + grp.members.length + '批)');
+                html += '<div class="cascade-option' + sel + '" data-group="' + escapeHtml(grp.label) + '" data-batch="" onclick="selectFilterCascadeL1(this)">' + escapeHtml(grp.label) + ' ' + cnt + '</div>';
               });
               FILTER_CASCADE_STANDALONE.forEach(function(b){
                 const sel = (cur === b) ? ' selected' : '';
