@@ -104,35 +104,100 @@
       return COUNTRY_OPTIONS.map(function (c) { return '<option value="' + c + '"></option>'; }).join('');
     }
 
-    /* 数据里如果还残留列表外的写法（旧导入 / 别处写入），追加到筛选器的「历史值」组，
-       否则这些条目永远筛不出来。只追加，不动当前选中项。 */
-    let _COUNTRY_EXTRA_LEN = -1;
-    function syncCountryFilterExtras() {
-      const sel = document.getElementById('filterCountry');
-      if (!sel || !Array.isArray(RAW_ITEMS)) return;
-      if (_COUNTRY_EXTRA_LEN === RAW_ITEMS.length) return;
-      _COUNTRY_EXTRA_LEN = RAW_ITEMS.length;
-      const known = Object.create(null);
-      Array.prototype.forEach.call(sel.options, function (o) { known[o.value] = 1; });
-      const extra = [];
-      RAW_ITEMS.forEach(function (it) {
-        const c = String(it.country || '').trim();
-        if (c && !known[c]) { known[c] = 1; extra.push(c); }
-      });
-      if (!extra.length) return;
-      let g = sel.querySelector('optgroup[data-legacy="1"]');
-      if (!g) {
-        g = document.createElement('optgroup');
-        g.label = '历史值';
-        g.setAttribute('data-legacy', '1');
-        sel.appendChild(g);
+    /* 🎯 联动筛选（2026-11-13 团长口径）：批次 / 地区 / 状态互为条件 ——
+       每个筛选器的候选值 = 「另外两个条件」下真的有货的值。
+       于是选了越南，批次里只剩有越南货的批次；选了某个批次，地区只剩这个批次有的地区；
+       不相关的直接不出现（团长选的方案），所以永远组合不出「一条都没有」的筛选。
+       exclude 传 'batch' / 'country' / 'status' = 算这个筛选器候选时忽略它自己。 */
+    function _facetItems(exclude) {
+      var items = Array.isArray(RAW_ITEMS) ? RAW_ITEMS : [];
+      var inc = document.getElementById('filterIncludeArchived');
+      var includeArchived = !!(inc && inc.checked);
+      var batch = (exclude === 'batch') ? '' : stripBatchCountLabel(window.SELECTED_FILTER_BATCH || '').trim();
+      var cEl = document.getElementById('filterCountry');
+      var sEl = document.getElementById('filterStatus');
+      var country = (exclude === 'country') ? '' : String((cEl && cEl.value) || '').trim();
+      var status = (exclude === 'status') ? '' : String((sEl && sEl.value) || '').trim().toLowerCase();
+      var exactBatch = false;
+      if (batch) {
+        exactBatch = items.some(function (it) { return String(it.batch_name || '默认批次') === batch; });
       }
-      extra.forEach(function (c) {
-        const o = document.createElement('option');
-        o.value = c; o.text = '（旧）' + c;
-        g.appendChild(o);
+      var out = [];
+      items.forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        var ib = String(it.batch_name || '默认批次');
+        if (!includeArchived && isArchivedBatchName(ib)) return;
+        if (batch) { if (exactBatch ? ib !== batch : ib.indexOf(batch) < 0) return; }
+        if (country && String(it.country || '日本') !== country) return;
+        if (status && String(it.status || '未出荷').toLowerCase().indexOf(status) < 0) return;
+        out.push(it);
+      });
+      return out;
+    }
+
+    function _facetBatchNames() {
+      var removed = getRemovedBatchOptions();
+      var inc = document.getElementById('filterIncludeArchived');
+      var includeArchived = !!(inc && inc.checked);
+      var set = new Set(['默认批次']);
+      _facetItems('batch').forEach(function (it) {
+        var bn = String(it.batch_name || '').trim();
+        if (bn) set.add(bn);
+      });
+      /* 当前选中的批次始终留在列表里：否则触发器上写着某批次、下拉里却找不到它 */
+      var cur = stripBatchCountLabel(window.SELECTED_FILTER_BATCH || '').trim();
+      if (cur) set.add(cur);
+      return Array.from(set).filter(function (b) {
+        return b === '默认批次' ||
+          (removed.indexOf(b) === -1 && (includeArchived || !isArchivedBatchName(b)));
       });
     }
+
+    /* 地区下拉按其它条件重建。
+       ⚠️ 必须「重建」不能「追加」—— 以前是往已有列表里追加历史值，
+       联动后会把这些已经被筛掉的地区又加回来，等于联动白做。 */
+    function _rebuildCountrySelect() {
+      var sel = document.getElementById('filterCountry');
+      if (!sel) return;
+      if (!Array.isArray(RAW_ITEMS) || !RAW_ITEMS.length) return;   /* 数据还没到：保持初始列表 */
+      var cur = String(sel.value || '');
+      var allowed = Object.create(null);
+      _facetItems('country').forEach(function (it) { allowed[String(it.country || '日本')] = 1; });
+      var html = '<option value="">全部地区</option>';
+      COUNTRY_GROUPS_RESOLVED.forEach(function (g) {
+        var hit = g.items.filter(function (c) { return allowed[c]; });
+        if (!hit.length) return;
+        html += '<optgroup label="' + escapeHtml(g.label) + '">' +
+          hit.map(function (c) { return '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>'; }).join('') +
+          '</optgroup>';
+      });
+      /* 列表外的遗留写法（旧导入 / 别处写入）仍要能筛，否则这些条目永远出不来 */
+      var extras = Object.keys(allowed).filter(function (c) { return COUNTRY_OPTIONS.indexOf(c) < 0; }).sort();
+      if (extras.length) {
+        html += '<optgroup label="历史值" data-legacy="1">' +
+          extras.map(function (c) { return '<option value="' + escapeHtml(c) + '">（旧）' + escapeHtml(c) + '</option>'; }).join('') +
+          '</optgroup>';
+      }
+      /* 当前选中的地区若被别的条件排除了：补回末尾并标「无匹配」。
+         否则 innerHTML 一换，select.value 会被浏览器静默清空 = 团长的选择凭空消失。 */
+      if (cur && !allowed[cur]) {
+        html += '<option value="' + escapeHtml(cur) + '">' + escapeHtml(cur) + '（无匹配）</option>';
+      }
+      sel.innerHTML = html;
+      if (cur) sel.value = cur;
+    }
+
+    /* 筛选条件一变就把另外两个的候选集刷一遍（onFilterChange / 恢复筛选 里调用）。
+       顺序无所谓：每个函数都从 DOM 读当前值，并且都会先忽略自己那一维。 */
+    function _refreshFacetOptions() {
+      try { buildFilterCascadeData(_facetBatchNames()); } catch (e) {}
+      try { _rebuildCountrySelect(); } catch (e) {}
+      try { _syncFilterStatusUI(); } catch (e) {}
+    }
+
+    /* 老入口保留：renderTable 每次都会调它（数据变了 / 勾了「显示已收款完结批次」），
+       现在等价于「按当前条件重建地区下拉」。 */
+    function syncCountryFilterExtras() { _rebuildCountrySelect(); }
 
     const SUPABASE_KEY = 'sb_publishable_UW9cgyBOeV6zIZCicI2SlQ_bqm0MeJa';
     /* ── 数据通道（2026-09-25）────────────────────────────────────────────
@@ -1829,7 +1894,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         dl.innerHTML = filterLegacyList.map(b => '<option value="' + escapeHtml(b) + '">').join('');
       }
       // 构建批次级联数据源（B+D 方案）：一级 = 分组，二级 = 组内具体批次
-            buildFilterCascadeData(filterLegacyList);
+      // 🎯 2026-11-13 联动：只列「当前地区/状态条件下真的有货」的批次
+            buildFilterCascadeData(_facetBatchNames());
           }
 
           // ===== 批次级联选择器（筛选区：B+D 方案 一级分组 → 二级具体批次） =====
@@ -1965,7 +2031,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       var order = STATUS_OPTIONS.map(function (o) { return o.value; });
       var seen = {};
       var extras = [];
-      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it) {
+      /* 🎯 2026-11-13 联动：只列「当前批次/地区条件下真的有货」的状态 */
+      _facetItems('status').forEach(function (it) {
         var s = String((it && it.status) || '未出荷').trim();
         if (!s || seen[s]) return;
         seen[s] = 1;
@@ -2194,7 +2261,12 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
     window.onFilterIncludeArchivedChange = onFilterIncludeArchivedChange;
 
-    function onFilterChange() { CURRENT_PAGE = 1; saveFilterState(); renderTable(); }
+    function onFilterChange() {
+      CURRENT_PAGE = 1;
+      _refreshFacetOptions();   /* 🎯 先按新条件收窄另外两个筛选器的候选，再画表 */
+      saveFilterState();
+      renderTable();
+    }
     window.onFilterChange = onFilterChange;
 
     /* 💾 筛选条件记忆（2026-10-26）：批次 / 地区 / 状态记在本机，下次进后台不用重新选一遍。
@@ -2229,11 +2301,23 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       window.SELECTED_BATCH_DETAIL = detail;
       const t = document.getElementById('filterBatchCascadeText');
       if (t) t.innerText = batch ? (detail ? batch + ' - ' + detail : batch) : '全部批次';
+      /* 🎯 联动（2026-11-13）：旧版本存的组合可能互相矛盾（那时三个筛选器各管各的）。
+         按「批次 > 地区 > 状态」恢复，后一个跟前一个搭配不出货就直接丢掉 ——
+         否则一进后台就是空表，团长会以为数据没了。 */
+      try {
+        const _okC = Object.create(null);
+        _facetItems('country').forEach(function (it) { _okC[String(it.country || '日本')] = 1; });
+        if (s.country && !_okC[s.country]) s.country = '';
+      } catch (e) {}
       const c = document.getElementById('filterCountry');
       if (c && s.country && Array.prototype.some.call(c.options, function (o) { return o.value === s.country; })) c.value = s.country;
       const st = document.getElementById('filterStatus');
+      try {
+        if (s.status && _statusFilterValues().indexOf(s.status) < 0) s.status = '';
+      } catch (e) {}
       if (st && s.status) st.value = s.status;
       _syncFilterStatusUI();
+      try { _refreshFacetOptions(); } catch (e) {}
       // 真的恢复了「有内容」的筛选才返回 true（全是空的不算，免得每次开都弹一句废话）
       const _c = (c && c.value) || '';
       const _s = (st && st.value) || '';
