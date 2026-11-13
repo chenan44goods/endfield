@@ -4164,15 +4164,18 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
            · 只动「这个 fee_members 所在的 logistics 批次」+「这条 fee_members 的 cn」的谷子；
            · 只把状态改成「可排发」；已经到终态（待发货/已排发/已到货/到货）的绝不回退去改；
            · 未付款的谷子（还没采购）不碰 —— 还没买的东西谈不上排发。 */
-      function _intlAutoDispatch(batchName, cn) {
-        if (!batchName || !cn) return 0;
-        const bk = _normBatchKey(batchName);
+      function _intlAutoDispatch(batch, cn) {
+        if (!batch || !cn) return 0;
+        const keys = _intlLinkedKeys(batch);
+        if (!keys.size) return 0;
+        const cnKey = String(cn).trim().toLowerCase();
+        if (!cnKey) return 0;
         const pool = RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []);
         let n = 0;
         pool.forEach(function (it) {
           if (!it || typeof it !== 'object') return;
-          if (_normBatchKey(it.batch_name || '') !== bk) return;
-          if (String(it.cn || '').trim() !== String(cn).trim()) return;
+          if (!keys.has(_normBatchKey(it.batch_name || ''))) return;
+          if (String(it.cn || '').trim().toLowerCase() !== cnKey) return;
           const st = String(it.status || '').trim();
           // 已经是终态/可排发/未付款的跳过：只把「采购完成、正在收国际/运输中」这批往前推
           if (st === '可排发' || st === '待发货' || st === '已排发' || st === '已到货' || st === '到货') return;
@@ -4202,8 +4205,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               m.paid_at = nowStr;
               m.amount_paid = Number(m.amount_due) || 0;
               changed++;
-              // 🔧 联动：这一笔国际运费交清了 → 这批这个人的谷子自动可排发
-              intlGoodsTouched += _intlAutoDispatch(b.batch_name, m.cn);
+              // 🔧 联动：这一笔国际运费交清了 → 这批（含关联的其它盘）这个人的谷子自动可排发
+              intlGoodsTouched += _intlAutoDispatch(b, m.cn);
             } else {
               alreadyPaid++;
             }
@@ -7280,6 +7283,17 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return { total: members.length, unpaid: unpaid, paid: paid, free: free, due: Math.round(due * 100) / 100, recv: Math.round(recv * 100) / 100 };
     }
 
+    /* 🔗 批次名底下那行小字：关联了几个排表盘 / 还没关联 */
+    function _intlLinkTagHtml(batch) {
+      const list = (batch && Array.isArray(batch.linked_batches)) ? batch.linked_batches : [];
+      if (!list.length) {
+        return '<div style="font-size:.7rem;color:#b45309;margin-top:3px;font-weight:400;">未关联排表 · 交清不会自动变可排发</div>';
+      }
+      const names = list.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+      const tip = names.join('\n');
+      return '<div style="font-size:.7rem;color:#0369a1;margin-top:3px;font-weight:400;" title="' + escapeHtml(tip) + '">🔗 已关联 ' + names.length + ' 个排表盘</div>';
+    }
+
     function renderLogistics() {
       renderIntlAlerts();          // 🌍 黄/红条跟着数据一起刷（涨跌都在这里统一）
       const tbody = document.getElementById('logisticsTableBody');
@@ -7299,8 +7313,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       RAW_LOGISTICS.forEach((batch, index) => {
         const s = logisticsBatchStats(batch);
         const batchName = batch.batch_name || '未命名批次';
-        html += '<tr><td style="font-weight:600;">' + escapeHtml(batchName) + '</td><td>' + s.total + '</td><td style="color:#dc2626; font-weight:600;">' + s.unpaid + '</td><td style="color:#16a34a;">' + s.paid + '</td><td style="color:#64748b;">' + s.free + '</td><td>￥' + s.due.toFixed(2) + '</td><td>￥' + s.recv.toFixed(2) + '</td><td>' + intlDueCellHtml(batch, index) + '</td><td><button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem;" onclick="openLogisticsDetail(' + index + ')">明细</button> <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogisticsBatch(' + index + ')">删除</button></td></tr>';
-        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(batchName) + '</span><span class="badge ' + (s.unpaid > 0 ? 'badge-status-未付款' : 'badge-status-可排发') + '">未交 ' + s.unpaid + '</span></div><div style="font-size:0.9rem; padding:6px 0;">共 ' + s.total + ' 人 | 未交 ' + s.unpaid + ' | 应收 ￥' + s.due.toFixed(2) + '</div><div style="font-size:0.82rem; padding:0 0 6px;">' + intlDueCellHtml(batch, index) + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openLogisticsDetail(' + index + ')">📋 明细</button> <button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteLogisticsBatch(' + index + ')">🗑️ 删除</button></div></div>';
+        const linkTag = _intlLinkTagHtml(batch);
+        html += '<tr><td style="font-weight:600;">' + escapeHtml(batchName) + linkTag + '</td><td>' + s.total + '</td><td style="color:#dc2626; font-weight:600;">' + s.unpaid + '</td><td style="color:#16a34a;">' + s.paid + '</td><td style="color:#64748b;">' + s.free + '</td><td>￥' + s.due.toFixed(2) + '</td><td>￥' + s.recv.toFixed(2) + '</td><td>' + intlDueCellHtml(batch, index) + '</td><td><button class="btn btn-primary" style="padding:2px 8px; font-size:0.8rem;" onclick="openLogisticsDetail(' + index + ')">明细</button> <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.8rem;" onclick="openIntlLinkModal(' + index + ')">🔗 关联</button> <button class="btn btn-danger" style="padding:2px 8px; font-size:0.8rem;" onclick="deleteLogisticsBatch(' + index + ')">删除</button></td></tr>';
+        cardsHtml += '<div class="admin-card-mobile"><div class="admin-card-mobile-header"><span class="badge badge-batch">' + escapeHtml(batchName) + '</span><span class="badge ' + (s.unpaid > 0 ? 'badge-status-未付款' : 'badge-status-可排发') + '">未交 ' + s.unpaid + '</span></div><div style="font-size:0.9rem; padding:6px 0;">共 ' + s.total + ' 人 | 未交 ' + s.unpaid + ' | 应收 ￥' + s.due.toFixed(2) + '</div><div style="font-size:0.82rem; padding:0 0 6px;">' + intlDueCellHtml(batch, index) + linkTag + '</div><div class="admin-card-mobile-actions"><button class="btn btn-primary" style="padding:4px 10px; font-size:0.8rem;" onclick="openLogisticsDetail(' + index + ')">📋 明细</button> <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="openIntlLinkModal(' + index + ')">🔗 关联</button> <button class="btn btn-danger" style="padding:4px 10px; font-size:0.8rem;" onclick="deleteLogisticsBatch(' + index + ')">🗑️ 删除</button></div></div>';
       });
       tbody.innerHTML = html;
       if (mobileView) mobileView.innerHTML = cardsHtml;
@@ -7315,7 +7330,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       document.getElementById('logisticsDetailTitle').innerText = '🌍 国际运费明细 - ' + (batch.batch_name || '未命名批次');
       const members = Array.isArray(batch.fee_members) ? batch.fee_members : [];
       const s = logisticsBatchStats(batch);
-      document.getElementById('logisticsDetailSummary').innerText = '共 ' + s.total + ' 人 | 未交 ' + s.unpaid + ' | 已交 ' + s.paid + ' | 免交 ' + s.free + ' | 应收 ￥' + s.due.toFixed(2) + ' | 实收 ￥' + s.recv.toFixed(2);
+      const _lk = (Array.isArray(batch.linked_batches) ? batch.linked_batches : []).filter(Boolean);
+      const _lkTxt = _lk.length
+        ? (' ｜ 🔗 关联 ' + _lk.length + ' 个盘：' + _lk.join('、'))
+        : ' ｜ 🔗 未关联排表（交清不会自动变可排发）';
+      document.getElementById('logisticsDetailSummary').innerText = '共 ' + s.total + ' 人 | 未交 ' + s.unpaid + ' | 已交 ' + s.paid + ' | 免交 ' + s.free + ' | 应收 ￥' + s.due.toFixed(2) + ' | 实收 ￥' + s.recv.toFixed(2) + _lkTxt;
       const tbody = document.getElementById('logisticsDetailBody');
       if (members.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">该批次暂无成员记录</td></tr>';
@@ -7334,6 +7353,107 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       document.getElementById('logisticsDetailModal').classList.add('active');
     }
     window.openLogisticsDetail = openLogisticsDetail;
+
+    /* ══ 🔗 国际运费 ↔ 排表批次 关联（2026-11-14 团长要求） ══
+       一笔国际运费可以同时管多个排表盘（现实里运费就是整包收，摊到好几个盘）。
+       勾了之后：审核通过 / 收清 → 这些盘里这个 CN 的谷子自动变「可排发」；
+       哪天到期没交 → 这些盘里这个 CN 的谷子标「未交国际掉落」。
+       不勾 = 退回老行为（按批次名同名匹配，基本匹配不上）。 */
+    var INTL_LINK_INDEX = -1;
+
+    function openIntlLinkModal(index) {
+      const b = RAW_LOGISTICS[index];
+      if (!b) return;
+      INTL_LINK_INDEX = index;
+      const nameEl = document.getElementById('intlLinkBatchName');
+      if (nameEl) nameEl.innerText = '「' + (b.batch_name || '未命名批次') + '」';
+      const sEl = document.getElementById('intlLinkSearch');
+      if (sEl) sEl.value = '';
+      renderIntlLinkList();
+      const modal = document.getElementById('intlLinkModal');
+      if (modal) modal.classList.add('active');
+    }
+    window.openIntlLinkModal = openIntlLinkModal;
+
+    function closeIntlLinkModal() {
+      const modal = document.getElementById('intlLinkModal');
+      if (modal) modal.classList.remove('active');
+      INTL_LINK_INDEX = -1;
+    }
+    window.closeIntlLinkModal = closeIntlLinkModal;
+
+    function renderIntlLinkList() {
+      const b = RAW_LOGISTICS[INTL_LINK_INDEX];
+      const box = document.getElementById('intlLinkList');
+      if (!b || !box) return;
+      /* 每个排表批次：总件数 + 这个国际批次的缴费名单里有几个人在这个盘（帮团长认批次） */
+      const cnt = {}, ppl = {}, memSet = {};
+      (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
+        if (String(m.fee_type || '').trim() === 'island') return;
+        const k = String(m.cn || '').trim().toLowerCase();
+        if (k) memSet[k] = 1;
+      });
+      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        const bn = String(it.batch_name || '').trim();
+        if (!bn) return;
+        let q = Number(it.quantity);
+        if (!isFinite(q) || q <= 0) q = 1;
+        cnt[bn] = (cnt[bn] || 0) + q;
+        const ck = String(it.cn || '').trim().toLowerCase();
+        if (ck && memSet[ck]) { ppl[bn] = ppl[bn] || {}; ppl[bn][ck] = 1; }
+      });
+      const cur = {};
+      (Array.isArray(b.linked_batches) ? b.linked_batches : []).forEach(function (x) {
+        const k = _normBatchKey(x); if (k) cur[k] = 1;
+      });
+      const kwEl = document.getElementById('intlLinkSearch');
+      const kw = String((kwEl && kwEl.value) || '').trim().toLowerCase();
+      const names = Object.keys(cnt).sort(function (a, z) { return (cnt[z] - cnt[a]) || a.localeCompare(z, 'zh'); });
+      const rows = names.filter(function (bn) { return !kw || bn.toLowerCase().indexOf(kw) >= 0; }).map(function (bn) {
+        const on = !!cur[_normBatchKey(bn)];
+        const pn = Object.keys(ppl[bn] || {}).length;
+        return '<label style="display:flex;align-items:center;gap:9px;padding:8px;border-bottom:1px solid #f1f5f9;cursor:pointer;">'
+          + '<input type="checkbox" data-bn="' + escapeHtml(bn) + '"' + (on ? ' checked' : '') + ' style="width:16px;height:16px;flex:none;">'
+          + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.86rem;">' + escapeHtml(bn) + '</span>'
+          + '<span style="font-size:.74rem;color:var(--text-muted);flex:none;">' + cnt[bn] + ' 件 · 名单内 ' + pn + ' 人</span>'
+          + '</label>';
+      });
+      box.innerHTML = rows.length ? rows.join('')
+        : '<div style="padding:22px;text-align:center;color:var(--text-muted);font-size:.86rem;">没有匹配的排表批次</div>';
+    }
+    window.renderIntlLinkList = renderIntlLinkList;
+
+    async function saveIntlLinkModal() {
+      const b = RAW_LOGISTICS[INTL_LINK_INDEX];
+      if (!b) return;
+      const picked = [];
+      document.querySelectorAll('#intlLinkList input[type="checkbox"]').forEach(function (el) {
+        if (el.checked) picked.push(String(el.getAttribute('data-bn') || ''));
+      });
+      const clean = picked.filter(Boolean);
+      b.linked_batches = clean;
+      await saveDataToSupabase();
+      renderLogistics();
+      closeIntlLinkModal();
+      if (clean.length) {
+        showToast('✅ 已关联 ' + clean.length + ' 个排表盘：交清后这些盘里该 CN 的谷子会自动变「可排发」', 7000);
+      } else {
+        showToast('已清空关联 → 退回按批次名同名匹配（基本匹配不上排表）');
+      }
+    }
+    window.saveIntlLinkModal = saveIntlLinkModal;
+
+    async function clearIntlLinkOne() {
+      const b = RAW_LOGISTICS[INTL_LINK_INDEX];
+      if (!b) return;
+      b.linked_batches = [];
+      await saveDataToSupabase();
+      renderLogistics();
+      renderIntlLinkList();
+      showToast('已清空关联');
+    }
+    window.clearIntlLinkOne = clearIntlLinkOne;
 
     function closeLogisticsDetail() { document.getElementById('logisticsDetailModal').classList.remove('active'); }
     window.closeLogisticsDetail = closeLogisticsDetail;
@@ -7426,6 +7546,24 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       var p = String(dateStr || '').split('-');
       return p.length === 3 ? (p[1] + '-' + p[2]) : String(dateStr || '');
     }
+
+    /* 🔗 一个国际运费批次「管哪些排表批次」（2026-11-14 团长要求：跨盘合并的运费也要能自动联动）。
+       团长在「🔗 关联」里勾过 → 只认勾的那几个（一笔运费可以管多个盘）；
+       没勾过 → 退回老行为：按批次名同名匹配。
+       匹配键走 _normBatchKey（忽略大小写 / 空格 / 中点写法），与人名一样不做模糊匹配。
+       ⚠️ 必须放在模块级：审核联动与「到期掉落」两处都要用。 */
+    function _intlLinkedKeys(batch) {
+      var keys = new Set();
+      var list = (batch && Array.isArray(batch.linked_batches)) ? batch.linked_batches : [];
+      if (list.length) {
+        list.forEach(function (x) { var k = _normBatchKey(x); if (k) keys.add(k); });
+        return keys;
+      }
+      var own = _normBatchKey((batch && batch.batch_name) || '');
+      if (own) keys.add(own);
+      return keys;
+    }
+    window._intlLinkedKeys = _intlLinkedKeys;
 
     /* 国际运费成员（排除岛内那一段）。岛内记录带 fee_type='island'。 */
     function _intlFeeMembers(batch) {
@@ -7657,13 +7795,14 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
 
       var total = 0, notes = [];
       jobs.forEach(function (job) {
-        var bk = _normBatchKey(job.b.batch_name || '');
+        var bks = _intlLinkedKeys(job.b);          // 🔗 关联过就按关联的盘算，没关联退回同名
+        if (!bks.size) return;
         var cnMap = {};
         job.unpaid.forEach(function (u) { cnMap[String(u.cn || '').trim().toLowerCase()] = 1; });
         var n = 0;
         RAW_ITEMS.forEach(function (it) {
           if (!it || typeof it !== 'object') return;
-          if (_normBatchKey(it.batch_name || '') !== bk) return;
+          if (!bks.has(_normBatchKey(it.batch_name || ''))) return;
           var ck = String(it.cn || '').trim().toLowerCase();
           if (!ck || !cnMap[ck]) return;
           if (INTL_DROP_SRC.indexOf(String(it.status || '').trim()) < 0) return;

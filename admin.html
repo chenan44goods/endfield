@@ -2190,6 +2190,26 @@ cn 点数 金额
     </div>
   </div>
 
+  <!-- 🔗 国际运费 ↔ 排表批次 关联 -->
+  <div class="modal-overlay" id="intlLinkModal">
+    <div class="modal" style="max-width: 560px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h3 style="font-size: 1.05rem; font-weight: 700;">🔗 关联排表批次</h3>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeIntlLinkModal()">✕</button>
+      </div>
+      <div id="intlLinkBatchName" style="font-size:0.86rem; color:var(--text-muted); margin-bottom:6px;"></div>
+      <div style="font-size:0.78rem; color:var(--text-muted); line-height:1.6; margin-bottom:8px;">
+        勾上的盘 = 这笔运费管这几个盘。交清后，这些盘里对应 CN 的谷子会自动变「可排发」；到期没交会自动标「未交国际掉落」。
+      </div>
+      <input id="intlLinkSearch" type="search" placeholder="搜批次名…" oninput="renderIntlLinkList()" style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.86rem; margin-bottom:8px;">
+      <div id="intlLinkList" style="max-height: 52vh; overflow:auto; border:1px solid #eef1f5; border-radius:10px;"></div>
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+        <button class="btn btn-secondary" onclick="clearIntlLinkOne()">清空关联</button>
+        <button class="btn btn-primary" onclick="saveIntlLinkModal()">保存关联</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 🌍 国际掉落到期日 Modal -->
   <div class="modal-overlay" id="intlDueModal">
     <div class="modal" style="max-width:430px;">
