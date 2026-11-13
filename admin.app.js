@@ -7360,7 +7360,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
        哪天到期没交 → 这些盘里这个 CN 的谷子标「未交国际掉落」。
        不勾 = 退回老行为（按批次名同名匹配，基本匹配不上）。 */
     var INTL_LINK_INDEX = -1;
-    /* 只看还有待派发谷子的盘（2026-11-14 团长要求：已全部可排发的盘别占地方） */
+    /* 只看还有「收国际中」谷子的盘（2026-11-14 团长口径：只留还在等国际的盘） */
     var INTL_LINK_PENDING_ONLY = true;
     window.setIntlLinkPendingOnly = function (on) {
       INTL_LINK_PENDING_ONLY = !!on;
@@ -7390,16 +7390,16 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
     window.closeIntlLinkModal = closeIntlLinkModal;
 
-    /* ⚠️「在途」口径必须和 _intlAutoDispatch 完全一致：
-       这几个状态交清后不会被改，所以不计入「待派发」。 */
-    var INTL_LINK_PEND_SKIP = { '可排发': 1, '待发货': 1, '已排发': 1, '已到货': 1, '到货': 1, '未付款': 1 };
+    /* 🎯 只认「收国际中」（2026-11-14 团长口径）：国际运费本来就是为这批还没运回来的货收的。
+       其它状态（已下单 / 国际运输中 / 可排发 / 未付款 / 终态）的盘不进这个关联列表。 */
+    var INTL_LINK_WANT = '收国际中';
 
     function renderIntlLinkList() {
       const b = RAW_LOGISTICS[INTL_LINK_INDEX];
       const box = document.getElementById('intlLinkList');
       if (!b || !box) return;
-      /* 每个排表批次：总件数 + 这笔运费里「还没交」的人在这个盘有几件待派发 */
-      const cnt = {}, ppl = {}, pend = {}, done = {}, memSet = {};
+      /* 每个排表批次：总件数 + 这笔运费里「还没交」的人在这个盘有几件「收国际中」 */
+      const cnt = {}, ppl = {}, want = {}, done = {}, memSet = {};
       (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
         if (String(m.fee_type || '').trim() === 'island') return;
         if (String(m.status || '').trim() !== '未交') return;   // 已交的人不会再被联动，别拿来占位
@@ -7419,7 +7419,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         ppl[bn][ck] = 1;
         const st = String(it.status || '').trim();
         if (st === '可排发') done[bn] = (done[bn] || 0) + q;
-        if (!INTL_LINK_PEND_SKIP[st]) pend[bn] = (pend[bn] || 0) + q;
+        if (st === INTL_LINK_WANT) want[bn] = (want[bn] || 0) + q;
       });
       const cur = {};
       (Array.isArray(b.linked_batches) ? b.linked_batches : []).forEach(function (x) {
@@ -7431,25 +7431,25 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         return {
           bn: bn,
           on: !!cur[_normBatchKey(bn)],
-          pend: pend[bn] || 0,
+          want: want[bn] || 0,
           done: done[bn] || 0,
           pn: Object.keys(ppl[bn] || {}).length,
           cnt: cnt[bn] || 0,
           hit: !kw || bn.toLowerCase().indexOf(kw) >= 0
         };
       });
-      /* 排序：名单内人数多的盘排前面（团长认盘主要靠「我的人在这个盘里有几个」），
-         人数相同再看谁待派发件数多；已勾选的同一档里优先，但不整块置顶，免得勾一个跳一下 */
+      /* 排序：收国际中的件数多的排前面（这才是这笔运费真正对应的货），
+         同档再看名单内人数；已勾选的同一档里优先，但不整块置顶，免得勾一个跳一下 */
       list.sort(function (a, z) {
-        return (z.pn - a.pn) || (z.pend - a.pend) || ((z.on ? 1 : 0) - (a.on ? 1 : 0))
+        return (z.want - a.want) || (z.pn - a.pn) || ((z.on ? 1 : 0) - (a.on ? 1 : 0))
           || (z.cnt - a.cnt) || a.bn.localeCompare(z.bn, 'zh');
       });
 
       let shown = 0, hidden = 0;
       const rows = list.map(function (it) {
-        const show = it.hit && (it.on || !INTL_LINK_PENDING_ONLY || it.pend > 0);
+        const show = it.hit && (it.on || !INTL_LINK_PENDING_ONLY || it.want > 0);
         if (show) shown++; else if (it.hit) hidden++;
-        const sub = '名单内 ' + it.pn + ' 人 · 待派发 ' + it.pend + ' 件' + (it.done ? ' · 已可排发 ' + it.done : '');
+        const sub = '名单内 ' + it.pn + ' 人 · 收国际中 ' + it.want + ' 件' + (it.done ? ' · 已可排发 ' + it.done : '');
         return '<label data-bn="' + escapeHtml(it.bn) + '" data-show="' + (show ? '1' : '0') + '"'
           + ' style="display:' + (show ? 'flex' : 'none') + ';align-items:flex-start;gap:9px;padding:8px;'
           + 'border-bottom:1px solid #f1f5f9;cursor:pointer;' + (it.on ? 'background:#f0f9ff;' : '') + '">'
@@ -7467,7 +7467,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (statEl) {
         const picked = list.filter(function (x) { return x.on; }).length;
         statEl.innerText = '共 ' + list.length + ' 个盘 · 可见 ' + shown + ' 个 · 已勾 ' + picked + ' 个'
-          + (hidden ? ' · 收起 ' + hidden + ' 个（没有待派发的谷子）' : '');
+          + (hidden ? ' · 收起 ' + hidden + ' 个（没有「收国际中」的谷子）' : '');
       }
     }
     window.renderIntlLinkList = renderIntlLinkList;
