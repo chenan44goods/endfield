@@ -4928,6 +4928,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const orderPlatform = (document.getElementById('inputOrderPlatform')?.value || '').trim();
 
       if (!name || !cn) return showToast('请填写谷子名称和 CN！');
+      if (imageUrl && !_imgUrlOk(imageUrl)) return showToast('图片地址只认 http/https 网址；C:\\ 本地路径别人打不开，请用「上传图片」按钮。');
 
       if (editId) {
         const idx = RAW_ITEMS.findIndex(i => String(i.item_id || i.id) === String(editId));
@@ -5649,6 +5650,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (selected.length === 0) return showToast('请先勾选谷子！');
       const url = prompt('请输入图片 URL 链接：');
       if (!url) return;
+      if (!_imgUrlOk(url)) return showToast('这不是图片链接：要 http/https 开头的网址。电脑里的 C:\\ 路径别人打不开，请用「上传图片」按钮。');
       /* ⚠️ 这一批会被同一张图覆盖，且不留旧图 —— 必须让团长看清件数再动手 */
       if (!confirm(`确定把选中的 ${selected.length} 件谷子的图片，全部改成这一张吗？\n\n${url.trim()}\n\n（原来挂的图会被替换掉）`)) return;
       selected.forEach(i => { i.image_url = url.trim(); DIRTY_ITEM_IDS.add(String(i.item_id || i.id)); });
@@ -5789,6 +5791,20 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return items;
     }
 
+    /* 图片字段护栏：只认公网链接 / 站内图床路径，电脑本地路径一律不收。
+       2026-11-16：拼谷助手导出的「图片」列是本机 C:\ 路径（还带表格引号），
+       以前被原样抄进库，导致整批谷子的图全是空白。 */
+    let _impImgDrop = 0;
+    function _imgUrlOk(v) {
+      const s = String(v == null ? '' : v).trim().replace(/^["'“”]+|["'“”]+$/g, '').trim();
+      return /^(https?:\/\/|\/sb\/|data:image\/)/i.test(s);
+    }
+    function _normImportImg(v) {
+      const s = String(v == null ? '' : v).trim();
+      if (_imgUrlOk(s)) return s.replace(/^["'“”]+|["'“”]+$/g, '').trim();
+      if (s) _impImgDrop++;
+      return '';
+    }
     function handleExcelImport(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -5804,6 +5820,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           const batchName = (document.getElementById('pasteBatchName')?.value || '').trim();
           let parsedItems = parseMatrixImportText(csvText, defaultCountry, batchName);
           if (parsedItems.length === 0) {
+            _impImgDrop = 0;
             const jsonRows = XLSX.utils.sheet_to_json(firstSheet);
             jsonRows.forEach(row => {
               const name = row['谷子名称'] || row['名称'] || row['谷子'];
@@ -5818,7 +5835,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
                   quantity: parseInt(row['数量'] || 1) || 1,
                   country: String(row['地区'] || defaultCountry).trim(),
                   status: String(row['状态'] || '未出荷').trim(),
-                  image_url: row['图片'] || '',
+                  image_url: _normImportImg(row['图片']),
                   created_at: new Date().toISOString()
                 });
               }
@@ -5832,7 +5849,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           updateBatchDropdownOptions();
           CURRENT_PAGE = Math.max(1, Math.ceil(RAW_ITEMS.length / PAGE_SIZE));
           renderTable();
-          showToast(`🎉 成功导入 ${dedup.fresh.length} 条谷子记录${dedup.skipped ? '，跳过重复 ' + dedup.skipped + ' 条' : ''}！`);
+          showToast(`🎉 成功导入 ${dedup.fresh.length} 条谷子记录${dedup.skipped ? '，跳过重复 ' + dedup.skipped + ' 条' : ''}${_impImgDrop ? '；其中 ' + _impImgDrop + ' 条图片不是网址，已留空（记得上传图）' : ''}！`);
           e.target.value = '';
         } catch (err) { showToast('Excel 解析失败！'); }
       };
