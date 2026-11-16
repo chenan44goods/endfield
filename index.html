@@ -1913,6 +1913,27 @@
       }
       throw lastErr || new Error('网络连不上');
     }
+    /* ⏱️ 读响应体也要封顶（2026-11-17）────────────────────────────────────
+       fetch 的超时只管到「响应头回来」为止；body 还在慢慢传的时候 await res.json()
+       可以挂很久都不返回 —— 团员看到的就是「一直显示上传中」（其实数据早写库了）。
+       这里给 body 读取单独计时，超时就 reject，交给调用方按「这次没确认」处理：
+       写操作重试前都会重读一遍做幂等校验，所以不会写重复。 */
+    function _resJson(res, ms){
+      ms = ms || 15000;
+      return new Promise(function(resolve, reject){
+        var settled = false;
+        var timer = setTimeout(function(){
+          if (settled) return;
+          settled = true;
+          reject(new Error('BODY_TIMEOUT'));
+        }, ms);
+        Promise.resolve().then(function(){ return res.json(); }).then(
+          function(v){ if (settled) return; settled = true; clearTimeout(timer); resolve(v); },
+          function(e){ if (settled) return; settled = true; clearTimeout(timer); reject(e); }
+        );
+      });
+    }
+    window._resJson = _resJson;
     // 给 img.src 等用的地址拼接（进入页面后通道一般已探测完成）
     function sbUrl(path){ return SB_BASE + path; }
 
@@ -2485,15 +2506,18 @@
             status: '待处理'
           });
           const body = { group_data: groupData, image_data: imgData };
-          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY;
+          /* 🩹 2026-11-17：只让服务端回 version 一列。不加这句时 PATCH 会把整行（最大 1.9MB）
+               回吐一遍，弱网下读 body 会挂住 = 团员看到的「一直上传中」。
+               版本被抢先时仍然返回空数组，下面的重试判断不变。 */
+          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY + '&select=version';
           if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
           const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
           if (!res.ok) { throw new Error('HTTP ' + res.status); }
           if (ver === null) { written = true; break; }
           let got = [];
-          try { got = await res.json(); } catch (e) { got = []; }
+          try { got = await _resJson(res, 15000); } catch (e) { got = []; }
           if (Array.isArray(got) && got.length > 0) { written = true; break; }
-          await new Promise(function (r) { setTimeout(r, 250 + Math.random() * 350); });   // 版本冲突：重读重试
+          await new Promise(function (r) { setTimeout(r, 120 * Math.pow(2, attempt) + Math.random() * 200); });   // 版本冲突：重读重试
         }
         if (!written) {
           // ⚠️ 必须弹窗，不能用 toast：以前这里只弹 2.6 秒的小提示，团员很容易当成
@@ -3571,17 +3595,20 @@
             refund_at: ''
           });
           const body = { image_data: imgData };
-          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY;
+          /* 🩹 2026-11-17：只让服务端回 version 一列。不加这句时 PATCH 会把整行（最大 1.9MB）
+               回吐一遍，弱网下读 body 会挂住 = 团员看到的「一直上传中」。
+               版本被抢先时仍然返回空数组，下面的重试判断不变。 */
+          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY + '&select=version';
           if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
           const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
           if (!res.ok) throw new Error('登记失败（HTTP ' + res.status + '）');
           if (ver === null) { written = true; break; }
           let got = [];
-          try { got = await res.json(); } catch (e) { got = []; }
+          try { got = await _resJson(res, 15000); } catch (e) { got = []; }
           if (Array.isArray(got) && got.length > 0) { written = true; break; }
-          await new Promise(function (r) { setTimeout(r, 250 + Math.random() * 350); });
+          await new Promise(function (r) { setTimeout(r, 120 * Math.pow(2, attempt) + Math.random() * 200); });
         }
-        if (!written) throw new Error('提交时正好有人在改数据，请再点一次「存进零钱罐」');
+        if (!written) throw new Error('这次没确认成功（网络慢，或刚好有人同时在交）。先刷新页面看一眼：零钱罐里已有记录就是成功了，没有再来一次。');
         if (resEl) resEl.innerHTML = '<div style="font-size:12px; color:#15803d; line-height:1.8;">✅ 已提交 ￥' + amt.toFixed(2) + '（等团长审核）。审核通过后就进你的零钱罐，交钱时能直接抵扣。</div>';
         showToast('✅ 已提交，等团长审核');
         window.__PIGGY_FILE = null;
@@ -3641,6 +3668,9 @@
             let t = ''; try { t = await upRes.text(); } catch(e){}
             throw new Error('截图上传失败（' + upRes.status + '）' + (t ? ' ' + String(t).slice(0, 120) : ''));
           }
+          /* 图已经进桶了，接下来是读版本 + 登记。明确分段，别让人以为卡死又点一次
+             （重复点会多出一条待审核凭证）。 */
+          if (btn) btn.innerText = '登记中…';
         }
 
         // 🔒 带版本锁写入（2026-10-04 修「交了截图但团长收不到、刷新又要重交」）：
@@ -3691,17 +3721,20 @@
             withdrawn_at: ''
           });
           const body = { image_data: imgData };
-          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY;
+          /* 🩹 2026-11-17：只让服务端回 version 一列。不加这句时 PATCH 会把整行（最大 1.9MB）
+               回吐一遍，弱网下读 body 会挂住 = 团员看到的「一直上传中」。
+               版本被抢先时仍然返回空数组，下面的重试判断不变。 */
+          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY + '&select=version';
           if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
           const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
           if (!res.ok) throw new Error('登记失败（HTTP ' + res.status + '）');
           if (ver === null) { window.__LAST_ROW = row; written = true; break; }
           let got = [];
-          try { got = await res.json(); } catch (e) { got = []; }
+          try { got = await _resJson(res, 15000); } catch (e) { got = []; }
           if (Array.isArray(got) && got.length > 0) { window.__LAST_ROW = row; written = true; break; }
-          await new Promise(function (r) { setTimeout(r, 250 + Math.random() * 350); });   // 版本冲突：重读重试
+          await new Promise(function (r) { setTimeout(r, 120 * Math.pow(2, attempt) + Math.random() * 200); });   // 版本冲突：重读重试
         }
-        if (!written) throw new Error('提交时正好有人在改数据，请再点一次「提交给团长审核」');
+        if (!written) throw new Error('这次没确认成功（网络慢，或刚好有人同时在交）。先刷新页面看一眼：已有「待审核」记录就是成功了，没有再来一次。');
         showToast('✅ 已提交！团长核对到账后会更新你的订单状态');
         cancelPayForm();
         doQuery('fee');
@@ -3758,15 +3791,18 @@
           hit.status = '已撤回';
           hit.withdrawn_at = new Date().toLocaleString('zh-CN');
           const body = { image_data: imgData };
-          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY;
+          /* 🩹 2026-11-17：只让服务端回 version 一列。不加这句时 PATCH 会把整行（最大 1.9MB）
+               回吐一遍，弱网下读 body 会挂住 = 团员看到的「一直上传中」。
+               版本被抢先时仍然返回空数组，下面的重试判断不变。 */
+          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY + '&select=version';
           if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
           const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
           if (!res.ok) throw new Error('撤销失败（' + res.status + '），请重试');
           if (ver === null) { window.__LAST_ROW = row; done = true; break; }
           let got = [];
-          try { got = await res.json(); } catch (e) { got = []; }
+          try { got = await _resJson(res, 15000); } catch (e) { got = []; }
           if (Array.isArray(got) && got.length > 0) { window.__LAST_ROW = row; done = true; break; }
-          await new Promise(function (r) { setTimeout(r, 250 + Math.random() * 350); });
+          await new Promise(function (r) { setTimeout(r, 120 * Math.pow(2, attempt) + Math.random() * 200); });
         }
         if (!done) throw new Error('撤销时正好有人在改数据，请重试');
         showToast('已撤销，可以重新上传');
@@ -4393,15 +4429,18 @@
             reply: ''
           });
           const body = { image_data: imgData };
-          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY;
+          /* 🩹 2026-11-17：只让服务端回 version 一列。不加这句时 PATCH 会把整行（最大 1.9MB）
+               回吐一遍，弱网下读 body 会挂住 = 团员看到的「一直上传中」。
+               版本被抢先时仍然返回空数组，下面的重试判断不变。 */
+          let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY + '&select=version';
           if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
           const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
           if (!res.ok) { throw new Error('HTTP ' + res.status); }
           if (ver === null) { written = true; break; }
           let got = [];
-          try { got = await res.json(); } catch (e) { got = []; }
+          try { got = await _resJson(res, 15000); } catch (e) { got = []; }
           if (Array.isArray(got) && got.length > 0) { written = true; break; }
-          await new Promise(function (r) { setTimeout(r, 250 + Math.random() * 350); });   // 版本冲突：重读重试
+          await new Promise(function (r) { setTimeout(r, 120 * Math.pow(2, attempt) + Math.random() * 200); });   // 版本冲突：重读重试
         }
         if (!written) throw new Error('数据正被同时更新，请再点一次提交');
         saveMyFbCode(key, newCode);
