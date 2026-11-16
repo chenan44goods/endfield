@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- 2026-11-16：补 favicon 声明。没有它浏览器每次访问都会自动要 /favicon.ico，
+       而本站会把找不到的路径回成整页 HTML → 等于每次多下一遍首页。 -->
+  <link rel="icon" href="data:,">
   <script>
   /* 🛡️ 快照地址保险（2026-09-25）
      背景：Cloudflare Pages 每部署一次，都会额外产生一个**永久**快照地址
@@ -5188,18 +5191,35 @@
       var names = ['login_bg.webp','login_bg.png','login_bg.jpg','login_bg.jpeg'];
       var el = document.getElementById('loginGate');
       if (!el) return;
-      var i = 0;
-      function next(){
-        if (i >= names.length) return;
-        var im = new Image();
-        im.onload = function(){
-          el.style.backgroundImage = "url('images/" + names[i] + "')";
-          el.setAttribute('data-bg', 'custom');
-        };
-        im.onerror = function(){ i++; next(); };
-        im.src = 'images/' + names[i] + '?v=' + Date.now();
+      /* 🚑 2026-11-16 修「网站一直加载不进去」的真凶：
+         以前用 new Image() 一个个试这四个候选名。可是本站的策略是「找不到的路径一律回首页」，
+         于是每个候选名都会把整页 index.html（约 320KB）当成图片下载一次，4 个候选 = 4 次整页下载、
+         白白烧掉 1.2MB 和几十秒带宽，还把这些请求串成一条长队，其他图片全抢不到带宽。
+         现在只发 HEAD 拿响应头，靠 content-type 判断是不是真图片，不下载正文；4 个并行。
+         团长以后往 images\ 里丢 login_bg.webp 之类，照样自动生效。 */
+      if (typeof fetch !== 'function') {
+        // 极老的浏览器才走原来那条路（少见，且失败也无害）
+        var j = 0;
+        (function next(){
+          if (j >= names.length) return;
+          var im = new Image();
+          im.onload = function(){ el.style.backgroundImage = "url('images/" + names[j] + "')"; el.setAttribute('data-bg', 'custom'); };
+          im.onerror = function(){ j++; next(); };
+          im.src = 'images/' + names[j];
+        })();
+        return;
       }
-      next();
+      Promise.all(names.map(function(n){
+        return fetch('images/' + n + '?probe=' + Date.now(), { method: 'HEAD', cache: 'no-store' })
+          .then(function(r){ return (r && r.ok && /^image\//i.test(r.headers.get('content-type') || '')) ? n : null; })
+          .catch(function(){ return null; });
+      })).then(function(hits){
+        var pick = null;
+        for (var k = 0; k < names.length; k++) { if (hits[k]) { pick = hits[k]; break; } }
+        if (!pick) return;                     // 四个都没有：保持默认底色，不再拖网络
+        el.style.backgroundImage = "url('images/" + pick + "')";
+        el.setAttribute('data-bg', 'custom');
+      });
     })();
 
 </script>
