@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <!-- ⚡ 资源预加载（2026-11-16）：让脚本与 HTML 并行下载 -->
-  <link rel="preload" href="./admin.app.js?v=933beb66" as="script">
+  <link rel="preload" href="./admin.app.js?v=97857386" as="script">
   <link rel="preload" href="./admin.auction.js?v=f09a384b" as="script">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script>
@@ -751,6 +751,22 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
       font-weight: 600;
       color: var(--text-muted);
     }
+
+    /* 📱 登录框：显示密码 + 页内错误提示（只作用于 #loginForm，不碰其它表单）
+       2026-11-17：手机上一次点击会发两次登录请求并连弹两个 alert；错误原因也看不清。 */
+    .login-pwd-row { display: flex; align-items: center; justify-content: space-between; }
+    .login-eye {
+      border: none; background: none; padding: 0 2px; margin: 0;
+      font-size: 0.8rem; line-height: 1; color: var(--text-muted);
+      cursor: pointer; text-decoration: underline;
+    }
+    #loginMsg {
+      display: none; margin: 0 0 12px; padding: 10px 12px;
+      border-radius: 8px; border: 1px solid #f3c7c7; background: #fff4f4;
+      color: #b42318; font-size: 0.82rem; line-height: 1.6;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    #loginMsg.show { display: block; }
 
     /* ── 谷子图片拖拽上传区（2026-11-04）──────────────────────────────
        浅色后台里的虚线投放框：平时灰虚线，拖进来变黑边 + 主黄淡底。
@@ -2417,13 +2433,19 @@ cn 点数 金额
       <form id="loginForm" onsubmit="event.preventDefault(); login();">
         <div class="form-group" style="margin-bottom: 12px;">
           <label for="email">Supabase 邮箱账号</label>
-          <input type="text" id="email" required placeholder="your-email@example.com">
+          <input type="text" id="email" required placeholder="your-email@example.com"
+                 inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="username">
         </div>
         <div class="form-group" style="margin-bottom: 20px;">
-          <label for="password">密码</label>
-          <input type="password" id="password" required placeholder="••••••••">
+          <div class="login-pwd-row">
+            <label for="password">密码</label>
+            <button type="button" class="login-eye" id="loginEye" onclick="toggleLoginPwd()">显示</button>
+          </div>
+          <input type="password" id="password" required placeholder="••••••••"
+                 autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="current-password">
         </div>
-        <button type="submit" class="btn btn-primary" onclick="login()" style="width: 100%; justify-content: center; padding: 10px;">登录后台</button>
+        <div id="loginMsg"></div>
+        <button type="submit" class="btn btn-primary" id="loginBtn" style="width: 100%; justify-content: center; padding: 10px;">登录后台</button>
       </form>
     </div>
   </div>
@@ -2553,7 +2575,7 @@ cn 点数 金额
   <div class="toast" id="toast"></div>
 
   </div>
-<script src="./admin.app.js?v=933beb66"></script>
+<script src="./admin.app.js?v=97857386"></script>
 
 
 

@@ -562,18 +562,74 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       toastTimer = setTimeout(() => toast.classList.remove('show'), ms || 4000);
     }
 
+    /* 📱 手机端登录修复（2026-11-17）
+       ① 以前按钮同时是 type=submit 又带 onclick=login() → 一次点击发两次登录请求、连弹两个 alert；
+          弱网下一次成功一次失败，就变成「密码明明对，却提示登录失败」。
+       ② 错误从 alert 改成弹窗内红字：手机 alert 会挡住键盘、也看不清原因。
+       ③ 登录成功后拉数据失败，不再报成「登录失败」。 */
+    let _LOGIN_BUSY = false;
+
+    function _loginMsg(html, ok) {
+      const box = document.getElementById('loginMsg');
+      if (!box) { if (html) alert(String(html).replace(/<[^>]+>/g, '')); return; }
+      if (!html) { box.className = ''; box.innerHTML = ''; return; }
+      box.innerHTML = html;
+      box.className = 'show';
+      box.style.background = ok ? '#f0fdf4' : '#fff4f4';
+      box.style.borderColor = ok ? '#bbf7d0' : '#f3c7c7';
+      box.style.color = ok ? '#166534' : '#b42318';
+    }
+
+    function toggleLoginPwd() {
+      const p = document.getElementById('password');
+      const b = document.getElementById('loginEye');
+      if (!p) return;
+      const show = p.type === 'password';
+      p.type = show ? 'text' : 'password';
+      if (b) b.innerText = show ? '隐藏' : '显示';
+    }
+    window.toggleLoginPwd = toggleLoginPwd;
+
+    function _loginErrText(error) {
+      const msg = String((error && (error.message || error.error_description)) || error || '');
+      const code = (error && (error.status || error.code)) || '';
+      if (/invalid login credentials|invalid_grant|invalid password/i.test(msg))
+        return '账号或密码不对。\n手机上最常见的两个原因：\n'
+             + '· 输入法把邮箱 / 密码首字母自动大写了（点「显示」看一眼实际内容）\n'
+             + '· 浏览器自动填充塞了旧密码（先清空密码框，手动重打一遍）';
+      if (/email not confirmed/i.test(msg))
+        return '这个账号还没验证邮箱。去 Supabase 后台把该用户的邮箱确认掉，或换其他管理账号登录。';
+      if (/rate limit|too many requests/i.test(msg) || String(code) === '429')
+        return '短时间内尝试次数太多，服务器先拒绝了。等 5–10 分钟再试，别连续点。';
+      if (/failed to fetch|network|networkerror|load failed/i.test(msg))
+        return '手机连不上服务器（网络或代理问题）。换 Wi-Fi 或关掉代理再试。';
+      return '登录失败：' + (msg || '未知错误') + (code ? '（' + code + '）' : '');
+    }
+
     async function login() {
+      if (_LOGIN_BUSY) return;
       const email = (document.getElementById('email')?.value || '').trim();
       const password = (document.getElementById('password')?.value || '').trim();
-      if (!email || !password) return alert('请填写邮箱和密码！');
+      if (!email || !password) { _loginMsg('请把邮箱和密码都填上。'); return; }
+      const btn = document.getElementById('loginBtn');
+      const btnText = btn && btn.innerText ? btn.innerText : '登录后台';
+      _LOGIN_BUSY = true;
+      _loginMsg('');
+      if (btn) { btn.disabled = true; btn.innerText = '登录中…'; }
       try {
         const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-        if (error) return alert('登录失败: ' + error.message);
-        showToast('🎉 登录成功！');
+        if (error) { _loginMsg(_loginErrText(error)); return; }
+        _loginMsg('登录成功，正在载入数据…', true);
         document.getElementById('authOverlay').classList.remove('active');
         document.getElementById('userEmailSpan').innerText = `已登录: ${data.user.email}`;
-        loadDataByQueryKey();
-      } catch (err) { alert('登录失败: ' + err.message); }
+        try { await loadDataByQueryKey(); }
+        catch (e) { showToast('已登录，但数据没拉下来：' + (e && e.message ? e.message : e), 8000); }
+      } catch (err) {
+        _loginMsg(_loginErrText(err));
+      } finally {
+        _LOGIN_BUSY = false;
+        if (btn) { btn.disabled = false; btn.innerText = btnText; }
+      }
     }
     window.login = login;
 
