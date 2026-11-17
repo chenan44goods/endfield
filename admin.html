@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <!-- ⚡ 资源预加载（2026-11-16）：让脚本与 HTML 并行下载 -->
-  <link rel="preload" href="./admin.app.js?v=97857386" as="script">
+  <link rel="preload" href="./admin.app.js?v=afc78057" as="script">
   <link rel="preload" href="./admin.auction.js?v=f09a384b" as="script">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script>
@@ -2112,6 +2112,15 @@ cn 点数 金额
         <div id="dispatchMergeHint" style="display:none; margin-bottom: 12px; padding: 10px 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; font-size: 0.84rem; color: #166534;">
           🔗 同一 CN 的多条待处理申请已自动合并为一张卡，点卡片右下角「🚀 一键派发」可一次发完这人的全部。
         </div>
+        <!-- 🔍 CN 搜索（2026-11-17 新增）：只筛「显示哪几张卡」，不动数据、不改原有卡片 -->
+        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;">
+          <input type="text" id="dispatchCnSearch" placeholder="🔍 搜 CN（打几个字就行）…" oninput="onDispatchCnSearch()" autocomplete="off" style="flex: 1; min-width: 200px; max-width: 340px;">
+          <span id="dispatchSearchStat" style="font-size: 0.82rem; color: var(--text-muted);"></span>
+          <button class="btn btn-secondary" id="btnDispatchSearchClear" onclick="clearDispatchCnSearch()" style="display: none; padding: 4px 10px; font-size: 0.8rem;">✕ 清除搜索</button>
+        </div>
+        <div id="dispatchSearchWarn" style="display: none; margin-bottom: 12px; padding: 10px 14px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; font-size: 0.84rem; color: #92400e;">
+          🔍 正在按 CN 搜索：下面只列匹配的卡。「🚀 全部一键派发」已临时收起，避免只派发了搜到的人；要全派先点「✕ 清除搜索」。
+        </div>
         <div id="dispatchSubContent"></div>
         <div id="dispatchLogsHost" style="display: none;">
           <div class="card-title">
@@ -2575,7 +2584,7 @@ cn 点数 金额
   <div class="toast" id="toast"></div>
 
   </div>
-<script src="./admin.app.js?v=97857386"></script>
+<script src="./admin.app.js?v=afc78057"></script>
 
 
 

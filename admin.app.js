@@ -438,6 +438,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     let PENDING_BATCH_RAW = '';
     let BATCH_SELECTED_IDS = new Set();
     let CURRENT_DISPATCH_SUBTAB = 'pending';
+    /* 🔍 排发工作台 CN 搜索（2026-11-17）：只影响「显示哪几张卡」，
+       不碰数据；APP_CACHE / APP_GROUPS 均按过滤后的列表重建，保证按索引派发/删除不会串人。 */
+    let DISPATCH_CN_QUERY = '';
 
     window.ITEM_CACHE = [];
     window.APP_CACHE = [];
@@ -6753,13 +6756,23 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const completedApps = RAW_APPLICATIONS.filter(a => a.status === '已完成');
       document.getElementById('statPendingCount').innerText = pendingApps.length;
       document.getElementById('statCompletedCount').innerText = completedApps.length;
+
+      /* 🔍 CN 搜索（2026-11-17）：顶部两个统计永远是全量，只缩「下面列出来的卡」。
+         这样团长看到数字没变就知道数据没丢，只是筛着。 */
+      const _q = String(DISPATCH_CN_QUERY || '').trim().toLowerCase();
+      const _hitCn = a => !_q || String(a.cn || '').toLowerCase().indexOf(_q) >= 0;
+      const pendingShown = _q ? pendingApps.filter(_hitCn) : pendingApps;
+      const completedShown = _q ? completedApps.filter(_hitCn) : completedApps;
+      _renderDispatchSearchMeta(_q, pendingShown, pendingApps, completedShown, completedApps);
+
       const container = document.getElementById('dispatchSubContent');
       const isPending = CURRENT_DISPATCH_SUBTAB === 'pending';
-      const targetList = isPending ? pendingApps : completedApps;
+      const targetList = isPending ? pendingShown : completedShown;
       window.APP_CACHE = targetList;
 
       const btnAll = document.getElementById('btnDispatchAll');
-      if (btnAll) btnAll.style.display = (isPending && pendingApps.length > 1) ? '' : 'none';
+      /* 🔒 搜索状态下收起「全部一键派发」：此时它只覆盖搜到的人，容易被当成「全派」 */
+      if (btnAll) btnAll.style.display = (isPending && pendingApps.length > 1 && !_q) ? '' : 'none';
       const hint = document.getElementById('dispatchMergeHint');
       if (hint) hint.style.display = (isPending && pendingApps.length > 0) ? '' : 'none';
       const _clrPick = document.getElementById('btnClearPicks');
@@ -6768,18 +6781,24 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
 
       if (targetList.length === 0) {
         window.APP_GROUPS = [];   // 清掉陈旧分组，避免空列表时被误用
-        container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);">暂无记录</div>`;
+        container.innerHTML = _q
+          ? `<div style="text-align:center; padding:40px; color:var(--text-muted);">
+               🔍 没找到 CN 含「${escapeHtml(String(DISPATCH_CN_QUERY).trim())}」的${isPending ? '待处理申请' : '已完成记录'}
+               <div style="font-size:0.82rem; margin-top:6px;">该列表一共 ${isPending ? pendingApps.length : completedApps.length} 条，数据没丢，只是没匹配上。</div>
+               <div style="margin-top:14px;"><button class="btn btn-secondary" onclick="clearDispatchCnSearch()">✕ 清除搜索</button></div>
+             </div>`
+          : `<div style="text-align:center; padding:40px; color:var(--text-muted);">暂无记录</div>`;
         return;
       }
       if (isPending) {
-        const _mis = findMisalignedApps(pendingApps);
-        container.innerHTML = (_mis.length ? _misalignedBannerHtml(_mis) : '') + renderPendingGrouped(pendingApps);
+        const _mis = findMisalignedApps(pendingShown);
+        container.innerHTML = (_mis.length ? _misalignedBannerHtml(_mis) : '') + renderPendingGrouped(pendingShown);
         Array.prototype.forEach.call(container.querySelectorAll('.app-card'), _refreshPickCard);
         return;
       }
 
       let html = '';
-      completedApps.forEach((app, appIndex) => {
+      completedShown.forEach((app, appIndex) => {
         const items = app.items || [];
         const itemChunks = chunkArray(items, 10);
         let itemsGridHtml = '';
@@ -6808,6 +6827,44 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       container.innerHTML = html;
       Array.prototype.forEach.call(container.querySelectorAll('.app-card'), _refreshPickCard);
     }
+
+    /* --- 🔍 排发工作台 CN 搜索（2026-11-17 团长要求）---
+       只缩「显示哪几张卡」：统计卡全量、APP_CACHE/APP_GROUPS 按可见列表重建，
+       所以卡片上的「派发 / 删除」索引不会串到别人。 */
+    function _renderDispatchSearchMeta(q, shownP, allP, shownC, allC) {
+      const isPending = CURRENT_DISPATCH_SUBTAB === 'pending';
+      const shown = isPending ? shownP : shownC;
+      const all = isPending ? allP : allC;
+      const stat = document.getElementById('dispatchSearchStat');
+      const clr = document.getElementById('btnDispatchSearchClear');
+      const warn = document.getElementById('dispatchSearchWarn');
+      /* 「人」= 按 CN 去重后的卡片数（阿卡 2 条申请合并成 1 张卡，不能报 2） */
+      const uniqCn = arr => {
+        const s = new Set();
+        (arr || []).forEach(a => s.add(String(a.cn || '').trim() || '(未署名)'));
+        return s.size;
+      };
+      if (stat) stat.innerText = q
+        ? ('筛选中：' + uniqCn(shown) + ' / ' + uniqCn(all) + ' 人（' + shown.length + ' / ' + all.length + ' 条申请）')
+        : '';
+      if (clr) clr.style.display = q ? '' : 'none';
+      if (warn) warn.style.display = q ? '' : 'none';
+    }
+
+    function onDispatchCnSearch() {
+      const el = document.getElementById('dispatchCnSearch');
+      DISPATCH_CN_QUERY = el ? String(el.value || '') : '';
+      renderDispatchWorkbench();
+    }
+    window.onDispatchCnSearch = onDispatchCnSearch;
+
+    function clearDispatchCnSearch() {
+      DISPATCH_CN_QUERY = '';
+      const el = document.getElementById('dispatchCnSearch');
+      if (el) el.value = '';
+      renderDispatchWorkbench();
+    }
+    window.clearDispatchCnSearch = clearDispatchCnSearch;
 
     /* --- 🚀 合并派发：确认弹窗（自绘，规避微信/QQ 内置浏览器屏蔽原生 confirm） --- */
     let _dispatchAction = null;
