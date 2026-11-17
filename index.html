@@ -2456,7 +2456,36 @@
       if (!ok) return;
       submitApply(items, note);
     }
-    async function submitApply(items, note){
+    /* 🔁 2026-11-17 防重复提交（团长报：CN「沚鹜」连点两次 → 后台合并成各 x2，实际只有各 x1）
+       原来只有 window.__APPLY_SUBMITTING 挡「同时在飞」的那一次，挡不住「上一次已经成功、过几秒又点一次」；
+       幂等判断也只认随机 appId，每次点击都是新 id → 两次都算合法写入。
+       这里按「内容指纹 + 时间窗口」兜住：同 CN、品项与数量完全一致、还没被处理过 → 判为重复。
+       ⚠️ 不能拿 CN+备注 当判据：备注常为空，且同样的东西确实可能要再交一次 → 留「确实要再交一次」出口。 */
+    const APPLY_DUP_WINDOW_MS = 10 * 60 * 1000;   // 10 分钟内容重复视为「点重了」
+    function _applyDupKey(cn, items){
+      const norm = (items || []).map(function (i) {
+        return String(i.item_id || i.id || ('n:' + (i.name || ''))) + ':' + (Number(i.quantity) || 1);
+      }).sort().join(',');
+      return String(cn || '').trim().toLowerCase() + '|' + norm;
+    }
+    function _findDupApply(apps, cn, items, windowMs){
+      const myKey = _applyDupKey(cn, items);
+      const now = Date.now();
+      const win = windowMs || APPLY_DUP_WINDOW_MS;
+      const list = apps || [];
+      for (let i = 0; i < list.length; i++) {
+        const a = list[i];
+        /* 只跟「还没被团长处理」的申请比：派发过的（已完成）说明这批已经发走了，再交同样的就是新需求 */
+        if (!a || String(a.status || '') !== '待处理') continue;
+        if (_applyDupKey(a.cn, a.items) !== myKey) continue;
+        const t = Date.parse(String(a.time || '').replace(/\//g, '-'));
+        if (!isNaN(t) && (now - t) <= win) return a;
+      }
+      return null;
+    }
+    window._findDupApply = _findDupApply;   // 便于真浏览器抽测
+
+    async function submitApply(items, note, skipDupCheck){
       if (window.__APPLY_SUBMITTING) return showToast('正在提交，请勿重复点击！');
       const key = (document.getElementById('panelKey').value||'').trim();
       const cn = (document.getElementById('panelCn').value||'').trim();
@@ -2479,6 +2508,7 @@
         const appId = 'app_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
         const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
         let written = false;
+        let dupHit = null;
         for (let attempt = 0; attempt < 6 && !written; attempt++) {
           const data = await fetchLeaderData(key);
           if (!data || !data.length) return showToast('未找到该密钥数据');
@@ -2493,6 +2523,11 @@
           if (!Array.isArray(imgData.applications)) imgData.applications = [];
           // 幂等：上一次其实已经写成功了（只是响应没回来）→ 不重复提交
           if (imgData.applications.some(function (a) { return String((a && a.id) || '') === appId; })) { written = true; break; }
+          /* 🔁 内容级判重：放在「刚读到最新数据」之后，所以永远按库里当前真值判断，版本冲突重读也不会漏 */
+          if (!skipDupCheck) {
+            dupHit = _findDupApply(imgData.applications, cn, items, APPLY_DUP_WINDOW_MS);
+            if (dupHit) break;
+          }
           const targetIds = new Set(items.map(i=>String(i.item_id||i.id)));
           // 状态改为「待发货」时，同步清掉囤货入库日/到期日，避免误点「可排发」留下的日期一直挂着
           groupData.forEach(item => { if (targetIds.has(String(item.item_id||item.id))) { item.status = '待发货'; item.stock_date = null; item.stock_expiry = null; } });
@@ -2519,6 +2554,22 @@
           if (Array.isArray(got) && got.length > 0) { written = true; break; }
           await new Promise(function (r) { setTimeout(r, 120 * Math.pow(2, attempt) + Math.random() * 200); });   // 版本冲突：重读重试
         }
+        if (dupHit) {
+          /* 命中重复：默认「不写」，给手滑的人一条明路，也给「确实要再交一次」留出口。
+             ⚠️ 这里必须弹窗，不能用 toast —— 2.6 秒的小提示会被当成「又交成功了一次」。 */
+          const again = await askConfirm({
+            title: '这条申请刚才已经交过了',
+            desc: '系统里已经有你在 <b>' + escapeHtml(String(dupHit.time || '')) + '</b> 提交的<b>内容完全一样</b>的排发申请（同样的谷子、同样的数量）。\n\n'
+                + '这次<b>没有再写一遍</b>，那批谷子已经在你名下了，不用重复交。\n\n'
+                + '如果你是手滑点了两次 → 点下面的「知道了，不重复交」。\n'
+                + '如果确实是想再交一批一模一样的（不是手滑）→ 点「确实要再交一次」。',
+            okText: '确实要再交一次',
+            cancelText: '知道了，不重复交'
+          });
+          if (!again) { showToast('已取消，没有重复提交'); return; }
+          window.__APPLY_SUBMITTING = false;      // 交给下一轮重新走一遍（这次跳过判重）
+          return submitApply(items, note, true);
+        }
         if (!written) {
           // ⚠️ 必须弹窗，不能用 toast：以前这里只弹 2.6 秒的小提示，团员很容易当成
           //    「已经提交成功」直接走开 → 谷子一直停在可排发、后台也收不到申请。
@@ -2531,6 +2582,16 @@
           });
           return;
         }
+        /* 🩹 本地立刻把这批谷子标成「待发货」：不能只等 doQuery 回来再重绘 ——
+           网络慢的这十几秒里按钮还在，团员以为没成功就会再点一次（就是沚鹜那个重复的来源）。 */
+        try {
+          const _doneIds = new Set(items.map(function (i) { return String(i.item_id || i.id); }));
+          [window.CURRENT_ITEMS, window.CURRENT_VIEW_ITEMS].forEach(function (list) {
+            (list || []).forEach(function (x) {
+              if (_doneIds.has(String(x.item_id || x.id))) x.status = '待发货';
+            });
+          });
+        } catch (e) {}
         showToast('🎉 排发申请提交成功！谷子已标记为【待发货】' + (String(note||'').trim() ? '，备注已同步' : ''));
         doQuery('dispatch');
       } catch(e){
