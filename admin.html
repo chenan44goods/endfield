@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <!-- ⚡ 资源预加载（2026-11-16）：让脚本与 HTML 并行下载 -->
-  <link rel="preload" href="./admin.app.js?v=afc78057" as="script">
+  <link rel="preload" href="./admin.app.js?v=2a8de5e5" as="script">
   <link rel="preload" href="./admin.auction.js?v=f09a384b" as="script">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script>
@@ -2227,7 +2227,8 @@ cn 点数 金额
       </div>
       <div id="intlLinkBatchName" style="font-size:0.86rem; color:var(--text-muted); margin-bottom:6px;"></div>
       <div style="font-size:0.78rem; color:var(--text-muted); line-height:1.6; margin-bottom:8px;">
-        勾上的盘 = 这笔运费管这几个盘。交清后，这些盘里对应 CN 的谷子会自动变「可排发」；到期没交会自动标「未交国际掉落」。
+        勾上的盘 = 这笔运费管这几个盘。交清后，这些盘里对应 CN 的谷子会自动变「可排发」；到期没交会自动标「未交国际掉落」。<br>
+        已被其它国际运费关联过的盘不会出现在下面（一个盘只归一笔运费，要挪过来先去那笔里取消）。
       </div>
       <input id="intlLinkSearch" type="search" placeholder="搜批次名…" oninput="renderIntlLinkList()" style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:8px; font-size:0.86rem; margin-bottom:8px;">
       <label style="display:flex;align-items:flex-start;gap:6px;font-size:0.78rem;color:var(--text-muted);margin:0 0 4px;cursor:pointer;line-height:1.5;">
@@ -2584,7 +2585,7 @@ cn 点数 金额
   <div class="toast" id="toast"></div>
 
   </div>
-<script src="./admin.app.js?v=afc78057"></script>
+<script src="./admin.app.js?v=2a8de5e5"></script>
 
 
 
