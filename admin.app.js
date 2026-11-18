@@ -7555,6 +7555,18 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       (Array.isArray(b.linked_batches) ? b.linked_batches : []).forEach(function (x) {
         const k = _normBatchKey(x); if (k) cur[k] = 1;
       });
+      /* 🚫 一个排表盘只归一笔国际运费（2026-11-18 团长口径：
+         「不小心关联到别的国际盘里面了，下次增加国际关联的时候就不要显示它」）。
+         已被其它运费记录挂在名下的盘，这里干脆不出现；本笔自己勾着的照常显示（好取消）。
+         ⚠️ 只影响「显示」，不自动改任何已有数据；历史双挂的会在行内标 ⚠️ 提示。 */
+      const _linkBusy = {};
+      (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (rb, ri) {
+        if (ri === INTL_LINK_INDEX || !rb) return;
+        (Array.isArray(rb.linked_batches) ? rb.linked_batches : []).forEach(function (x) {
+          const k = _normBatchKey(x);
+          if (k && !_linkBusy[k]) _linkBusy[k] = String(rb.batch_name || '另一笔运费');
+        });
+      });
       const kwEl = document.getElementById('intlLinkSearch');
       const kw = String((kwEl && kwEl.value) || '').trim().toLowerCase();
       const list = Object.keys(cnt).map(function (bn) {
@@ -7565,7 +7577,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           done: done[bn] || 0,
           pn: Object.keys(ppl[bn] || {}).length,
           cnt: cnt[bn] || 0,
-          hit: !kw || bn.toLowerCase().indexOf(kw) >= 0
+          hit: !kw || bn.toLowerCase().indexOf(kw) >= 0,
+          busy: _linkBusy[_normBatchKey(bn)] || ''
         };
       });
       /* 排序：收国际中的件数多的排前面（这才是这笔运费真正对应的货），
@@ -7576,10 +7589,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       });
 
       let shown = 0, hidden = 0;
+      const busyCount = list.filter(function (x) { return x.busy && !x.on; }).length;
       const rows = list.map(function (it) {
-        const show = it.hit && (it.on || !INTL_LINK_PENDING_ONLY || it.want > 0);
-        if (show) shown++; else if (it.hit) hidden++;
-        const sub = '名单内 ' + it.pn + ' 人 · 收国际中 ' + it.want + ' 件' + (it.done ? ' · 已可排发 ' + it.done : '');
+        const blocked = !!it.busy && !it.on;        // 已被别的运费占了 → 整行不显示
+        const show = !blocked && it.hit && (it.on || !INTL_LINK_PENDING_ONLY || it.want > 0);
+        if (show) shown++; else if (it.hit && !blocked) hidden++;
+        const sub = '名单内 ' + it.pn + ' 人 · 收国际中 ' + it.want + ' 件' + (it.done ? ' · 已可排发 ' + it.done : '')
+          + (it.busy && it.on ? ' · ⚠️ 同时被「' + escapeHtml(it.busy) + '」关联着' : '');
         return '<label data-bn="' + escapeHtml(it.bn) + '" data-show="' + (show ? '1' : '0') + '"'
           + ' style="display:' + (show ? 'flex' : 'none') + ';align-items:flex-start;gap:9px;padding:8px;'
           + 'border-bottom:1px solid #f1f5f9;cursor:pointer;' + (it.on ? 'background:#f0f9ff;' : '') + '">'
@@ -7596,8 +7612,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const statEl = document.getElementById('intlLinkStat');
       if (statEl) {
         const picked = list.filter(function (x) { return x.on; }).length;
-        statEl.innerText = '共 ' + list.length + ' 个盘 · 可见 ' + shown + ' 个 · 已勾 ' + picked + ' 个'
-          + (hidden ? ' · 收起 ' + hidden + ' 个（没有「收国际中」的谷子）' : '');
+        statEl.innerText = '共 ' + (list.length - busyCount) + ' 个盘 · 可见 ' + shown + ' 个 · 已勾 ' + picked + ' 个'
+          + (hidden ? ' · 收起 ' + hidden + ' 个（没有「收国际中」的谷子）' : '')
+          + (busyCount ? ' · 另 ' + busyCount + ' 个已被其它国际运费关联，不显示' : '');
       }
     }
     window.renderIntlLinkList = renderIntlLinkList;
@@ -7610,14 +7627,35 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         if (el.checked) picked.push(String(el.getAttribute('data-bn') || ''));
       });
       const clean = picked.filter(Boolean);
-      b.linked_batches = clean;
+      /* 🚫 兜底：同一个盘只写进一笔运费（本笔原来就勾着的保留，不动历史数据） */
+      const _mine = {};
+      (Array.isArray(b.linked_batches) ? b.linked_batches : []).forEach(function (x) {
+        const k = _normBatchKey(x); if (k) _mine[k] = 1;
+      });
+      const _busy = {};
+      (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (rb, ri) {
+        if (ri === INTL_LINK_INDEX || !rb) return;
+        (Array.isArray(rb.linked_batches) ? rb.linked_batches : []).forEach(function (x) {
+          const k = _normBatchKey(x);
+          if (k && !_busy[k]) _busy[k] = String(rb.batch_name || '另一笔运费');
+        });
+      });
+      let _skip = 0;
+      const clean2 = clean.filter(function (n) {
+        const k = _normBatchKey(n);
+        if (!k || !_busy[k] || _mine[k]) return true;
+        _skip++;
+        return false;
+      });
+      b.linked_batches = clean2;
       await saveDataToSupabase();
       renderLogistics();
       closeIntlLinkModal();
-      if (clean.length) {
-        showToast('✅ 已关联 ' + clean.length + ' 个排表盘：交清后这些盘里该 CN 的谷子会自动变「可排发」', 7000);
+      if (clean2.length) {
+        showToast('✅ 已关联 ' + clean2.length + ' 个排表盘：交清后这些盘里该 CN 的谷子会自动变「可排发」'
+          + (_skip ? '（' + _skip + ' 个盘已被其它运费关联，没写入）' : ''), 7000);
       } else {
-        showToast('已清空关联 → 退回按批次名同名匹配（基本匹配不上排表）');
+        showToast(_skip ? ('⚠️ 这 ' + _skip + ' 个盘都已被其它运费关联，未写入') : '已清空关联 → 退回按批次名同名匹配（基本匹配不上排表）');
       }
     }
     window.saveIntlLinkModal = saveIntlLinkModal;
