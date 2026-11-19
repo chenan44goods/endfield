@@ -1482,6 +1482,17 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
 #itemFormCard.collapsed #itemForm { display: none; }
 #itemFormCard.collapsed .card-title { margin-bottom: 0; }
 #itemFormCard #btnToggleForm { white-space: nowrap; }
+/* 导入条里「标签 + 输入框」绑成一组，手机换行时不会被拆到两行 */
+#excelImportBar .imp-fld { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+/* 手机上把常驻的「导入 Excel」条压窄，尽量两行内放下（团长经常导 Excel，不能藏太深） */
+@media (max-width: 600px) {
+  #excelImportBar { gap: 6px !important; padding: 8px 0 2px !important; }
+  #excelImportBar .imp-lbl { font-size: 0.74rem !important; }
+  #excelImportBar input { width: 80px !important; padding: 3px 5px !important; }
+  #excelImportBar input#pasteBatchName { width: 96px !important; }
+  #excelImportBar .btn { padding: 4px 8px !important; font-size: 0.78rem !important; }
+}
 </style>
 </head>
 <body>
@@ -1562,6 +1573,21 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
             <!-- FORM_TOGGLE 2026-11-19：录入表单默认收起，点开才展开（手机上一屏能看到排表明细） -->
             <button class="btn btn-primary" id="btnToggleForm" type="button" onclick="toggleItemForm()" style="padding: 3px 12px; font-size: 0.82rem;">＋ 录入谷子</button>
           </div>
+        </div>
+        <!-- IMPORT_BAR 2026-11-19：团长经常导 Excel → 这条常驻在折叠区外面，收起状态也能一键导入 -->
+        <div id="excelImportBar" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 0 2px; border-top: 1px dashed var(--border);">
+          <span class="imp-fld">
+            <span class="imp-lbl" style="font-size: 0.85rem; color: var(--text-muted);">导入默认地区:</span>
+            <input type="text" id="excelDefaultCountry" list="countryList" value="日本" placeholder="默认地区" autocomplete="off" style="width: 110px; padding: 4px 8px;">
+          </span>
+          <span class="imp-fld">
+            <label class="imp-lbl" for="pasteBatchName" style="font-size:0.85rem; color:var(--text-muted); font-weight:600;">Excel批次名:</label>
+            <input type="text" id="pasteBatchName" list="batchPresets" placeholder="可选" style="width:150px; padding: 4px 8px;">
+          </span>
+          <label class="btn btn-success" style="cursor: pointer; margin: 0;">
+            📁 导入 Excel
+            <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleExcelImport(event)">
+          </label>
         </div>
         <form id="itemForm" onsubmit="event.preventDefault(); saveItemForm();">
           <input type="hidden" id="editItemId">
@@ -1746,16 +1772,7 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
 
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <button type="submit" class="btn btn-primary">保存谷子到 group_data</button>
-            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-              <span style="font-size: 0.85rem; color: var(--text-muted);">导入默认地区:</span>
-              <input type="text" id="excelDefaultCountry" list="countryList" value="日本" placeholder="默认地区" autocomplete="off" style="width: 110px; padding: 4px 8px;">
-              <label for="pasteBatchName" style="font-size:0.85rem; color:var(--text-muted); font-weight:600;">Excel批次名:</label>
-              <input type="text" id="pasteBatchName" list="batchPresets" placeholder="可选" style="width:150px; padding:4px 8px;">
-              <label class="btn btn-success" style="cursor: pointer; margin: 0;">
-                📁 导入 Excel
-                <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleExcelImport(event)">
-              </label>
-            </div>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">批量录入请用卡片上方常驻的「📁 导入 Excel」</span>
           </div>
         </form>
       </div>
