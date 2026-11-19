@@ -1286,6 +1286,97 @@
     /* ⚠️ 2026-10-22 修：主题 --accent 就是 #212121（近黑），原来这里把文字也写成 #1a1a1a
        → 黑底黑字、按钮文字完全看不见。确认按钮一律白字。 */
     .qmodal-ok { background: var(--accent, #212121); border-color: rgba(33,33,33,0.35); color: #fff; }
+
+    /* ===== 🗂 分类筛选面板（2026-11-19）=====
+       原来「全部分类」是个原生 <select>。安卓（含我们的 App 壳 WebView）点开弹出的是
+       系统自带的全屏列表，那个弹层是系统画的 —— 我们既改不了样式，也没法让它「点外面空白
+       就关」，只能按返回键（团长截图反馈的原话：让我可以点周围空白处取消该页面）。
+       所以改成自绘面板：数据仍然读同一个 #batchFilter（select 只是藏起来当数据源），
+       选中后写回 select.value 再调 filterByBatch()，筛选逻辑一行没动。
+       关闭方式：点遮罩 / 点 ✕ / 按 Esc / 选中任意一项。 */
+    .bp-mask {
+      position: fixed; inset: 0; z-index: 2600;
+      background: rgba(20,18,16,0.55);
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+      -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+      opacity: 0; pointer-events: none;
+      touch-action: none;   /* 在遮罩上滑动不会把后面的页面带着滚（列表自己可滚） */
+      transition: opacity var(--mo-dur-out) var(--mo-out);
+    }
+    .bp-mask.open {
+      opacity: 1; pointer-events: auto;
+      transition: opacity var(--mo-dur-in) var(--mo-in);
+    }
+    .bp-card {
+      width: 100%; max-width: 380px; max-height: 76vh;
+      display: flex; flex-direction: column;
+      background: #fffdf7; border: 2px solid var(--ink, #212121); border-radius: 16px;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+      opacity: 0; transform: scale(.94) translateY(10px);
+      transition: transform var(--mo-dur-out) var(--mo-out),
+                  opacity   var(--mo-dur-out) var(--mo-out);
+    }
+    .bp-mask.open .bp-card {
+      opacity: 1; transform: none;
+      transition: transform var(--mo-dur-in) var(--mo-in),
+                  opacity   var(--mo-dur-in) var(--mo-in);
+    }
+    .bp-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 14px 16px 10px; border-bottom: 2px dashed rgba(33,33,33,0.16);
+    }
+    .bp-title { font-family: var(--serif-cn); font-size: 16px; font-weight: 900; color: var(--ink); }
+    .bp-x {
+      flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%;
+      border: 2px solid #212121; background: #FEFE2C; color: var(--ink);
+      font-size: 12px; font-weight: 900; line-height: 1; cursor: pointer;
+    }
+    .bp-body {
+      overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y;
+      padding: 6px 8px calc(10px + env(safe-area-inset-bottom, 0px));
+    }
+    .bp-group {
+      padding: 12px 10px 6px; font-size: 11px; font-weight: 800;
+      letter-spacing: .08em; color: var(--muted, #7b7e83);
+    }
+    .bp-item {
+      display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box;
+      padding: 11px 10px; border: 0; border-radius: 10px; background: transparent;
+      font-family: var(--sans); font-size: 14px; color: var(--ink);
+      text-align: left; cursor: pointer;
+    }
+    .bp-item:hover { background: rgba(33,33,33,0.06); }
+    .bp-item.on { background: rgba(254,254,44,0.42); font-weight: 800; }
+    .bp-dot {
+      position: relative; flex: 0 0 auto; width: 16px; height: 16px;
+      border-radius: 50%; border: 2px solid rgba(33,33,33,0.35);
+    }
+    .bp-item.on .bp-dot { border-color: #212121; }
+    .bp-item.on .bp-dot::after {
+      content: ''; position: absolute; inset: 2px; border-radius: 50%; background: #212121;
+    }
+    .bp-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* .ver-tag 是 z-index:9999 的常驻小字，会浮在遮罩之上 → 面板开着时先让位 */
+    body.bp-open .ver-tag { display: none; }
+
+    /* 触发按钮：外观与原来的 <select> 完全一致（同 padding / 边框 / 圆角 / 字号 / 底色） */
+    .batch-pick-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      min-width: 170px; max-width: min(60vw, 280px);
+      padding: 8px 12px; border-radius: 8px;
+      border: 1px solid rgba(22,24,28,0.12); background: rgba(250,250,250,0.95);
+      color: var(--ink); font-size: 13px; font-family: var(--sans);
+      line-height: 1.2; text-align: left; cursor: pointer;
+    }
+    .batch-pick-btn .bp-lbl { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .batch-pick-btn .bp-caret { flex: 0 0 auto; font-style: normal; font-size: 10px; opacity: .55; }
+    @media (max-width: 600px) {
+      /* 手机上从底部弹出，一只手够得着；遮罩照旧点空白关闭 */
+      .bp-mask { padding: 0; align-items: flex-end; }
+      .bp-card { max-width: none; width: 100%; border-radius: 16px 16px 0 0; border-bottom: none; max-height: 80vh; }
+      .bp-item { padding: 13px 12px; font-size: 15px; }   /* 加大点击区，避免误触 */
+    }
+
     @media (max-width: 600px) {
       .qmodal-mask { padding: 0; align-items: flex-end; }   /* 手机端从底部弹出，方便单手操作 */
       .qmodal { max-width: none; width: 100%; border-radius: 16px 16px 0 0; border-bottom: none;
@@ -1765,9 +1856,14 @@
           <span id="resultStat" class="stat-pill"></span>
           <div style="display:flex; align-items:center; gap:8px;">
             <span class="batch-label-pill">BATCH · 分类筛选</span>
-            <select id="batchFilter" onchange="filterByBatch()" style="padding:8px 12px; border-radius:8px; border:1px solid rgba(22,24,28,0.12); background:rgba(250,250,250,0.95); color:var(--ink); font-size:13px; font-family:var(--sans); outline:none; min-width:170px;">
+            <!-- 2026-11-19：select 只留作数据源（show 出来的是下面的按钮）。
+                 安卓 WebView 的系统下拉点空白关不掉，所以显示层换成了自绘面板。 -->
+            <select id="batchFilter" onchange="filterByBatch()" aria-hidden="true" tabindex="-1" style="display:none;">
               <option value="">全部分类</option>
             </select>
+            <button type="button" id="batchPickBtn" class="batch-pick-btn" onclick="openBatchPicker()" aria-haspopup="dialog" aria-label="选择分类">
+              <span class="bp-lbl" id="batchPickLabel">全部分类</span><i class="bp-caret">▾</i>
+            </button>
             <button id="applyAllBtn" onclick="applyAllDispatchable()" style="display:none; padding:8px 16px; border-radius:8px; border:1px solid rgba(21,128,61,0.35); background:#d6f5df; color:#15803d; font-weight:700; font-size:13px; cursor:pointer; font-family:var(--sans); transition:background 0.2s;">⚡ 一键排发</button>
           </div>
         </div>
@@ -1796,6 +1892,17 @@
       </div>
       <div class="taotie-list" id="myTodoBody"></div>
       <div class="taotie-foot">这张卡只数「有几笔、哪天到期」，准确金额以「交肾核算」为准；共用设备看完请点「退出登录」。</div>
+    </div>
+  </div>
+
+  <!-- 🗂 分类筛选面板（2026-11-19）：替代原生 select，点遮罩/✕/Esc 均可关闭 -->
+  <div class="bp-mask" id="bpMask" onclick="if(event.target===this)closeBatchPicker()">
+    <div class="bp-card" role="dialog" aria-modal="true" aria-label="选择分类">
+      <div class="bp-head">
+        <span class="bp-title">分类筛选</span>
+        <button type="button" class="bp-x" onclick="closeBatchPicker()" aria-label="关闭">✕</button>
+      </div>
+      <div class="bp-body" id="bpBody"></div>
     </div>
   </div>
 
@@ -2277,6 +2384,84 @@
       }
       finally { if (typeof _qbtn !== 'undefined' && _qbtn) _qbtn.disabled = false; }
     }
+
+    /* ===== 🗂 分类筛选面板（2026-11-19）=====
+       数据源就是藏在旁边的 #batchFilter：直接从它的 <optgroup>/<option> 读，
+       跟原来 renderQuery 生成下拉的那段代码完全同源，不会出现「面板里有、下拉里没有」。
+       选中 → 写回 select.value → 调 filterByBatch()：筛选逻辑一行没动。 */
+    function _bpLabel(){
+      var sel = document.getElementById('batchFilter');
+      var lab = document.getElementById('batchPickLabel');
+      if (!lab) return;
+      var v = sel ? String(sel.value || '') : '';
+      lab.innerText = v || '全部分类';
+      lab.title = v || '全部分类';
+    }
+    function _bpRender(){
+      var body = document.getElementById('bpBody');
+      var sel = document.getElementById('batchFilter');
+      if (!body || !sel) return;
+      var cur = String(sel.value || '');
+      var h = '<button type="button" class="bp-item' + (cur ? '' : ' on') + '" data-b="">'
+            + '<span class="bp-dot"></span><span class="bp-name">全部分类</span></button>';
+      var kids = sel.children;
+      for (var i = 0; i < kids.length; i++) {
+        var node = kids[i];
+        if (node.tagName === 'OPTGROUP') {
+          h += '<div class="bp-group">' + escapeHtml(node.label) + '</div>';
+          for (var j = 0; j < node.children.length; j++) {
+            var ov = String(node.children[j].value || '');
+            h += '<button type="button" class="bp-item' + (cur === ov ? ' on' : '') + '" data-b="' + escapeHtml(ov) + '">'
+               + '<span class="bp-dot"></span><span class="bp-name">' + escapeHtml(ov) + '</span></button>';
+          }
+        } else if (node.tagName === 'OPTION' && String(node.value || '') !== '') {
+          var ov2 = String(node.value || '');
+          h += '<button type="button" class="bp-item' + (cur === ov2 ? ' on' : '') + '" data-b="' + escapeHtml(ov2) + '">'
+             + '<span class="bp-dot"></span><span class="bp-name">' + escapeHtml(ov2) + '</span></button>';
+        }
+      }
+      body.innerHTML = h;
+    }
+    function openBatchPicker(){
+      var m = document.getElementById('bpMask');
+      if (!m) return;
+      _bpRender();
+      m.classList.add('open');
+      document.body.classList.add('bp-open');
+      var b = document.getElementById('bpBody');
+      if (b) b.scrollTop = 0;
+    }
+    function closeBatchPicker(){
+      var m = document.getElementById('bpMask');
+      if (m) m.classList.remove('open');
+      document.body.classList.remove('bp-open');
+    }
+    function pickBatch(v){
+      var sel = document.getElementById('batchFilter');
+      if (sel) sel.value = v || '';
+      _bpLabel();
+      closeBatchPicker();
+      filterByBatch();
+    }
+    function _bpReset(){ closeBatchPicker(); _bpLabel(); }
+    window.openBatchPicker = openBatchPicker;
+    window.closeBatchPicker = closeBatchPicker;
+    window.pickBatch = pickBatch;
+    function _bpBind(){
+      var body = document.getElementById('bpBody');
+      if (!body) return;
+      /* 事件委托：面板每次打开都重写 innerHTML，绑在里面的按钮上会丢，绑在容器上不会 */
+      body.addEventListener('click', function(ev){
+        var btn = (ev.target && ev.target.closest) ? ev.target.closest('.bp-item') : null;
+        if (!btn) return;
+        pickBatch(btn.getAttribute('data-b') || '');
+      });
+      document.addEventListener('keydown', function(ev){
+        if (ev.key === 'Escape' || ev.keyCode === 27) closeBatchPicker();
+      });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _bpBind);
+    else _bpBind();
 
     // 按分类（batch_name）筛选（只显示选定的分类）
     function filterByBatch(){
@@ -4820,6 +5005,7 @@
       // 分类筛选下拉 + 一键排发：装着上一个团员的批次名，不能留给下一个人
       const bf = document.getElementById('batchFilter');
       if (bf) bf.innerHTML = '<option value="">全部分类</option>';
+      if (typeof _bpReset === 'function') _bpReset();   // 面板上的文字 + 残留高亮一起归零
       const allBtn = document.getElementById('applyAllBtn');
       if (allBtn) allBtn.style.display = 'none';
       // 内存里那份「当前这个人的订单」也要断掉，否则后续动作还能改到上一个人的条目
@@ -5935,7 +6121,7 @@ function aucConfirmYes(){ aucConfirmNo(); }
   var COVER = [
     '#queryPanel.open', '#myTodoOverlay.open', '#taotieOverlay.open',
     '.qmodal-mask.open', '#aucPanel.on', '#aucMask.on',
-    '#aucConfirm.on', '#aucViewer.on'
+    '#aucConfirm.on', '#aucViewer.on', '#bpMask.open'
   ];
   /* ⚠️ 故意不看 #queryResultOverlay：它是 #queryPanel 的子元素，父面板关掉后
      异步查询仍可能把它设成 display:block，但那时它根本不在屏幕上。
