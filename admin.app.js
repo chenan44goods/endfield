@@ -2043,7 +2043,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
 
       const dl = document.getElementById('batchPresets');
       if (dl) {
-        dl.innerHTML = filterLegacyList.map(b => '<option value="' + escapeHtml(b) + '">').join('');
+        dl.innerHTML = _sortBatchNamesDesc(filterLegacyList).map(b => '<option value="' + escapeHtml(b) + '">').join('');
       }
       // 构建批次级联数据源（B+D 方案）：一级 = 分组，二级 = 组内具体批次
       // 🎯 2026-11-13 联动：只列「当前地区/状态条件下真的有货」的批次
@@ -2077,14 +2077,15 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             FILTER_CASCADE_STANDALONE = [];
             const loose = [];
             if (universe.indexOf('默认批次') >= 0) loose.push('默认批次');
+            groupOrder.sort(_cmpBatchGroup);      // 📅 默认 → 常驻/活动 → 月份（大的在前）
             groupOrder.forEach(function(g){
-              const all = groups[g];
+              const all = _sortBatchNamesDesc(groups[g]);
               const vis = all.filter(function(b){ return keep[b]; });
               if (!vis.length) return;                        // 整组都被筛掉：不显示
               if (all.length <= 1) { if (loose.indexOf(vis[0]) < 0) loose.push(vis[0]); return; }
               FILTER_CASCADE_GROUPS.push({ label: g, members: vis, total: all.length });
             });
-            FILTER_CASCADE_STANDALONE = loose;
+            FILTER_CASCADE_STANDALONE = _sortBatchNamesDesc(loose);   // 📅 没日期的（默认/常驻）在前
           }
 
           function toggleFilterBatchCascade() {
@@ -2108,6 +2109,13 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
                       + '　<span class="cnt-clear">点这里全部显示</span></div>';
               }
               html += '<div class="cascade-option' + (cur === '' ? ' selected' : '') + '" data-group="" data-batch="" onclick="selectFilterCascadeL1(this)">全部批次</div>';
+              /* 📅 2026-11-19 团长规则：没日期的独立项（默认批次）在分组之前，
+                 分组的组长之间按「无日期 → 月份从新到旧」，有日期的独立项垫在最后。 */
+              const _looseItem = function(b){
+                const sel = (cur === b) ? ' selected' : '';
+                return '<div class="cascade-option' + sel + '" data-group="" data-batch="' + escapeHtml(b) + '" onclick="selectFilterCascadeL1(this)">' + escapeHtml(b) + '</div>';
+              };
+              FILTER_CASCADE_STANDALONE.filter(function(b){ return _batchDateKey(b) === null; }).forEach(function(b){ html += _looseItem(b); });
               FILTER_CASCADE_GROUPS.forEach(function(grp){
                 const sel = (cur && grp.members.indexOf(cur) !== -1) ? ' selected' : '';
                 const total = grp.total || grp.members.length;
@@ -2116,10 +2124,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
                   : ('(' + grp.members.length + '批)');
                 html += '<div class="cascade-option' + sel + '" data-group="' + escapeHtml(grp.label) + '" data-batch="" onclick="selectFilterCascadeL1(this)">' + escapeHtml(grp.label) + ' ' + cnt + '</div>';
               });
-              FILTER_CASCADE_STANDALONE.forEach(function(b){
-                const sel = (cur === b) ? ' selected' : '';
-                html += '<div class="cascade-option' + sel + '" data-group="" data-batch="' + escapeHtml(b) + '" onclick="selectFilterCascadeL1(this)">' + escapeHtml(b) + '</div>';
-              });
+              FILTER_CASCADE_STANDALONE.filter(function(b){ return _batchDateKey(b) !== null; }).forEach(function(b){ html += _looseItem(b); });
               document.getElementById('filterBatchOptions1').innerHTML = html;
               panel1.classList.add('open');
               if (trig) trig.classList.add('open');
@@ -4717,6 +4722,78 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
        规则：数字列第一下从大到小（找最贵的一单是最常见的用法），文字列第一下 A→Z；
        同一列再点反转；第三下回到原始顺序（给团长一个"我什么都不排了"的出口）。
        ⚠️ 排序只影响「画出来的顺序」，不动 RAW_ITEMS；勾选按 item_id 记，排完还是勾着的。 */
+    /* ══ 📅 批次日期倒序（2026-11-19 团长规则）══
+       团长原话：「不管团员自查还是后台，有日期显示的地方都必须严格按照日期从后往前去排放」。
+       规则（与团员页 index.html 里的同名函数保持一致，改一边记得改另一边）：
+         · 批名里的「月.日」当日期 —— "11.5 小群小盘" / "台湾8.23" / "11.12-11.20" / "2026-11-05" 都认；
+         · 有日期的：新的在前（从后往前）；
+         · 批名里没日期的（常驻 / 活动 / 科隆展物料打卡国际…）：整块排最前；
+         · 都没日期之间、以及同一批次内部：保持原来的相对顺序（稳定排序，不会自己乱跳）。 */
+    function _batchDateKey(name){
+      const n = String(name == null ? '' : name).trim();
+      /* 先认「2026-11-05 / 2026.11.5」这种带年份的写法 */
+      const iso = n.match(/(\d{4})\s*[.\-\/]\s*(\d{1,2})\s*[.\-\/]\s*(\d{1,2})/);
+      if (iso) {
+        const y4 = parseInt(iso[1], 10), m4 = parseInt(iso[2], 10), d4 = parseInt(iso[3], 10);
+        if (m4 >= 1 && m4 <= 12 && d4 >= 1 && d4 <= 31) return y4 * 10000 + m4 * 100 + d4;
+      }
+      const m = n.match(/(\d{1,2})\s*[.\-\/\u6708]\s*(\d{1,2})/);
+      if (!m) return null;
+      const mo = parseInt(m[1], 10), dd = parseInt(m[2], 10);
+      if (!(mo >= 1 && mo <= 12) || !(dd >= 1 && dd <= 31)) return null;
+      /* 批名一般不写年份 → 按「最近的过去」推断：比当前月大 6 个月以上就算去年 */
+      const now = new Date();
+      let y = now.getFullYear();
+      if (mo - (now.getMonth() + 1) > 6) y -= 1;
+      return y * 10000 + mo * 100 + dd;
+    }
+    /* 没日期的批次内部也定个次序，跟下拉的分组顺序对齐：默认批次 → 常驻/活动 → 其它 */
+    function _batchNoDateRank(name){
+      const n = String(name == null ? '' : name).trim();
+      if (n === '默认批次' || n === '默认') return 0;
+      if (n.indexOf('常驻') >= 0 || n.indexOf('活动') >= 0) return 1;
+      return 2;
+    }
+    function _cmpBatchDesc(a, b){
+      const ka = _batchDateKey(a), kb = _batchDateKey(b);
+      if (ka === null && kb === null) return _batchNoDateRank(a) - _batchNoDateRank(b);
+      if (ka === null) return -1;            /* 没日期的排最前 */
+      if (kb === null) return 1;
+      return kb - ka;                        /* 有日期的：从后往前 */
+    }
+    /* 分组标签排序：「默认」→「常驻/活动」→ 📅 月份（月份大的在前）→ 其它 */
+    function _cmpBatchGroup(a, b){
+      const t = function(s){
+        s = String(s || '');
+        if (s === '默认') return [0, 0];
+        if (s.indexOf('常驻') >= 0 || s.indexOf('活动') >= 0) return [1, 0];
+        const m = s.match(/(\d{1,2})/);
+        return m ? [2, -parseInt(m[1], 10)] : [3, 0];
+      };
+      const ta = t(a), tb = t(b);
+      return (ta[0] - tb[0]) || (ta[1] - tb[1]);
+    }
+    function _sortBatchNamesDesc(list){
+      return (Array.isArray(list) ? list : []).map(function(n, i){ return { n: n, i: i, k: _batchDateKey(n) }; })
+        .sort(function(a, b){
+          if (a.k === null && b.k === null) return (_batchNoDateRank(a.n) - _batchNoDateRank(b.n)) || (a.i - b.i);
+          if (a.k === null) return -1;
+          if (b.k === null) return 1;
+          return (b.k - a.k) || (a.i - b.i);
+        }).map(function(x){ return x.n; });
+    }
+    function _sortItemsByBatchDesc(list){
+      return (Array.isArray(list) ? list : []).map(function(it, i){
+          const _nm = String((it && it.batch_name) || '默认批次').trim();
+          return { it: it, i: i, nm: _nm, k: _batchDateKey(_nm) };
+        }).sort(function(a, b){
+          if (a.k === null && b.k === null) return (_batchNoDateRank(a.nm) - _batchNoDateRank(b.nm)) || (a.i - b.i);
+          if (a.k === null) return -1;
+          if (b.k === null) return 1;
+          return (b.k - a.k) || (a.i - b.i);   /* 同一批次保持原顺序 */
+        }).map(function(x){ return x.it; });
+    }
+
     function _sortValue(item, key) {
       if (key === 'price') return Number(item.price) || 0;
       if (key === 'quantity') return Number(item.quantity) || 0;
@@ -4805,7 +4882,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             });
 
       // ↕️ 排序只影响展示顺序（不动 RAW_ITEMS），勾选按 item_id 记所以排完还在
-      const filteredSorted = applySort(filtered);
+      /* 📅 2026-11-19 团长规则：没点表头排序时，排表明细按「所属批次日期」从后往前
+         （批名没日期的常驻/活动整块排最前，同一批次内保持录入顺序）。
+         点了表头排序就以表头为准 —— 那是团长当场要的临时视图，不抢。 */
+      const filteredSorted = (SORT_KEY && SORT_DIR) ? applySort(filtered) : _sortItemsByBatchDesc(filtered);
 
       const totalItems = filteredSorted.length;
       const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
@@ -5421,7 +5501,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       labelEl.innerText = '请选择或新建批次：';
       const includeArchived = document.getElementById('batchModalIncludeArchived')?.checked || false;
       const batchSet = buildBatchList(includeArchived);
-      const batchList = Array.from(batchSet);
+      /* 📅 2026-11-19：批次一律按日期从后往前；没日期的（默认/常驻/活动）排最前 */
+      const batchList = _sortBatchNamesDesc(Array.from(batchSet));
 
       // 构建分组：状态优先（归档归"已收款完结"），否则按日期/常驻分组；单批次组直接展开为独立选项
       const ARCHIVED_LABEL = '⚪ 已收款完结';
@@ -5436,19 +5517,24 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
         groups[g].push(b);
       });
+      groupOrder.sort(_cmpBatchGroup);
       const groupOpts = [];
       groupOrder.forEach(function(g){
-        const members = groups[g];
+        const members = _sortBatchNamesDesc(groups[g]);
         if (members.length <= 1) { standalone.push(members[0]); return; }
         groupOpts.push({ value: '__GROUP__:' + g, label: g + ' (' + members.length + '批)' });
       });
       // 保存分组映射，供展开模式使用
       window.BATCH_MODAL_GROUPS = groups;
 
-      const standaloneOpts = standalone.map(function(b){ return { value: b, label: b }; });
+      /* 📅 2026-11-19：没有日期的独立项（默认批次等）排到分组之前，有日期的独立项排在分组之后 */
+      const _stSorted  = _sortBatchNamesDesc(standalone);
+      const _stNoDate  = _stSorted.filter(function(b){ return _batchDateKey(b) === null; }).map(function(b){ return { value: b, label: b }; });
+      const _stDated   = _stSorted.filter(function(b){ return _batchDateKey(b) !== null; }).map(function(b){ return { value: b, label: b }; });
       BATCH_MODAL_FULL_OPTIONS = [
+        ..._stNoDate,
         ...groupOpts,
-        ...standaloneOpts,
+        ..._stDated,
         { value: '__NEW__', label: '➕ 新建批次...' },
         { value: '__DELETE_BATCH__', label: '🗂 归档某个批次选项（仅隐藏选项，不改谷子）' },
         { value: '__RESTORE_OPTIONS__', label: '🔄 恢复已归档批次选项' },

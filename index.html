@@ -2332,13 +2332,8 @@
             if(!gMap[g]){gMap[g]=[];gOrder.push(g);}
             gMap[g].push(b);
           });
-          gOrder.sort(function(a,b){
-            const ra=(a==='\u9ed8\u8ba4')?-1:(a.indexOf('\u5e38\u9a7b')!==-1?9:0);
-            const rb=(b==='\u9ed8\u8ba4')?-1:(b.indexOf('\u5e38\u9a7b')!==-1?9:0);
-            if(ra!==rb) return ra-rb;
-            const ma=a.match(/(\d{1,2})/), mb=b.match(/(\d{1,2})/);
-            return (mb?parseInt(mb[1],10):0)-(ma?parseInt(ma[1],10):0);
-          });
+          gOrder.sort(function(a,b){ return _cmpBatchGroup(a,b); });
+          gOrder.forEach(function(g){ gMap[g] = _sortBatchNamesDesc(gMap[g]); });   // 组内：有日期的新→旧
           batchSel.innerHTML = '<option value="">全部分类</option>' + gOrder.map(function(g){
             return '<optgroup label="'+escapeHtml(g)+'">'+gMap[g].map(function(b){return '<option value="'+escapeHtml(b)+'">'+escapeHtml(b)+'</option>';}).join('')+'</optgroup>';
           }).join('');
@@ -2468,7 +2463,9 @@
       const sel = document.getElementById('batchFilter');
       const batch = sel ? sel.value : '';
       const items = window.CURRENT_ITEMS || [];
-      const filter = batch ? items.filter(i=>String(i.batch_name||'默认批次').trim() === batch) : items;
+      const _filter0 = batch ? items.filter(i=>String(i.batch_name||'默认批次').trim() === batch) : items;
+      /* 📅 2026-11-19：结果列表也按批次日期从后往前（同一批次内保持原顺序，申请排发用的下标不受影响） */
+      const filter = _sortItemsByBatchDesc(_filter0);
       window.CURRENT_VIEW_ITEMS = filter;
       const list = document.getElementById('resultList');
       const stat = document.getElementById('resultStat');
@@ -2860,6 +2857,79 @@
         .toLowerCase()
         .replace(/\s+/g, '');
     }
+
+    /* ══ 📅 批次日期倒序（2026-11-19 团长规则）══
+       团长原话：「不管团员自查还是后台，有日期显示的地方都必须严格按照日期从后往前去排放」。
+       规则（一处定义，全站共用，别各自再写一份）：
+         · 批名里的「月.日」当日期 —— "11.5 小群小盘" / "台湾8.23" / "11.12-11.20" 都认；
+         · 有日期的：新的在前（从后往前）；
+         · 批名里没日期的（常驻 / 活动 / 科隆展物料打卡国际…）：整块排最前；
+         · 都没日期之间、以及同一批次内部：保持原来的相对顺序（稳定排序，不会自己乱跳）。 */
+    function _batchDateKey(name){
+      const n = String(name == null ? '' : name).trim();
+      /* 先认「2026-11-05 / 2026.11.5」这种带年份的写法（批名直接用日期的团长会这么起） */
+      const iso = n.match(/(\d{4})\s*[.\-\/]\s*(\d{1,2})\s*[.\-\/]\s*(\d{1,2})/);
+      if (iso) {
+        const y4 = parseInt(iso[1], 10), m4 = parseInt(iso[2], 10), d4 = parseInt(iso[3], 10);
+        if (m4 >= 1 && m4 <= 12 && d4 >= 1 && d4 <= 31) return y4 * 10000 + m4 * 100 + d4;
+      }
+      const m = n.match(/(\d{1,2})\s*[.\-\/\u6708]\s*(\d{1,2})/);
+      if (!m) return null;
+      const mo = parseInt(m[1], 10), dd = parseInt(m[2], 10);
+      if (!(mo >= 1 && mo <= 12) || !(dd >= 1 && dd <= 31)) return null;
+      /* 批名一般不写年份 → 按「最近的过去」推断：比当前月大 6 个月以上就算去年。
+         这样过了年再看 12 月的批次，它仍然是「旧的」，不会被当成最新的排到最前。 */
+      const now = new Date();
+      let y = now.getFullYear();
+      if (mo - (now.getMonth() + 1) > 6) y -= 1;
+      return y * 10000 + mo * 100 + dd;
+    }
+    /* 没日期的批次内部也定个次序，跟下拉的分组顺序对齐：默认批次 → 常驻/活动 → 其它 */
+    function _batchNoDateRank(name){
+      const n = String(name == null ? '' : name).trim();
+      if (n === '默认批次' || n === '默认') return 0;
+      if (n.indexOf('常驻') >= 0 || n.indexOf('活动') >= 0) return 1;
+      return 2;
+    }
+    function _cmpBatchDesc(a, b){
+      const ka = _batchDateKey(a), kb = _batchDateKey(b);
+      if (ka === null && kb === null) return _batchNoDateRank(a) - _batchNoDateRank(b);
+      if (ka === null) return -1;            /* 没日期的排最前 */
+      if (kb === null) return 1;
+      return kb - ka;                        /* 有日期的：从后往前 */
+    }
+    /* 分组标签排序：「默认」→「常驻/活动」→ 📅 月份（月份大的在前） */
+    function _cmpBatchGroup(a, b){
+      const t = function(s){
+        s = String(s || '');
+        if (s === '默认') return [0, 0];
+        if (s.indexOf('常驻') >= 0 || s.indexOf('活动') >= 0) return [1, 0];
+        const m = s.match(/(\d{1,2})/);
+        return m ? [2, -parseInt(m[1], 10)] : [3, 0];
+      };
+      const ta = t(a), tb = t(b);
+      return (ta[0] - tb[0]) || (ta[1] - tb[1]);
+    }
+    function _sortBatchNamesDesc(list){
+      return (Array.isArray(list) ? list : []).map(function(n, i){ return { n: n, i: i, k: _batchDateKey(n) }; })
+        .sort(function(a, b){
+          if (a.k === null && b.k === null) return (_batchNoDateRank(a.n) - _batchNoDateRank(b.n)) || (a.i - b.i);
+          if (a.k === null) return -1;
+          if (b.k === null) return 1;
+          return (b.k - a.k) || (a.i - b.i);
+        }).map(function(x){ return x.n; });
+    }
+    function _sortItemsByBatchDesc(list){
+      return (Array.isArray(list) ? list : []).map(function(it, i){
+          const _nm = String((it && it.batch_name) || '默认批次').trim();
+          return { it: it, i: i, nm: _nm, k: _batchDateKey(_nm) };
+        }).sort(function(a, b){
+          if (a.k === null && b.k === null) return (_batchNoDateRank(a.nm) - _batchNoDateRank(b.nm)) || (a.i - b.i);
+          if (a.k === null) return -1;
+          if (b.k === null) return 1;
+          return (b.k - a.k) || (a.i - b.i);   /* 同一批次保持原顺序 */
+        }).map(function(x){ return x.it; });
+    }
     /* 💰 本批是否开了定金 —— 读后台「💰 定金设置」写下的 image_data.batch_plans。
        返回 { ratio } 或 null。未启用 / 比例不合法一律 null：
        「读不到就按全款走」，绝不能因为配置异常把团员的交款口改歪。 */
@@ -3117,6 +3187,10 @@
                       intl: _isIntl, hasIntl: _isIntl && !_isIslandProof, island: _isIslandProof };
         order.push(k);
       });
+
+      /* 📅 2026-11-19 团长规则：交款区的批次卡片同样按批次日期从后往前，
+         批名没日期的（常驻/活动）排最前；同一批次内部顺序不变。 */
+      order.sort(function(a, b){ return _cmpBatchDesc(groups[a].name, groups[b].name); });
 
       // 💰 每批「还欠多少尾款」= 该批**已通过**的定金凭证上固化的 balance_due 之和。
       //    ⚠️ 金额在后台审核那一刻就写死在凭证上，**不按当前比例重算** ——
