@@ -3011,6 +3011,38 @@ cn 点数 金额
       .container { margin: 0 12px !important; }
       .tab-content#tabCalc { margin: 0 12px !important; }
 
+      /* ── 2026-11-19 手机端 header 修复（团长反馈「按钮竖成一条」「黑线超出卡片」）──
+         原因：.user-info 是 nowrap 的 flex 行，三个按钮都能被压缩 → 每个字占一行；
+         且这一排的最小宽度（实测 312px）大于卡片内容区（390 宽的手机只有 284px），
+         把 header 内容宽度顶大，.terminal-title 的下划线跟着溢出到卡片外面。
+         改法：按钮统一缩小 + 不许换行/压缩；登录邮箱单独占一行（过长用省略号）。 */
+      .user-info {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 6px;
+        font-size: .8rem;
+      }
+      #userEmailSpan {
+        flex: 1 1 100%;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .user-info .btn {
+        flex: 0 0 auto;
+        white-space: nowrap;
+        padding: 5px 9px !important;
+        font-size: .78rem !important;
+      }
+      /* 标题那条黑线（border-bottom）不许超出卡片内容区 */
+      .terminal-title { width: 100%; max-width: 100%; min-width: 0; }
+      .terminal-title h1 { white-space: nowrap; min-width: 0; }
+
       /* 标题跟着导航变之后文案变长（如「算账中心 · 退款补录」10 个字），
          390px 下原字号 + 右侧英文副标会把 header 顶成一倍高 → 收小字号并藏掉英文副标。 */
       .terminal-title h1 { font-size: 1.12rem; }
