@@ -1379,16 +1379,13 @@
     #loginBadge{
       --ink:#0E0F12; --blue:#1B9CF0; --panel:#FFFFFF;
       --hint:#F4F5F7; --line:#E4E6EA; --muted:#6B7280;
-      /* 2026-11-19 二改：团长在 App（安卓 WebView）里说「还在跟」。
-         fixed 在 WebView 里天生不稳（滚动时先跟着走一段再弹回），加过渡/加图层都盖不住。
-         改成 absolute（相对 body）：静止时坐标和 fixed 一模一样（top 132 / right 12），
-         往下滚它就跟着文档一起滚出屏幕 —— 几何上不可能再"跟随抖动"，也不需要任何 JS 补丁。
-         代价：滚回顶部它是直接出现（不再淡入）。 */
-      position:absolute; top:132px; right:12px; z-index:99997;
+      /* 2026-11-19 定稿：保持 fixed（钉在屏幕右上，团长原始诉求就是这个），
+         但去掉 translateZ/will-change —— 给 fixed 单独建图层恰好是 WebView 里
+         "滚动时先跟着走一段再弹回"的常见诱因，普通 fixed 反而不抖。
+         再配上面 JS 的"一滚动就 0 过渡隐藏"：即使有残余跟随也看不见。 */
+      position:fixed; top:132px; right:12px; z-index:99997;
       display:flex; align-items:center; font-family:var(--sans);
-      background:transparent; border:0; border-radius:0; box-shadow:none;
-      transform:translateZ(0); -webkit-transform:translateZ(0);
-      -webkit-backface-visibility:hidden; backface-visibility:hidden;}
+      background:transparent; border:0; border-radius:0; box-shadow:none;}
     #loginBadge.hidden{display:none;}
     #loginBadge .sb-dot{flex:none; width:7px; height:7px; border-radius:50%;
       background:var(--blue); margin-right:9px;}
