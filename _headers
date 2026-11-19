@@ -13,3 +13,9 @@
 # 图标内容不变，但文件名不带版本号 → 只给 1 小时，方便以后换图标能生效
 /app-icons/*
   Cache-Control: public, max-age=3600
+
+# 安装包：必须给安卓的 MIME，否则手机浏览器会当文本打开
+/download/*.apk
+  Content-Type: application/vnd.android.package-archive
+  Content-Disposition: attachment
+  Cache-Control: no-cache
