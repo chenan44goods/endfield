@@ -5909,6 +5909,11 @@ function aucConfirmYes(){ aucConfirmNo(); }
      只监听浮层开合，不改动任何现有函数；登录身份直通四个面板的逻辑一行不动。 -->
 <style>
   #loginBadge.sb-inpanel{display:none !important;}
+  /* 2026-11-19 团长选定：它是「首屏提示」性质的东西，往下滑就该让位，别压着卡片。
+     滑回顶部自动回来；只动 opacity，位置/尺寸/颜色一个像素不动。 */
+  #loginBadge{transition:opacity .22s ease;}
+  #loginBadge.sb-scrollaway{opacity:0; pointer-events:none;}
+  @media (prefers-reduced-motion:reduce){ #loginBadge{transition:none;} }
 </style>
 <script>
 (function(){
@@ -5953,6 +5958,24 @@ function aucConfirmYes(){ aucConfirmNo(); }
     document.addEventListener('click', function(){ setTimeout(sync, 200); }, true);
   }
   window.addEventListener('pageshow', schedule);
+
+  /* 往下滑就把状态条淡出，滑回顶部再出现（团长 2026-11-19 选定）。
+     它只在首屏有意义，滚下去还挂着会压住「我要存钱」等卡片。
+     ⚠️ 只加/去 sb-scrollaway 一个 class，不改位置尺寸；阈值 16px 防止手指轻抖误触。 */
+  var _sbAway = null;
+  function scrollSync(){
+    var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var away = y > 16;
+    if (away === _sbAway) return;          /* 状态没变不碰 DOM */
+    _sbAway = away;
+    var b = document.getElementById('loginBadge');
+    if (b) b.classList.toggle('sb-scrollaway', away);
+  }
+  window.addEventListener('scroll', function(){
+    if (window.requestAnimationFrame) requestAnimationFrame(scrollSync);
+    else scrollSync();
+  }, { passive: true });
+  scrollSync();
 })();
 </script>
 <!-- ═══ 可安装网页：注册 Service Worker · 2026-11-19 ═══════════════════════
