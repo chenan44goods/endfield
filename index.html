@@ -5913,6 +5913,9 @@ function aucConfirmYes(){ aucConfirmNo(); }
      滑回顶部自动回来；只动 opacity，位置/尺寸/颜色一个像素不动。 */
   #loginBadge{transition:opacity .22s ease;}
   #loginBadge.sb-scrollaway{opacity:0; pointer-events:none;}
+  /* App 壳（安卓 WebView）里 fixed 元素滚动时有渲染延迟，会"跟着页面走一下"。
+     滚动中额外挂这个类：0 过渡立即消失，滚动过程中它根本没有出现的机会。 */
+  #loginBadge.sb-rolling{transition:none; opacity:0; pointer-events:none;}
   @media (prefers-reduced-motion:reduce){ #loginBadge{transition:none;} }
 </style>
 <script>
@@ -5960,16 +5963,27 @@ function aucConfirmYes(){ aucConfirmNo(); }
   window.addEventListener('pageshow', schedule);
 
   /* 往下滑就把状态条淡出，滑回顶部再出现（团长 2026-11-19 选定）。
-     它只在首屏有意义，滚下去还挂着会压住「我要存钱」等卡片。
-     ⚠️ 只加/去 sb-scrollaway 一个 class，不改位置尺寸；阈值 16px 防止手指轻抖误触。 */
-  var _sbAway = null;
+     ⚠️ 团长在 App（安卓 WebView 壳）里看到它还是"跟着滑"：WebView 对 fixed 元素的
+     渲染有延迟，元素会先跟着页面走一小段才弹回。光加过渡盖不住这段跟随。
+     做法：一滚动（>2px）就挂 .sb-rolling 立刻消失（0 过渡），滚停 140ms 后再按位置决定
+     是否恢复 —— 滚动过程中它根本没有出现的机会。 */
+  var _sbAway = null, _sbRollT = null, _sbRolling = false;
   function scrollSync(){
     var y = window.pageYOffset || document.documentElement.scrollTop || 0;
-    var away = y > 16;
-    if (away === _sbAway) return;          /* 状态没变不碰 DOM */
-    _sbAway = away;
     var b = document.getElementById('loginBadge');
-    if (b) b.classList.toggle('sb-scrollaway', away);
+    if (!b) return;
+    var away = y > 16;
+    if (away !== _sbAway) { _sbAway = away; b.classList.toggle('sb-scrollaway', away); }
+    if (y > 2 && !_sbRolling) { _sbRolling = true; b.classList.add('sb-rolling'); }
+    clearTimeout(_sbRollT);
+    _sbRollT = setTimeout(function(){
+      var bb = document.getElementById('loginBadge');
+      if (!bb) { _sbRolling = false; return; }
+      var yy = window.pageYOffset || document.documentElement.scrollTop || 0;
+      _sbRolling = false;
+      bb.classList.remove('sb-rolling');
+      if (yy <= 16) { _sbAway = false; bb.classList.remove('sb-scrollaway'); }
+    }, 140);
   }
   window.addEventListener('scroll', function(){
     if (window.requestAnimationFrame) requestAnimationFrame(scrollSync);

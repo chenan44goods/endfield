@@ -19,3 +19,15 @@
   Content-Type: application/vnd.android.package-archive
   Content-Disposition: attachment
   Cache-Control: no-cache
+
+# 页面本身绝不缓存 · 2026-11-19
+# 团长在 App 壳里改了看不到 / 修了还是老样子，最常见的原因就是壳把旧 html 缓存住了。
+# 首页与后台都要求每次向服务器验证，保证发版后 App 重开一次就是新版。
+/
+  Cache-Control: no-cache, must-revalidate
+
+/index.html
+  Cache-Control: no-cache, must-revalidate
+
+/admin.html
+  Cache-Control: no-cache, must-revalidate
