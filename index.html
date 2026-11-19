@@ -1381,7 +1381,13 @@
       --hint:#F4F5F7; --line:#E4E6EA; --muted:#6B7280;
       position:fixed; top:132px; right:12px; z-index:99997;
       display:flex; align-items:center; font-family:var(--sans);
-      background:transparent; border:0; border-radius:0; box-shadow:none;}
+      background:transparent; border:0; border-radius:0; box-shadow:none;
+      /* 2026-11-19 团长反馈「滑动页面时它也跟着滑」。
+         某些手机浏览器/WebView 里 fixed 元素滚动时会有跟随延迟（iOS 经典问题），
+         提升成独立合成层就不会再"粘"着页面走。只影响渲染方式，外观零变化。 */
+      transform:translateZ(0); -webkit-transform:translateZ(0);
+      will-change:transform;
+      -webkit-backface-visibility:hidden; backface-visibility:hidden;}
     #loginBadge.hidden{display:none;}
     #loginBadge .sb-dot{flex:none; width:7px; height:7px; border-radius:50%;
       background:var(--blue); margin-right:9px;}
