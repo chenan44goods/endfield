@@ -1379,14 +1379,15 @@
     #loginBadge{
       --ink:#0E0F12; --blue:#1B9CF0; --panel:#FFFFFF;
       --hint:#F4F5F7; --line:#E4E6EA; --muted:#6B7280;
-      position:fixed; top:132px; right:12px; z-index:99997;
+      /* 2026-11-19 二改：团长在 App（安卓 WebView）里说「还在跟」。
+         fixed 在 WebView 里天生不稳（滚动时先跟着走一段再弹回），加过渡/加图层都盖不住。
+         改成 absolute（相对 body）：静止时坐标和 fixed 一模一样（top 132 / right 12），
+         往下滚它就跟着文档一起滚出屏幕 —— 几何上不可能再"跟随抖动"，也不需要任何 JS 补丁。
+         代价：滚回顶部它是直接出现（不再淡入）。 */
+      position:absolute; top:132px; right:12px; z-index:99997;
       display:flex; align-items:center; font-family:var(--sans);
       background:transparent; border:0; border-radius:0; box-shadow:none;
-      /* 2026-11-19 团长反馈「滑动页面时它也跟着滑」。
-         某些手机浏览器/WebView 里 fixed 元素滚动时会有跟随延迟（iOS 经典问题），
-         提升成独立合成层就不会再"粘"着页面走。只影响渲染方式，外观零变化。 */
       transform:translateZ(0); -webkit-transform:translateZ(0);
-      will-change:transform;
       -webkit-backface-visibility:hidden; backface-visibility:hidden;}
     #loginBadge.hidden{display:none;}
     #loginBadge .sb-dot{flex:none; width:7px; height:7px; border-radius:50%;
