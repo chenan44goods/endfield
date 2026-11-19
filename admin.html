@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <!-- ⚡ 资源预加载（2026-11-16）：让脚本与 HTML 并行下载 -->
-  <link rel="preload" href="./admin.app.js?v=2a8de5e5" as="script">
+  <link rel="preload" href="./admin.app.js?v=64aa8edc" as="script">
   <link rel="preload" href="./admin.auction.js?v=f09a384b" as="script">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script>
@@ -1473,6 +1473,15 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
   /* 手机上把「—」这种空值行收起来，别让每张卡片都挂着三行没用的占位 */
   table.piggy-t td[data-empty="1"] { display: none !important; }
 }
+
+/* ══════════ 录入表单折叠 · 2026-11-19 ══════════════════════════════════
+   排表管理页最上面那个「📝 录入/编辑谷子」大表单（11 个输入框）默认收起，
+   只在卡片标题右边留一个「＋ 录入谷子」按钮，点一下就地展开、再点收起。
+   目的：手机上打开排表管理，一屏就能看到排表明细，不用先划过一大片表单。
+   ⚠️ 只加 class 控制显示，表单 DOM 一直在，输入内容不会丢。 */
+#itemFormCard.collapsed #itemForm { display: none; }
+#itemFormCard.collapsed .card-title { margin-bottom: 0; }
+#itemFormCard #btnToggleForm { white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -1545,10 +1554,14 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
 
         <!-- 标签页 1：排表管理 -->
     <div class="tab-content active" id="tabItems">
-      <div class="card">
+      <div class="card collapsed" id="itemFormCard">
         <div class="card-title">
           <span id="formTitle">📝 录入/编辑谷子</span>
-          <button class="btn btn-secondary" id="btnClearForm" style="display: none; padding: 2px 8px; font-size: 0.8rem;" onclick="clearForm()">取消编辑</button>
+          <div class="btn-group" style="gap: 8px; align-items: center;">
+            <button class="btn btn-secondary" id="btnClearForm" style="display: none; padding: 2px 8px; font-size: 0.8rem;" onclick="clearForm()">取消编辑</button>
+            <!-- FORM_TOGGLE 2026-11-19：录入表单默认收起，点开才展开（手机上一屏能看到排表明细） -->
+            <button class="btn btn-primary" id="btnToggleForm" type="button" onclick="toggleItemForm()" style="padding: 3px 12px; font-size: 0.82rem;">＋ 录入谷子</button>
+          </div>
         </div>
         <form id="itemForm" onsubmit="event.preventDefault(); saveItemForm();">
           <input type="hidden" id="editItemId">
@@ -2585,7 +2598,7 @@ cn 点数 金额
   <div class="toast" id="toast"></div>
 
   </div>
-<script src="./admin.app.js?v=2a8de5e5"></script>
+<script src="./admin.app.js?v=64aa8edc"></script>
 
 
 

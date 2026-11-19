@@ -5044,9 +5044,27 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       imgResetUploader();
       document.getElementById('formTitle').innerText = '✏️ 修改谷子信息';
       document.getElementById('btnClearForm').style.display = 'inline-block';
+      toggleItemForm(true);    // 点「编辑」必须先把收起的大表单展开，否则什么都没发生
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
     window.editItemByIndex = editItemByIndex;
+
+    /* ══════════ 录入表单折叠 · 2026-11-19 团长要求 ══════════════════════
+       排表管理页最上面那个大表单（📝 录入/编辑谷子，11 个输入框）默认收成
+       一个「＋ 录入谷子」按钮，点了就地展开、再点收起。手机上一屏就能看到列表。
+       为什么不纯用 CSS：①点某条「编辑」时要自动展开并滚到表单
+                        ②保存成功后要自动收回去 —— 这两处都得 JS 参与。
+       force: true=强制展开, false=强制收起, 不传=切换。 */
+    function toggleItemForm(force) {
+      const card = document.getElementById('itemFormCard');
+      const btn = document.getElementById('btnToggleForm');
+      if (!card) return false;
+      const open = (typeof force === 'boolean') ? force : card.classList.contains('collapsed');
+      card.classList.toggle('collapsed', !open);
+      if (btn) btn.innerText = open ? '收起 ▲' : '＋ 录入谷子';
+      return open;
+    }
+    window.toggleItemForm = toggleItemForm;
 
     function clearForm() {
       document.getElementById('editItemId').value = '';
@@ -5063,6 +5081,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       IS_IMAGE_UPLOADING = false;
       document.getElementById('formTitle').innerText = '📝 录入/编辑谷子';
       document.getElementById('btnClearForm').style.display = 'none';
+      toggleItemForm(false);   // 清空后自动收回，别让它一直占着屏
     }
     window.clearForm = clearForm;
 
