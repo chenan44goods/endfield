@@ -1402,6 +1402,18 @@
     #loginBadge.sb-b{min-height:44px; padding:0 4px; border-bottom:1px solid var(--line);}
     #loginBadge.sb-b .sb-out{border-radius:8px;}
     #loginBadge.sb-b .sb-out:hover{background:var(--hint);}
+    /* 2026-11-19 手机端单独定位（团长截图：「已登录 辰安 退出登录」压在装饰行
+       「№ SHAN TUAN · GRAND GARDEN」上，叠字看不清）。
+       top:132px 是桌面为了避开 .hud-panel（底≈119）；.hud-panel 在 ≤900px 已是 display:none，
+       所以手机上还按 132px 就正好落进装饰行里。
+       改法：跟着视口高走，落在「眉标」和装饰行中间那条空档的垂直正中，并压扁到 30px。
+       （本站 hero 顶部有 60px 的 logo 图，整块比粥团低约 47px，所以常数跟着不一样。）
+       实测 390×844 / 360×780 / 375×667 / 412×915 四档都夹在空档里，上下都不碰字（≥5px）。 */
+    @media (max-width: 900px){
+      #loginBadge{top:calc(11.6vh + 7px);}
+      #loginBadge.sb-b{min-height:30px;}
+      #loginBadge .sb-out{height:30px; padding:0 10px;}
+    }
     /* 图标左上角红点：挂在 .entry 上（.entry-icon 自带 clip-path 会裁掉内侧红点） */
     .todo-dot{position:absolute; top:2px; left:-4px; width:12px; height:12px;
       border-radius:50%; background:#e11d48; border:2px solid #fff;
