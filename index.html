@@ -5960,34 +5960,60 @@ function aucConfirmYes(){ aucConfirmNo(); }
   }
   window.addEventListener('pageshow', schedule);
 
-  /* 往下滑就把状态条淡出，滑回顶部再出现（团长 2026-11-19 选定）。
-     ⚠️ 团长在 App（安卓 WebView 壳）里看到它还是"跟着滑"：WebView 对 fixed 元素的
-     渲染有延迟，元素会先跟着页面走一小段才弹回。光加过渡盖不住这段跟随。
-     做法：一滚动（>2px）就挂 .sb-rolling 立刻消失（0 过渡），滚停 140ms 后再按位置决定
-     是否恢复 —— 滚动过程中它根本没有出现的机会。 */
+  /* 往下滑就把状态条收起，滑回顶部再出现（团长 2026-11-19 定）。
+
+     ═══ 2026-11-19 第二次返工的真正原因（务必保留这段注释）═══
+     本站 body 是 height:100% + overflow-y:auto —— 手机上「body 自己就是滚动容器」，
+     而不是整个文档在滚。而 scroll 事件【不冒泡】，只挂在 window 上的监听器在真机上
+     永远收不到 body 的滚动 → 之前写的「一滚动就隐藏」一次都没执行过，
+     所以团长看到的现象是「改了三版，一点变化都没有」，不是 CSS 没生效。
+
+     现在三管齐下，任何一条命中都会立刻收起：
+       ① window / document 上以【捕获阶段】监听 scroll —— 事件不冒泡，捕获阶段照样经过
+       ② 额外监听 touchmove / wheel —— 手指一动就躲开，完全不依赖"谁是滚动容器"
+       ③ 读位置时把 window / documentElement / body / scrollingElement 全取最大值 */
   var _sbAway = null, _sbRollT = null, _sbRolling = false;
-  function scrollSync(){
-    var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+
+  function _sbScrollY(){
+    var y = window.pageYOffset || 0;
+    var se = document.scrollingElement || document.documentElement;
+    var cand = [document.documentElement, document.body, se];
+    for (var i = 0; i < cand.length; i++) {
+      if (cand[i] && cand[i].scrollTop > y) y = cand[i].scrollTop;
+    }
+    return y;
+  }
+
+  function _sbPoke(){
     var b = document.getElementById('loginBadge');
     if (!b) return;
-    var away = y > 16;
-    if (away !== _sbAway) { _sbAway = away; b.classList.toggle('sb-scrollaway', away); }
-    if (y > 2 && !_sbRolling) { _sbRolling = true; b.classList.add('sb-rolling'); }
+    if (!_sbRolling) { _sbRolling = true; b.classList.add('sb-rolling'); }
     clearTimeout(_sbRollT);
     _sbRollT = setTimeout(function(){
       var bb = document.getElementById('loginBadge');
-      if (!bb) { _sbRolling = false; return; }
-      var yy = window.pageYOffset || document.documentElement.scrollTop || 0;
       _sbRolling = false;
+      if (!bb) return;
       bb.classList.remove('sb-rolling');
-      if (yy <= 16) { _sbAway = false; bb.classList.remove('sb-scrollaway'); }
-    }, 140);
+      var away = _sbScrollY() > 16;
+      if (away !== _sbAway) { _sbAway = away; bb.classList.toggle('sb-scrollaway', away); }
+    }, 180);
   }
-  window.addEventListener('scroll', function(){
-    if (window.requestAnimationFrame) requestAnimationFrame(scrollSync);
-    else scrollSync();
-  }, { passive: true });
-  scrollSync();
+
+  try {
+    window.addEventListener('scroll', _sbPoke, { passive: true, capture: true });
+    document.addEventListener('scroll', _sbPoke, { passive: true, capture: true });
+    window.addEventListener('touchmove', _sbPoke, { passive: true, capture: true });
+    window.addEventListener('wheel', _sbPoke, { passive: true, capture: true });
+  } catch (e) {
+    /* 极老内核不支持 capture 选项：退回普通监听，至少保留一半能力 */
+    window.addEventListener('scroll', _sbPoke, true);
+    window.addEventListener('touchmove', _sbPoke, true);
+  }
+  _sbAway = _sbScrollY() > 16;
+  if (_sbAway) {
+    var _b0 = document.getElementById('loginBadge');
+    if (_b0) _b0.classList.add('sb-scrollaway');
+  }
 })();
 </script>
 <!-- ═══ 可安装网页：注册 Service Worker · 2026-11-19 ═══════════════════════
