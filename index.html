@@ -947,6 +947,33 @@
       background:var(--ink); color:var(--paper); font-family:var(--sans); font-size:13px; font-weight:700;
       letter-spacing:0.04em; cursor:pointer; box-shadow:3px 3px 0 rgba(33,33,33,0.18); }
     .result-empty .retry-btn:active { transform:translateY(1px); box-shadow:1px 1px 0 rgba(33,33,33,0.18); }
+    /* 📦 排发调度分区标题（2026-11-20）：待排发 / 可排发 两块分开，别让人分不清哪条还能点。
+       ⚠️ 必须实底：结果区铺在人物插画上，纯文字直接浮着几乎看不清（第一版就踩了）。 */
+    .r-sect { display:flex; align-items:center; flex-wrap:wrap; gap:8px;
+      margin:2px 0 8px; padding:9px 12px; border-radius:10px;
+      background:rgba(250,250,246,.97); border:1px solid rgba(22,24,28,.09);
+      box-shadow:0 2px 10px rgba(0,0,0,.12); }
+    .r-sect .r-sect-t { font-size:13px; font-weight:800; letter-spacing:.02em; color:#212121; }
+    .r-sect .r-sect-n { font-size:11px; font-weight:800; color:#6b21a8;
+      background:rgba(107,33,168,.12); padding:2px 8px; border-radius:999px; white-space:nowrap; }
+    .r-sect-pend { border-left:4px solid #a855f7; }
+    .r-sect-pend .r-sect-t { color:#6b21a8; }
+    .r-sect .r-copy { margin-left:auto; border:1px solid rgba(126,34,206,.32); background:#efe2fb; color:#6b21a8;
+      font-family:var(--sans); font-size:12px; font-weight:700; padding:6px 10px; border-radius:8px;
+      cursor:pointer; white-space:nowrap; }
+    .r-sect .r-copy:hover { background:#e6d5f9; }
+    .r-sect-tip { font-size:12px; line-height:1.6; color:#5b1f8a; background:rgba(250,250,246,.94);
+      border:1px solid rgba(168,85,247,.35); border-left:4px solid #a855f7; border-radius:8px;
+      padding:8px 10px; margin:0 0 12px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+    .copy-raw { background:rgba(22,24,28,.05); border-radius:6px; padding:10px; font-size:12px;
+      line-height:1.7; text-align:left; word-break:break-all; user-select:text; -webkit-user-select:text; }
+    @media (max-width:600px){
+      .r-sect { padding:8px 10px; }
+      .r-sect .r-sect-t { font-size:12px; }
+      /* 手机一行塞不下「标题+件数+按钮」→ 按钮独占一行、满宽：
+         拇指好点，也不会孤零零吊在右边像出错 */
+      .r-sect .r-copy { flex:1 1 100%; margin-left:0; padding:9px 10px; font-size:12.5px; }
+    }
     .stat-pill { display:inline-block; background:rgba(22,24,28,0.72); color:#f5f4ec; padding:8px 16px; border-radius:999px; font-size:13px; font-weight:600; letter-spacing:0.06em; backdrop-filter:blur(3px); }
     .batch-label-pill { display:inline-block; background:rgba(22,24,28,0.72); color:#f5f4ec; padding:8px 12px; border-radius:999px; font-size:11px; letter-spacing:0.12em; backdrop-filter:blur(3px); }
     .r-batch { font-size:11px; color:#7a756a; margin-top:4px; letter-spacing:0.02em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
@@ -2281,11 +2308,16 @@
             return c === lower && (s === '未付款' || s === '未交' || s === '已交定金');
           });
         } else if (mode === 'dispatch') {
-          // 排发调度：该 CN 可排发
+          /* 📦 2026-11-20 团长要求：排发调度必须能看到「已提交、团长还没发」的谷子。
+             以前这里只筛「可排发」→ 团员一点一键排发，状态变「待发货」，整页立刻清空，
+             既看不见自己交了哪些，也没东西可截图/复制给团长，货就这么压着。
+             现在「待发货」也收进来；渲染时单独一块置顶、只读、没有申请按钮。
+             团长在后台点「一键派发」→ 谷子变「已排发」→ 自动从这里消失（这就是「团长完成排发才消失」）。
+             ⚠️ 不新增状态：后台那条「待发货（团员已申请/打包中）」就是这个状态，语义本来就对。 */
           items = arr.filter(it => {
             const c = String(it.cn||'').trim().toLowerCase();
             const s = String(it.status||'').trim();
-            return c === lower && s === '可排发';
+            return c === lower && (s === '可排发' || s === '待发货');
           });
         } else {
           // 自助查询：该 CN 的全部谷子（含已排发归档，状态标签可见，历史不丢）
@@ -2344,7 +2376,11 @@
         if (mode === 'fee') {
           stat.innerText = '未交 ' + items.length + ' 条，应交 ￥' + totalAmt.toFixed(2);
         } else if (mode === 'dispatch') {
-          stat.innerText = '可排发 ' + items.length + ' 条，总件 ' + totalQty;
+          /* 📦 两块分开数：待排发（已提交等团长发） + 可排发（还能交） */
+          const _pwA = items.filter(function(x){ return String(x.status||'').trim() === '待发货'; });
+          const _rwA = items.filter(function(x){ return String(x.status||'').trim() === '可排发'; });
+          const _sqA = function(a){ return a.reduce(function(t,x){ return t + (Number(x.quantity)||1); }, 0); };
+          stat.innerText = '待排发 ' + _sqA(_pwA) + ' 件 · 可排发 ' + _sqA(_rwA) + ' 件';
         } else {
           stat.innerText = '共 ' + items.length + ' 条，总件 ' + totalQty;
         }
@@ -2475,7 +2511,13 @@
       if (currentPanel === 'fee') {
         if (stat) stat.innerText = '未交 ' + filter.length + ' 条，应交 ￥' + totalAmt.toFixed(2);
       } else if (currentPanel === 'dispatch') {
-        if (stat) stat.innerText = '可排发 ' + filter.length + ' 条，总件 ' + totalQty;
+        if (stat) {
+          /* 📦 同上：待排发 / 可排发 分别数件数（按分类筛选后同步变） */
+          const _pwB = filter.filter(function(x){ return String(x.status||'').trim() === '待发货'; });
+          const _rwB = filter.filter(function(x){ return String(x.status||'').trim() === '可排发'; });
+          const _sqB = function(a){ return a.reduce(function(t,x){ return t + (Number(x.quantity)||1); }, 0); };
+          stat.innerText = '待排发 ' + _sqB(_pwB) + ' 件 · 可排发 ' + _sqB(_rwB) + ' 件';
+        }
       } else {
         if (stat) stat.innerText = '共 ' + filter.length + ' 条，总件 ' + totalQty;
       }
@@ -2485,8 +2527,36 @@
         measureCarousel();
         return;
       }
-      if (applyAllBtn) applyAllBtn.style.display = (currentPanel === 'dispatch') ? 'inline-block' : 'none';
-      if (list) list.innerHTML = filter.map((it, idx)=>{
+      /* 📦 2026-11-20：排发调度分两块显示 —— 上面「待排发」（只读，等团长发），下面「可排发」（带按钮）。
+         关键：applyDispatchItem(idx) 用的是「在 filter 里的原始下标」，所以这里只重排显示顺序，
+         idx 必须仍然取 row.i，不能改成循环序号，否则会点 A 提交 B。 */
+      const _isDp = (currentPanel === 'dispatch');
+      const _pendRows = [], _readyRows = [];
+      if (_isDp) {
+        filter.forEach(function(it, i){
+          const _st = String((it && it.status) || '').trim();
+          (_st === '待发货' ? _pendRows : _readyRows).push({ it: it, i: i });
+        });
+      }
+      const _rows = _isDp ? _pendRows.concat(_readyRows) : filter.map(function(it, i){ return { it: it, i: i }; });
+      const _qtyOf = function(rows){ return rows.reduce(function(t, r){ return t + (Number(r.it.quantity) || 1); }, 0); };
+      function _sectHead(kind, n){
+        if (kind === 'pending') {
+          return '<div class="r-sect r-sect-pend"><span class="r-sect-t">📦 待排发 · 等团长打包发货</span>'
+               + '<b class="r-sect-n">' + n + ' 件</b>'
+               + '<button class="r-copy" onclick="copyDispatchList()">📋 复制清单</button></div>'
+               + '<div class="r-sect-tip">把清单复制（或截图这一页）发给团长，才算真通知到他。团长点发货后这里会自动消失。</div>';
+        }
+        return '<div class="r-sect"><span class="r-sect-t">✅ 可排发 · 现在就能提交</span>'
+             + '<b class="r-sect-n">' + n + ' 件</b></div>';
+      }
+      /* 一键排发只在「确实还有可排发的」时出现：否则页面上只剩待排发，按钮点了也只会提示没得排 */
+      if (applyAllBtn) applyAllBtn.style.display = (_isDp && _readyRows.length) ? 'inline-block' : 'none';
+      if (list) list.innerHTML = _rows.map(function(row, _ri){
+        const it = row.it, idx = row.i;
+        let _head = '';
+        if (_isDp && _pendRows.length && _ri === 0) _head = _sectHead('pending', _qtyOf(_pendRows));
+        if (_isDp && _readyRows.length && _ri === _pendRows.length) _head = _sectHead('ready', _qtyOf(_readyRows));
         const q=Number(it.quantity)||1;
         const showStatus = currentPanel !== 'fee';
         const isDispatch = currentPanel === 'dispatch';
@@ -2506,7 +2576,7 @@
         const orderHtml=_opParts.length?'<div class="r-batch">\ud83d\uded2 '+escapeHtml(_opParts.join(' · '))+'</div>':'';
         // 囤货到期行放在「金额 + 状态」下面（2026-09-30 团长要求：红字 + 贴着状态更醒目），
         // 不再挂在左侧信息区的批次/下单日期下面。
-        return '<div class="result-item">'+imgHtml+
+        return _head + '<div class="result-item">'+imgHtml+
           '<div class="r-info"><div class="r-name">'+escapeHtml(it.name||'未命名')+'</div>'+
           '<div class="r-meta">'+(it.country||'日本')+' ×'+q+'</div>'+
           batchHtml+orderHtml+'</div>'+
@@ -2669,6 +2739,67 @@
       if (!ok) return;
       submitApply(items, note);
     }
+    /* 📋 复制排发清单（2026-11-20 团长要求）
+       为什么要有它：团员交完排发就忘截图，团长那边就不知道要发什么。
+       截图有三个毛病 —— 会糊、会漏行、团长没法搜索；纯文本粘到 QQ 里全都没有。
+       注意：不传参数时取「当前页上所有待发货」，而不是只看筛选后的可见项 ——
+       团长要的是全量清单，少报一批比多报更麻烦。 */
+    function _buildDispatchListText(items, note){
+      const cnEl = document.getElementById('panelCn');
+      const cn = (cnEl && cnEl.value) ? String(cnEl.value).trim() : '';
+      const list = (items || []).filter(Boolean);
+      const out = [];
+      out.push('【待排发清单】CN：' + (cn || '（未填）'));
+      out.push('——————————');
+      list.forEach(function(it, i){
+        const bn = String(it.batch_name || '').trim();
+        out.push((i + 1) + '. ' + String(it.name || '未命名') + ' ×' + (Number(it.quantity) || 1)
+                 + ((bn && bn !== '默认批次') ? '（' + bn + '）' : ''));
+      });
+      out.push('——————————');
+      const qty = list.reduce(function(a, it){ return a + (Number(it.quantity) || 1); }, 0);
+      out.push('共 ' + list.length + ' 项 / ' + qty + ' 件');
+      if (String(note || '').trim()) out.push('备注：' + String(note).trim());
+      return out.join('\n');
+    }
+    async function copyDispatchList(items, note){
+      const list = (Array.isArray(items) && items.length) ? items.slice()
+        : (window.CURRENT_ITEMS || []).filter(function(x){ return String((x && x.status) || '').trim() === '待发货'; });
+      if (!list.length) { showToast('现在没有待排发的谷子'); return false; }
+      const text = _buildDispatchListText(list, note);
+      let ok = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); ok = true; }
+      } catch (e) { ok = false; }
+      if (!ok) {
+        /* QQ / 微信内置浏览器对 clipboard API 支持不一致 → 退回临时 textarea + execCommand */
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+          document.body.appendChild(ta);
+          ta.select();
+          ta.setSelectionRange(0, text.length);
+          ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+        } catch (e) { ok = false; }
+      }
+      if (ok) {
+        showToast('📋 已复制 ' + list.length + ' 项，去 QQ 粘贴发给团长');
+      } else {
+        await askAlert({
+          title: '没能自动复制',
+          desc: '这个浏览器不让脚本写剪贴板。下面是清单原文，<b>长按全选复制</b>后发给团长：<br><br>'
+              + '<div class="copy-raw">' + escapeHtml(text).replace(/\n/g, '<br>') + '</div>',
+          okText: '知道了'
+        });
+      }
+      return ok;
+    }
+    window.copyDispatchList = copyDispatchList;
+    window._buildDispatchListText = _buildDispatchListText;   // 便于真浏览器抽测
+
     /* 🔁 2026-11-17 防重复提交（团长报：CN「沚鹜」连点两次 → 后台合并成各 x2，实际只有各 x1）
        原来只有 window.__APPLY_SUBMITTING 挡「同时在飞」的那一次，挡不住「上一次已经成功、过几秒又点一次」；
        幂等判断也只认随机 appId，每次点击都是新 id → 两次都算合法写入。
@@ -2805,7 +2936,20 @@
             });
           });
         } catch (e) {}
-        showToast('🎉 排发申请提交成功！谷子已标记为【待发货】' + (String(note||'').trim() ? '，备注已同步' : ''));
+        /* 📋 2026-11-20：提交成功不能只闪一个 2.6 秒的 toast。
+           团员的下一步是「把清单发给团长」，漏了这一步货就一直压着 —— 所以这里直接把复制按钮递到手上：
+           点「复制清单」→ 自动复制 → 再刷新到「待排发」区（东西还在，看得见）。 */
+        try {
+          const _copyNow = await askConfirm({
+            title: '✅ 提交成功，还差最后一步',
+            desc: '这批谷子已经进【待排发】，团长还没打包。<br><br>'
+                + '<b>请把清单发给团长</b>（点下面的按钮复制，直接粘到 QQ 就行）。<br>'
+                + '不发这一步，团长那边不一定知道要发什么。',
+            okText: '📋 复制清单发给团长',
+            cancelText: '我自己截图'
+          });
+          if (_copyNow) await copyDispatchList(items, note);
+        } catch (e) { /* 复制失败也不能挡住刷新，页面里还有「复制清单」按钮 */ }
         doQuery('dispatch');
       } catch(e){
         await askAlert({
