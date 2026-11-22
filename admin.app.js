@@ -2910,16 +2910,25 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return { exact: exact, fuzzy: fuzzy, key: key };
     }
 
-    /* 2026-11-23 团长：「录进去有名字相似的你就跳过」
-       → 只有「归一化后完全同名、且只对得上 1 条」才自动挂图；
-         名字相近（包含匹配）或同名多条，一律跳过不猜。
-       跳过 ≠ 不上传：图照样传上去（不白白浪费流量），只是不写库；列表里给一个
-       折叠的「想挂就点这里手动选」，想挂再挂，不想挂就确认写入剩下的。 */
+    /* 当前有没有真的把范围筛窄（筛了批次/搜索/地区…）。
+       团长 11-23：「我导某个批次时，只认这个批次里的谷子」——
+       筛窄了就别去别的批次里找同名，也别因为别的批次有同名就跳过。 */
+    function _bulkScoped() {
+      let view = [];
+      try { view = window.__LAST_FILTERED || []; } catch (_) { view = []; }
+      const total = RAW_ITEMS.length;
+      return view.length > 0 && view.length < total;
+    }
+
+    /* 批量补图的配对口径（2026-11-23 团长两次改口后的最终版）：
+       ┌ 筛了批次/搜索（最常见）→ 只在这个范围里认名字，
+       │   名字「完全一样」或「互相包含」都算对上；同一个名字有多条时，
+       │   只有一条缺图就挂给它，多条都缺/都有图才跳过。
+       ├ 没筛（全部批次）→ 保守：只认完全同名，相似一律跳过，避免挂到别的批次。
+       └ 跳过 ≠ 不上传：图照样传（不白费流量），只是不写库；列表里给折叠的手选入口。 */
     function _bulkDecide(name) {
       const c = _bulkCands(name);
-      const view = c.exact.filter(function (r) { return r.inView; });
-      /* 同名多条时，只有「唯一一条还没图」才自动挂 —— 这种情况基本就是在给那一件补图，
-         不用让团长手选（团长 11-23 定的）。多条都缺图 / 都有图 → 仍然跳过不猜。 */
+      const inView = function (r) { return r.inView; };
       const onlyBlank = function (pool) {
         const blank = pool.filter(function (r) { return !r.hasImg; });
         return blank.length === 1 ? blank[0] : null;
@@ -2930,18 +2939,48 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           ? '同名 ' + pool.length + ' 条都还没图'
           : '同名 ' + pool.length + ' 条都已经有图了';
       };
-      if (view.length === 1) return { kind: 'ok', how: 'exact', rec: view[0], pool: c.exact };
-      if (view.length > 1) {
-        const one = onlyBlank(view);
-        if (one) return { kind: 'ok', how: 'exact', rec: one, pool: c.exact };
-        return { kind: 'skip', how: 'exact', reason: whyMulti(view), pool: view.slice(0, 12) };
+      /* 在一个候选池里定下唯一一条；定不下来返回 null */
+      const pickOne = function (exactPool, fuzzyPool, allowFuzzy) {
+        if (exactPool.length === 1) return { kind: 'ok', how: 'exact', rec: exactPool[0], pool: exactPool };
+        if (exactPool.length > 1) {
+          const b = onlyBlank(exactPool);
+          if (b) return { kind: 'ok', how: 'exact', rec: b, pool: exactPool };
+          return { kind: 'skip', how: 'exact', reason: whyMulti(exactPool), pool: exactPool.slice(0, 12) };
+        }
+        if (allowFuzzy && fuzzyPool.length) {
+          if (fuzzyPool.length === 1) return { kind: 'ok', how: 'fuzzy', rec: fuzzyPool[0], pool: fuzzyPool };
+          const b = onlyBlank(fuzzyPool);
+          if (b) return { kind: 'ok', how: 'fuzzy', rec: b, pool: fuzzyPool };
+          return {
+            kind: 'skip', how: 'fuzzy',
+            reason: '名字相近的有 ' + fuzzyPool.length + ' 条', pool: fuzzyPool.slice(0, 12)
+          };
+        }
+        return null;
+      };
+
+      const scopeExact = c.exact.filter(inView);
+      const scopeFuzzy = c.fuzzy.filter(inView);
+      const scoped = _bulkScoped();
+
+      /* ① 筛了批次 → 只在这个范围里认名字，相似也算对上 */
+      if (scoped) {
+        const hit = pickOne(scopeExact, scopeFuzzy, true);
+        if (hit) return hit;
+        const anyWhole = c.exact.length ? c.exact : c.fuzzy;
+        if (anyWhole.length) {
+          return {
+            kind: 'skip', how: 'scope',
+            reason: '这个批次里没对上（别批次有 ' + anyWhole.length + ' 条同名）',
+            pool: anyWhole.slice(0, 12)
+          };
+        }
+        return { kind: 'none', how: 'fuzzy', pool: [] };
       }
-      if (c.exact.length === 1) return { kind: 'ok', how: 'exact', rec: c.exact[0], pool: c.exact };
-      if (c.exact.length > 1) {
-        const one = onlyBlank(c.exact);
-        if (one) return { kind: 'ok', how: 'exact', rec: one, pool: c.exact };
-        return { kind: 'skip', how: 'exact', reason: whyMulti(c.exact), pool: c.exact.slice(0, 12) };
-      }
+
+      /* ② 没筛窄（全部批次）→ 保守：只认完全同名 */
+      const hitAll = pickOne(c.exact, c.fuzzy, false);
+      if (hitAll) return hitAll;
       if (c.fuzzy.length) {
         return {
           kind: 'skip', how: 'fuzzy',
@@ -3094,11 +3133,30 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       });
     }
 
+    /* 面板顶部那句「配对范围」提示：让团长一眼看到现在锁没锁批次。
+       筛了批次 → 绿字确认已锁定；没筛 → 橙字提醒先筛，否则名字相近会跳过。 */
+    function bulkImgScopeHint() {
+      const el = document.getElementById('bulkImgScope');
+      if (!el) return;
+      const n = (window.__LAST_FILTERED || []).length;
+      const total = RAW_ITEMS.length;
+      if (_bulkScoped()) {
+        el.style.color = '#15803d';
+        el.innerHTML = '🎯 已锁定当前筛选的 <b>' + n + '</b> 条（全库 ' + total + ' 条）：' +
+          '只在这 ' + n + ' 条里按名字认，<b>名字相近也算对上</b>，不会挂到别的批次。';
+      } else {
+        el.style.color = '#b45309';
+        el.innerHTML = '范围：全部 <b>' + total + '</b> 条。<b>先筛好批次再传图</b>' +
+          '（下面那排筛选）—— 没筛的时候只认一模一样的名字（名字相近会跳过，防止挂到别的批次）。';
+      }
+    }
+
     function bulkImgRender() {
       const box = document.getElementById('bulkImgList');
       const bar = document.getElementById('bulkImgProgress');
       const act = document.getElementById('bulkImgActions');
       if (!box || !bar || !act) return;
+      try { bulkImgScopeHint(); } catch (_) {}
 
       if (!BULK_JOBS.length) {
         box.style.display = 'none'; box.innerHTML = '';
@@ -3150,7 +3208,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           const tag = r && r.hasImg
             ? '<span style="color:#b45309;">↻ 覆盖</span>'
             : '<span style="color:#15803d;">✓ 新挂</span>';
-          right = tag + ' <b>' + escapeHtml(r.name) + '</b>' +
+          /* 靠「名字相近（包含匹配）」挂上的，标一下，团长一眼能看出这条不是完全同名 */
+          const approx = j.match.how === 'fuzzy'
+            ? '<span style="color:#b45309;font-size:.7rem;">≈名字相近</span> '
+            : '';
+          right = tag + ' ' + approx + '<b>' + escapeHtml(r.name) + '</b>' +
             '<span style="color:var(--text-muted);"> · ' + escapeHtml(r.cn) + ' · ' + escapeHtml(r.batch) + '</span>';
         } else if (j.match) {
           /* 剩下的都是「跳过」：名字相近 / 同名多条 / 完全没找到 —— 一律不猜。
@@ -3335,6 +3397,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     window.bulkImgManual = bulkImgManual;
     window.bulkImgCommit = bulkImgCommit;
     window.bulkImgReset = bulkImgReset;
+    window.bulkImgScopeHint = bulkImgScopeHint;
 
     /* ══════════════════ 🖼️ 列表行直接换图（2026-11-23） ══════════════════
        卡点 ③：原来换一张图要「点编辑 → 展开表单 → 滚到图片区 → 选图 → 保存」五步。
