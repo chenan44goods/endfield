@@ -2864,6 +2864,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     function _bulkNormName(s) {
       return String(s == null ? '' : s)
         .replace(/\.(jpe?g|png)$/i, '')
+        /* 系统/微信导图常自动加副本序号：「洛茜立牌 (1).png」「洛茜立牌（2）.jpg」。
+           这种是同一张图的不同副本，不算「名字相近」，去掉后照样能自动配。
+           ⚠️ 只去「括号 + 纯数字」结尾，不动「亚克力砖2」这种真名。 */
+        .replace(/[（(]\s*\d+\s*[）)]\s*$/, '')
         .replace(/[\s\u3000]+/g, '')
         .replace(/[（）()【】\[\]「」『』《》<>_\-—·、,，.。!！?？:：;；'"“”]/g, '')
         .replace(/(副本|copy)$/i, '')
@@ -2906,16 +2910,30 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return { exact: exact, fuzzy: fuzzy, key: key };
     }
 
+    /* 2026-11-23 团长：「录进去有名字相似的你就跳过」
+       → 只有「归一化后完全同名、且只对得上 1 条」才自动挂图；
+         名字相近（包含匹配）或同名多条，一律跳过不猜。
+       跳过 ≠ 不上传：图照样传上去（不白白浪费流量），只是不写库；列表里给一个
+       折叠的「想挂就点这里手动选」，想挂再挂，不想挂就确认写入剩下的。 */
     function _bulkDecide(name) {
       const c = _bulkCands(name);
-      const how = c.exact.length ? 'exact' : 'fuzzy';
-      const pool = c.exact.length ? c.exact : c.fuzzy;
-      if (!pool.length) return { kind: 'none', how: how, pool: [] };
-      const view = pool.filter(function (r) { return r.inView; });
-      if (view.length === 1) return { kind: 'ok', how: how, rec: view[0], pool: pool };
-      if (view.length > 1) return { kind: 'multi', how: how, pool: view };
-      if (pool.length === 1) return { kind: 'ok', how: how, rec: pool[0], pool: pool };
-      return { kind: 'multi', how: how, pool: pool.slice(0, 12) };
+      const view = c.exact.filter(function (r) { return r.inView; });
+      if (view.length === 1) return { kind: 'ok', how: 'exact', rec: view[0], pool: c.exact };
+      if (view.length > 1) {
+        return { kind: 'skip', how: 'exact', reason: '同名 ' + view.length + ' 条', pool: view.slice(0, 12) };
+      }
+      if (c.exact.length === 1) return { kind: 'ok', how: 'exact', rec: c.exact[0], pool: c.exact };
+      if (c.exact.length > 1) {
+        return { kind: 'skip', how: 'exact', reason: '同名 ' + c.exact.length + ' 条', pool: c.exact.slice(0, 12) };
+      }
+      if (c.fuzzy.length) {
+        return {
+          kind: 'skip', how: 'fuzzy',
+          reason: c.fuzzy.length > 1 ? '名字相近的有 ' + c.fuzzy.length + ' 条' : '名字相近，没完全对上',
+          pool: c.fuzzy.slice(0, 12)
+        };
+      }
+      return { kind: 'none', how: 'fuzzy', pool: [] };
     }
 
     /* 按 key 回查当前条目（写入前用它取到最新对象，避免用过期的下标） */
@@ -3087,7 +3105,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       bar.style.display = 'block';
       bar.textContent = '共 ' + BULK_JOBS.length + ' 张 · 已传 ' + doneN +
         (errN ? ' · 失败 ' + errN : '') +
-        (pendingPick ? ' · 待指定 ' + pendingPick : '') +
+        (pendingPick ? ' · ⏭ 跳过 ' + pendingPick : '') +
         (BULK_BUSY ? ' · 传输中…' : '');
 
       /* 手选用的 datalist：只用当前筛选结果，避免 2600 条全塞进去 */
@@ -3118,20 +3136,29 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             : '<span style="color:#15803d;">✓ 新挂</span>';
           right = tag + ' <b>' + escapeHtml(r.name) + '</b>' +
             '<span style="color:var(--text-muted);"> · ' + escapeHtml(r.cn) + ' · ' + escapeHtml(r.batch) + '</span>';
-        } else if (j.match && j.match.kind === 'multi') {
-          right = '<span style="font-size:.72rem;color:#b45309;">有多条同名，选一条：</span><br>' +
-            '<select data-bulk-sel="' + j.id + '" onchange="bulkImgChoose(this)" style="max-width:100%;margin-top:3px;">' +
-            '<option value="">— 请选择 —</option>' +
-            (j.match.pool || []).map(function (r) {
-              return '<option value="' + escapeHtml(r.key) + '"' + (j.chosen === r.key ? ' selected' : '') + '>' +
-                escapeHtml(r.name + ' · ' + r.cn + ' · ' + r.batch) + '</option>';
-            }).join('') +
-            '</select>';
+        } else if (j.match) {
+          /* 剩下的都是「跳过」：名字相近 / 同名多条 / 完全没找到 —— 一律不猜。
+             图照样传上去了，想挂就展开这里自己挑，不想挂就直接确认写入其它的。 */
+          const isNone = j.match.kind === 'none';
+          const why = isNone ? '没找到同名谷子' : (j.match.reason || '');
+          const pool = j.match.pool || [];
+          const picker = pool.length
+            ? '<select data-bulk-sel="' + j.id + '" onchange="bulkImgChoose(this)" style="max-width:100%;margin-top:3px;">' +
+                '<option value="">— 选一条 —</option>' +
+                pool.map(function (r) {
+                  return '<option value="' + escapeHtml(r.key) + '"' + (j.chosen === r.key ? ' selected' : '') + '>' +
+                    escapeHtml(r.name + ' · ' + r.cn + ' · ' + r.batch) + '</option>';
+                }).join('') +
+              '</select>'
+            : '<input type="text" list="bulkNameList" data-bulk-manual="' + j.id + '" ' +
+                'placeholder="输入谷子名搜…" value="" onchange="bulkImgManual(this)" ' +
+                'style="max-width:100%;margin-top:3px;font-size:.76rem;padding:3px 6px;">';
+          right = '<span style="font-size:.72rem;color:#6b7280;">⏭ 跳过' +
+            (why ? '（' + escapeHtml(why) + '）' : '') + '</span>' +
+            '<details style="margin-top:1px;"><summary style="font-size:.72rem;color:#2563eb;cursor:pointer;">想挂就点这里手动选</summary>' +
+            picker + '</details>';
         } else {
-          right = '<span style="font-size:.72rem;color:#dc2626;">❌ 没找到同名谷子</span><br>' +
-            '<input type="text" list="bulkNameList" data-bulk-manual="' + j.id + '" ' +
-            'placeholder="输入谷子名搜…" value="" onchange="bulkImgManual(this)" ' +
-            'style="max-width:100%;margin-top:3px;font-size:.76rem;padding:3px 6px;">';
+          right = '';
         }
 
         const thumb = j.objUrl
@@ -3175,7 +3202,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       job.chosen = String(sel.value || '');
       const rec = _bulkRecByKey(job.chosen);
       job.match = rec ? { kind: 'ok', how: job.match && job.match.how, rec: rec, pool: (job.match && job.match.pool) || [] }
-        : { kind: 'multi', how: job.match && job.match.how, pool: (job.match && job.match.pool) || [] };
+        : { kind: 'skip', how: job.match && job.match.how, reason: '没对上这一条', pool: (job.match && job.match.pool) || [] };
       bulkImgRender();
     }
 
@@ -3190,6 +3217,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       job.match = d;
       job.chosen = d.kind === 'ok' ? d.rec.key : '';
       if (d.kind === 'none') showToast('没搜到「' + typed + '」，检查一下名字或先在上方筛一下批次');
+      else if (d.kind === 'skip') showToast('「' + typed + '」还是对不上唯一的一条（' + (d.reason || '') + '），展开下拉里挑一条');
       bulkImgRender();
     }
 
@@ -3211,8 +3239,12 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         return r && r.hasImg;
       }).length;
 
+      const skipN = BULK_JOBS.filter(function (j) {
+        return j.state === 'done' && j.url && !j.chosen;
+      }).length;
       const msg = '确认把 ' + uniq.length + ' 张图挂到对应谷子上？' +
-        (willReplace ? '\n\n其中 ' + willReplace + ' 条原来有图，会被替换。' : '');
+        (willReplace ? '\n\n其中 ' + willReplace + ' 条原来有图，会被替换。' : '') +
+        (skipN ? '\n\n另外 ' + skipN + ' 张名字相近/同名多条，已跳过（不写入）。' : '');
       if (!confirm(msg)) return;
 
       let changed = 0;
