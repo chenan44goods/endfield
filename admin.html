@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <!-- ⚡ 资源预加载（2026-11-16）：让脚本与 HTML 并行下载 -->
-  <link rel="preload" href="./admin.app.js?v=8dea2773" as="script">
+  <link rel="preload" href="./admin.app.js?v=cccbe86b" as="script">
   <link rel="preload" href="./admin.auction.js?v=f09a384b" as="script">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script>
@@ -1438,6 +1438,23 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
             border: 1px solid var(--border);
           }
 
+    /* 🖼️ 列表行直接换图（2026-11-23 团长要求：换一张图别让我再走一遍编辑表单）
+       桌面：图片格拖入即替换；点右下角小按钮也能选文件。
+       手机：没有拖拽，靠那个按钮（触屏无 hover，所以常显）。 */
+    .img-cell { position: relative; }
+    .img-cell.dz-over { outline: 2px dashed #2563eb; outline-offset: -2px; background: rgba(37,99,235,.10); }
+    .img-cell-busy { opacity: .45; pointer-events: none; }
+    .img-cell-btn {
+      position: absolute; right: 1px; bottom: 1px;
+      width: 16px; height: 16px; line-height: 14px; padding: 0;
+      font-size: 10px; border: 1px solid var(--border); border-radius: 4px;
+      background: rgba(255,255,255,.94); color: #475569; cursor: pointer;
+      opacity: 0; transition: opacity .12s;
+    }
+    .img-cell:hover .img-cell-btn { opacity: 1; }
+    .img-cell-btn:hover { background: #1a1a1a; color: #fefe2c; border-color: #1a1a1a; }
+    @media (hover: none) { .img-cell-btn { opacity: 1; } }
+
           /* ═══════════════════════════════════════════════════════════
              
 
@@ -1793,6 +1810,32 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           </div>
         </div>
 
+        <!-- 🖼️ 批量补图（2026-11-23 团长要求）
+             解决两个卡点：
+               ① 录入框一次只挂 1 张、还得等上一张传完才能选下一张；
+               ② Excel / 粘贴导入后「图片」列是本机 C:\ 路径被丢空，几十件要一张张手动补。
+             这里一次拖入 N 张，按「文件名 = 谷子名称」自动配对，**先预览再写库**，不直接落库。
+             ⚠️ 口径沿用 11-04 团长定的：只收 jpg / png、单张 ≤ 10MB、超了直接拒绝并说清原因，绝不偷偷压缩。 -->
+        <details id="bulkImgBox" style="margin-bottom: 12px; border: 1px dashed rgba(0,0,0,.18); border-radius: 16px; padding: 10px 14px;">
+          <summary style="cursor: pointer; font-size: 0.88rem; font-weight: 600;">📚 一次传几十张图（按文件名自动配对到谷子）</summary>
+          <div style="margin-top: 10px;">
+            <input type="file" id="bulkImgFile" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple style="display: none;" onchange="bulkImgPick(event)">
+            <div id="bulkImgZone" class="img-dropzone" role="button" tabindex="0"
+                 onclick="document.getElementById('bulkImgFile').click()"
+                 ondragover="bulkImgDragOver(event)" ondragleave="bulkImgDragLeave(event)" ondrop="bulkImgDrop(event)">
+              <div class="dz-icon">📚</div>
+              <div class="dz-title">一次拖入多张图片，或 <span class="dz-link">点击多选</span></div>
+              <div class="dz-hint">文件名按谷子名称命名（如「洛茜立牌.jpg」），jpg / png，单张 ≤ 10MB</div>
+            </div>
+            <div id="bulkImgProgress" style="display: none; margin-top: 8px; font-size: 0.8rem; color: var(--text-muted);"></div>
+            <div id="bulkImgList" style="display: none; margin-top: 10px;"></div>
+            <div id="bulkImgActions" style="display: none; margin-top: 10px; gap: 8px; flex-wrap: wrap; align-items: center;"></div>
+          </div>
+        </details>
+        <!-- 列表行换图用的隐藏选择器（手机点图片格右下角 📷 时走它） -->
+        <input type="file" id="rowImgFile" accept=".jpg,.jpeg,.png,image/jpeg,image/png" style="display: none;" onchange="rowImgFilePicked(event)">
+
+
         <!-- 过滤器栏 -->
         <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
           <span class="search-wrap" id="searchWrap">
@@ -1863,7 +1906,9 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
                 <th>操作</th>
               </tr>
             </thead>
-            <tbody id="itemsTableBody"></tbody>
+            <!-- 🖼️ 拖图兜底（2026-11-23）：图片格自己有 drop 处理并 stopPropagation；
+                 拖到表格其它位置时由这里吃掉默认行为 —— 否则浏览器直接打开这张图，当前页面就没了。 -->
+            <tbody id="itemsTableBody" ondragover="event.preventDefault()" ondrop="event.preventDefault()"></tbody>
           </table>
         </div>
 
@@ -2615,7 +2660,7 @@ cn 点数 金额
   <div class="toast" id="toast"></div>
 
   </div>
-<script src="./admin.app.js?v=8dea2773"></script>
+<script src="./admin.app.js?v=cccbe86b"></script>
 
 
 

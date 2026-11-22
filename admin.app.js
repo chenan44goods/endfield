@@ -2838,6 +2838,542 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
     window.handleImageUpload = handleImageUpload;
 
+    /* ══════════════════ 🖼️ 批量补图（2026-11-23 团长要求） ══════════════════
+       团长原话：「管理后台传图太麻烦了」。读代码定位到 4 个卡点，这段解决前两个：
+         ① imgDropZone 一次只挂 1 张（IMG_MAX_COUNT = 1）且 IMG_TASK 互斥 —— 必须等上一张传完才能选下一张
+         ② Excel / 粘贴导入时「图片」列是本机 C:\ 路径，_normImportImg 直接丢空 → 几十件要一张张手动补
+       做法：一次收 N 张 → 并发 3 条流水线上传 → 按「文件名 = 谷子名称」配对 → 预览确认 → 一次写库。
+
+       ⚠️ 口径（11-04 团长定的，11-23 明确「维持现状不动」）：
+          只收 jpg / png、单张 ≤ 10MB、超了直接拒绝并说清原因，**绝不偷偷压缩**。
+       ⚠️ 上传这段故意跟 startImageUpload 分开写、不合并：
+          那条是核心录入链路，不动它，避免把现有单图上传搞坏。
+       ⚠️ 配对规则：归一化（去扩展名 / 空格 / 标点 / 大小写）后
+          ① 完全相同 → ② 互相包含 → ③ 候选多于 1 条就让人挑（当前筛选结果里的优先） → ④ 一条都没有 = 没找到
+       ⚠️ 只在「确认写入」时才碰 RAW_ITEMS + 保存，上传本身不写库。
+    */
+    const BULK_IMG_CONCURRENCY = 3;
+    const BULK_DATALIST_MAX = 400;
+    let BULK_JOBS = [];        /* [{ id, file, objUrl, name, state, pct, url, err, match, chosen }] */
+    let BULK_SEQ = 0;          /* 稳定行 id：重画时手选值不丢 */
+    let BULK_BUSY = false;
+
+    function _bulkNormName(s) {
+      return String(s == null ? '' : s)
+        .replace(/\.(jpe?g|png)$/i, '')
+        .replace(/[\s\u3000]+/g, '')
+        .replace(/[（）()【】\[\]「」『』《》<>_\-—·、,，.。!！?？:：;；'"“”]/g, '')
+        .replace(/(副本|copy)$/i, '')
+        .toLowerCase();
+    }
+
+    /* 按名字取候选：exact = 归一化完全相同，fuzzy = 互相包含 */
+    function _bulkCands(name) {
+      const key = _bulkNormName(name);
+      if (!key) return { exact: [], fuzzy: [], key: key };
+      const inView = new Set((window.__LAST_FILTERED || [])
+        .map(function (x) { return x ? _itemKeyOf(x) : ''; })
+        .filter(function (k) { return k; }));
+      const exact = [], fuzzy = [];
+      RAW_ITEMS.forEach(function (it, idx) {
+        if (!it) return;
+        const n = _bulkNormName(it.name);
+        if (!n) return;
+        const k = _itemKeyOf(it, idx);
+        const rec = {
+          key: k, idx: idx,
+          name: it.name || '', cn: it.cn || '', batch: it.batch_name || '默认批次',
+          hasImg: !!String(it.image_url || '').trim(),
+          inView: inView.has(k)
+        };
+        if (n === key) exact.push(rec);
+        else {
+          /* 包含匹配要设门槛，否则文件名「立牌.jpg」会把「洛茜立牌」当成命中。
+             规则：两边都不少于 3 个字，且短的那个不短于长的一半（4 vs 8 可以，2 vs 4 不行）。 */
+          const a = n.length, b = key.length;
+          const mn = Math.min(a, b), mx = Math.max(a, b);
+          if (mn >= 3 && mn * 2 >= mx && (key.indexOf(n) >= 0 || n.indexOf(key) >= 0)) fuzzy.push(rec);
+        }
+      });
+      const rank = function (a, b) {
+        if (a.inView !== b.inView) return a.inView ? -1 : 1;
+        return Math.abs(String(a.name).length - key.length) - Math.abs(String(b.name).length - key.length);
+      };
+      exact.sort(rank); fuzzy.sort(rank);
+      return { exact: exact, fuzzy: fuzzy, key: key };
+    }
+
+    function _bulkDecide(name) {
+      const c = _bulkCands(name);
+      const how = c.exact.length ? 'exact' : 'fuzzy';
+      const pool = c.exact.length ? c.exact : c.fuzzy;
+      if (!pool.length) return { kind: 'none', how: how, pool: [] };
+      const view = pool.filter(function (r) { return r.inView; });
+      if (view.length === 1) return { kind: 'ok', how: how, rec: view[0], pool: pool };
+      if (view.length > 1) return { kind: 'multi', how: how, pool: view };
+      if (pool.length === 1) return { kind: 'ok', how: how, rec: pool[0], pool: pool };
+      return { kind: 'multi', how: how, pool: pool.slice(0, 12) };
+    }
+
+    /* 按 key 回查当前条目（写入前用它取到最新对象，避免用过期的下标） */
+    function _bulkRecByKey(key) {
+      if (!key) return null;
+      const k = String(key);
+      for (let i = 0; i < RAW_ITEMS.length; i++) {
+        const it = RAW_ITEMS[i];
+        if (it && _itemKeyOf(it, i) === k) {
+          return {
+            key: k, idx: i,
+            name: it.name || '', cn: it.cn || '', batch: it.batch_name || '默认批次',
+            hasImg: !!String(it.image_url || '').trim()
+          };
+        }
+      }
+      return null;
+    }
+
+    /* ── 收文件 ─────────────────────────────────────────────────────────── */
+    function _bulkAddFiles(fileList) {
+      const files = Array.prototype.slice.call(fileList || []);
+      if (!files.length) return;
+      files.forEach(function (f) {
+        const d = _bulkDecide(f.name);
+        let objUrl = '';
+        try { objUrl = URL.createObjectURL(f); } catch (_) {}
+        BULK_JOBS.push({
+          id: ++BULK_SEQ,
+          file: f,
+          objUrl: objUrl,
+          name: f.name,
+          state: 'pending',        /* pending | up | done | err */
+          pct: 0,
+          url: '',
+          err: '',
+          match: d,
+          chosen: d.kind === 'ok' ? d.rec.key : ''
+        });
+      });
+      _bulkRun();
+    }
+
+    async function _bulkRun() {
+      if (BULK_BUSY) { bulkImgRender(); return; }
+      BULK_BUSY = true;
+      const zone = document.getElementById('bulkImgZone');
+      if (zone) zone.classList.add('dz-busy');
+      let cursor = 0;
+      const worker = async function () {
+        while (cursor < BULK_JOBS.length) {
+          const job = BULK_JOBS[cursor++];
+          if (!job || job.state !== 'pending') continue;
+          job.state = 'up';
+          bulkImgRender();
+          await _bulkUploadOne(job);
+          bulkImgRender();
+        }
+      };
+      const n = Math.min(BULK_IMG_CONCURRENCY, Math.max(1, BULK_JOBS.length));
+      await Promise.all(Array.from({ length: n }, worker));
+      BULK_BUSY = false;
+      if (zone) zone.classList.remove('dz-busy');
+      bulkImgRender();
+    }
+
+    /* 单张上传 → 真实进度（XHR，理由同 startImageUpload：supabase-js 的 upload() 不给进度） */
+    function _bulkUploadOne(job) {
+      return new Promise(function (resolve) {
+        const chk = _imgCheck(job.file);
+        if (!chk.ok) { job.state = 'err'; job.err = chk.msg; return resolve(); }
+
+        const ext = chk.ext || 'jpg';
+        const objPath = String(CURRENT_QUERY_KEY || 'public') + '/' + Date.now() + '_' +
+          Math.floor(Math.random() * 100000) + '_' + job.id + '.' + ext;
+
+        (async function () {
+          /* goods-images 桶对匿名是 403，必须带登录态 token */
+          let token = SUPABASE_KEY;
+          try {
+            const sess = await supabaseClient.auth.getSession();
+            const at = sess && sess.data && sess.data.session && sess.data.session.access_token;
+            if (at) token = at;
+          } catch (_) {}
+
+          const base = SB_ACTIVE_BASE || sbPageBase();
+          const url = base + '/storage/v1/object/goods-images/' +
+            objPath.split('/').map(encodeURIComponent).join('/');
+
+          const xhr = new XMLHttpRequest();
+          job.xhr = xhr;
+          xhr.open('POST', url, true);
+          xhr.setRequestHeader('apikey', SUPABASE_KEY);
+          xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+          xhr.setRequestHeader('x-upsert', 'true');
+          xhr.setRequestHeader('Content-Type', job.file.type || (ext === 'png' ? 'image/png' : 'image/jpeg'));
+
+          xhr.upload.onprogress = function (ev) {
+            if (!ev || !ev.lengthComputable) return;
+            job.pct = Math.round(ev.loaded / ev.total * 100);
+            const el = document.querySelector('[data-bulk-pct="' + job.id + '"]');
+            if (el) el.textContent = job.pct + '%';
+          };
+          xhr.onload = function () {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              const pub = supabaseClient.storage.from('goods-images').getPublicUrl(objPath);
+              const u = pub && pub.data ? pub.data.publicUrl : '';
+              if (u) { job.url = u; job.state = 'done'; job.pct = 100; }
+              else { job.state = 'err'; job.err = '传上去了但没拿到地址，重试一次'; }
+            } else {
+              job.state = 'err';
+              job.err = _imgUploadErrText(xhr);
+            }
+            resolve();
+          };
+          xhr.onerror = function () { job.state = 'err'; job.err = '网络中断，传到一半断了'; resolve(); };
+          xhr.onabort = function () { job.state = 'err'; job.err = '已取消'; resolve(); };
+          xhr.send(job.file);
+        })().catch(function (e) {
+          job.state = 'err';
+          job.err = String((e && e.message) || e || '上传异常');
+          resolve();
+        });
+      });
+    }
+
+    /* ── 渲染 ───────────────────────────────────────────────────────────── */
+    function _bulkReadyJobs() {
+      return BULK_JOBS.filter(function (j) {
+        return j.state === 'done' && j.url && j.chosen && _bulkRecByKey(j.chosen);
+      });
+    }
+
+    function bulkImgRender() {
+      const box = document.getElementById('bulkImgList');
+      const bar = document.getElementById('bulkImgProgress');
+      const act = document.getElementById('bulkImgActions');
+      if (!box || !bar || !act) return;
+
+      if (!BULK_JOBS.length) {
+        box.style.display = 'none'; box.innerHTML = '';
+        bar.style.display = 'none'; bar.textContent = '';
+        act.style.display = 'none'; act.innerHTML = '';
+        return;
+      }
+
+      const doneN = BULK_JOBS.filter(function (j) { return j.state === 'done'; }).length;
+      const errN = BULK_JOBS.filter(function (j) { return j.state === 'err'; }).length;
+      const ready = _bulkReadyJobs();
+      const pendingPick = BULK_JOBS.filter(function (j) {
+        return j.state === 'done' && j.url && !j.chosen;
+      }).length;
+      const willReplace = ready.filter(function (j) {
+        const r = _bulkRecByKey(j.chosen);
+        return r && r.hasImg;
+      }).length;
+
+      bar.style.display = 'block';
+      bar.textContent = '共 ' + BULK_JOBS.length + ' 张 · 已传 ' + doneN +
+        (errN ? ' · 失败 ' + errN : '') +
+        (pendingPick ? ' · 待指定 ' + pendingPick : '') +
+        (BULK_BUSY ? ' · 传输中…' : '');
+
+      /* 手选用的 datalist：只用当前筛选结果，避免 2600 条全塞进去 */
+      const allNames = (window.__LAST_FILTERED && window.__LAST_FILTERED.length
+        ? window.__LAST_FILTERED
+        : RAW_ITEMS).slice(0, BULK_DATALIST_MAX);
+      let dl = '<datalist id="bulkNameList">';
+      allNames.forEach(function (it) {
+        const nm = String(it.name || '').trim();
+        if (!nm) return;
+        dl += '<option value="' + escapeHtml(nm) + '"></option>';
+      });
+      dl += '</datalist>';
+
+      let html = '<div style="border:1px solid var(--border); border-radius:10px; overflow:hidden;">';
+      html += '<div style="max-height:360px; overflow:auto;">';
+
+      BULK_JOBS.forEach(function (j) {
+        let right = '';
+        if (j.state === 'pending' || j.state === 'up') {
+          right = '<span style="font-size:.76rem; color:var(--text-muted);">等待上传…</span>';
+        } else if (j.state === 'err') {
+          right = '<span style="font-size:.76rem; color:#dc2626;">❌ ' + escapeHtml(j.err || '上传失败') + '</span>';
+        } else if (j.match && j.match.kind === 'ok' && j.chosen) {
+          const r = _bulkRecByKey(j.chosen) || j.match.rec;
+          const tag = r && r.hasImg
+            ? '<span style="color:#b45309;">↻ 覆盖</span>'
+            : '<span style="color:#15803d;">✓ 新挂</span>';
+          right = tag + ' <b>' + escapeHtml(r.name) + '</b>' +
+            '<span style="color:var(--text-muted);"> · ' + escapeHtml(r.cn) + ' · ' + escapeHtml(r.batch) + '</span>';
+        } else if (j.match && j.match.kind === 'multi') {
+          right = '<span style="font-size:.72rem;color:#b45309;">有多条同名，选一条：</span><br>' +
+            '<select data-bulk-sel="' + j.id + '" onchange="bulkImgChoose(this)" style="max-width:100%;margin-top:3px;">' +
+            '<option value="">— 请选择 —</option>' +
+            (j.match.pool || []).map(function (r) {
+              return '<option value="' + escapeHtml(r.key) + '"' + (j.chosen === r.key ? ' selected' : '') + '>' +
+                escapeHtml(r.name + ' · ' + r.cn + ' · ' + r.batch) + '</option>';
+            }).join('') +
+            '</select>';
+        } else {
+          right = '<span style="font-size:.72rem;color:#dc2626;">❌ 没找到同名谷子</span><br>' +
+            '<input type="text" list="bulkNameList" data-bulk-manual="' + j.id + '" ' +
+            'placeholder="输入谷子名搜…" value="" onchange="bulkImgManual(this)" ' +
+            'style="max-width:100%;margin-top:3px;font-size:.76rem;padding:3px 6px;">';
+        }
+
+        const thumb = j.objUrl
+          ? '<img src="' + j.objUrl + '" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;flex:0 0 auto;">'
+          : '<span style="width:40px;height:40px;flex:0 0 auto;"></span>';
+
+        const pctText = j.state === 'err' ? '失败' : (j.state === 'done' ? '100%' : (j.pct || 0) + '%');
+        const pctColor = j.state === 'err' ? '#dc2626' : (j.state === 'done' ? '#15803d' : 'var(--text-muted)');
+
+        html += '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:7px 10px; border-top:1px solid #eef2f7;">' +
+          thumb +
+          '<span style="flex:1 1 130px; min-width:0; font-size:.76rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' + escapeHtml(j.name) + '">' + escapeHtml(j.name) + '</span>' +
+          '<span style="flex:2 1 220px; min-width:0; font-size:.76rem;">' + right + '</span>' +
+          '<span data-bulk-pct="' + j.id + '" style="flex:0 0 42px; text-align:right; font-size:.72rem; color:' + pctColor + ';">' + pctText + '</span>' +
+          '</div>';
+      });
+
+      html += '</div></div>' + dl;
+      box.innerHTML = html;
+      box.style.display = 'block';
+
+      let actHtml = '';
+      if (ready.length) {
+        actHtml += '<button type="button" class="btn btn-primary" onclick="bulkImgCommit()">✅ 确认写入 ' + ready.length + ' 张</button>';
+        if (willReplace) {
+          actHtml += '<span style="font-size:.76rem;color:#b45309;">其中 ' + willReplace + ' 条原来有图，会被覆盖</span>';
+        }
+      } else {
+        actHtml += '<span style="font-size:.76rem;color:var(--text-muted);">还没有可写入的图</span>';
+      }
+      actHtml += '<button type="button" class="btn btn-secondary" onclick="bulkImgReset()">清空重来</button>';
+      act.innerHTML = actHtml;
+      act.style.display = 'flex';
+    }
+
+    /* 手选：下拉（多条同名） */
+    function bulkImgChoose(sel) {
+      const id = Number(sel && sel.getAttribute('data-bulk-sel'));
+      const job = BULK_JOBS.filter(function (j) { return j.id === id; })[0];
+      if (!job) return;
+      job.chosen = String(sel.value || '');
+      const rec = _bulkRecByKey(job.chosen);
+      job.match = rec ? { kind: 'ok', how: job.match && job.match.how, rec: rec, pool: (job.match && job.match.pool) || [] }
+        : { kind: 'multi', how: job.match && job.match.how, pool: (job.match && job.match.pool) || [] };
+      bulkImgRender();
+    }
+
+    /* 手选：输入框搜名字（没找到时） */
+    function bulkImgManual(inp) {
+      const id = Number(inp && inp.getAttribute('data-bulk-manual'));
+      const job = BULK_JOBS.filter(function (j) { return j.id === id; })[0];
+      if (!job) return;
+      const typed = String(inp.value || '').trim();
+      if (!typed) return;
+      const d = _bulkDecide(typed);
+      job.match = d;
+      job.chosen = d.kind === 'ok' ? d.rec.key : '';
+      if (d.kind === 'none') showToast('没搜到「' + typed + '」，检查一下名字或先在上方筛一下批次');
+      bulkImgRender();
+    }
+
+    /* ── 写入 ───────────────────────────────────────────────────────────── */
+    async function bulkImgCommit() {
+      const ready = _bulkReadyJobs();
+      if (!ready.length) return showToast('没有可写入的图片');
+
+      /* 同一条谷子被两张图对上 → 只留最后一张，否则悄悄丢掉一张图 */
+      const byKey = {};
+      ready.forEach(function (j) { byKey[j.chosen] = j; });
+      const uniq = Object.keys(byKey).map(function (k) { return byKey[k]; });
+      if (uniq.length < ready.length) {
+        showToast('有 ' + (ready.length - uniq.length) + ' 张图指向同一件谷子，已只保留最后一张');
+      }
+
+      const willReplace = uniq.filter(function (j) {
+        const r = _bulkRecByKey(j.chosen);
+        return r && r.hasImg;
+      }).length;
+
+      const msg = '确认把 ' + uniq.length + ' 张图挂到对应谷子上？' +
+        (willReplace ? '\n\n其中 ' + willReplace + ' 条原来有图，会被替换。' : '');
+      if (!confirm(msg)) return;
+
+      let changed = 0;
+      uniq.forEach(function (j) {
+        const r = _bulkRecByKey(j.chosen);
+        if (!r) return;
+        const it = RAW_ITEMS[r.idx];
+        if (!it) return;
+        it.image_url = j.url;
+        DIRTY_ITEM_IDS.add(String(it.item_id || it.id || ''));
+        changed++;
+      });
+      if (!changed) return showToast('没有条目被改动');
+
+      const ok = await saveDataToSupabase();
+      if (ok === false) {
+        /* 图已经在图床上，只需重试保存 —— 不要让团长以为要重传 */
+        return showToast('❌ 保存失败（图已上传成功），再点一次「确认写入」即可');
+      }
+      try { renderTable(); } catch (_) {}
+      showToast('✅ 已挂 ' + changed + ' 张图');
+      bulkImgReset();
+    }
+
+    function bulkImgReset() {
+      BULK_JOBS.forEach(function (j) {
+        if (j.xhr && j.state === 'up') { try { j.xhr.abort(); } catch (_) {} }
+        if (j.objUrl) { try { URL.revokeObjectURL(j.objUrl); } catch (_) {} }
+      });
+      BULK_JOBS = [];
+      BULK_BUSY = false;
+      const inp = document.getElementById('bulkImgFile');
+      if (inp) inp.value = '';
+      const zone = document.getElementById('bulkImgZone');
+      if (zone) zone.classList.remove('dz-over', 'dz-busy');
+      bulkImgRender();
+    }
+
+    /* ── 入口 ───────────────────────────────────────────────────────────── */
+    function bulkImgPick(e) {
+      const files = e && e.target && e.target.files ? e.target.files : null;
+      if (!files || !files.length) return;
+      _bulkAddFiles(files);
+      if (e.target) e.target.value = '';
+    }
+    function bulkImgDragOver(e) {
+      e.preventDefault(); e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      const z = document.getElementById('bulkImgZone');
+      if (z) z.classList.add('dz-over');
+    }
+    function bulkImgDragLeave(e) {
+      e.preventDefault(); e.stopPropagation();
+      const z = document.getElementById('bulkImgZone');
+      if (z) z.classList.remove('dz-over');
+    }
+    function bulkImgDrop(e) {
+      e.preventDefault(); e.stopPropagation();
+      const z = document.getElementById('bulkImgZone');
+      if (z) z.classList.remove('dz-over');
+      const dt = e.dataTransfer;
+      const files = dt && dt.files ? dt.files : null;
+      if (!files || !files.length) return;
+      _bulkAddFiles(files);
+    }
+
+    window.bulkImgPick = bulkImgPick;
+    window.bulkImgDragOver = bulkImgDragOver;
+    window.bulkImgDragLeave = bulkImgDragLeave;
+    window.bulkImgDrop = bulkImgDrop;
+    window.bulkImgChoose = bulkImgChoose;
+    window.bulkImgManual = bulkImgManual;
+    window.bulkImgCommit = bulkImgCommit;
+    window.bulkImgReset = bulkImgReset;
+
+    /* ══════════════════ 🖼️ 列表行直接换图（2026-11-23） ══════════════════
+       卡点 ③：原来换一张图要「点编辑 → 展开表单 → 滚到图片区 → 选图 → 保存」五步。
+       现在：桌面把图直接拖到那一格；手机点格子右下角 📷（触屏没有 hover，按钮常显）。
+       上传复用 _bulkUploadOne（同一套 XHR / 真实进度 / 同一套错误文案）。
+       ⚠️ 只改这一行的 image_url，不碰其它字段、不碰状态。
+       ⚠️ 已经有图 → 先 confirm，避免误拖把原来的图冲掉。
+    */
+    let ROW_IMG_KEY = '';
+
+    function _findItemByKey(key) {
+      if (!key) return null;
+      const k = String(key);
+      for (let i = 0; i < RAW_ITEMS.length; i++) {
+        if (RAW_ITEMS[i] && _itemKeyOf(RAW_ITEMS[i], i) === k) return RAW_ITEMS[i];
+      }
+      return null;
+    }
+
+    async function _rowImgApply(file, key, cell) {
+      const it = _findItemByKey(key);
+      if (!it) return showToast('这一行找不到对应条目，刷新一下再试');
+      if (!file) return;
+
+      const chk = _imgCheck(file);
+      if (!chk.ok) return showToast(chk.msg);
+
+      if (String(it.image_url || '').trim() &&
+          !confirm('这一行原来有图，确认用「' + file.name + '」替换？')) {
+        return;
+      }
+
+      const el = cell || document.querySelector('.img-cell[data-k="' + String(key).replace(/"/g, '\\"') + '"]');
+      if (el && el.classList) el.classList.add('img-cell-busy');
+
+      const job = { id: ++BULK_SEQ, file: file, state: 'up', pct: 0, url: '', err: '' };
+      await _bulkUploadOne(job);
+
+      if (el && el.classList) el.classList.remove('img-cell-busy');
+      if (job.state !== 'done' || !job.url) {
+        return showToast('上传失败：' + (job.err || '未知原因'));
+      }
+
+      it.image_url = job.url;
+      DIRTY_ITEM_IDS.add(String(it.item_id || it.id || ''));
+      const ok = await saveDataToSupabase();
+      if (ok === false) return showToast('图传上去了，但保存失败；再拖一次即可（图不会重复上传）');
+      try { renderTable(); } catch (_) {}
+      showToast('✅ 图已换好');
+    }
+
+    function rowImgPick(e, btn) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      /* 桌面：点图片格右下角 📷（key 在 .img-cell 上）
+         手机：点卡片里的「🖼️ 换图」（key 直接在按钮上，因为手机端没有表格） */
+      let key = '';
+      const cell = btn && btn.closest ? btn.closest('.img-cell') : null;
+      if (cell) key = cell.getAttribute('data-k') || '';
+      if (!key && btn && btn.getAttribute) key = btn.getAttribute('data-k') || '';
+      if (!key) return;
+      ROW_IMG_KEY = key;
+      const inp = document.getElementById('rowImgFile');
+      if (inp) { inp.value = ''; inp.click(); }
+    }
+
+    function rowImgFilePicked(e) {
+      const f = e && e.target && e.target.files ? e.target.files[0] : null;
+      const key = ROW_IMG_KEY;
+      if (e && e.target) e.target.value = '';
+      if (!f || !key) return;
+      _rowImgApply(f, key, null);
+    }
+
+    function rowImgDragOver(e) {
+      e.preventDefault(); e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      const td = e.currentTarget;
+      if (td && td.classList) td.classList.add('dz-over');
+    }
+    function rowImgDragLeave(e) {
+      e.preventDefault(); e.stopPropagation();
+      const td = e.currentTarget;
+      if (td && td.classList) td.classList.remove('dz-over');
+    }
+    function rowImgDrop(e) {
+      e.preventDefault(); e.stopPropagation();
+      const td = e.currentTarget;
+      if (td && td.classList) td.classList.remove('dz-over');
+      const dt = e.dataTransfer;
+      const f = dt && dt.files ? dt.files[0] : null;
+      if (!f) return;
+      if (dt.files.length > 1) showToast('一次只换一张，已取「' + f.name + '」');
+      _rowImgApply(f, td.getAttribute('data-k'), td);
+    }
+
+    window.rowImgPick = rowImgPick;
+    window.rowImgFilePicked = rowImgFilePicked;
+    window.rowImgDragOver = rowImgDragOver;
+    window.rowImgDragLeave = rowImgDragLeave;
+    window.rowImgDrop = rowImgDrop;
+
     // 状态样式映射（含老状态兼容）
     function getStatusBadgeClass(status) {
       const s = (status || '').trim();
@@ -4881,6 +5417,10 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               return matchSearch && matchBatch && matchDetail && matchCountry && matchStatus;
             });
 
+      /* 🖼️ 批量补图要把「当前筛选结果」排到候选前面（团长一般是先筛批次再补图）。
+         这里只存一份引用给 bulkImg 用，不参与渲染、不改顺序。 */
+      window.__LAST_FILTERED = filtered;
+
       // ↕️ 排序只影响展示顺序（不动 RAW_ITEMS），勾选按 item_id 记所以排完还在
       /* 📅 2026-11-19 团长规则：没点表头排序时，排表明细按「所属批次日期」从后往前
          （批名没日期的常驻/活动整块排最前，同一批次内保持录入顺序）。
@@ -4935,7 +5475,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         html += `
           <tr class="itemRow" style="cursor:pointer;${_rowBg}" onclick="itemRowClick(event, ${index})" ondblclick="itemRowDblClick(event, ${index})">
             <td><input type="checkbox" class="item-checkbox" value="${index}" data-k="${_kAttr}"${_on ? ' checked' : ''} onclick="itemPaintFromCb(this)"></td>
-            <td>${imgTag}</td>
+            <td class="img-cell" data-k="${_kAttr}" ondragover="rowImgDragOver(event)" ondragleave="rowImgDragLeave(event)" ondrop="rowImgDrop(event)">${imgTag}<button type="button" class="img-cell-btn" title="换这张图" onclick="rowImgPick(event, this)">📷</button></td>
             <td style="font-weight:600;">${escapeHtml(item.name)}</td>
             <td><strong>${escapeHtml(item.cn)}</strong></td>
             <td><span class="badge badge-batch">${escapeHtml(batchStr)}</span></td>
@@ -4979,6 +5519,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               </div>
             </div>
             <div class="admin-card-mobile-actions">
+              <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="rowImgPick(event, this)" data-k="${_kAttr}">🖼️ 换图</button>
               <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="editItemByIndex(${index})">✏️ 编辑</button>
               <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="transferSingleByIndex(${index})">🔄 转单</button>
             </div>
