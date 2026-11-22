@@ -2854,6 +2854,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     */
     const BULK_IMG_CONCURRENCY = 3;
     const BULK_DATALIST_MAX = 400;
+    /* 一次最多收 60 张：拖进来的 File 会全部留在内存里（100 张 × 5MB = 500MB），
+       手机上直接卡死，所以宁可让他分两批。 */
+    const BULK_MAX_FILES = 60;
     let BULK_JOBS = [];        /* [{ id, file, objUrl, name, state, pct, url, err, match, chosen }] */
     let BULK_SEQ = 0;          /* 稳定行 id：重画时手选值不丢 */
     let BULK_BUSY = false;
@@ -2936,7 +2939,18 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     function _bulkAddFiles(fileList) {
       const files = Array.prototype.slice.call(fileList || []);
       if (!files.length) return;
-      files.forEach(function (f) {
+
+      const room = BULK_MAX_FILES - BULK_JOBS.length;
+      if (room <= 0) {
+        return showToast('这一批已经 ' + BULK_JOBS.length + ' 张了，先「确认写入」或「清空重来」再拖下一批');
+      }
+      let list = files;
+      if (files.length > room) {
+        list = files.slice(0, room);
+        showToast('一次最多 ' + BULK_MAX_FILES + ' 张，这次先收前 ' + room + ' 张，剩下的再拖一次');
+      }
+
+      list.forEach(function (f) {
         const d = _bulkDecide(f.name);
         let objUrl = '';
         try { objUrl = URL.createObjectURL(f); } catch (_) {}
