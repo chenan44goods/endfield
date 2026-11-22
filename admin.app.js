@@ -2918,13 +2918,29 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     function _bulkDecide(name) {
       const c = _bulkCands(name);
       const view = c.exact.filter(function (r) { return r.inView; });
+      /* 同名多条时，只有「唯一一条还没图」才自动挂 —— 这种情况基本就是在给那一件补图，
+         不用让团长手选（团长 11-23 定的）。多条都缺图 / 都有图 → 仍然跳过不猜。 */
+      const onlyBlank = function (pool) {
+        const blank = pool.filter(function (r) { return !r.hasImg; });
+        return blank.length === 1 ? blank[0] : null;
+      };
+      const whyMulti = function (pool) {
+        const blankN = pool.filter(function (r) { return !r.hasImg; }).length;
+        return blankN > 1
+          ? '同名 ' + pool.length + ' 条都还没图'
+          : '同名 ' + pool.length + ' 条都已经有图了';
+      };
       if (view.length === 1) return { kind: 'ok', how: 'exact', rec: view[0], pool: c.exact };
       if (view.length > 1) {
-        return { kind: 'skip', how: 'exact', reason: '同名 ' + view.length + ' 条', pool: view.slice(0, 12) };
+        const one = onlyBlank(view);
+        if (one) return { kind: 'ok', how: 'exact', rec: one, pool: c.exact };
+        return { kind: 'skip', how: 'exact', reason: whyMulti(view), pool: view.slice(0, 12) };
       }
       if (c.exact.length === 1) return { kind: 'ok', how: 'exact', rec: c.exact[0], pool: c.exact };
       if (c.exact.length > 1) {
-        return { kind: 'skip', how: 'exact', reason: '同名 ' + c.exact.length + ' 条', pool: c.exact.slice(0, 12) };
+        const one = onlyBlank(c.exact);
+        if (one) return { kind: 'ok', how: 'exact', rec: one, pool: c.exact };
+        return { kind: 'skip', how: 'exact', reason: whyMulti(c.exact), pool: c.exact.slice(0, 12) };
       }
       if (c.fuzzy.length) {
         return {
