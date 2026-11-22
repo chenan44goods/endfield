@@ -1683,6 +1683,15 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       return data;
     }
 
+    /* 最近一次保存失败的原文 —— 删除这类操作失败后要能说清原因，
+       不能再出现「明明没保存成功、却弹『已彻底删除』」（2026-11-23 团长踩到） */
+    function _lastSaveErrText() {
+      const s = String(window.__LAST_SAVE_ERR__ || '').trim();
+      if (!s) return '保存没成功';
+      return s.length > 80 ? s.slice(0, 80) + '…' : s;
+    }
+    window._lastSaveErrText = _lastSaveErrText;
+
     function saveDataToSupabase() {
       const run = function () { return _saveDataToSupabase(); };
       /* 遮罩从「进入队列」就开始计时：连点两下时，第二下等的这段时间也是用户在等。 */
@@ -1705,6 +1714,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     async function _saveDataToSupabase() {
       if (!CURRENT_QUERY_KEY) return showToast('未指定 Query Key');
       try {
+        window.__LAST_SAVE_ERR__ = '';   /* 每次保存重新记错误原文，别残留上一次的 */
         // 本次保存「自己负责的」标记快照 —— 只按这份合并、也只清这份。
         // ⚠️ 绝不能再写全局 DIRTY_ITEM_IDS.clear()：那会把并发保存的标记一起清掉（上面那个 bug 的根因）。
         const MY_DIRTY = new Set(DIRTY_ITEM_IDS);
@@ -1841,6 +1851,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               }
               window.__DIFF_SAVE_LAST__.ok = false;
               window.__DIFF_SAVE_LAST__.reason = (_r && (_r.conflict ? 'conflict' : (_r.guard ? 'guard' : 'other'))) || 'empty';
+              window.__LAST_SAVE_ERR__ = (_r && (_r.msg || _r.message)) ||
+                (_r && _r.conflict ? '数据版本已变（有人同时在改）' :
+                  _r && _r.guard ? '被「整批删除」保护拦下' : '');
               /* conflict / guard → 落到整份保存，由它合并重试 */
             } else if (_d) {
               window.__DIFF_SAVE_LAST__ = { upserts: _d.upserts.length, deletes: _d.deletes.length,
@@ -1858,7 +1871,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           payload.version = nextVersion;
           const { data, error } = await supabaseClient.from('leader_data')
             .update(payload).eq('id', CURRENT_RECORD_ID).eq('version', CURRENT_VERSION).select('id');
-          if (error) { showToast('保存失败: ' + error.message); return false; }
+          if (error) { window.__LAST_SAVE_ERR__ = String(error.message || error); showToast('保存失败: ' + error.message); return false; }
           if (!data || data.length === 0) {
             // 冲突：循环拉取最新数据并合并保存（最多 6 次），避免后台写库频繁导致失败
             let mergedApplied = false;
@@ -6599,16 +6612,95 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
     window.batchSetImgModal = batchSetImgModal;
 
+    /* 🧮 这次删除会「整批删光」哪些批次？（服务端护栏的判定条件：该批次原来 ≥3 条，
+       且这批 id 全在删除名单里 —— 前端先算一遍，好在提交前问一次、并自动拆两步）
+       2026-11-23 团长「删不动粥团的谷子数据」→ 根因就是整批删光被护栏拦下了。 */
+    function _wipeBatchesOf(items, deleteIds) {
+      const byBatch = Object.create(null);
+      (Array.isArray(items) ? items : []).forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        const bn = String(it.batch_name || '').trim();
+        const id = String(it.item_id || it.id || '');
+        if (!bn || !id) return;
+        (byBatch[bn] || (byBatch[bn] = [])).push(id);
+      });
+      const out = [];
+      Object.keys(byBatch).forEach(function (bn) {
+        const ids = byBatch[bn];
+        if (ids.length < 3) return;
+        if (ids.every(function (id) { return deleteIds.has(id); })) {
+          out.push({ name: bn, n: ids.length, ids: ids.slice() });
+        }
+      });
+      return out;
+    }
+    window._wipeBatchesOf = _wipeBatchesOf;
+
     async function batchDeleteItems() {
       const selected = getSelectedCacheItems();
       if (selected.length === 0) return showToast('请先勾选谷子！');
       if (!confirm(`确定彻底删除选中的 ${selected.length} 件谷子吗？`)) return;
-      const deleteIds = new Set(selected.map(i => String(i.item_id || i.id)));
-      deleteIds.forEach(id => DELETED_ITEM_IDS.add(id));
-      RAW_ITEMS = RAW_ITEMS.filter(i => !deleteIds.has(String(i.item_id || i.id)));
-      await saveDataToSupabase();
+
+      /* 删之前的完整快照：失败要能原样回滚（以前失败也照样提示"已彻底删除"，团长以为删掉了） */
+      const before = RAW_ITEMS.slice();
+      const deleteIds = new Set(selected.map(i => String(i.item_id || i.id || '')));
+      const wiped = _wipeBatchesOf(before, deleteIds);
+
+      /* 会把某些批次删到一条不剩 → 单独确认一次。
+         确认后自动拆成两次提交（每批先留 1 条，第二次再删最后一条）：
+         服务端那道「整批消失」护栏是为了挡旧页面误覆盖，不是挡真人删数据，
+         而它在批次只剩 1 条时本来就不会触发。这样不用改数据库函数也不用改代理。 */
+      let holdBack = null;
+      if (wiped.length) {
+        const desc = wiped.map(function (w) { return '「' + w.name + '」' + w.n + ' 条'; }).join('、');
+        if (!confirm('⚠️ 这次会把 ' + desc + ' 整批删光，一条不剩。\n\n' +
+                     '（系统默认会拦下整批删除，是为了防止后台页面没刷新时误删别人的数据。\n' +
+                     '你确认要删的话，我分成两次提交，最后一定会删干净。）\n\n确定整批删除吗？')) return;
+        holdBack = new Set();
+        wiped.forEach(function (w) { holdBack.add(w.ids[w.ids.length - 1]); });
+      }
+
+      const applyStep = function (ids) {
+        ids.forEach(function (id) { DELETED_ITEM_IDS.add(id); });
+        RAW_ITEMS = RAW_ITEMS.filter(function (i) { return !ids.has(String(i.item_id || i.id || '')); });
+      };
+      const rollbackLocal = function (ids) {
+        RAW_ITEMS = before;
+        ids.forEach(function (id) { DELETED_ITEM_IDS.delete(id); });
+      };
+
+      if (holdBack && holdBack.size) {
+        const step1 = new Set();
+        deleteIds.forEach(function (id) { if (!holdBack.has(id)) step1.add(id); });
+        applyStep(step1);
+        const ok1 = await saveDataToSupabase();
+        if (ok1 === false) {
+          rollbackLocal(step1);
+          clearItemSelection(true);
+          updateBatchDropdownOptions(); renderTable();
+          return showToast('❌ 删除没生效：' + _lastSaveErrText() + '（数据还是原样）');
+        }
+        applyStep(holdBack);
+      } else {
+        applyStep(deleteIds);
+      }
+
+      const ok = await saveDataToSupabase();
+      if (ok === false) {
+        clearItemSelection(true);
+        if (holdBack && holdBack.size) {
+          /* 第一段已经写进库了，第二段没成功 → 直接拉最新，别让界面骗人 */
+          try { await loadDataByQueryKey(); } catch (_) {}
+          return showToast('⚠️ 前面几条已删掉，最后 1 条没删成功，再点一次删除即可');
+        }
+        rollbackLocal(deleteIds);
+        updateBatchDropdownOptions(); renderTable();
+        return showToast('❌ 删除没生效：' + _lastSaveErrText() + '（数据还是原样）');
+      }
+
       clearItemSelection(true);
-      updateBatchDropdownOptions(); renderTable(); showToast('已彻底删除选中谷子！');
+      updateBatchDropdownOptions(); renderTable();
+      showToast('已彻底删除 ' + deleteIds.size + ' 件谷子');
     }
     window.batchDeleteItems = batchDeleteItems;
 
