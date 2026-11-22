@@ -3240,7 +3240,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         }
 
         const thumb = j.objUrl
-          ? '<img src="' + j.objUrl + '" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;flex:0 0 auto;">'
+          ? '<img src="' + j.objUrl + '" alt="" class="img-zoomable" title="点一下看大图" onclick="openImgLightbox(event, this)" style="width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;flex:0 0 auto;">'
           : '<span style="width:40px;height:40px;flex:0 0 auto;"></span>';
 
         const pctText = j.state === 'err' ? '失败' : (j.state === 'done' ? '100%' : (j.pct || 0) + '%');
@@ -3498,6 +3498,115 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     window.rowImgDragOver = rowImgDragOver;
     window.rowImgDragLeave = rowImgDragLeave;
     window.rowImgDrop = rowImgDrop;
+
+    /* ═══════════════════════════════════════════════════════════
+       🔍 预览图点击放大（2026-11-23 团长：「加个点击放大」）
+       入口：桌面表格缩略图 / 手机卡片缩略图 / 批量传图面板缩略图 / 编辑弹窗预览图
+       关闭：点背景空白 / 右上 ✕ / Esc（点图片本身不关，防止看细节时误关）
+       同页有多张图时：左右箭头、键盘 ← → 连续翻，不用关了再点下一张
+       ═══════════════════════════════════════════════════════════ */
+    var IMG_LB_LIST = [];      /* [{ url, cap }] 当前可翻的图 */
+    var IMG_LB_IDX = -1;
+    var IMG_LB_OVF = null;     /* 打开前的 body overflow，关闭时还原 */
+
+    function _imgLbCapOf(it) {
+      const parts = [];
+      if (!it) return '';
+      if (it.name) parts.push(String(it.name));
+      if (it.cn) parts.push('CN ' + it.cn);
+      if (it.batch_name) parts.push(String(it.batch_name));
+      return parts.join(' · ');
+    }
+
+    /* 当前页里所有「有图」的谷子，按表格顺序 —— 只用于左右翻，不写库 */
+    function _imgLbPageList() {
+      const out = [];
+      const arr = (window.ITEM_CACHE && window.ITEM_CACHE.length) ? window.ITEM_CACHE : [];
+      for (let i = 0; i < arr.length; i++) {
+        const it = arr[i];
+        const u = it && it.image_url ? String(it.image_url).trim() : '';
+        if (u) out.push({ url: u, cap: _imgLbCapOf(it) });
+      }
+      return out;
+    }
+
+    function _imgLbPaint() {
+      const box = document.getElementById('imgLightbox');
+      const pic = document.getElementById('imgLightboxPic');
+      const nm = document.getElementById('imgLightboxName');
+      const mt = document.getElementById('imgLightboxMeta');
+      if (!box || !pic) return;
+      const cur = IMG_LB_LIST[IMG_LB_IDX] || null;
+      const raw = cur ? cur.url : String(pic.getAttribute('data-raw') || '');
+      if (!raw) return;
+      pic.setAttribute('data-raw', raw);
+      pic.removeAttribute('data-fb');
+      pic.style.opacity = '';
+      pic.src = sbImg(raw);
+      const n = IMG_LB_LIST.length;
+      box.classList.toggle('has-multi', n > 1);
+      if (nm) nm.textContent = cur ? cur.cap : '';
+      if (mt) {
+        mt.textContent = (n > 1)
+          ? (IMG_LB_IDX + 1) + ' / ' + n + '　点空白处或按 Esc 关闭'
+          : '点空白处或按 Esc 关闭';
+      }
+    }
+
+    function openImgLightbox(ev, el) {
+      if (ev) { if (ev.preventDefault) ev.preventDefault(); if (ev.stopPropagation) ev.stopPropagation(); }
+      if (!el) return;
+      const raw = String(el.getAttribute('data-orig') || el.getAttribute('src') || '').trim();
+      if (!raw) return;
+      const box = document.getElementById('imgLightbox');
+      const pic = document.getElementById('imgLightboxPic');
+      if (!box || !pic) return;
+
+      /* 按原图地址在当页有图的条目里定位；定位到才能左右翻，否则当单张看 */
+      const list = _imgLbPageList();
+      let idx = -1;
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].url === raw) { idx = i; break; }
+      }
+      IMG_LB_LIST = idx >= 0 ? list : [];
+      IMG_LB_IDX = idx >= 0 ? idx : -1;
+      pic.setAttribute('data-raw', raw);
+      _imgLbPaint();
+      IMG_LB_OVF = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';   /* 手机：别让底下页面跟着滚 */
+      box.classList.add('show');
+      try { box.focus(); } catch (_) {}
+    }
+
+    function closeImgLightbox(ev) {
+      if (ev) { if (ev.preventDefault) ev.preventDefault(); if (ev.stopPropagation) ev.stopPropagation(); }
+      const box = document.getElementById('imgLightbox');
+      const pic = document.getElementById('imgLightboxPic');
+      if (box) box.classList.remove('show', 'has-multi');
+      IMG_LB_LIST = []; IMG_LB_IDX = -1;
+      document.body.style.overflow = IMG_LB_OVF || '';
+      IMG_LB_OVF = null;
+      if (pic) { pic.removeAttribute('src'); pic.removeAttribute('data-raw'); }
+    }
+
+    function imgLightboxStep(d) {
+      if (IMG_LB_LIST.length < 2) return;
+      IMG_LB_IDX = (IMG_LB_IDX + d + IMG_LB_LIST.length) % IMG_LB_LIST.length;
+      _imgLbPaint();
+    }
+
+    function imgLightboxKey(e) {
+      const k = e && e.key;
+      if (k === 'Escape') { closeImgLightbox(e); return; }
+      if (k !== 'ArrowLeft' && k !== 'ArrowRight') return;
+      imgLightboxStep(k === 'ArrowLeft' ? -1 : 1);
+      if (e.preventDefault) e.preventDefault();
+    }
+
+    window.openImgLightbox = openImgLightbox;
+    window.closeImgLightbox = closeImgLightbox;
+    window.imgLightboxStep = imgLightboxStep;
+    window.imgLightboxKey = imgLightboxKey;
 
     // 状态样式映射（含老状态兼容）
     function getStatusBadgeClass(status) {
@@ -4351,7 +4460,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         el.innerHTML = '<span style="padding:6px;">图片读不到<br>检查 pay-proofs 桶</span>';
         return;
       }
-      el.innerHTML = '<img src="' + url + '" onerror="imgFallback(this)" style="width:100%; height:100%; object-fit:cover; cursor:zoom-in;" onclick="window.open(this.src,\'_blank\')">';
+      el.innerHTML = '<img src="' + url + '" onerror="imgFallback(this)" class="img-zoomable" title="点一下看大图" style="width:100%; height:100%; object-fit:cover;" onclick="openImgLightbox(event, this)">';
     }
 
     // ==========================================
@@ -5578,8 +5687,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
 
       let html = '', cardsHtml = '';
       pageItems.forEach((item, index) => {
-        const imgTag = item.image_url ? `<img src="${escapeHtml(sbImg(item.image_url))}" data-orig="${escapeHtml(item.image_url)}" onerror="imgFallback(this)" class="img-preview" alt="谷子" loading="lazy">` : `<span style="color:#cbd5e1;font-size:0.75rem;">无图</span>`;
-        const mobileImgTag = item.image_url ? `<img src="${escapeHtml(sbImg(item.image_url))}" data-orig="${escapeHtml(item.image_url)}" onerror="imgFallback(this)" class="admin-card-mobile-img" alt="谷子" loading="lazy">` : `<div class="admin-card-mobile-noimg">无图</div>`;
+        const imgTag = item.image_url ? `<img src="${escapeHtml(sbImg(item.image_url))}" data-orig="${escapeHtml(item.image_url)}" onerror="imgFallback(this)" class="img-preview img-zoomable" alt="谷子" loading="lazy" title="点一下看大图" onclick="openImgLightbox(event, this)" ondblclick="event.stopPropagation()">` : `<span style="color:#cbd5e1;font-size:0.75rem;">无图</span>`;
+        const mobileImgTag = item.image_url ? `<img src="${escapeHtml(sbImg(item.image_url))}" data-orig="${escapeHtml(item.image_url)}" onerror="imgFallback(this)" class="admin-card-mobile-img img-zoomable" alt="谷子" loading="lazy" title="点一下看大图" onclick="openImgLightbox(event, this)" ondblclick="event.stopPropagation()">` : `<div class="admin-card-mobile-noimg">无图</div>`;
         const batchStr = item.batch_name || '默认批次';
         const countryStr = item.country || '日本';
         const statusStr = item.status || '未出荷';
@@ -6844,7 +6953,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       if (strip) {
         strip.style.display = 'flex';
         strip.innerHTML = pages.slice(0, 10).map(function(p){
-          return '<img src="' + escapeHtml(_cutProxyImg(p.img)) + '" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--border);" alt="" onerror="this.style.opacity=.25">' +
+          return '<img src="' + escapeHtml(_cutProxyImg(p.img)) + '" class="img-zoomable" title="点一下看大图" onclick="openImgLightbox(event, this)" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--border);" alt="" onerror="this.style.opacity=.25">' +
                  '<span style="font-size:0.68rem;color:var(--text-muted);align-self:center;margin-right:4px;">' + escapeHtml(_cutPageLabel(p.no)) + '</span>';
         }).join('');
       }
@@ -7023,7 +7132,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         html += '<div style="margin-top:8px;max-height:230px;overflow:auto;">'
              +  items.slice(0, 40).map(function(x){
                   return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:0.8rem;">'
-                       +   '<img src="' + escapeHtml(_cutProxyImg(x.img)) + '" style="width:34px;height:34px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" alt="" onerror="this.style.opacity=.25">'
+                       +   '<img src="' + escapeHtml(_cutProxyImg(x.img)) + '" class="img-zoomable" title="点一下看大图" onclick="openImgLightbox(event, this)" style="width:34px;height:34px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" alt="" onerror="this.style.opacity=.25">'
                        +   '<span style="flex:0 0 auto;font-weight:600;">' + escapeHtml(x.cn) + '</span>'
                        +   '<span style="color:var(--text-muted);flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(x.name) + '</span>'
                        +   '<span style="flex:0 0 auto;font-weight:600;' + (x.price === null ? 'color:var(--text-muted);' : '') + '">'
@@ -9869,7 +9978,7 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
       const rawUrl = _payProofPublicUrl(r.img_path);
       const thumb = rawUrl
         ? '<img src="' + escapeHtml(sbImg(rawUrl)) + '" data-orig="' + escapeHtml(rawUrl) + '" onerror="imgFallback(this)" ' +
-          'onclick="window.open(this.src,\'_blank\')" style="width:132px;height:132px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in;background:#f1f5f9;" alt="存款截图" loading="lazy">'
+          'onclick="openImgLightbox(event, this)" style="width:132px;height:132px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in;background:#f1f5f9;" alt="存款截图" loading="lazy">'
         : '<div style="width:132px;height:132px;border-radius:8px;border:1px solid var(--border);background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:0.72rem;color:var(--text-muted);">无截图</div>';
       const amt = Number(r.amount || 0);
       return '' +
