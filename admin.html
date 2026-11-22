@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <!-- ⚡ 资源预加载（2026-11-16）：让脚本与 HTML 并行下载 -->
-  <link rel="preload" href="./admin.app.js?v=b59c709d" as="script">
+  <link rel="preload" href="./admin.app.js?v=8d3d796f" as="script">
   <link rel="preload" href="./admin.auction.js?v=f09a384b" as="script">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script>
@@ -1455,6 +1455,68 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
     .img-cell-btn:hover { background: #1a1a1a; color: #fefe2c; border-color: #1a1a1a; }
     @media (hover: none) { .img-cell-btn { opacity: 1; } }
 
+    /* 🔍 预览图点击放大（2026-11-23 团长要求）
+       只加一个新浮层，不动列表原有版式：缩略图只多一个 zoom-in 光标和点击事件。
+       关闭方式：点背景空白 / 右上 ✕ / Esc；同页有多张图时左右箭头（或 ← →）翻。 */
+    .img-zoomable { cursor: zoom-in; }
+    .img-lightbox {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 10003;
+      background: rgba(6, 10, 18, 0.985);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 54px 18px 74px;
+      outline: none;
+    }
+    .img-lightbox.show { display: flex; }
+    #imgLightboxPic {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto; height: auto;
+      object-fit: contain;
+      border-radius: 8px;
+      background: #0b1020;
+      box-shadow: 0 14px 44px rgba(0,0,0,.55);
+      cursor: default;
+    }
+    #imgLightboxCap {
+      position: absolute;
+      left: 0; right: 0; bottom: 16px;
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      padding: 0 58px;
+      text-align: center;
+      pointer-events: none;
+    }
+    #imgLightboxName { color: #f1f5f9; font-size: 0.86rem; font-weight: 600; line-height: 1.4; }
+    #imgLightboxMeta { color: #94a3b8; font-size: 0.72rem; line-height: 1.4; }
+    .lb-close {
+      position: absolute; top: 10px; right: 12px;
+      width: 34px; height: 34px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.12);
+      color: #fff; font-size: 15px; line-height: 1; cursor: pointer;
+    }
+    .lb-close:hover { background: #fefe2c; color: #1a1a1a; border-color: #fefe2c; }
+    .lb-arrow {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      width: 38px; height: 58px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.24); background: rgba(255,255,255,.10);
+      color: #fff; font-size: 26px; line-height: 1; cursor: pointer;
+      display: none;
+    }
+    .lb-arrow:hover { background: rgba(255,255,255,.22); }
+    .lb-prev { left: 8px; }
+    .lb-next { right: 8px; }
+    .img-lightbox.has-multi .lb-arrow { display: block; }
+    @media (max-width: 900px) {
+      .img-lightbox { padding: 50px 10px 70px; }
+      .lb-arrow { width: 32px; height: 50px; font-size: 22px; }
+      .lb-prev { left: 4px; }
+      .lb-next { right: 4px; }
+      #imgLightboxCap { padding: 0 44px; }
+    }
+
           /* ═══════════════════════════════════════════════════════════
              
 
@@ -1704,7 +1766,8 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
                 </div>
                 <div id="imagePreviewBox" style="width: 80px; height: 80px; border: 1px dashed var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #f8fafc; overflow: hidden; position: relative; flex-shrink: 0;">
                   <span id="imagePreviewText" style="font-size: 0.75rem; color: #94a3b8;">无图预览</span>
-                  <img id="imagePreviewImg" style="width: 100%; height: 100%; object-fit: cover; border-radius: 6px; display: none;" alt="预览">
+                  <img id="imagePreviewImg" class="img-zoomable" style="width: 100%; height: 100%; object-fit: cover; border-radius: 6px; display: none;" alt="预览"
+                       onclick="openImgLightbox(event, this)" title="点一下看大图">
                 </div>
               </div>
             </div>
@@ -2662,7 +2725,7 @@ cn 点数 金额
   <div class="toast" id="toast"></div>
 
   </div>
-<script src="./admin.app.js?v=b59c709d"></script>
+<script src="./admin.app.js?v=8d3d796f"></script>
 
 
 
@@ -3373,5 +3436,22 @@ cn 点数 金额
 
 <script src="./admin.auction.js?v=f09a384b"></script>
 <!-- AUC_ADMIN_END 2026-11-10 -->
+  <!-- 🔍 预览图点击放大（2026-11-23）：点缩略图看大图，同页多张可左右翻
+       ⚠️ 必须放在 .container 外面（position:fixed 才不被推入动画的 transform 影响） -->
+  <div id="imgLightbox" class="img-lightbox" tabindex="-1"
+       onclick="closeImgLightbox(event)" onkeydown="imgLightboxKey(event)">
+    <img id="imgLightboxPic" alt="谷子大图" onclick="event.stopPropagation()" onerror="imgFallback(this)">
+    <button type="button" class="lb-arrow lb-prev" title="上一张（←）"
+            onclick="event.stopPropagation(); imgLightboxStep(-1)">‹</button>
+    <button type="button" class="lb-arrow lb-next" title="下一张（→）"
+            onclick="event.stopPropagation(); imgLightboxStep(1)">›</button>
+    <button type="button" class="lb-close" title="关闭（Esc）"
+            onclick="event.stopPropagation(); closeImgLightbox(event)">✕</button>
+    <div id="imgLightboxCap">
+      <span id="imgLightboxName"></span>
+      <span id="imgLightboxMeta"></span>
+    </div>
+  </div>
+
 </body>
 </html>
