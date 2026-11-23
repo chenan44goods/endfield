@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <!-- ⚡ 资源预加载（2026-11-16）：让脚本与 HTML 并行下载 -->
-  <link rel="preload" href="./admin.app.js?v=3fc1384d" as="script">
+  <link rel="preload" href="./admin.app.js?v=4581eb81" as="script">
   <link rel="preload" href="./admin.auction.js?v=f09a384b" as="script">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script>
@@ -1873,30 +1873,6 @@ body { font-family:var(--font-ui); background:var(--c-void); color:var(--c-text-
           </div>
         </div>
 
-        <!-- 🖼️ 批量补图（2026-11-23 团长要求）
-             解决两个卡点：
-               ① 录入框一次只挂 1 张、还得等上一张传完才能选下一张；
-               ② Excel / 粘贴导入后「图片」列是本机 C:\ 路径被丢空，几十件要一张张手动补。
-             这里一次拖入 N 张，按「文件名 = 谷子名称」自动配对，**先预览再写库**，不直接落库。
-             ⚠️ 口径沿用 11-04 团长定的：只收 jpg / png、单张 ≤ 10MB、超了直接拒绝并说清原因，绝不偷偷压缩。 -->
-        <details id="bulkImgBox" ontoggle="bulkImgScopeHint()" style="margin-bottom: 12px; border: 1px dashed rgba(0,0,0,.18); border-radius: 16px; padding: 10px 14px;">
-          <summary style="cursor: pointer; font-size: 0.88rem; font-weight: 600;">📚 一次传几十张图（按文件名自动配对到谷子）</summary>
-          <div style="margin-top: 10px;">
-            <input type="file" id="bulkImgFile" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple style="display: none;" onchange="bulkImgPick(event)">
-            <div id="bulkImgZone" class="img-dropzone" role="button" tabindex="0"
-                 onclick="document.getElementById('bulkImgFile').click()"
-                 ondragover="bulkImgDragOver(event)" ondragleave="bulkImgDragLeave(event)" ondrop="bulkImgDrop(event)">
-              <div class="dz-icon">📚</div>
-              <div class="dz-title">一次拖入多张图片，或 <span class="dz-link">点击多选</span></div>
-              <div class="dz-hint">文件名按谷子名称命名（如「洛茜立牌.jpg」），jpg / png，单张 ≤ 10MB</div>
-            </div>
-            <!-- 配对范围提示：筛了批次就锁定在批次内认名字（11-23 团长要的） -->
-            <div id="bulkImgScope" style="margin-top: 8px; font-size: 0.78rem; line-height: 1.55; color: var(--text-muted);"></div>
-            <div id="bulkImgProgress" style="display: none; margin-top: 8px; font-size: 0.8rem; color: var(--text-muted);"></div>
-            <div id="bulkImgList" style="display: none; margin-top: 10px;"></div>
-            <div id="bulkImgActions" style="display: none; margin-top: 10px; gap: 8px; flex-wrap: wrap; align-items: center;"></div>
-          </div>
-        </details>
         <!-- 列表行换图用的隐藏选择器（手机点图片格右下角 📷 时走它） -->
         <input type="file" id="rowImgFile" accept=".jpg,.jpeg,.png,image/jpeg,image/png" style="display: none;" onchange="rowImgFilePicked(event)">
 
@@ -2762,7 +2738,7 @@ cn 点数 金额
   <div class="toast" id="toast"></div>
 
   </div>
-<script src="./admin.app.js?v=3fc1384d"></script>
+<script src="./admin.app.js?v=4581eb81"></script>
 
 
 
