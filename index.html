@@ -3117,6 +3117,18 @@
       return (d && typeof d === 'object') ? d : {};
     }
 
+    /* 🩺 2026-11-23：写库被拒时把服务端原话带出来。
+       原来只报「登记失败（HTTP 400）」，服务端到底说了什么全被丢掉 —— 团长和我都没法定位。
+       ⚠️ 只在失败分支调用；成功的 body 留给 _resJson 读，不要在这里抢先读走。 */
+    async function _writeFailMsg(res, what){
+      let t = '';
+      try { t = await res.text(); } catch (e) {}
+      t = String(t || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+      const hint = (res.status === 400 || res.status === 422)
+        ? '［先彻底刷新页面再试；还报就截这句话给团长］' : '';
+      return (what || '登记失败') + '（HTTP ' + res.status + '）' + hint + (t ? ' 服务端说：' + t : '');
+    }
+
     /* 🌍 国际掉落到期日（2026-11-07 团长要求）：在「交肾核算」的批次卡片上附带显示。
        数据源与后台完全一致：image_data.logistics_data[].intl_due_date（YYYY-MM-DD，留空＝不计时、不告警）。
        ⚠️ 纯显示：不改数据、不改状态；岛内运费(fee_type='island')不出现「国际」字样。
@@ -4096,7 +4108,7 @@
           let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY + '&select=version';
           if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
           const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
-          if (!res.ok) throw new Error('登记失败（HTTP ' + res.status + '）');
+          if (!res.ok) throw new Error(await _writeFailMsg(res, '登记失败'));
           if (ver === null) { written = true; break; }
           let got = [];
           try { got = await _resJson(res, 15000); } catch (e) { got = []; }
@@ -4222,7 +4234,7 @@
           let url = '/rest/v1/leader_data?query_key=eq.' + DATA_KEY + '&select=version';
           if (ver !== null) { body.version = ver + 1; url += '&version=eq.' + ver; }
           const res = await sbFetch(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) });
-          if (!res.ok) throw new Error('登记失败（HTTP ' + res.status + '）');
+          if (!res.ok) throw new Error(await _writeFailMsg(res, '登记失败'));
           if (ver === null) { window.__LAST_ROW = row; written = true; break; }
           let got = [];
           try { got = await _resJson(res, 15000); } catch (e) { got = []; }
