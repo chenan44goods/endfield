@@ -2851,236 +2851,14 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
     }
     window.handleImageUpload = handleImageUpload;
 
-    /* ══════════════════ 🖼️ 批量补图（2026-11-23 团长要求） ══════════════════
-       团长原话：「管理后台传图太麻烦了」。读代码定位到 4 个卡点，这段解决前两个：
-         ① imgDropZone 一次只挂 1 张（IMG_MAX_COUNT = 1）且 IMG_TASK 互斥 —— 必须等上一张传完才能选下一张
-         ② Excel / 粘贴导入时「图片」列是本机 C:\ 路径，_normImportImg 直接丢空 → 几十件要一张张手动补
-       做法：一次收 N 张 → 并发 3 条流水线上传 → 按「文件名 = 谷子名称」配对 → 预览确认 → 一次写库。
-
-       ⚠️ 口径（11-04 团长定的，11-23 明确「维持现状不动」）：
+    /* ══════════════════ 🖼️ 单张图片上传（只给「列表行直接换图」用） ══════════════════
+       2026-11-23 团长要求删掉「一次传几十张图」的批量面板（配对容易出错、他不用）。
+       这里只保留行换图需要的那一段：一张图 → XHR 真进度 → 返回 publicUrl。
+       ⚠️ 口径不变（11-04 团长定、11-23 明确「维持现状不动」）：
           只收 jpg / png、单张 ≤ 10MB、超了直接拒绝并说清原因，**绝不偷偷压缩**。
-       ⚠️ 上传这段故意跟 startImageUpload 分开写、不合并：
-          那条是核心录入链路，不动它，避免把现有单图上传搞坏。
-       ⚠️ 配对规则：归一化（去扩展名 / 空格 / 标点 / 大小写）后
-          ① 完全相同 → ② 互相包含 → ③ 候选多于 1 条就让人挑（当前筛选结果里的优先） → ④ 一条都没有 = 没找到
-       ⚠️ 只在「确认写入」时才碰 RAW_ITEMS + 保存，上传本身不写库。
+       ⚠️ 故意跟 startImageUpload（录入框那条核心链路）分开写、不合并。
     */
-    const BULK_IMG_CONCURRENCY = 3;
-    const BULK_DATALIST_MAX = 400;
-    /* 一次最多收 60 张：拖进来的 File 会全部留在内存里（100 张 × 5MB = 500MB），
-       手机上直接卡死，所以宁可让他分两批。 */
-    const BULK_MAX_FILES = 60;
-    let BULK_JOBS = [];        /* [{ id, file, objUrl, name, state, pct, url, err, match, chosen }] */
-    let BULK_SEQ = 0;          /* 稳定行 id：重画时手选值不丢 */
-    let BULK_BUSY = false;
-
-    function _bulkNormName(s) {
-      return String(s == null ? '' : s)
-        .replace(/\.(jpe?g|png)$/i, '')
-        /* 系统/微信导图常自动加副本序号：「洛茜立牌 (1).png」「洛茜立牌（2）.jpg」。
-           这种是同一张图的不同副本，不算「名字相近」，去掉后照样能自动配。
-           ⚠️ 只去「括号 + 纯数字」结尾，不动「亚克力砖2」这种真名。 */
-        .replace(/[（(]\s*\d+\s*[）)]\s*$/, '')
-        .replace(/[\s\u3000]+/g, '')
-        .replace(/[（）()【】\[\]「」『』《》<>_\-—·、,，.。!！?？:：;；'"“”]/g, '')
-        .replace(/(副本|copy)$/i, '')
-        .toLowerCase();
-    }
-
-    /* 按名字取候选：exact = 归一化完全相同，fuzzy = 互相包含 */
-    function _bulkCands(name) {
-      const key = _bulkNormName(name);
-      if (!key) return { exact: [], fuzzy: [], key: key };
-      const inView = new Set((window.__LAST_FILTERED || [])
-        .map(function (x) { return x ? _itemKeyOf(x) : ''; })
-        .filter(function (k) { return k; }));
-      const exact = [], fuzzy = [];
-      RAW_ITEMS.forEach(function (it, idx) {
-        if (!it) return;
-        const n = _bulkNormName(it.name);
-        if (!n) return;
-        const k = _itemKeyOf(it, idx);
-        const rec = {
-          key: k, idx: idx,
-          name: it.name || '', cn: it.cn || '', batch: it.batch_name || '默认批次',
-          hasImg: !!String(it.image_url || '').trim(),
-          inView: inView.has(k)
-        };
-        if (n === key) exact.push(rec);
-        else {
-          /* 包含匹配要设门槛，否则文件名「立牌.jpg」会把「洛茜立牌」当成命中。
-             规则：两边都不少于 3 个字，且短的那个不短于长的一半（4 vs 8 可以，2 vs 4 不行）。 */
-          const a = n.length, b = key.length;
-          const mn = Math.min(a, b), mx = Math.max(a, b);
-          if (mn >= 3 && mn * 2 >= mx && (key.indexOf(n) >= 0 || n.indexOf(key) >= 0)) fuzzy.push(rec);
-        }
-      });
-      const rank = function (a, b) {
-        if (a.inView !== b.inView) return a.inView ? -1 : 1;
-        return Math.abs(String(a.name).length - key.length) - Math.abs(String(b.name).length - key.length);
-      };
-      exact.sort(rank); fuzzy.sort(rank);
-      return { exact: exact, fuzzy: fuzzy, key: key };
-    }
-
-    /* 当前有没有真的把范围筛窄（筛了批次/搜索/地区…）。
-       团长 11-23：「我导某个批次时，只认这个批次里的谷子」——
-       筛窄了就别去别的批次里找同名，也别因为别的批次有同名就跳过。 */
-    function _bulkScoped() {
-      let view = [];
-      try { view = window.__LAST_FILTERED || []; } catch (_) { view = []; }
-      const total = RAW_ITEMS.length;
-      return view.length > 0 && view.length < total;
-    }
-
-    /* 批量补图的配对口径（2026-11-23 团长两次改口后的最终版）：
-       ┌ 筛了批次/搜索（最常见）→ 只在这个范围里认名字，
-       │   名字「完全一样」或「互相包含」都算对上；同一个名字有多条时，
-       │   只有一条缺图就挂给它，多条都缺/都有图才跳过。
-       ├ 没筛（全部批次）→ 保守：只认完全同名，相似一律跳过，避免挂到别的批次。
-       └ 跳过 ≠ 不上传：图照样传（不白费流量），只是不写库；列表里给折叠的手选入口。 */
-    function _bulkDecide(name) {
-      const c = _bulkCands(name);
-      const inView = function (r) { return r.inView; };
-      const onlyBlank = function (pool) {
-        const blank = pool.filter(function (r) { return !r.hasImg; });
-        return blank.length === 1 ? blank[0] : null;
-      };
-      const whyMulti = function (pool) {
-        const blankN = pool.filter(function (r) { return !r.hasImg; }).length;
-        return blankN > 1
-          ? '同名 ' + pool.length + ' 条都还没图'
-          : '同名 ' + pool.length + ' 条都已经有图了';
-      };
-      /* 在一个候选池里定下唯一一条；定不下来返回 null */
-      const pickOne = function (exactPool, fuzzyPool, allowFuzzy) {
-        if (exactPool.length === 1) return { kind: 'ok', how: 'exact', rec: exactPool[0], pool: exactPool };
-        if (exactPool.length > 1) {
-          const b = onlyBlank(exactPool);
-          if (b) return { kind: 'ok', how: 'exact', rec: b, pool: exactPool };
-          return { kind: 'skip', how: 'exact', reason: whyMulti(exactPool), pool: exactPool.slice(0, 12) };
-        }
-        if (allowFuzzy && fuzzyPool.length) {
-          if (fuzzyPool.length === 1) return { kind: 'ok', how: 'fuzzy', rec: fuzzyPool[0], pool: fuzzyPool };
-          const b = onlyBlank(fuzzyPool);
-          if (b) return { kind: 'ok', how: 'fuzzy', rec: b, pool: fuzzyPool };
-          return {
-            kind: 'skip', how: 'fuzzy',
-            reason: '名字相近的有 ' + fuzzyPool.length + ' 条', pool: fuzzyPool.slice(0, 12)
-          };
-        }
-        return null;
-      };
-
-      const scopeExact = c.exact.filter(inView);
-      const scopeFuzzy = c.fuzzy.filter(inView);
-      const scoped = _bulkScoped();
-
-      /* ① 筛了批次 → 只在这个范围里认名字，相似也算对上 */
-      if (scoped) {
-        const hit = pickOne(scopeExact, scopeFuzzy, true);
-        if (hit) return hit;
-        const anyWhole = c.exact.length ? c.exact : c.fuzzy;
-        if (anyWhole.length) {
-          return {
-            kind: 'skip', how: 'scope',
-            reason: '这个批次里没对上（别批次有 ' + anyWhole.length + ' 条同名）',
-            pool: anyWhole.slice(0, 12)
-          };
-        }
-        return { kind: 'none', how: 'fuzzy', pool: [] };
-      }
-
-      /* ② 没筛窄（全部批次）→ 保守：只认完全同名 */
-      const hitAll = pickOne(c.exact, c.fuzzy, false);
-      if (hitAll) return hitAll;
-      if (c.fuzzy.length) {
-        return {
-          kind: 'skip', how: 'fuzzy',
-          reason: c.fuzzy.length > 1 ? '名字相近的有 ' + c.fuzzy.length + ' 条' : '名字相近，没完全对上',
-          pool: c.fuzzy.slice(0, 12)
-        };
-      }
-      return { kind: 'none', how: 'fuzzy', pool: [] };
-    }
-
-    /* 按 key 回查当前条目（写入前用它取到最新对象，避免用过期的下标） */
-    function _bulkRecByKey(key) {
-      if (!key) return null;
-      const k = String(key);
-      for (let i = 0; i < RAW_ITEMS.length; i++) {
-        const it = RAW_ITEMS[i];
-        if (it && _itemKeyOf(it, i) === k) {
-          return {
-            key: k, idx: i,
-            name: it.name || '', cn: it.cn || '', batch: it.batch_name || '默认批次',
-            hasImg: !!String(it.image_url || '').trim()
-          };
-        }
-      }
-      return null;
-    }
-
-    /* ── 收文件 ─────────────────────────────────────────────────────────── */
-    function _bulkAddFiles(fileList) {
-      const files = Array.prototype.slice.call(fileList || []);
-      if (!files.length) return;
-
-      const room = BULK_MAX_FILES - BULK_JOBS.length;
-      if (room <= 0) {
-        return showToast('这一批已经 ' + BULK_JOBS.length + ' 张了，先「确认写入」或「清空重来」再拖下一批');
-      }
-      let list = files;
-      if (files.length > room) {
-        list = files.slice(0, room);
-        showToast('一次最多 ' + BULK_MAX_FILES + ' 张，这次先收前 ' + room + ' 张，剩下的再拖一次');
-      }
-
-      list.forEach(function (f) {
-        const d = _bulkDecide(f.name);
-        let objUrl = '';
-        try { objUrl = URL.createObjectURL(f); } catch (_) {}
-        BULK_JOBS.push({
-          id: ++BULK_SEQ,
-          file: f,
-          objUrl: objUrl,
-          name: f.name,
-          state: 'pending',        /* pending | up | done | err */
-          pct: 0,
-          url: '',
-          err: '',
-          match: d,
-          chosen: d.kind === 'ok' ? d.rec.key : ''
-        });
-      });
-      _bulkRun();
-    }
-
-    async function _bulkRun() {
-      if (BULK_BUSY) { bulkImgRender(); return; }
-      BULK_BUSY = true;
-      const zone = document.getElementById('bulkImgZone');
-      if (zone) zone.classList.add('dz-busy');
-      let cursor = 0;
-      const worker = async function () {
-        while (cursor < BULK_JOBS.length) {
-          const job = BULK_JOBS[cursor++];
-          if (!job || job.state !== 'pending') continue;
-          job.state = 'up';
-          bulkImgRender();
-          await _bulkUploadOne(job);
-          bulkImgRender();
-        }
-      };
-      const n = Math.min(BULK_IMG_CONCURRENCY, Math.max(1, BULK_JOBS.length));
-      await Promise.all(Array.from({ length: n }, worker));
-      BULK_BUSY = false;
-      if (zone) zone.classList.remove('dz-busy');
-      bulkImgRender();
-    }
-
-    /* 单张上传 → 真实进度（XHR，理由同 startImageUpload：supabase-js 的 upload() 不给进度） */
-    function _bulkUploadOne(job) {
+    function _uploadOneImage(job) {
       return new Promise(function (resolve) {
         const chk = _imgCheck(job.file);
         if (!chk.ok) { job.state = 'err'; job.err = chk.msg; return resolve(); }
@@ -3113,8 +2891,6 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           xhr.upload.onprogress = function (ev) {
             if (!ev || !ev.lengthComputable) return;
             job.pct = Math.round(ev.loaded / ev.total * 100);
-            const el = document.querySelector('[data-bulk-pct="' + job.id + '"]');
-            if (el) el.textContent = job.pct + '%';
           };
           xhr.onload = function () {
             if (xhr.status >= 200 && xhr.status < 300) {
@@ -3139,287 +2915,15 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       });
     }
 
-    /* ── 渲染 ───────────────────────────────────────────────────────────── */
-    function _bulkReadyJobs() {
-      return BULK_JOBS.filter(function (j) {
-        return j.state === 'done' && j.url && j.chosen && _bulkRecByKey(j.chosen);
-      });
-    }
-
-    /* 面板顶部那句「配对范围」提示：让团长一眼看到现在锁没锁批次。
-       筛了批次 → 绿字确认已锁定；没筛 → 橙字提醒先筛，否则名字相近会跳过。 */
-    function bulkImgScopeHint() {
-      const el = document.getElementById('bulkImgScope');
-      if (!el) return;
-      const n = (window.__LAST_FILTERED || []).length;
-      const total = RAW_ITEMS.length;
-      if (_bulkScoped()) {
-        el.style.color = '#15803d';
-        el.innerHTML = '🎯 已锁定当前筛选的 <b>' + n + '</b> 条（全库 ' + total + ' 条）：' +
-          '只在这 ' + n + ' 条里按名字认，<b>名字相近也算对上</b>，不会挂到别的批次。';
-      } else {
-        el.style.color = '#b45309';
-        el.innerHTML = '范围：全部 <b>' + total + '</b> 条。<b>先筛好批次再传图</b>' +
-          '（下面那排筛选）—— 没筛的时候只认一模一样的名字（名字相近会跳过，防止挂到别的批次）。';
-      }
-    }
-
-    function bulkImgRender() {
-      const box = document.getElementById('bulkImgList');
-      const bar = document.getElementById('bulkImgProgress');
-      const act = document.getElementById('bulkImgActions');
-      if (!box || !bar || !act) return;
-      try { bulkImgScopeHint(); } catch (_) {}
-
-      if (!BULK_JOBS.length) {
-        box.style.display = 'none'; box.innerHTML = '';
-        bar.style.display = 'none'; bar.textContent = '';
-        act.style.display = 'none'; act.innerHTML = '';
-        return;
-      }
-
-      const doneN = BULK_JOBS.filter(function (j) { return j.state === 'done'; }).length;
-      const errN = BULK_JOBS.filter(function (j) { return j.state === 'err'; }).length;
-      const ready = _bulkReadyJobs();
-      const pendingPick = BULK_JOBS.filter(function (j) {
-        return j.state === 'done' && j.url && !j.chosen;
-      }).length;
-      const willReplace = ready.filter(function (j) {
-        const r = _bulkRecByKey(j.chosen);
-        return r && r.hasImg;
-      }).length;
-
-      bar.style.display = 'block';
-      bar.textContent = '共 ' + BULK_JOBS.length + ' 张 · 已传 ' + doneN +
-        (errN ? ' · 失败 ' + errN : '') +
-        (pendingPick ? ' · ⏭ 跳过 ' + pendingPick : '') +
-        (BULK_BUSY ? ' · 传输中…' : '');
-
-      /* 手选用的 datalist：只用当前筛选结果，避免 2600 条全塞进去 */
-      const allNames = (window.__LAST_FILTERED && window.__LAST_FILTERED.length
-        ? window.__LAST_FILTERED
-        : RAW_ITEMS).slice(0, BULK_DATALIST_MAX);
-      let dl = '<datalist id="bulkNameList">';
-      allNames.forEach(function (it) {
-        const nm = String(it.name || '').trim();
-        if (!nm) return;
-        dl += '<option value="' + escapeHtml(nm) + '"></option>';
-      });
-      dl += '</datalist>';
-
-      let html = '<div style="border:1px solid var(--border); border-radius:10px; overflow:hidden;">';
-      html += '<div style="max-height:360px; overflow:auto;">';
-
-      BULK_JOBS.forEach(function (j) {
-        let right = '';
-        if (j.state === 'pending' || j.state === 'up') {
-          right = '<span style="font-size:.76rem; color:var(--text-muted);">等待上传…</span>';
-        } else if (j.state === 'err') {
-          right = '<span style="font-size:.76rem; color:#dc2626;">❌ ' + escapeHtml(j.err || '上传失败') + '</span>';
-        } else if (j.match && j.match.kind === 'ok' && j.chosen) {
-          const r = _bulkRecByKey(j.chosen) || j.match.rec;
-          const tag = r && r.hasImg
-            ? '<span style="color:#b45309;">↻ 覆盖</span>'
-            : '<span style="color:#15803d;">✓ 新挂</span>';
-          /* 靠「名字相近（包含匹配）」挂上的，标一下，团长一眼能看出这条不是完全同名 */
-          const approx = j.match.how === 'fuzzy'
-            ? '<span style="color:#b45309;font-size:.7rem;">≈名字相近</span> '
-            : '';
-          right = tag + ' ' + approx + '<b>' + escapeHtml(r.name) + '</b>' +
-            '<span style="color:var(--text-muted);"> · ' + escapeHtml(r.cn) + ' · ' + escapeHtml(r.batch) + '</span>';
-        } else if (j.match) {
-          /* 剩下的都是「跳过」：名字相近 / 同名多条 / 完全没找到 —— 一律不猜。
-             图照样传上去了，想挂就展开这里自己挑，不想挂就直接确认写入其它的。 */
-          const isNone = j.match.kind === 'none';
-          const why = isNone ? '没找到同名谷子' : (j.match.reason || '');
-          const pool = j.match.pool || [];
-          const picker = pool.length
-            ? '<select data-bulk-sel="' + j.id + '" onchange="bulkImgChoose(this)" style="max-width:100%;margin-top:3px;">' +
-                '<option value="">— 选一条 —</option>' +
-                pool.map(function (r) {
-                  return '<option value="' + escapeHtml(r.key) + '"' + (j.chosen === r.key ? ' selected' : '') + '>' +
-                    escapeHtml(r.name + ' · ' + r.cn + ' · ' + r.batch) + '</option>';
-                }).join('') +
-              '</select>'
-            : '<input type="text" list="bulkNameList" data-bulk-manual="' + j.id + '" ' +
-                'placeholder="输入谷子名搜…" value="" onchange="bulkImgManual(this)" ' +
-                'style="max-width:100%;margin-top:3px;font-size:.76rem;padding:3px 6px;">';
-          right = '<span style="font-size:.72rem;color:#6b7280;">⏭ 跳过' +
-            (why ? '（' + escapeHtml(why) + '）' : '') + '</span>' +
-            '<details style="margin-top:1px;"><summary style="font-size:.72rem;color:#2563eb;cursor:pointer;">想挂就点这里手动选</summary>' +
-            picker + '</details>';
-        } else {
-          right = '';
-        }
-
-        const thumb = j.objUrl
-          ? '<img src="' + j.objUrl + '" alt="" class="img-zoomable" title="点一下看大图" onclick="openImgLightbox(event, this)" style="width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;flex:0 0 auto;">'
-          : '<span style="width:40px;height:40px;flex:0 0 auto;"></span>';
-
-        const pctText = j.state === 'err' ? '失败' : (j.state === 'done' ? '100%' : (j.pct || 0) + '%');
-        const pctColor = j.state === 'err' ? '#dc2626' : (j.state === 'done' ? '#15803d' : 'var(--text-muted)');
-
-        html += '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:7px 10px; border-top:1px solid #eef2f7;">' +
-          thumb +
-          '<span style="flex:1 1 130px; min-width:0; font-size:.76rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' + escapeHtml(j.name) + '">' + escapeHtml(j.name) + '</span>' +
-          '<span style="flex:2 1 220px; min-width:0; font-size:.76rem;">' + right + '</span>' +
-          '<span data-bulk-pct="' + j.id + '" style="flex:0 0 42px; text-align:right; font-size:.72rem; color:' + pctColor + ';">' + pctText + '</span>' +
-          '</div>';
-      });
-
-      html += '</div></div>' + dl;
-      box.innerHTML = html;
-      box.style.display = 'block';
-
-      let actHtml = '';
-      if (ready.length) {
-        actHtml += '<button type="button" class="btn btn-primary" onclick="bulkImgCommit()">✅ 确认写入 ' + ready.length + ' 张</button>';
-        if (willReplace) {
-          actHtml += '<span style="font-size:.76rem;color:#b45309;">其中 ' + willReplace + ' 条原来有图，会被覆盖</span>';
-        }
-      } else {
-        actHtml += '<span style="font-size:.76rem;color:var(--text-muted);">还没有可写入的图</span>';
-      }
-      actHtml += '<button type="button" class="btn btn-secondary" onclick="bulkImgReset()">清空重来</button>';
-      act.innerHTML = actHtml;
-      act.style.display = 'flex';
-    }
-
-    /* 手选：下拉（多条同名） */
-    function bulkImgChoose(sel) {
-      const id = Number(sel && sel.getAttribute('data-bulk-sel'));
-      const job = BULK_JOBS.filter(function (j) { return j.id === id; })[0];
-      if (!job) return;
-      job.chosen = String(sel.value || '');
-      const rec = _bulkRecByKey(job.chosen);
-      job.match = rec ? { kind: 'ok', how: job.match && job.match.how, rec: rec, pool: (job.match && job.match.pool) || [] }
-        : { kind: 'skip', how: job.match && job.match.how, reason: '没对上这一条', pool: (job.match && job.match.pool) || [] };
-      bulkImgRender();
-    }
-
-    /* 手选：输入框搜名字（没找到时） */
-    function bulkImgManual(inp) {
-      const id = Number(inp && inp.getAttribute('data-bulk-manual'));
-      const job = BULK_JOBS.filter(function (j) { return j.id === id; })[0];
-      if (!job) return;
-      const typed = String(inp.value || '').trim();
-      if (!typed) return;
-      const d = _bulkDecide(typed);
-      job.match = d;
-      job.chosen = d.kind === 'ok' ? d.rec.key : '';
-      if (d.kind === 'none') showToast('没搜到「' + typed + '」，检查一下名字或先在上方筛一下批次');
-      else if (d.kind === 'skip') showToast('「' + typed + '」还是对不上唯一的一条（' + (d.reason || '') + '），展开下拉里挑一条');
-      bulkImgRender();
-    }
-
-    /* ── 写入 ───────────────────────────────────────────────────────────── */
-    async function bulkImgCommit() {
-      const ready = _bulkReadyJobs();
-      if (!ready.length) return showToast('没有可写入的图片');
-
-      /* 同一条谷子被两张图对上 → 只留最后一张，否则悄悄丢掉一张图 */
-      const byKey = {};
-      ready.forEach(function (j) { byKey[j.chosen] = j; });
-      const uniq = Object.keys(byKey).map(function (k) { return byKey[k]; });
-      if (uniq.length < ready.length) {
-        showToast('有 ' + (ready.length - uniq.length) + ' 张图指向同一件谷子，已只保留最后一张');
-      }
-
-      const willReplace = uniq.filter(function (j) {
-        const r = _bulkRecByKey(j.chosen);
-        return r && r.hasImg;
-      }).length;
-
-      const skipN = BULK_JOBS.filter(function (j) {
-        return j.state === 'done' && j.url && !j.chosen;
-      }).length;
-      const msg = '确认把 ' + uniq.length + ' 张图挂到对应谷子上？' +
-        (willReplace ? '\n\n其中 ' + willReplace + ' 条原来有图，会被替换。' : '') +
-        (skipN ? '\n\n另外 ' + skipN + ' 张名字相近/同名多条，已跳过（不写入）。' : '');
-      if (!confirm(msg)) return;
-
-      let changed = 0;
-      uniq.forEach(function (j) {
-        const r = _bulkRecByKey(j.chosen);
-        if (!r) return;
-        const it = RAW_ITEMS[r.idx];
-        if (!it) return;
-        it.image_url = j.url;
-        DIRTY_ITEM_IDS.add(String(it.item_id || it.id || ''));
-        changed++;
-      });
-      if (!changed) return showToast('没有条目被改动');
-
-      const ok = await saveDataToSupabase();
-      if (ok === false) {
-        /* 图已经在图床上，只需重试保存 —— 不要让团长以为要重传 */
-        return showToast('❌ 保存失败（图已上传成功），再点一次「确认写入」即可');
-      }
-      try { renderTable(); } catch (_) {}
-      showToast('✅ 已挂 ' + changed + ' 张图');
-      bulkImgReset();
-    }
-
-    function bulkImgReset() {
-      BULK_JOBS.forEach(function (j) {
-        if (j.xhr && j.state === 'up') { try { j.xhr.abort(); } catch (_) {} }
-        if (j.objUrl) { try { URL.revokeObjectURL(j.objUrl); } catch (_) {} }
-      });
-      BULK_JOBS = [];
-      BULK_BUSY = false;
-      const inp = document.getElementById('bulkImgFile');
-      if (inp) inp.value = '';
-      const zone = document.getElementById('bulkImgZone');
-      if (zone) zone.classList.remove('dz-over', 'dz-busy');
-      bulkImgRender();
-    }
-
-    /* ── 入口 ───────────────────────────────────────────────────────────── */
-    function bulkImgPick(e) {
-      const files = e && e.target && e.target.files ? e.target.files : null;
-      if (!files || !files.length) return;
-      _bulkAddFiles(files);
-      if (e.target) e.target.value = '';
-    }
-    function bulkImgDragOver(e) {
-      e.preventDefault(); e.stopPropagation();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-      const z = document.getElementById('bulkImgZone');
-      if (z) z.classList.add('dz-over');
-    }
-    function bulkImgDragLeave(e) {
-      e.preventDefault(); e.stopPropagation();
-      const z = document.getElementById('bulkImgZone');
-      if (z) z.classList.remove('dz-over');
-    }
-    function bulkImgDrop(e) {
-      e.preventDefault(); e.stopPropagation();
-      const z = document.getElementById('bulkImgZone');
-      if (z) z.classList.remove('dz-over');
-      const dt = e.dataTransfer;
-      const files = dt && dt.files ? dt.files : null;
-      if (!files || !files.length) return;
-      _bulkAddFiles(files);
-    }
-
-    window.bulkImgPick = bulkImgPick;
-    window.bulkImgDragOver = bulkImgDragOver;
-    window.bulkImgDragLeave = bulkImgDragLeave;
-    window.bulkImgDrop = bulkImgDrop;
-    window.bulkImgChoose = bulkImgChoose;
-    window.bulkImgManual = bulkImgManual;
-    window.bulkImgCommit = bulkImgCommit;
-    window.bulkImgReset = bulkImgReset;
-    window.bulkImgScopeHint = bulkImgScopeHint;
-
     /* ══════════════════ 🖼️ 列表行直接换图（2026-11-23） ══════════════════
        卡点 ③：原来换一张图要「点编辑 → 展开表单 → 滚到图片区 → 选图 → 保存」五步。
        现在：桌面把图直接拖到那一格；手机点格子右下角 📷（触屏没有 hover，按钮常显）。
-       上传复用 _bulkUploadOne（同一套 XHR / 真实进度 / 同一套错误文案）。
+       上传复用 _uploadOneImage（同一套 XHR / 真实进度 / 同一套错误文案）。
        ⚠️ 只改这一行的 image_url，不碰其它字段、不碰状态。
        ⚠️ 已经有图 → 先 confirm，避免误拖把原来的图冲掉。
     */
     let ROW_IMG_KEY = '';
+    let ROW_IMG_SEQ = 0;   /* 上传对象名里的递增号，只求不撞名 */
 
     function _findItemByKey(key) {
       if (!key) return null;
@@ -3446,8 +2950,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const el = cell || document.querySelector('.img-cell[data-k="' + String(key).replace(/"/g, '\\"') + '"]');
       if (el && el.classList) el.classList.add('img-cell-busy');
 
-      const job = { id: ++BULK_SEQ, file: file, state: 'up', pct: 0, url: '', err: '' };
-      await _bulkUploadOne(job);
+      const job = { id: ++ROW_IMG_SEQ, file: file, state: 'up', pct: 0, url: '', err: '' };
+      await _uploadOneImage(job);
 
       if (el && el.classList) el.classList.remove('img-cell-busy');
       if (job.state !== 'done' || !job.url) {
@@ -3514,7 +3018,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
 
     /* ═══════════════════════════════════════════════════════════
        🔍 预览图点击放大（2026-11-23 团长：「加个点击放大」）
-       入口：桌面表格缩略图 / 手机卡片缩略图 / 批量传图面板缩略图 / 编辑弹窗预览图
+       入口：桌面表格缩略图 / 手机卡片缩略图 / 编辑弹窗预览图 / 交款凭证与存款截图
        关闭：点背景空白 / 右上 ✕ / Esc（点图片本身不关，防止看细节时误关）
        同页有多张图时：左右箭头、键盘 ← → 连续翻，不用关了再点下一张
        ═══════════════════════════════════════════════════════════ */
@@ -5664,8 +5168,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               return matchSearch && matchBatch && matchDetail && matchCountry && matchStatus;
             });
 
-      /* 🖼️ 批量补图要把「当前筛选结果」排到候选前面（团长一般是先筛批次再补图）。
-         这里只存一份引用给 bulkImg 用，不参与渲染、不改顺序。 */
+      /* 留一份「当前筛选结果」的引用，方便排查 / 外部脚本读，不参与渲染、不改顺序。 */
       window.__LAST_FILTERED = filtered;
 
       // ↕️ 排序只影响展示顺序（不动 RAW_ITEMS），勾选按 item_id 记所以排完还在
