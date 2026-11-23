@@ -35,6 +35,146 @@ const STRIP_HEADERS = [
   'x-real-ip', 'x-forwarded-host',
 ];
 
+/* ══ 🧩 服务端拼接写入（2026-11-23）════════════════════════════════════════
+   团长反馈：团员用**夸克**提交支付凭证，图已经传上去了，登记那一步报 HTTP 400。
+
+   定位：提交一次要把**整份 image_data（536KB）**读下来、再整份 PATCH 回去。
+   这份大 JSON 过夸克那层云端加速/省流代理之后已经损坏 → Supabase 解析不了 → 400。
+   （同一份请求在服务器上五种写法全部 200：带 548KB 真数据、带版本锁、真写进去，
+     所以不是数据、权限、版本锁的问题，是手机端那一层的传输问题。）
+
+   现在团员只发**这一条新记录（约 1KB）**，由这里读库 → 拼接 → 带版本锁写回。
+   ① 走本函数独有的路径 /sb/__append_leader：老版本反代不认识它（会原样转给
+      Supabase → 404），前端探测不到就自动退回老的整份写法，
+     绝不会出现 image_data 被写成 {append:...} 把数据清空的事故。
+   ② 数组按 id 去重 → 网络重试幂等，同一条不会追加两遍。
+   ③ 读库失败一律 503 且**一个字都不写**（宁可让前端走老路，也不能拿空数组覆盖）。
+   ④ void_bot：网站提交后作废「同人 + 同批次 + 同订单类型」的 QQ 待审记录，
+      规则与前端 voidBotProofsOnWebSubmit 一致；时间文案由前端传（这里跑 UTC 会差 8 小时）。 */
+
+const _normCn = function (s) {
+  return String(s == null ? '' : s).replace(/\s+/g, '').toLowerCase();
+};
+
+function _jsonOut(obj, status) {
+  return new Response(JSON.stringify(obj), {
+    status: status || 200,
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'access-control-allow-origin': '*',
+      'cache-control': 'no-store',
+    },
+  });
+}
+
+async function _appendLeader(request, url) {
+  let body = null;
+  try { body = JSON.parse(await request.text()); } catch (e) { body = null; }
+  if (!body || typeof body !== 'object' || !body.append || typeof body.append !== 'object') {
+    return _jsonOut({ error: 'append_bad_body' }, 400);
+  }
+  let sent = 0;
+  for (const k of Object.keys(body.append)) {
+    if (Array.isArray(body.append[k])) sent += body.append[k].length;
+  }
+  if (!sent) return _jsonOut({ error: 'append_empty' }, 400);
+
+  const qp = new URLSearchParams(url.search);
+  const key = qp.get('query_key') || '4goods';
+  const wantVer = qp.get('version');
+
+  const headers = new Headers(request.headers);
+  for (const h of STRIP_HEADERS) headers.delete(h);
+  headers.delete('content-length');
+  headers.set('origin', ORIGIN);
+  headers.set('content-type', 'application/json');
+
+  let cur = null;
+  try {
+    const r = await fetch(
+      ORIGIN + '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key) + '&select=image_data,version',
+      { method: 'GET', headers, redirect: 'manual' });
+    if (!r.ok) return _jsonOut({ error: 'append_read_failed', status: r.status }, 503);
+    const arr = await r.json();
+    cur = (arr && arr[0]) || null;
+  } catch (e) {
+    return _jsonOut({ error: 'append_read_failed', detail: String(e) }, 503);
+  }
+  if (!cur) return _jsonOut({ error: 'append_row_missing' }, 404);
+
+  let img = cur.image_data;
+  if (typeof img === 'string') { try { img = JSON.parse(img); } catch (e) { img = {}; } }
+  if (!img || typeof img !== 'object' || Array.isArray(img)) img = {};
+  const ver = (cur.version === undefined || cur.version === null) ? null : Number(cur.version);
+
+  if (wantVer && ver !== null && String(wantVer) !== 'eq.' + ver) {
+    return _jsonOut({ conflict: 1 }, 409);
+  }
+
+  let changed = 0;
+  for (const k of Object.keys(body.append)) {
+    const add = body.append[k];
+    if (!Array.isArray(add) || !add.length) continue;
+    const arr = Array.isArray(img[k]) ? img[k] : [];
+    const have = Object.create(null);
+    for (const it of arr) { const id = String((it && it.id) || ''); if (id) have[id] = true; }
+    const pre = [];
+    for (const it of add) {
+      if (!it || typeof it !== 'object') continue;
+      const id = String(it.id || '');
+      if (id && have[id]) continue;
+      if (id) have[id] = true;
+      pre.push(it);
+    }
+    if (pre.length) { img[k] = pre.concat(arr); changed += pre.length; }
+  }
+
+  const vb = body.void_bot;
+  if (vb && vb.match && Array.isArray(img.pay_proofs)) {
+    for (const p of img.pay_proofs) {
+      if (!p || typeof p !== 'object') continue;
+      let ok = true;
+      for (const mk of Object.keys(vb.match)) {
+        const want = vb.match[mk];
+        const w = (mk === 'cn') ? _normCn(want) : String(want == null ? '' : want);
+        const g = (mk === 'cn') ? _normCn(p.cn) : String(p[mk] == null ? '' : p[mk]);
+        if (w !== g) { ok = false; break; }
+      }
+      if (ok) {
+        const set = vb.set || {};
+        for (const sk of Object.keys(set)) p[sk] = set[sk];
+        changed++;
+      }
+    }
+  }
+
+  if (!changed) {
+    return _jsonOut(ver === null ? [{ ok: true }] : [{ version: ver }], 200);
+  }
+
+  const patch = { image_data: img };
+  let t = ORIGIN + '/rest/v1/leader_data?query_key=eq.' + encodeURIComponent(key) + '&select=version';
+  if (ver !== null) { patch.version = ver + 1; t += '&version=eq.' + ver; }
+  headers.set('prefer', 'return=representation');
+
+  let w;
+  try {
+    w = await fetch(t, { method: 'PATCH', headers, body: JSON.stringify(patch), redirect: 'manual' });
+  } catch (e) {
+    return _jsonOut({ error: 'append_write_failed', detail: String(e) }, 502);
+  }
+  let txt = '';
+  try { txt = await w.text(); } catch (e) { txt = ''; }
+  return new Response(txt || '[]', {
+    status: w.status,
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'access-control-allow-origin': '*',
+      'cache-control': 'no-store',
+    },
+  });
+}
+
 export async function onRequest(context) {
   const { request } = context;
   const url = new URL(request.url);
@@ -42,7 +182,7 @@ export async function onRequest(context) {
   // ── 健康探针 ──
   if (url.pathname === HEALTH_PATH) {
     return new Response(
-      JSON.stringify({ ok: true, proxy: 'sb', origin: ORIGIN, t: Date.now() }),
+      JSON.stringify({ ok: true, proxy: 'sb', origin: ORIGIN, append: 1, t: Date.now() }),
       {
         status: 200,
         headers: {
@@ -51,6 +191,15 @@ export async function onRequest(context) {
         },
       },
     );
+  }
+
+  /* 🧩 服务端拼接写入：见文件末尾 _appendLeader 的说明。
+     GET 只用来给前端探测「这版反代支不支持」（老版本会转给 Supabase → 404）。 */
+  if (url.pathname === '/sb/__append_leader') {
+    if (request.method !== 'PATCH') {
+      return _jsonOut({ ok: true, append: 1 }, 200);
+    }
+    return await _appendLeader(request, url);
   }
 
   const target = ORIGIN + url.pathname.replace(/^\/sb/, '') + url.search;

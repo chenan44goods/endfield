@@ -2204,6 +2204,105 @@
       return await res.json();
     }
 
+    /* ── 🧩 服务端拼接写入（2026-11-23）──────────────────────────────────────
+       团长反馈：团员用**夸克**提交支付凭证，图传上去了，登记那一步报「HTTP 400」。
+
+       原因：老写法每次提交都要把整份 image_data（现在约 500KB、635 条历史凭证）
+             读下来、再整份 PATCH 回去。这么大的 JSON body 过夸克那层云端加速/省流代理
+             之后会被弄坏 → Supabase 解析失败 → 400。
+             截图上传走的是另一条（二进制）通道，所以图没事，看起来就像「只挂登记」。
+             （同一份请求在服务器上试过五种写法，全部 200，不是数据/权限/版本锁问题。）
+
+       现在手机只发**这一条记录（约 1KB）**，拼接和写回在反代里做
+       （functions/sb/[[path]].js 的 /sb/__append_leader）。反代是老版本时探测不到，
+       自动退回下面原有的整份写法，行为与改动前一模一样。 */
+
+    let __APPEND_CAP = null;      // null = 还没探测过
+    async function _canAppendWrite(){
+      if (__APPEND_CAP !== null) return __APPEND_CAP;
+      try {
+        const r = await fetchOnce(SB_PROXY + '/__append_leader', { cache: 'no-store' }, 6000);
+        if (r.ok) { const j = await r.json(); __APPEND_CAP = !!(j && j.append); }
+        else { __APPEND_CAP = false; }
+      } catch (e) { __APPEND_CAP = false; }
+      return __APPEND_CAP;
+    }
+
+    /* 只取版本号（几十字节）—— 不再为了写一条记录把整行 500KB 拉下来 */
+    async function fetchRowVersion(){
+      const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON };
+      const res = await sbFetch('/rest/v1/leader_data?query_key=eq.' + DATA_KEY + '&select=version',
+        { headers: h, cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const j = await _resJson(res, 12000);
+      const row = (j && j[0]) || null;
+      if (!row) throw new Error('读取档案失败');
+      return (row.version === undefined || row.version === null) ? null : Number(row.version);
+    }
+
+    /* 🥇 网站提交优先（2026-10-29 口径）：把「同人 + 同批次 + 同订单类型」的 QQ 待审记录作废，
+       规则交给服务端执行（手机上本来就没读那份数组）；匹配不到就什么也不改。
+       时间用客户端给的 —— 反代跑 UTC，自己生成会差 8 小时。 */
+    function _voidBotSpec(ctx){
+      if (!ctx) return null;
+      return {
+        match: {
+          source: 'bot', status: '待审核',
+          batch_key: String(ctx.batchKey || ''),
+          order_type: String(ctx.orderType || '普通'),
+          cn: String(ctx.cn || '')
+        },
+        set: {
+          status: '已撤回',
+          withdrawn_at: new Date().toLocaleString('zh-CN'),
+          withdraw_reason: '已在网站提交，QQ 那条自动作废'
+        }
+      };
+    }
+
+    /* 通用：把一条记录拼进 image_data 里的某个数组（pay_proofs / piggy_bank …）。
+       返回 true = 已写进库；false = 这条路走不通（调用方退回老的整份写法）；
+       404/405/5xx/网络问题一律 false（老写法还能兜住），只有版本冲突会自己重试。 */
+    async function _appendOne(kind, rec, ctx){
+      const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON,
+                  'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+      for (let attempt = 0; attempt < 6; attempt++) {
+        let ver = null;
+        try { ver = await fetchRowVersion(); } catch (e) { return false; }
+        const body = { append: {} };
+        body.append[kind] = [rec];
+        /* 只有付款凭证要顺带作废「同人+同批次」的 QQ 待审记录 */
+        if (kind === 'pay_proofs') {
+          const vb = _voidBotSpec(ctx);
+          if (vb) body.void_bot = vb;
+        }
+        let url = SB_PROXY + '/__append_leader?query_key=eq.' + DATA_KEY + '&select=version';
+        if (ver !== null) url += '&version=eq.' + ver;
+        let res = null;
+        try { res = await fetchOnce(url, { method: 'PATCH', headers: h, body: JSON.stringify(body) }, 90000); }
+        catch (e) { return false; }
+        if (res.status === 404 || res.status === 405 || res.status === 501) return false;   // 老版反代
+        if (!res.ok) {
+          if (res.status === 409) {
+            await new Promise(function(r){ setTimeout(r, 150 + Math.random() * 250); });
+            continue;
+          }
+          /* 拼接这条路自己出毛病（反代读库失败/被拦/老版本）→ 一律退回老写法，
+             保证团员总能交上；真错误由老写法那边带出来。 */
+          return false;
+        }
+        if (ver === null) return true;
+        let got = [];
+        try { got = await _resJson(res, 15000); } catch (e) { got = []; }
+        if (Array.isArray(got) && got.length > 0) return true;
+        await new Promise(function(r){ setTimeout(r, 120 * Math.pow(2, attempt) + Math.random() * 200); });
+      }
+      throw new Error('这次没确认成功（网络慢，或刚好有人同时在交）。先刷新页面看一眼：已有「待审核」记录就是成功了，没有再来一次。');
+    }
+    async function _appendProofRec(rec, ctx){
+      return await _appendOne('pay_proofs', rec, ctx);
+    }
+
     /* 🚀 2026-11-10 查询提速（member_fetch）
        一次 RPC 同时做两件事：① 校验「CN + 密码」② 只返回**这个 CN 自己的条目**。
        以前是「验密码 1 次请求 + 拉整行 1.6MB 1 次请求」，3–4 秒；现在 1 次请求、几百 KB。
@@ -4077,16 +4176,8 @@
         // 🔒 带版本锁写入（理由同交款凭证：不带 version 会被后台整份回写覆盖掉）
         const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON,
                     'Content-Type': 'application/json', 'Prefer': 'return=representation' };
-        let written = false;
-        for (let attempt = 0; attempt < 6 && !written; attempt++) {
-          const fresh = await fetchLeaderData(key);
-          if (!fresh || !fresh.length) throw new Error('读取档案失败');
-          const row = fresh[0];
-          const ver = (row.version === undefined || row.version === null) ? null : Number(row.version);
-          const imgData = parseImgData(row);
-          if (!Array.isArray(imgData.piggy_bank)) imgData.piggy_bank = [];
-          if (imgData.piggy_bank.some(function (p) { return String((p && p.id) || '') === depId; })) { written = true; break; }
-          imgData.piggy_bank.unshift({
+        /* 🧾 这条记录只构造一次（拼接 / 老写法共用） */
+        const piggyRec = {
             id: depId,
             cn: cn,
             amount: amt,
@@ -4100,7 +4191,22 @@
             reviewed_at: '',
             reject_reason: '',
             refund_at: ''
-          });
+        };
+        let written = false;
+        /* 🧩 先试「只发这一条」（约 1KB）：不再为了存一笔钱把 500KB 整份读下来写回去。
+           反代不支持 / 读不到库 → 返回 false，接着走下面老的整份写法。 */
+        if (await _canAppendWrite()) {
+          written = await _appendOne('piggy_bank', piggyRec, null);
+        }
+        for (let attempt = 0; attempt < 6 && !written; attempt++) {
+          const fresh = await fetchLeaderData(key);
+          if (!fresh || !fresh.length) throw new Error('读取档案失败');
+          const row = fresh[0];
+          const ver = (row.version === undefined || row.version === null) ? null : Number(row.version);
+          const imgData = parseImgData(row);
+          if (!Array.isArray(imgData.piggy_bank)) imgData.piggy_bank = [];
+          if (imgData.piggy_bank.some(function (p) { return String((p && p.id) || '') === depId; })) { written = true; break; }
+          imgData.piggy_bank.unshift(piggyRec);
           const body = { image_data: imgData };
           /* 🩹 2026-11-17：只让服务端回 version 一列。不加这句时 PATCH 会把整行（最大 1.9MB）
                回吐一遍，弱网下读 body 会挂住 = 团员看到的「一直上传中」。
@@ -4188,23 +4294,8 @@
         //    这样任何一方（后台/机器人/其他团员）同时在写，都不会再互相盖掉。
         const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON,
                     'Content-Type': 'application/json', 'Prefer': 'return=representation' };
-        let written = false;
-        for (let attempt = 0; attempt < 6 && !written; attempt++) {
-          const fresh = await fetchLeaderData(ctx.key);
-          if (!fresh || !fresh.length) throw new Error('读取档案失败');
-          const row = fresh[0];
-          const ver = (row.version === undefined || row.version === null) ? null : Number(row.version);
-          const imgData = parseImgData(row);
-          if (!Array.isArray(imgData.pay_proofs)) imgData.pay_proofs = [];
-          // 幂等：上一次其实已经写成功了（只是响应没回来）→ 别再追加一遍
-          if (imgData.pay_proofs.some(function (p) { return String((p && p.id) || '') === proofId; })) {
-            window.__LAST_ROW = row; written = true; break;
-          }
-          /* 🥇 网站优先（2026-10-29 团长口径）：网站提交永远优先于 QQ 私聊 #已付。
-             同一个人 + 同一批次 + 同一订单类型，如果还挂着一条「来自 QQ 机器人」的待审记录，
-             就在这里把它作废 —— 后台只剩网站这一份，不会同一笔被审两次。 */
-          voidBotProofsOnWebSubmit(imgData, ctx);
-          imgData.pay_proofs.unshift({
+        /* 🧾 这条记录只构造一次：下面的「服务端拼接」和老的「整份回写」用的是同一条 */
+        const proofRec = {
             id: proofId,
             cn: ctx.cn,
             order_type: ctx.orderType || '普通',   // ← 国际运费走另一份数据，后台靠它分辨改哪里
@@ -4226,7 +4317,29 @@
             reviewed_at: '',
             reject_reason: '',
             withdrawn_at: ''
-          });
+        };
+        let written = false;
+        /* 🧩 先试「只发这一条」（约 1KB）：夸克/弱网都不再传 500KB 大 JSON。
+           反代不支持或读不到库 → 返回 false，接着走下面的老写法。 */
+        if (await _canAppendWrite()) {
+          written = await _appendProofRec(proofRec, ctx);
+        }
+        for (let attempt = 0; attempt < 6 && !written; attempt++) {
+          const fresh = await fetchLeaderData(ctx.key);
+          if (!fresh || !fresh.length) throw new Error('读取档案失败');
+          const row = fresh[0];
+          const ver = (row.version === undefined || row.version === null) ? null : Number(row.version);
+          const imgData = parseImgData(row);
+          if (!Array.isArray(imgData.pay_proofs)) imgData.pay_proofs = [];
+          // 幂等：上一次其实已经写成功了（只是响应没回来）→ 别再追加一遍
+          if (imgData.pay_proofs.some(function (p) { return String((p && p.id) || '') === proofId; })) {
+            window.__LAST_ROW = row; written = true; break;
+          }
+          /* 🥇 网站优先（2026-10-29 团长口径）：网站提交永远优先于 QQ 私聊 #已付。
+             同一个人 + 同一批次 + 同一订单类型，如果还挂着一条「来自 QQ 机器人」的待审记录，
+             就在这里把它作废 —— 后台只剩网站这一份，不会同一笔被审两次。 */
+          voidBotProofsOnWebSubmit(imgData, ctx);
+          imgData.pay_proofs.unshift(proofRec);
           const body = { image_data: imgData };
           /* 🩹 2026-11-17：只让服务端回 version 一列。不加这句时 PATCH 会把整行（最大 1.9MB）
                回吐一遍，弱网下读 body 会挂住 = 团员看到的「一直上传中」。
