@@ -10175,6 +10175,7 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
               '<th style="padding:7px; text-align:left;">团员</th>' +
               '<th style="padding:7px; text-align:center;">可用余额</th><th style="padding:7px; text-align:center;">待审核</th>' +
               '<th style="padding:7px; text-align:center;">已抵扣</th><th style="padding:7px; text-align:center;">笔数</th>' +
+              '<th style="padding:7px; text-align:center;">操作</th>' +
             '</tr></thead><tbody>';
           list.forEach(function (o) {
             h += '<tr style="border-top:1px solid var(--line);">' +
@@ -10183,6 +10184,14 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
               '<td data-l="待审核"' + (o.pend > 0.004 ? '' : ' data-empty="1"') + ' style="padding:7px; text-align:center; color:#a16207;">' + (o.pend > 0.004 ? ('￥' + o.pend.toFixed(2)) : '—') + '</td>' +
               '<td data-l="已抵扣"' + (o.used > 0.004 ? '' : ' data-empty="1"') + ' style="padding:7px; text-align:center; color:var(--text-muted);">' + (o.used > 0.004 ? ('￥' + o.used.toFixed(2)) : '—') + '</td>' +
               '<td data-l="笔数" style="padding:7px; text-align:center; color:var(--text-muted);">' + o.n + '</td>' +
+              /* 🐷 2026-11-23：管理员代扣入口。学生党存了钱但没时间自己交截图/勾抵扣，
+                 由团长直接从这里扣，扣的钱抵到一笔具体费用上。 */
+              '<td data-l="操作" style="padding:7px; text-align:center;">' +
+                '<button class="btn btn-secondary" style="padding:3px 9px; font-size:0.78rem;" ' +
+                  'data-cn="' + escapeHtml(o.cn) + '" ' +
+                  (o.bal > 0.004 ? '' : 'disabled title="余额为 0" ') +
+                  'onclick="openPiggyDeduct(this)">➖ 代扣</button>' +
+              '</td>' +
             '</tr>';
           });
           h += '</tbody></table></div>';
@@ -10292,6 +10301,312 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
       }
     }
     window.renderPiggyBank = renderPiggyBank;
+
+    /* ============================================================
+       🐷 管理员代扣（2026-11-23 团长需求）
+       背景：学生党先把钱存进罐里，但没时间/没设备自己上传截图、自己勾选抵扣。
+             以前只有「团员交款时勾用罐抵扣 → 你审核凭证」这一条路，这类人走不通。
+       口径（团长 2026-11-23 定）：
+         · 一次只抵**一笔具体费用**（某批谷子费 / 某笔运费），绝不铺开到他所有订单
+         · 罐里不够就扣到 0，差额仍算欠（那笔保持「未付款 / 未交」，不虚标已交）
+         · 原因必填，写进 used_log（使用记录表里能看到「谁、抵哪笔、为什么」）
+         · 扣减与费用状态同一把版本锁提交；保存失败整体回滚
+       数据落点：
+         · 零钱罐：存款的 used / used_log[]（先存的先用，与团员自助抵扣一致）
+         · 谷子：新增 piggy_paid 累计已抵金额；抵满 → status=已下单 + pay_method=零钱罐
+         · 运费：复用已有 amount_paid 累计；抵满 → status=已交 + pay_method=零钱罐
+       ⚠️ 部分抵扣时，团员端仍显示「未付款 / 未交」全价（它还不认 piggy_paid），
+          属已知限制；团长这边在弹窗里能看到「还欠多少」。
+       ============================================================ */
+    var PIGGY_DEDUCT = null;        // { cn, bal, targets:[{kind,id,label,due,batch,obj}] }
+    var PIGGY_DEDUCT_BUSY = false;
+
+    function _piggyR2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+    /* 这笔谷子还欠多少（扣掉以前用零钱罐抵过的部分） */
+    function _piggyItemDue(it) {
+      if (!it) return 0;
+      const gross = _piggyR2((Number(it.price) || 0) * (Number(it.quantity) || 1));
+      return Math.max(0, _piggyR2(gross - (Number(it.piggy_paid) || 0)));
+    }
+
+    /* 这个人名下所有「还没交」的费用 —— 只列真正能抵的，已经交过/免交的一律不出现 */
+    function _piggyUnpaidTargets(cn) {
+      const out = [];
+      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        if (!_piggySameCn(it.cn, cn)) return;
+        const st = String(it.status || '').trim();
+        if (st !== '未付款' && st !== '未交') return;
+        const due = _piggyItemDue(it);
+        if (due <= 0.004) return;
+        const bn = String(it.batch_name || '').trim();
+        out.push({
+          kind: 'item', id: String(it.item_id || it.id || ''), obj: it, batch: bn, due: due,
+          label: '谷子｜' + (bn || '默认批次') + '｜' + (it.name || '(未命名)') +
+                 ((Number(it.quantity) || 1) > 1 ? (' ×' + (Number(it.quantity) || 1)) : '')
+        });
+      });
+      (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+        if (!b || typeof b !== 'object') return;
+        (Array.isArray(b.fee_members) ? b.fee_members : []).forEach(function (m) {
+          if (!m || typeof m !== 'object') return;
+          if (!_piggySameCn(m.cn, cn)) return;
+          if (String(m.status || '').trim() !== '未交') return;
+          const due = Math.max(0, _piggyR2((Number(m.amount_due) || 0) - (Number(m.amount_paid) || 0)));
+          if (due <= 0.004) return;
+          const isIsland = String(m.fee_type || '').trim() === 'island';
+          const bn = String(b.batch_name || '').trim();
+          out.push({
+            kind: 'fee', id: String(m.id || ''), obj: m, batch: bn, due: due,
+            label: (isIsland ? '岛内运费' : '国际运费') + '｜' + (bn || '(未命名批次)')
+          });
+        });
+      });
+      // 谷子在前、运费在后；同类里金额大的先列（团长最常抵的就是大头）
+      out.sort(function (a, b) {
+        if (a.kind !== b.kind) return a.kind === 'item' ? -1 : 1;
+        return b.due - a.due;
+      });
+      return out;
+    }
+
+    function openPiggyDeduct(btn) {
+      const cn = btn ? String(btn.getAttribute('data-cn') || '').trim() : '';
+      if (!cn) return showToast('没拿到这个人的圈名');
+      const bal = piggyBalanceOf(cn);
+      if (!(bal > 0.004)) return showToast('「' + cn + '」零钱罐里没有可用余额');
+      const targets = _piggyUnpaidTargets(cn);
+      if (!targets.length) {
+        return showToast('「' + cn + '」名下没有待交的谷子费/运费，没有可抵的项。要退钱请到「全部存入记录」点退回。');
+      }
+      PIGGY_DEDUCT = { cn: cn, bal: bal, targets: targets };
+
+      const head = document.getElementById('piggyDeductHead');
+      if (head) {
+        head.innerHTML = '<b style="font-size:1rem;">' + escapeHtml(cn) + '</b>' +
+          '<span style="margin-left:10px; color:#15803d; font-weight:700;">可用余额 ￥' + bal.toFixed(2) + '</span>' +
+          '<div style="margin-top:4px; font-size:0.78rem; color:var(--text-muted); line-height:1.6;">' +
+          '从罐里扣钱，抵到他名下某一笔还没交的费用上。扣多少由你填，扣完罐里余额会减少。</div>';
+      }
+      _piggyDeductRenderTargets(0);
+      const rsn = document.getElementById('piggyDeductReason');
+      if (rsn) rsn.value = '';
+      _piggyDeductSelect(0);
+      const ov = document.getElementById('piggyDeductModal');
+      if (ov) ov.classList.add('active');
+    }
+    window.openPiggyDeduct = openPiggyDeduct;
+
+    /* 自绘选项列表（2026-11-23）：原生 <select> 在手机宽度下会把「还欠 ￥xx」截掉，
+       团长看不到金额就没法判断抵哪笔。改成两行卡片：
+         第一行 = 类型 + 批次
+         第二行 = 名称 ×数量 · 还欠 ￥xx
+       桌面 / 手机都能完整换行显示。 */
+    function _piggyDeductRenderTargets(selIdx) {
+      const box = document.getElementById('piggyDeductTarget');
+      if (!box || !PIGGY_DEDUCT) return;
+      box.innerHTML = PIGGY_DEDUCT.targets.map(function (t, i) {
+        const head = (t.kind === 'item' ? '📦 谷子' : '🚚 运费') + '｜' + escapeHtml(t.batch || '默认批次');
+        const sub = t.kind === 'item'
+          ? escapeHtml(String(t.label).split('｜').slice(2).join('｜'))
+          : escapeHtml(String(t.label).split('｜')[0]);
+        return '<div data-i="' + i + '" onclick="selectPiggyDeductTarget(' + i + ')" ' +
+          'style="padding:9px 11px; border-bottom:1px solid var(--line); cursor:pointer; line-height:1.55;' +
+          (i === selIdx ? 'background:#fefce8;' : '') + '">' +
+          '<div style="font-size:0.82rem; font-weight:600; color:var(--text-main);">' + head + '</div>' +
+          '<div style="font-size:0.76rem; color:var(--text-muted); margin-top:2px;">' + sub +
+            ' · <b style="color:#b45309;">还欠 ￥' + t.due.toFixed(2) + '</b></div>' +
+        '</div>';
+      }).join('');
+    }
+    window._piggyDeductRenderTargets = _piggyDeductRenderTargets;
+
+    function selectPiggyDeductTarget(i) {
+      if (!PIGGY_DEDUCT) return;
+      i = Number(i);
+      if (!(i >= 0 && i < PIGGY_DEDUCT.targets.length)) return;
+      PIGGY_DEDUCT.idx = i;
+      _piggyDeductRenderTargets(i);
+      const box = document.getElementById('piggyDeductTarget');
+      if (box) {
+        const cur = box.querySelector('[data-i="' + i + '"]');
+        if (cur && cur.scrollIntoView) { try { cur.scrollIntoView({ block: 'nearest' }); } catch (e) {} }
+      }
+      _piggyDeductSelect(i);
+    }
+    window.selectPiggyDeductTarget = selectPiggyDeductTarget;
+
+    function closePiggyDeduct() {
+      const ov = document.getElementById('piggyDeductModal');
+      if (ov) ov.classList.remove('active');
+      PIGGY_DEDUCT = null;
+    }
+    window.closePiggyDeduct = closePiggyDeduct;
+
+    /* 换目标时把默认金额改成「这笔还欠多少」与余额取小 —— 团长少算一步 */
+    function _piggyDeductSelect(i) {
+      if (!PIGGY_DEDUCT) return;
+      const t = PIGGY_DEDUCT.targets[i];
+      if (!t) return;
+      PIGGY_DEDUCT.idx = i;
+      const amtEl = document.getElementById('piggyDeductAmount');
+      const def = Math.min(PIGGY_DEDUCT.bal, t.due);
+      if (amtEl) amtEl.value = (_piggyR2(def)).toFixed(2);
+      _piggyDeductPreview();
+    }
+    /* 旧名字保留：万一还有地方调 onPiggyDeductTargetChange()，不至于报错 */
+    function onPiggyDeductTargetChange() { if (PIGGY_DEDUCT) _piggyDeductSelect(PIGGY_DEDUCT.idx || 0); }
+    window.onPiggyDeductTargetChange = onPiggyDeductTargetChange;
+
+    function _piggyDeductPreview() {
+      const box = document.getElementById('piggyDeductPreview');
+      if (!box || !PIGGY_DEDUCT) return;
+      const t = PIGGY_DEDUCT.targets[Number(PIGGY_DEDUCT.idx || 0)];
+      if (!t) { box.innerHTML = ''; return; }
+      const amtEl = document.getElementById('piggyDeductAmount');
+      let amt = _piggyR2(amtEl ? amtEl.value : 0);
+      if (!(amt > 0)) amt = 0;
+      if (amt > PIGGY_DEDUCT.bal) amt = PIGGY_DEDUCT.bal;
+      const leftAfter = _piggyR2(PIGGY_DEDUCT.bal - amt);
+      const still = _piggyR2(t.due - amt);
+      const lines = [];
+      lines.push('扣完罐里剩 <b style="color:#15803d;">￥' + leftAfter.toFixed(2) + '</b>');
+      if (still > 0.004) {
+        lines.push('这笔还差 <b style="color:#b45309;">￥' + still.toFixed(2) + '</b>，仍显示「' +
+                   (t.kind === 'item' ? '未付款' : '未交') + '」（以后可以再代扣）');
+      } else {
+        lines.push('这笔<b style="color:#15803d;">抵清</b>，会标成「' +
+                   (t.kind === 'item' ? '已下单' : '已交') + '」，支付方式记「零钱罐」');
+      }
+      box.innerHTML = lines.join('<br>');
+    }
+    window._piggyDeductPreview = _piggyDeductPreview;
+
+    async function confirmPiggyDeduct() {
+      if (PIGGY_DEDUCT_BUSY) return showToast('上一笔还在写库，稍等');
+      const st = PIGGY_DEDUCT;
+      if (!st) return showToast('弹窗数据丢了，请关掉重开');
+      const idx = Number(typeof st.idx === 'number' ? st.idx : -1);
+      const pick = st.targets[idx];
+      if (!pick) return showToast('请选择要抵扣的费用');
+      const amtEl = document.getElementById('piggyDeductAmount');
+      const rsnEl = document.getElementById('piggyDeductReason');
+      let amt = _piggyR2(amtEl ? amtEl.value : 0);
+      const reason = String((rsnEl && rsnEl.value) || '').trim();
+      const balNow = piggyBalanceOf(st.cn);
+      if (!(amt > 0)) return showToast('抵扣金额要大于 0');
+      if (!reason) { if (rsnEl) rsnEl.focus(); return showToast('请填原因（必填，会记进使用记录）'); }
+      if (amt > balNow + 0.004) return showToast('抵扣金额超过了当前余额 ￥' + balNow.toFixed(2));
+      if (amt > pick.due + 0.004) return showToast('抵扣金额超过了这笔还欠的 ￥' + pick.due.toFixed(2));
+
+      /* 重新按 id 定位目标对象：页面开着很久时，数组可能已被保存合并换过 */
+      let target = null;
+      if (pick.kind === 'item') {
+        const pool = RAW_ITEMS.concat(Array.isArray(RAW_ARCHIVED) ? RAW_ARCHIVED : []);
+        target = pool.filter(function (x) {
+          return x && String(x.item_id || x.id || '') === pick.id;
+        })[0] || null;
+      } else {
+        (Array.isArray(RAW_LOGISTICS) ? RAW_LOGISTICS : []).forEach(function (b) {
+          (Array.isArray(b && b.fee_members) ? b.fee_members : []).forEach(function (m) {
+            if (m && String(m.id || '') === pick.id) target = m;
+          });
+        });
+      }
+      if (!target) return showToast('这笔费用已经不在列表里了（可能刚被改过），请关掉重开');
+
+      const dueNow = pick.kind === 'item'
+        ? _piggyItemDue(target)
+        : Math.max(0, _piggyR2((Number(target.amount_due) || 0) - (Number(target.amount_paid) || 0)));
+      if (!(dueNow > 0.004)) return showToast('这笔已经交清了，不用再抵');
+      if (amt > dueNow + 0.004) amt = dueNow;
+
+      const cleared = (amt >= dueNow - 0.004);
+      const summary = '确认从「' + st.cn + '」的零钱罐代扣 ￥' + amt.toFixed(2) + '？\n\n' +
+        '抵：' + pick.label + '\n' +
+        '罐里原来：￥' + balNow.toFixed(2) + ' → 扣完 ￥' + _piggyR2(balNow - amt).toFixed(2) + '\n' +
+        (cleared ? ('这笔抵清 → 标成「' + (pick.kind === 'item' ? '已下单' : '已交') + '」\n')
+                 : ('这笔还差 ￥' + _piggyR2(dueNow - amt).toFixed(2) + '，仍显示未交\n')) +
+        '原因：' + reason;
+      if (!confirm(summary)) return;
+
+      const nowCN = new Date().toLocaleString('zh-CN');
+      /* ① 先存的先用（与团员自助抵扣同一口径） */
+      const list = (Array.isArray(RAW_PIGGY) ? RAW_PIGGY : []).filter(function (r) {
+        return r && _piggySameCn(r.cn, st.cn) && piggyRemain(r) > 0.004;
+      }).sort(function (a, b) {
+        return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+      });
+      let left = amt;
+      const touched = [];
+      for (let i = 0; i < list.length && left > 0.004; i++) {
+        const r = list[i];
+        const can = Math.min(piggyRemain(r), left);
+        touched.push({ r: r, used: Number(r.used || 0),
+                       log: Array.isArray(r.used_log) ? r.used_log.slice() : [],
+                       hadLog: Array.isArray(r.used_log) });
+        r.used = _piggyR2(Number(r.used || 0) + can);
+        if (!Array.isArray(r.used_log)) r.used_log = [];
+        r.used_log.push({
+          at: nowCN,
+          amount: _piggyR2(can),
+          note: '管理员代扣 ' + pick.batch,
+          reason: (pick.batch ? pick.batch + '｜' : '') + reason,
+          time: nowCN,
+          by: '管理员'
+        });
+        left = _piggyR2(left - can);
+      }
+      if (left > 0.004) {
+        touched.forEach(function (t) { t.r.used = t.used; t.r.used_log = t.log; });
+        return showToast('余额不够了（可能刚被别处用掉），请刷新后重试');
+      }
+
+      /* ② 费用侧：累计已抵金额；抵满才改状态，绝不给没交清的笔盖「已付」 */
+      const prev = {
+        status: target.status, pay_method: target.pay_method, paid_at: target.paid_at,
+        piggy_paid: target.piggy_paid, amount_paid: target.amount_paid
+      };
+      const dirtyId = String(target.item_id || target.id || '');
+      if (pick.kind === 'item') {
+        target.piggy_paid = _piggyR2((Number(target.piggy_paid) || 0) + amt);
+        if (target.piggy_paid >= _piggyR2((Number(target.price) || 0) * (Number(target.quantity) || 1)) - 0.005) {
+          target.status = '已下单';
+          target.pay_method = '零钱罐';
+          target.paid_at = nowCN;
+        }
+        if (dirtyId) DIRTY_ITEM_IDS.add(dirtyId);
+      } else {
+        target.amount_paid = _piggyR2((Number(target.amount_paid) || 0) + amt);
+        if (target.amount_paid >= (Number(target.amount_due) || 0) - 0.005) {
+          target.status = '已交';
+          target.pay_method = '零钱罐';
+          target.paid_at = nowCN;
+        }
+      }
+
+      PIGGY_DEDUCT_BUSY = true;
+      let ok = false;
+      try { ok = await saveDataToSupabase(); } catch (e) { ok = false; }
+      PIGGY_DEDUCT_BUSY = false;
+      if (!ok) {
+        touched.forEach(function (t) { t.r.used = t.used; t.r.used_log = t.log; });
+        target.status = prev.status; target.pay_method = prev.pay_method;
+        target.paid_at = prev.paid_at;
+        if (pick.kind === 'item') target.piggy_paid = prev.piggy_paid;
+        else target.amount_paid = prev.amount_paid;
+        return showToast('❌ 保存失败，已全部回滚，请重试');
+      }
+
+      closePiggyDeduct();
+      showToast('✅ 已代扣 ￥' + amt.toFixed(2) + '（抵 ' + pick.label + '）' +
+                (cleared ? '，这笔已抵清' : '，这笔仍欠 ￥' + _piggyR2(dueNow - amt).toFixed(2)));
+      renderPiggyBank();
+      try { renderTable(); } catch (e) {}
+      try { renderLogistics(); } catch (e) {}
+    }
+    window.confirmPiggyDeduct = confirmPiggyDeduct;
 
     /* 审核通过：钱进罐（只改内存 + 走带版本锁的保存） */
     async function approvePiggyDeposit(id) {

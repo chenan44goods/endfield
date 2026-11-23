@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <!-- ⚡ 资源预加载（2026-11-16）：让脚本与 HTML 并行下载 -->
-  <link rel="preload" href="./admin.app.js?v=8e1de5ac" as="script">
+  <link rel="preload" href="./admin.app.js?v=3fc1384d" as="script">
   <link rel="preload" href="./admin.auction.js?v=f09a384b" as="script">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script>
@@ -2722,10 +2722,47 @@ cn 点数 金额
     </div>
   </div>
 
+  <!-- 🐷 管理员代扣（2026-11-23 团长需求）
+       学生党存了钱但没法自己交截图/勾抵扣 → 团长在「各人余额一览」点「➖ 代扣」直接扣，
+       扣的钱抵到他名下某一笔还没交的费用上。一次只抵一笔，不铺开。 -->
+  <div class="modal-overlay" id="piggyDeductModal">
+    <div class="modal" style="max-width:560px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="font-size:1.05rem; font-weight:700;">🐷 代扣零钱罐</h3>
+        <button class="btn btn-secondary" style="padding:4px 8px;" onclick="closePiggyDeduct()">✕</button>
+      </div>
+      <div id="piggyDeductHead" style="margin-bottom:14px; font-size:0.9rem; line-height:1.7;"></div>
+
+      <label style="display:block; font-size:0.82rem; font-weight:600; margin-bottom:5px;">抵扣哪一笔费用</label>
+      <div id="piggyDeductTarget" style="max-height:196px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; background:#fff;"></div>
+      <div style="margin-top:4px; font-size:0.75rem; color:var(--text-muted);">只列他名下还没交的谷子费 / 运费。</div>
+
+      <label style="display:block; font-size:0.82rem; font-weight:600; margin:14px 0 5px;">本次抵扣金额（元）</label>
+      <input id="piggyDeductAmount" type="number" step="0.01" min="0.01" inputmode="decimal"
+             oninput="_piggyDeductPreview()"
+             style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem;">
+
+      <div id="piggyDeductPreview" style="margin-top:8px; padding:9px 11px; background:#f8fafc; border:1px solid var(--line); border-radius:8px; font-size:0.82rem; line-height:1.8; color:var(--text-muted);"></div>
+
+      <label style="display:block; font-size:0.82rem; font-weight:600; margin:14px 0 5px;">原因（必填）</label>
+      <input id="piggyDeductReason" placeholder="例如：学生党没手机，线下给的现金，代扣这批运费" autocomplete="off"
+             style="width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:0.86rem;">
+      <div style="margin-top:4px; font-size:0.75rem; color:var(--text-muted);">会原样写进「使用记录」，以后对账靠它。</div>
+
+      <div style="display:flex; gap:10px; margin-top:18px;">
+        <button class="btn btn-primary" style="flex:1;" onclick="confirmPiggyDeduct()">确认代扣</button>
+        <button class="btn btn-secondary" style="flex:1;" onclick="closePiggyDeduct()">取消</button>
+      </div>
+      <div style="margin-top:10px; font-size:0.75rem; color:var(--text-muted); line-height:1.7;">
+        ⚠️ 罐里钱不够时扣到 0，差额仍算欠、那笔不会标已交；以后可以再代扣一次补上。
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   </div>
-<script src="./admin.app.js?v=8e1de5ac"></script>
+<script src="./admin.app.js?v=3fc1384d"></script>
 
 
 
