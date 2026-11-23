@@ -10248,22 +10248,75 @@ async function _refLoadQrMap(){
   return REF_QR_MAP;
 }
 
+/* 收款码表格外面那个 620px 高的可滚框（admin.html 里的 #refScrollBox）。
+   🔴 2026-11-23 团长报「打开二维码再关上页面会跳走」的根因就在这里：
+      原代码用 trs[i].scrollIntoView({block:'center'})。这个方法会把**所有可滚祖先一起滚**，
+      连整个后台页面 body 也跟着滚一下 —— 所以点开二维码时整页跳到别处，收起后停在那儿回不来。
+      现在一律只改这个内层框的 scrollTop，整页 window 一格都不动（万一被浏览器钳位，按差值补回来）。 */
+function _refScrollBox(){
+  var el = document.getElementById('refScrollBox');
+  if (el) return el;
+  /* 兜底：万一以后有人把这个 id 删了，按「最近的可纵向滚动祖先」找 */
+  var tb = document.getElementById('refRows');
+  var p = tb ? tb.parentNode : null;
+  while (p && p !== document.body && p !== document.documentElement){
+    var oy = '';
+    try { oy = window.getComputedStyle(p).overflowY; } catch (e) {}
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 2) return p;
+    p = p.parentNode;
+  }
+  return null;
+}
+
+/* 展开大图前那个框的 scrollTop —— 收起时滚回这儿，团长看到的就是原来的列表 */
+var REF_BOX_TOP = null;
+
 function refToggleQr(id){
   id = String(id);
-  REF_OPEN_ID = (String(REF_OPEN_ID) === id) ? null : id;
-  _refRenderRows();
-  if (REF_OPEN_ID) {
-    /* 展开后把那一条滚进视野 —— 不放这句的话，靠下的行点开后大图落在框外，
-       团长还得自己滚一下才能扫（真机实测 onScreen=false）。 */
-    try {
-      var tb = document.getElementById('refRows');
-      var trs = tb ? tb.children : [];
-      for (var i = 0; i < trs.length; i++) {
-        var im = trs[i].querySelector ? trs[i].querySelector('img') : null;
-        if (im && im.getBoundingClientRect().width > 200) { trs[i].scrollIntoView({ block: 'center' }); break; }
-      }
-    } catch (e) {}
+  var box = _refScrollBox();
+  var y0 = Math.round(window.scrollY);
+  var isOpen = (String(REF_OPEN_ID) === id);
+
+  if (isOpen) {
+    /* ── 收起 ────────────────────────────────────────────── */
+    REF_OPEN_ID = null;
+    _refRenderRows();
+    if (box) {
+      /* 先把框滚回展开前的位置（内容变短后放不下就贴底，不做别的动作） */
+      try {
+        box.scrollTop = (REF_BOX_TOP == null) ? box.scrollTop
+          : Math.min(REF_BOX_TOP, Math.max(0, box.scrollHeight - box.clientHeight));
+      } catch (e) {}
+    }
+    REF_BOX_TOP = null;
+  } else {
+    /* ── 展开 ────────────────────────────────────────────── */
+    REF_BOX_TOP = box ? box.scrollTop : null;   /* 记住展开前的框位置，收起时回这儿 */
+    REF_OPEN_ID = id;
+    _refRenderRows();
+    /* 只在 620px 的框里把大图框进视野 —— 原来靠 scrollIntoView 干这事，顺带把整页也滚了 */
+    if (box) {
+      try {
+        var tb = document.getElementById('refRows');
+        var trs = tb ? tb.children : [];
+        var big = null;
+        for (var i = 0; i < trs.length; i++) {
+          var im = trs[i].querySelector ? trs[i].querySelector('img') : null;
+          if (im && im.getBoundingClientRect().width > 200) { big = trs[i]; break; }
+        }
+        if (big) {
+          var rb = big.getBoundingClientRect(), rbox = box.getBoundingClientRect();
+          if (rb.top < rbox.top || rb.bottom > rbox.bottom) {
+            box.scrollTop = Math.max(0, box.scrollTop + (rb.top - rbox.top) - Math.max(0, (rbox.height - rb.height) / 2));
+          }
+        }
+      } catch (e) {}
+    }
   }
+
+  /* 整页一格都不许动：内容变高变矮有可能让浏览器把 body 钳位滚一下，按差值补回去 */
+  var y1 = Math.round(window.scrollY);
+  if (y1 !== y0) { try { window.scrollBy(0, y0 - y1); } catch (e) {} }
 }
 
 /* 勾选范围扩大到整行（2026-10-15 团长要求）：
