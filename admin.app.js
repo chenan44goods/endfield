@@ -9878,23 +9878,40 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
       const cn = btn ? String(btn.getAttribute('data-cn') || '').trim() : '';
       if (!cn) return showToast('没拿到这个人的圈名');
       const bal = piggyBalanceOf(cn);
-      if (!(bal > 0.004)) return showToast('「' + cn + '」零钱罐里没有可用余额');
       const targets = _piggyUnpaidTargets(cn);
-      if (!targets.length) {
-        return showToast('「' + cn + '」名下没有待交的谷子费/运费，没有可抵的项。要退钱请到「全部存入记录」点退回。');
-      }
-      PIGGY_DEDUCT = { cn: cn, bal: bal, targets: targets };
+      /* 🔴 2026-11-24 团长反馈「点没有反应」：
+         原来「余额为 0 / 名下没有待交的项」时只弹一条 toast —— 3 秒就消失，
+         手机上很容易完全错过，看起来就是按钮坏了。
+         现在**一律把弹窗打开**，在头部那行把原因写清楚、确认按钮置灰。
+         点了必有回应，绝不会再"一点动静都没有"。 */
+      const blocked = (!(bal > 0.004)) ? 'bal' : (targets.length ? '' : 'targets');
+      PIGGY_DEDUCT = { cn: cn, bal: bal, targets: targets, blocked: blocked };
 
       const head = document.getElementById('piggyDeductHead');
       if (head) {
         head.innerHTML = '<b style="font-size:1rem;">' + escapeHtml(cn) + '</b>' +
-          '<span style="margin-left:10px; color:#15803d; font-weight:700;">可用余额 ￥' + bal.toFixed(2) + '</span>' +
-          '<div style="margin-top:4px; font-size:0.78rem; color:var(--text-muted); line-height:1.6;">' +
-          '从罐里扣钱，抵到他名下某一笔还没交的费用上。扣多少由你填，扣完罐里余额会减少。</div>';
+          '<span style="margin-left:10px; color:' + (blocked === 'bal' ? '#b45309' : '#15803d') + '; font-weight:700;">可用余额 ￥' + bal.toFixed(2) + '</span>' +
+          '<div style="margin-top:4px; font-size:0.78rem; color:' + (blocked ? '#b45309' : 'var(--text-muted)') + '; line-height:1.6;">' +
+          (blocked
+            ? (blocked === 'bal'
+                ? '这个人罐里现在没有可用余额，没什么可抵的。'
+                : '这个人名下现在没有待交的谷子费 / 运费，暂时没得抵。')
+            : '从罐里扣钱，抵到他名下某一笔还没交的费用上。扣多少由你填，扣完罐里余额会减少。') +
+          '</div>';
       }
       _piggyDeductRenderTargets(0);
       const rsn = document.getElementById('piggyDeductReason');
-      if (rsn) rsn.value = '';
+      if (rsn) { rsn.value = ''; rsn.disabled = !!blocked; }
+      const amtIn = document.getElementById('piggyDeductAmount');
+      if (amtIn) amtIn.disabled = !!blocked;
+      const okBtn = document.getElementById('piggyDeductOk');
+      if (okBtn) {
+        okBtn.disabled = !!blocked;
+        try {
+          okBtn.style.opacity = blocked ? '0.45' : '1';
+          okBtn.style.cursor = blocked ? 'not-allowed' : 'pointer';
+        } catch (e) {}
+      }
       _piggyDeductSelect(0);
       const ov = document.getElementById('piggyDeductModal');
       if (ov) ov.classList.add('active');
@@ -9909,6 +9926,16 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
     function _piggyDeductRenderTargets(selIdx) {
       const box = document.getElementById('piggyDeductTarget');
       if (!box || !PIGGY_DEDUCT) return;
+      /* 没得抵也要把话说清楚（见 openPiggyDeduct 顶部注释），不能留一片白框 */
+      if (!PIGGY_DEDUCT.targets.length) {
+        box.innerHTML = '<div style="padding:14px 12px; font-size:0.84rem; line-height:1.85; color:var(--text-muted);">' +
+          (PIGGY_DEDUCT.blocked === 'bal'
+            ? '罐里现在没有可用余额，所以没什么可抵的。'
+            : '名下现在<b>没有待交的谷子费 / 运费</b>，所以没得抵。<br>' +
+              '<span style="font-size:0.78rem;">如果是想把钱退回去 → 到下面「全部存入记录」那一行点「↩️ 退回」。</span>') +
+          '</div>';
+        return;
+      }
       box.innerHTML = PIGGY_DEDUCT.targets.map(function (t, i) {
         const head = (t.kind === 'item' ? '📦 谷子' : '🚚 运费') + '｜' + escapeHtml(t.batch || '默认批次');
         const sub = t.kind === 'item'
@@ -9951,7 +9978,13 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
     function _piggyDeductSelect(i) {
       if (!PIGGY_DEDUCT) return;
       const t = PIGGY_DEDUCT.targets[i];
-      if (!t) return;
+      if (!t) {
+        /* 没有可抵项：把金额框清空，别留上一次的残值 */
+        const amtEl0 = document.getElementById('piggyDeductAmount');
+        if (amtEl0) amtEl0.value = '';
+        _piggyDeductPreview();
+        return;
+      }
       PIGGY_DEDUCT.idx = i;
       const amtEl = document.getElementById('piggyDeductAmount');
       const def = Math.min(PIGGY_DEDUCT.bal, t.due);
@@ -9992,7 +10025,11 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
       if (!st) return showToast('弹窗数据丢了，请关掉重开');
       const idx = Number(typeof st.idx === 'number' ? st.idx : -1);
       const pick = st.targets[idx];
-      if (!pick) return showToast('请选择要抵扣的费用');
+      if (!pick) {
+        return showToast(st.blocked === 'bal'
+          ? ('「' + st.cn + '」罐里没有可用余额')
+          : ('「' + st.cn + '」名下没有待交的费用，没得抵；要退钱请到「全部存入记录」点退回'));
+      }
       const amtEl = document.getElementById('piggyDeductAmount');
       const rsnEl = document.getElementById('piggyDeductReason');
       let amt = _piggyR2(amtEl ? amtEl.value : 0);
