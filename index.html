@@ -2963,6 +2963,10 @@
         const h = { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
         let written = false;
         let dupHit = null;
+        /* 🛡️ 2026-11-24：这批里哪些谷子其实早就交过排发了（库里状态已是 待发货/已排发） */
+        let outAlready = null;
+        let outPartial = [];
+        let wroteItems = items;
         for (let attempt = 0; attempt < 6 && !written; attempt++) {
           const data = await fetchLeaderData(key);
           if (!data || !data.length) return showToast('未找到该密钥数据');
@@ -2982,14 +2986,36 @@
             dupHit = _findDupApply(imgData.applications, cn, items, APPLY_DUP_WINDOW_MS);
             if (dupHit) break;
           }
-          const targetIds = new Set(items.map(i=>String(i.item_id||i.id)));
+          /* 🛡️ 2026-11-24 团长报「只有各一件，后台却显示 x2」的根治：
+             真凶不是“连点两下”，是**同一件谷子被交了两次排发**——
+             团员页面挂了好几天没刷新，视图里这两件还是「可排发」、按钮还在，
+             点了一次写库（11-18）之后再点一次（11-22）；每次写之前虽然读了最新数据，
+             却从没检查过「这件是不是已经在待发货了」，于是 applications 多了一条，
+             后台 mergeAppItems 按 item_id 累加数量 → x2。
+             ⚠️ 判据是 item_id + 库里实时状态，与时间窗口无关（跨天也能拦），也不会误伤
+                「团长退回可排发后重新交」——那种情况状态已经不是待发货了。 */
+          const _freshItems = [], _outItems = [];
+          items.forEach(function (it) {
+            const _iid = String(it.item_id || it.id || '');
+            const _g = groupData.find(function (x) { return String((x && (x.item_id || x.id)) || '') === _iid; });
+            const _st = String((_g && _g.status) || '').trim();
+            if (_st === '待发货' || _st === '已排发') {
+              _outItems.push({ name: String(it.name || '未命名'), qty: Number(it.quantity) || 1, status: _st });
+            } else {
+              _freshItems.push(it);
+            }
+          });
+          outPartial = _outItems;
+          if (!_freshItems.length) { outAlready = _outItems; break; }
+          const targetIds = new Set(_freshItems.map(i=>String(i.item_id||i.id)));
           // 状态改为「待发货」时，同步清掉囤货入库日/到期日，避免误点「可排发」留下的日期一直挂着
           groupData.forEach(item => { if (targetIds.has(String(item.item_id||item.id))) { item.status = '待发货'; item.stock_date = null; item.stock_expiry = null; } });
+          wroteItems = _freshItems;
           imgData.applications.unshift({
             id: appId,
             type: '排发申请',
             cn: cn,
-            items: items.map(i=>({ item_id: i.item_id||i.id, name: i.name, quantity: i.quantity||1, country: i.country||'日本' })),
+            items: _freshItems.map(i=>({ item_id: i.item_id||i.id, name: i.name, quantity: i.quantity||1, country: i.country||'日本' })),
             note: String(note||'').trim(),
             time: new Date().toLocaleString('zh-CN'),
             status: '待处理'
@@ -3007,6 +3033,18 @@
           try { got = await _resJson(res, 15000); } catch (e) { got = []; }
           if (Array.isArray(got) && got.length > 0) { written = true; break; }
           await new Promise(function (r) { setTimeout(r, 120 * Math.pow(2, attempt) + Math.random() * 200); });   // 版本冲突：重读重试
+        }
+        if (outAlready) {
+          /* 🛡️ 全都已经交过了：绝不写第二条申请，弹窗说清（不能用 toast，会被当成“又交成功了”） */
+          const _names = outAlready.map(function (x) { return escapeHtml(x.name) + ' ×' + x.qty; }).join('、');
+          await askAlert({
+            title: '✅ 这些谷子已经交过排发了',
+            desc: '系统里这几件<b>已经是【待发货】</b>，正在等团长打包：<br><br><b>' + _names + '</b><br><br>'
+                + '所以这次<b>没有再提交一遍</b>，后台也不会重复计数。你不用再交一次。<br><br>'
+                + '（可能是页面开着没刷新、按钮还显示「申请排发」。想确认进度，刷新一次页面看【待排发】那一块。）',
+            okText: '知道了'
+          });
+          return;
         }
         if (dupHit) {
           /* 命中重复：默认「不写」，给手滑的人一条明路，也给「确实要再交一次」留出口。
@@ -3053,12 +3091,16 @@
           const _copyNow = await askConfirm({
             title: '✅ 提交成功，还差最后一步',
             desc: '这批谷子已经进【待排发】，团长还没打包。<br><br>'
+                + (outPartial.length
+                    ? '⚠️ 其中 <b>' + outPartial.map(function (x) { return escapeHtml(x.name) + ' ×' + x.qty; }).join('、')
+                      + '</b> 之前已经交过、还在等打包，这次<b>没有重复提交</b>。<br><br>'
+                    : '')
                 + '<b>请把清单发给团长</b>（点下面的按钮复制，直接粘到 QQ 就行）。<br>'
                 + '不发这一步，团长那边不一定知道要发什么。',
             okText: '📋 复制清单发给团长',
             cancelText: '我自己截图'
           });
-          if (_copyNow) await copyDispatchList(items, note);
+          if (_copyNow) await copyDispatchList(wroteItems, note);
         } catch (e) { /* 复制失败也不能挡住刷新，页面里还有「复制清单」按钮 */ }
         doQuery('dispatch');
       } catch(e){
