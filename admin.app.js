@@ -7058,9 +7058,23 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       const map = new Map();
       (apps || []).forEach(app => {
         (app.items || []).forEach(it => {
+          const _hasId = !!(it.item_id || it.id);
           const key = String(it.item_id || it.id || ('n:' + (it.name || '')));
-          if (!map.has(key)) map.set(key, { name: it.name || '(未命名)', quantity: 0, pick_key: key });
-          map.get(key).quantity += (Number(it.quantity) || 1);
+          if (!map.has(key)) map.set(key, { name: it.name || '(未命名)', quantity: 0, pick_key: key, seen: 0 });
+          const cur = map.get(key);
+          const q = Number(it.quantity) || 1;
+          /* 🔴 2026-11-24：item_id = 一件具体谷子的唯一标识，同一个 item_id 不可能有两件货。
+             以前这里无条件累加 → 同一人隔几天又交一遍同一件，就显示 x2（实际 1 件），
+             团长照这个数分货会多拿（11-24 忍野萝夏 立牌/徽章 各多 1 件就是这么来的）。
+             现在：有 item_id 的取最大值（= 真实数量）；没有 id 的老数据仍累加（分不出是不是同一件）。
+             ⚠️ 真买两件不受影响 —— 那是同一个 item 的 quantity=2，取 max 仍然是 2。
+             ⚠️ 要改某件的实际发货数量，请到「排表」里改这件谷子的数量，不要在申请上重复提交。 */
+          if (_hasId) {
+            if (q > cur.quantity) cur.quantity = q;
+            cur.seen += 1;
+          } else {
+            cur.quantity += q;
+          }
         });
       });
       return Array.from(map.values());
@@ -7101,6 +7115,8 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       groups.forEach((g, gi) => {
         const merged = mergeAppItems(g.apps);
         const totalQty = merged.reduce((s, x) => s + (x.quantity || 0), 0);
+        /* 同一件谷子被交了不止一次（见 mergeAppItems）：数量已按 1 件算，这里标出来 */
+        const dupItems = merged.filter(x => (x.seen || 0) > 1);
         const times = g.apps.map(a => String(a.time || '').trim()).filter(Boolean);
         let timeText = '';
         if (times.length === 1) { timeText = times[0]; }
@@ -7151,6 +7167,9 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
             </div>
             <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:6px;">📝 备注: ${escapeHtml(noteText)}</div>
             <div style="font-size:0.82rem; color:var(--text-muted); margin-bottom:2px;">合计 ${g.apps.length} 条申请 · ${merged.length} 个品项 · ${totalQty} 件</div>
+            ${dupItems.length ? `<div class="dup-merge-tip" style="font-size:0.8rem; color:#b45309; background:#fffbeb; border:1px solid #fde68a; border-radius:6px; padding:5px 9px; margin:6px 0; line-height:1.55;">
+              ⚠️ ${dupItems.map(x => escapeHtml(x.name) + '（' + x.seen + ' 次）').join('、')} —— 同一件谷子被提交了不止一次，<b>已按 1 件算</b>。真要发两件，请到「排表」里把这件的数量改成 2。
+            </div>` : ''}
             <div>${renderItemsGrid(merged, g.cn)}</div>
             <div class="gip-pick-bar">
               <button type="button" class="gip-pick-btn" data-pick-all="1">☑ 全部勾选</button>
