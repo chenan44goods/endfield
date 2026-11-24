@@ -9586,6 +9586,9 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
             '</div>' +
             '<div style="margin-top:6px; font-size:0.86rem; line-height:1.9; color:var(--text-muted);">' +
               '金额：<b style="color:#b91c1c; font-size:1rem;">￥' + amt.toFixed(2) + '</b><br>' +
+              /* 💳 2026-11-24：审核时就要知道这笔钱是微信还是支付宝进的（对账靠它）。
+                 老记录没这个字段 → 整行不出现，不编数据。 */
+              (r.pay_method ? ('付款方式：<b>' + escapeHtml(String(r.pay_method)) + '</b><br>') : '') +
               (r.note ? ('备注：' + escapeHtml(r.note) + '<br>') : '') +
               '提交：' + escapeHtml(r.created_at || '') +
             '</div>' +
@@ -9717,6 +9720,7 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
             '<table class="piggy-t" style="width:100%; font-size:13px; border-collapse:collapse;">' +
             '<thead><tr style="background:#f1f5f9;">' +
               '<th style="padding:7px; text-align:left;">团员</th><th style="padding:7px; text-align:center;">金额</th>' +
+              '<th style="padding:7px; text-align:center;">方式</th>' +
               '<th style="padding:7px; text-align:center;">状态</th><th style="padding:7px; text-align:center;">已抵扣</th>' +
               '<th style="padding:7px; text-align:left;">备注</th><th style="padding:7px; text-align:center;">提交时间</th><th style="padding:7px; text-align:center;">操作</th>' +
             '</tr></thead><tbody>';
@@ -9738,6 +9742,8 @@ function _saveItems(){ if(!CURRENT_QUERY_KEY) return Promise.resolve(false); ret
             h += '<tr style="border-top:1px solid var(--line);">' +
               '<td class="piggy-main" data-l="" style="padding:7px; font-weight:600;">' + escapeHtml(r.cn || '(未填CN)') + '</td>' +
               '<td class="piggy-amt" data-l="" style="padding:7px; text-align:center; font-weight:700;">￥' + Number(r.amount || 0).toFixed(2) + '</td>' +
+              '<td data-l="方式"' + (r.pay_method ? '' : ' data-empty="1"') + ' style="padding:7px; text-align:center; color:var(--text-muted); font-size:0.8rem;">' +
+                (r.pay_method ? escapeHtml(String(r.pay_method)) : '—') + '</td>' +
               '<td data-l="状态" style="padding:7px; text-align:center; color:' + color + '; font-weight:600;">' + escapeHtml(stLabel) + stSub +
               '</td>' +
               '<td data-l="已抵扣"' + ((used <= 0.004 && refunded <= 0.004) ? ' data-empty="1"' : '') + ' style="padding:7px; text-align:center; color:var(--text-muted); font-size:0.8rem;">' +
