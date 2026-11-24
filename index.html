@@ -3363,6 +3363,24 @@
       if (s === '已撤回') { bg='rgba(33,33,33,0.06)'; bd='rgba(33,33,33,0.22)'; fg='#6b6b6b'; }
       return '<span style="font-size:11px; padding:4px 8px; border-radius:20px; border:1px solid '+bd+'; background:'+bg+'; color:'+fg+';">'+esc(s)+'</span>';
     }
+    /* 💳 已确认收款回执上的「付款方式」（2026-11-24 团长要求）：
+       存了零钱罐的老师回来，能看到这笔钱是怎么付的、其中多少是从罐里抵的 ——
+       零钱罐面板只显示「已经用它抵扣过 ￥X」，看不到到底抵到了哪一笔。
+       ⚠️ 口径与后台 _payMethodWithPiggy 一字不差（团长审核写订单时用的就是它）：
+          · 罐里抵满   → 零钱罐
+          · 抵一部分   → 零钱罐 + 微信 / 零钱罐 + 支付宝
+          · 没抵       → 原样（微信 / 支付宝）
+          · 老凭证没写 → 返回空串，卡片上和改动前一模一样（不编数据） */
+    function _proofPayMethodText(p){
+      if (!p) return '';
+      const base = String(p.pay_method || '').trim();
+      const use = Math.round(Number(p.piggy_used || 0) * 100) / 100;
+      const gross = Math.round(Number(p.amount || 0) * 100) / 100;
+      if (!(use > 0)) return base;
+      if (gross > 0 && use >= gross - 0.005) return '零钱罐';
+      return base ? ('零钱罐 + ' + base) : '零钱罐';
+    }
+
     async function renderPayBox(items, key, cn){
       const box = document.getElementById('payBox');
       if (!box) return;
@@ -3602,7 +3620,20 @@
           html += '</div>';
         });
         approved.forEach(function(p){
+          const _pmTxt = _proofPayMethodText(p);
+          const _pgUse = Math.round(Number(p.piggy_used || 0) * 100) / 100;
+          const _planNow = String(p.plan || '');
+          const _planTxt = _planNow === 'deposit' ? '定金' : (_planNow === 'balance' ? '尾款' : '');
           html += '<div style="margin-top:12px; padding:8px 12px; border-radius:8px; background:rgba(21,128,61,0.08); border:1px solid rgba(21,128,61,0.25); font-size:12px; color:#15803d; line-height:1.7;">✅ 你交的 ￥' + Number(p.amount || 0).toFixed(2) + ' 已确认收款（' + esc(when(p)) + '）';
+          /* 💳 付款方式：让存零钱罐的人回来能看到「这笔钱是怎么付的、罐里抵了多少」。
+             pay_method 为空的老凭证整块不渲染 —— 页面与改动前完全一致。 */
+          if (_pmTxt) {
+            html += '<div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center; font-size:11px;">'
+                 +  '<span style="padding:3px 9px; border-radius:20px; border:1px solid rgba(21,128,61,0.35); background:#fff; color:#15803d; font-weight:600; white-space:nowrap;">💳 ' + esc(_pmTxt) + '</span>'
+                 +  (_pgUse > 0 ? '<span style="color:#15803d;">罐里抵 ￥' + _pgUse.toFixed(2) + '</span>' : '')
+                 +  (_planTxt ? '<span style="color:rgba(21,128,61,0.75);">· ' + _planTxt + '</span>' : '')
+                 +  '</div>';
+          }
           html += '<div style="margin-top:4px; font-size:11px; color:rgba(21,128,61,0.7);">这条回执保存 7 天，到期后自动从页面收起（账目不受影响）</div></div>';
         });
         rejected.slice(0, 2).forEach(function(p){
