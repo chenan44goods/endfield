@@ -3169,6 +3169,57 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
        2026-10-10 上定金功能时一并修正（只多排除这一个状态，其余口径一字未动）。 */
     function isOrderPaid(it) { const st = String((it && it.status) || '').trim(); return st !== '未付款' && st !== '已交定金'; }
 
+    /* 💰 已收定金要算进「实付」（2026-11-26 团长报障）：
+       「已交定金」的订单在收款对账里一直按 0 实收 —— 团长看到「已付 ￥0.00 / 未付 ￥全款」，
+       以为人家一分钱都没交，实际定金早到账了（凭证上有金额、有尾款）。
+       这里把「已通过、且尾款还没补」的定金凭证金额补进已付，**只补进显示，不动任何订单状态**。
+
+       防重复的双保险（两个都满足才加，宁可少算也不重复算）：
+         · 同一人同一批**必须还有**「已交定金」状态的订单 —— 全款订单的金额里本来就含这笔定金，
+           尾款一补完订单就变「已下单」，这时再加就翻倍；
+         · 凭证自己 balance_due > 0 且没有 balance_paid_at —— 已经补过尾款的定金不再单列。
+       批次对不上的（凭证写「默认批次」而订单是别的批次）一律不加。 */
+    function _depositPaidMap() {
+      const pend = {};                // cn|批次 → { n: 还有几条「已交定金」订单, due: 这几条的全款应收 }
+      const idx = {};                 // cn|批次 → { cn, batch_name, amt, methods }
+      const _dk = function (cn, bn) { return String(cn || '').trim().toLowerCase() + '|' + _normBatchKey(bn); };
+      (Array.isArray(RAW_ITEMS) ? RAW_ITEMS : []).forEach(function (it) {
+        if (!it || String(it.status || '').trim() !== '已交定金') return;
+        const k = _dk(it.cn, it.batch_name || '默认批次');
+        if (!pend[k]) pend[k] = { n: 0, due: 0 };
+        pend[k].n += 1;
+        pend[k].due = Math.round((pend[k].due + (Number(it.price) || 0) * (Number(it.quantity) || 1)) * 100) / 100;
+      });
+      (Array.isArray(RAW_PAY_PROOFS) ? RAW_PAY_PROOFS : []).forEach(function (p) {
+        if (!p) return;
+        if (String(p.plan || '') !== 'deposit') return;
+        if (String(p.status || '') !== '已通过') return;
+        if (!(Number(p.balance_due) > 0)) return;
+        if (String(p.balance_paid_at || '').trim()) return;
+        const amt = Math.round((Number(p.amount) || 0) * 100) / 100;
+        if (!(amt > 0)) return;
+        const bn = Array.isArray(p.batch_names) ? p.batch_names[0] : (p.batch_names || p.batch_key || '');
+        const k = _dk(p.cn, bn);
+        if (!pend[k] || !pend[k].n) return;   // 没有「已交定金」订单托着 → 这笔钱已含在全款里，不能再加
+        let o = idx[k];
+        if (!o) { o = { cn: String(p.cn || '').trim(), batch_name: String(bn || '').trim(), amt: 0, methods: {} }; idx[k] = o; }
+        o.amt = Math.round((o.amt + amt) * 100) / 100;
+        const mk = _payMethodKey(p.pay_method);
+        o.methods[mk] = Math.round(((o.methods[mk] || 0) + amt) * 100) / 100;
+      });
+      /* 上限钳位：万一同一笔定金被误确认了两次（库里有两条已通过），
+         合计也不能超过这几条订单的应收全款 —— 多出来的钱不该记在「已付」里。 */
+      Object.keys(idx).forEach(function (k) {
+        const cap = pend[k] ? pend[k].due : 0;
+        const o = idx[k];
+        if (!(cap > 0) || o.amt <= cap + 0.004) return;
+        const ratio = cap / o.amt;
+        Object.keys(o.methods).forEach(function (mk) { o.methods[mk] = Math.round(o.methods[mk] * ratio * 100) / 100; });
+        o.amt = cap;
+      });
+      return idx;
+    }
+
     /* 把 created_at（ISO 串，老数据也可能是别的写法）转成毫秒时间戳；解析不了 → 0 */
     function _payTs(v) {
       const s = String(v == null ? '' : v).trim();
@@ -3228,6 +3279,26 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           b.unpaidCnt += 1; unpaidCnt += 1;
         }
       });
+      /* 💰 把已收定金并进批次「实收」（清单见 _depositPaidMap）：
+         批次对不上（已被「含已完结」过滤掉 / 凭证没写批次）就跳过，绝不加到别的批次头上。 */
+      let depTotal = 0;
+      const depIdx = _depositPaidMap();
+      if (Object.keys(depIdx).length) {
+        const _bnByNorm = {};
+        Object.keys(batches).forEach(function (n) { _bnByNorm[_normBatchKey(n)] = n; });
+        Object.keys(depIdx).forEach(function (k) {
+          const dep = depIdx[k];
+          const bName = _bnByNorm[_normBatchKey(dep.batch_name)];
+          const b = bName ? batches[bName] : null;
+          if (!b) return;
+          b.recv = r2(b.recv + dep.amt); recv = r2(recv + dep.amt); depTotal = r2(depTotal + dep.amt);
+          Object.keys(dep.methods).forEach(function (mk) {
+            b.methods[mk] = r2((b.methods[mk] || 0) + dep.methods[mk]);
+            methods[mk] = (methods[mk] || 0) + dep.methods[mk];
+            methodMembers[mk].add(String(dep.cn || ''));
+          });
+        });
+      }
       const list = Object.keys(batches).map(function (k) {
         const b = batches[k];
         return { name: b.name, cnt: b.cnt, members: b.members.size, due: r2(b.due), recv: r2(b.recv), unpaid: r2(b.due - b.recv), unpaidCnt: b.unpaidCnt, methods: b.methods, archived: isArchivedBatchName(b.name), firstTs: b.firstTs, lastTs: b.lastTs };
@@ -3241,7 +3312,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       Object.keys(methods).forEach(function (k) { methods[k] = r2(methods[k]); });
       const methodPeople = {};
       Object.keys(methodMembers).forEach(function (k) { methodPeople[k] = methodMembers[k].size; });
-      return { list: list, overall: { cnt: cnt, members: overallMembers.size, due: r2(due), recv: r2(recv), unpaid: r2(due - recv), unpaidCnt: unpaidCnt, methods: methods, methodPeople: methodPeople } };
+      return { list: list, overall: { cnt: cnt, members: overallMembers.size, due: r2(due), recv: r2(recv), unpaid: r2(due - recv), unpaidCnt: unpaidCnt, methods: methods, methodPeople: methodPeople, deposit: depTotal } };
     }
 
     /* 💳 平台分账小计条（2026-11-08 团长要求）：上下排布，微信 / 支付宝 / 其他各一块。
@@ -3282,6 +3353,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
               : '') +
           '</div>' +
           (o.methods['未注明'] > 0.0000001 ? '<div style="margin-top:6px; font-size:0.78rem; color:var(--text-muted);">「未注明」= 早期订单或团长手动改的状态，没记支付方式；团员用 /已付 上报后会自动归类到微信/支付宝。</div>' : '') +
+          ((o.deposit || 0) > 0.0000001 ? '<div style="margin-top:6px; font-size:0.78rem; color:#a16207;">💰 其中已收定金 ￥' + o.deposit.toFixed(2) + '：定金订单还没补尾款，钱算「已付」，但不算交齐。</div>' : '') +
           '<div style="margin-top:4px; font-size:0.76rem; color:var(--text-muted);">金额按每笔订单的支付方式拆；人数按平台各自去重。点「明细」可按人分排看，每排也有小计。</div>';
       }
       if (s.list.length === 0) {
@@ -3349,10 +3421,41 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         }
         else { g.unpaid += amt; }
       });
+      /* 💰 已收定金并进「已付」（口径同 computePayStats，见 _depositPaidMap）：
+         定金凭证的支付方式也记进 pmAmt，这样人会被分到「支付宝」那排，
+         而不是因为"没付全款"掉进「其他（零钱罐 / 未注明 / 未付款）」。
+         ⚠️ 只加钱、加显示；订单状态与任何写库逻辑一律不碰。 */
+      const _depIdx = _depositPaidMap();
+      const _thisNorm = _normBatchKey(batchName);
+      const _findCnKey = function (cn) {
+        if (byCn[cn]) return cn;
+        const t = String(cn || '').trim().toLowerCase();
+        const hit = Object.keys(byCn).filter(function (x) { return String(x).trim().toLowerCase() === t; })[0];
+        return hit || cn;
+      };
+      Object.keys(_depIdx).forEach(function (k) {
+        const dep = _depIdx[k];
+        if (_normBatchKey(dep.batch_name) !== _thisNorm) return;
+        const cnKey = _findCnKey(dep.cn || '(未填CN)');
+        let g = byCn[cnKey];
+        if (!g) { g = { cn: cnKey, cnt: 0, due: 0, recv: 0, unpaid: 0, methods: {}, pmAmt: {} }; byCn[cnKey] = g; }
+        g.recv = Math.round((g.recv + dep.amt) * 100) / 100;
+        g.dep = Math.round(((g.dep || 0) + dep.amt) * 100) / 100;
+        g.depMethods = g.depMethods || {};
+        Object.keys(dep.methods).forEach(function (mk) {
+          g.depMethods[mk] = Math.round(((g.depMethods[mk] || 0) + dep.methods[mk]) * 100) / 100;
+          g.pmAmt[mk] = Math.round(((g.pmAmt[mk] || 0) + dep.methods[mk]) * 100) / 100;
+        });
+      });
+      Object.keys(byCn).forEach(function (k) {
+        const g = byCn[k];
+        g.unpaid = Math.max(0, Math.round((g.due - g.recv) * 100) / 100);   // 已付含定金 → 未付自动少掉这一块
+      });
       const rows = Object.keys(byCn).map(function (k) { return byCn[k]; })
         .sort(function (a, b) { return (b.unpaid - a.unpaid) || (b.due - a.due); });
       const totalDue = rows.reduce(function (a, r) { return a + r.due; }, 0);
       const totalRecv = rows.reduce(function (a, r) { return a + r.recv; }, 0);
+      const totalDep = rows.reduce(function (a, r) { return a + (Number(r.dep) || 0); }, 0);
       const unpaidPeople = rows.filter(function (r) { return r.unpaid > 0.0000001; }).length;
       /* 🐷 零钱罐（2026-10-14）：把「这批人里谁的罐里还有钱」在明细里直接摊出来 ——
          团长一句「你罐里还有 ￥X，直接用掉」就能收账，不必再翻算账中心。只读，不动任何数据。 */
@@ -3364,6 +3467,7 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
       document.getElementById('payDetailTitle').innerText = '💰 收款对账明细 - ' + batchName;
       document.getElementById('payDetailSummary').innerText =
         '共 ' + rows.length + ' 人 | 未付款 ' + unpaidPeople + ' 人 | 应收 ￥' + totalDue.toFixed(2) + ' | 实收 ￥' + totalRecv.toFixed(2) + ' | 未收 ￥' + (totalDue - totalRecv).toFixed(2) +
+        (totalDep > 0.0000001 ? '（实收含已交定金 ￥' + totalDep.toFixed(2) + '）' : '') +
         (pgPeople ? '　｜　🐷 零钱罐可用：' + pgPeople + ' 人 共 ￥' + pgTotal.toFixed(2) + '（可从罐里直接抵扣）' : '');
       const tbody = document.getElementById('payDetailBody');
       if (rows.length === 0) {
@@ -3395,14 +3499,26 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
         /* 一行 = 一个人，HTML 与改前完全一样（零钱罐余额、支付方式标签都在），只是搬成可复用函数 */
         const _payDetailRowHtml = function (r) {
           const pmKeys = Object.keys(r.methods).sort(function (a, b) { return r.methods[b] - r.methods[a]; });
-          const pmHtml = pmKeys.length ? pmKeys.map(function (k) { return getPayMethodBadge(k) + (r.methods[k] > 1 ? '<span style="font-size:0.72rem;color:var(--text-muted);">×' + r.methods[k] + '</span>' : ''); }).join(' ') : '<span style="color:var(--text-muted);font-size:0.8rem;">—</span>';
+          const _depMks = Object.keys(r.depMethods || {}).filter(function (k) { return (r.depMethods[k] || 0) > 0.004; })
+            .sort(function (a, b) { return (r.depMethods[b] || 0) - (r.depMethods[a] || 0); });
+          /* 💰 只交了定金、还没付全款的人：订单支付方式是空的，用定金凭证的方式撑住这一列，
+             免得显示成「—」让团长以为没记方式。 */
+          const pmHtml = pmKeys.length
+            ? pmKeys.map(function (k) { return getPayMethodBadge(k) + (r.methods[k] > 1 ? '<span style="font-size:0.72rem;color:var(--text-muted);">×' + r.methods[k] + '</span>' : ''); }).join(' ')
+            : (_depMks.length ? _depMks.map(function (k) { return getPayMethodBadge(k); }).join(' ') : '<span style="color:var(--text-muted);font-size:0.8rem;">—</span>');
           /* 🐷 零钱罐挂在「支付方式」下面一行：有余额才显示，余额为 0 什么都不加（老账目一字不变） */
           const _pgb = _pgOf(r.cn);
           const pgHtml = _pgb > 0.004
             ? '<div style="margin-top:4px; font-size:0.76rem; line-height:1.5;">🐷 零钱罐 <span class="badge badge-pay-零钱罐" style="font-size:0.72rem;">可用 ￥' + _pgb.toFixed(2) + '</span></div>'
             : '';
           const un = r.unpaid > 0.0000001;
-          return '<tr><td><strong>' + escapeHtml(r.cn) + '</strong></td><td>' + pmHtml + pgHtml + '</td><td>￥' + r.due.toFixed(2) + '</td><td style="color:#16a34a;">￥' + r.recv.toFixed(2) + '</td><td style="color:' + (un ? '#dc2626' : '#64748b') + '; font-weight:' + (un ? '700' : '400') + ';">￥' + r.unpaid.toFixed(2) + '</td></tr>';
+          /* 💰 已交定金（2026-11-26）：这一行必须写清「钱到过多少、还欠多少」，
+             否则团长会像这次一样，把「已付 ￥0.00」当成人家没交钱。 */
+          const _depAmt = Number(r.dep) || 0;
+          const depHtml = _depAmt > 0.004
+            ? '<div style="margin-top:4px; font-size:0.74rem; line-height:1.5; color:#a16207; white-space:nowrap;">💰 定金 <b>￥' + _depAmt.toFixed(2) + '</b></div>'
+            : '';
+          return '<tr><td><strong>' + escapeHtml(r.cn) + '</strong></td><td>' + pmHtml + depHtml + pgHtml + '</td><td>￥' + r.due.toFixed(2) + '</td><td style="color:#16a34a;">￥' + r.recv.toFixed(2) + '</td><td style="color:' + (un ? '#dc2626' : '#64748b') + '; font-weight:' + (un ? '700' : '400') + ';">￥' + r.unpaid.toFixed(2) + '</td></tr>';
         };
 
         let out = '';
@@ -3413,10 +3529,11 @@ let RAW_ARCHIVED = [];   // 🗄️ 已排发归档区（image_data.archived_ite
           const sDue = arr.reduce(function (a, r) { return a + r.due; }, 0);
           const sRecv = arr.reduce(function (a, r) { return a + r.recv; }, 0);
           const sUnpaid = arr.reduce(function (a, r) { return a + r.unpaid; }, 0);
+          const sDep = arr.reduce(function (a, r) { return a + (Number(r.dep) || 0); }, 0);
           out += '<tr><td colspan="5" style="padding:8px 10px; background:' + m.bg + '; border-left:4px solid ' + m.color + '; font-weight:700; font-size:0.88rem; color:' + m.color + ';">' +
             m.icon + ' ' + m.label + ' · ' + arr.length + ' 人' +
             ' <span style="font-weight:500; color:var(--text-muted);">｜ 应收 ￥' + sDue.toFixed(2) +
-            ' ｜ 已付 ￥' + sRecv.toFixed(2) + ' ｜ 未付 ￥' + sUnpaid.toFixed(2) + '</span></td></tr>';
+            ' ｜ 已付 ￥' + sRecv.toFixed(2) + (sDep > 0.004 ? '（含定金 ￥' + sDep.toFixed(2) + '）' : '') + ' ｜ 未付 ￥' + sUnpaid.toFixed(2) + '</span></td></tr>';
           out += arr.length
             ? arr.map(_payDetailRowHtml).join('')
             : '<tr><td colspan="5" style="text-align:center; padding:10px; color:var(--text-muted); font-size:0.82rem;">这一排暂时没有人</td></tr>';
